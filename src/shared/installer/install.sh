@@ -206,6 +206,21 @@ KEYRING
   echo 'Default_keyring' > "$keyring_dir/default"
 fi
 
+# ── GPU hardware detection ────────────────────────────────────────────────────
+# Must run while pacman.conf still points to the offline repo (before it is
+# restored to standard online mirrors below).  Detects the installed GPU
+# vendor/architecture and installs only the correct driver subset from the
+# packages bundled in the ISO — fully offline.
+echo "==> Detecting GPU hardware and installing drivers..."
+for _hw_script in \
+    "$SMPLOS_INSTALL/config/hardware/nvidia.sh" \
+    "$SMPLOS_INSTALL/config/hardware/amd.sh" \
+    "$SMPLOS_INSTALL/config/hardware/intel.sh"; do
+  if [[ -f "$_hw_script" ]]; then
+    bash "$_hw_script" || echo "    WARNING: $_hw_script exited with error $?"
+  fi
+done
+
 # Setup greetd with autologin
 echo "==> Setting up greetd autologin..."
 sudo mkdir -p /etc/greetd

@@ -1,0 +1,44 @@
+# ── GPU Packages (offline-repo-only) ─────────────────────────────────────────
+# Downloaded into the offline repo during the ISO build but NOT installed into
+# the live squashfs.  The live ISO is a TUI installer that boots via the EFI
+# framebuffer (nomodeset) and needs zero GPU driver.
+#
+# The post-install hardware detection scripts:
+#   install/config/hardware/{nvidia,amd,intel}.sh
+# run after archinstall completes, detect the GPU vendor/architecture, and
+# install only the correct subset from this bundled repo — fully offline.
+
+# ── NVIDIA Turing+ (GTX 16xx, RTX 20xx–50xx, Ada RTX 40xx) ──────────────────
+# nvidia-open-dkms: open-source kernel module (Turing+, Ada Lovelace).
+#   Compiled via DKMS against the installed kernel at post-install time.
+#   Requires linux-zen-headers to be present in the offline repo.
+# nvidia-utils: userspace libraries (EGL, GLX, Vulkan, OpenCL, nvidia-smi).
+nvidia-open-dkms
+nvidia-utils
+lib32-nvidia-utils
+linux-zen-headers
+
+# ── AMD (all GCN/RDNA generations + AMD APU iGPUs) ───────────────────────────
+# mesa: base OpenGL/EGL/DRI library; also provides the amdgpu DRM userspace.
+# vulkan-radeon: AMD Vulkan via Mesa RADV (required by Hyprland for rendering).
+# libva-mesa-driver: VAAPI hardware video decode for AMD/nouveau.
+mesa
+lib32-mesa
+vulkan-radeon
+lib32-vulkan-radeon
+libva-mesa-driver
+
+# ── Intel (HD Graphics / Iris / UHD / Xe / all Intel iGPUs) ─────────────────
+# vulkan-intel: Intel ANV Vulkan driver (Broadwell+ required by Hyprland).
+# intel-media-driver: VAAPI iHD backend for HD/UHD/Iris/Xe (Broadwell+).
+# libva-intel-driver: VAAPI i965 backend for legacy GMA / pre-Broadwell.
+vulkan-intel
+lib32-vulkan-intel
+intel-media-driver
+libva-intel-driver
+
+# ── Shared Vulkan infrastructure ─────────────────────────────────────────────
+# vulkan-icd-loader: runtime ICD loader; required on systems where no GPU
+#   package pulls it in as a dep (e.g. pure NVIDIA installs).
+vulkan-icd-loader
+lib32-vulkan-icd-loader

@@ -51,6 +51,7 @@ log_sub()   { echo -e "${CYAN}  ->${NC} $*"; }
 # Package arrays
 declare -a ALL_PACKAGES=()
 declare -a AUR_PACKAGES=()
+declare -a GPU_PACKAGES=()   # offline-repo-only: not installed into live squashfs
 declare -a FLATPAK_PACKAGES=()
 declare -a APPIMAGE_PACKAGES=()
 
@@ -188,9 +189,13 @@ collect_packages() {
     
     local compositor_dir="$SRC_DIR/compositors/$COMPOSITOR"
     
-    # Official packages
+    # Official packages (installed into live squashfs)
     read_package_list "$compositor_dir/packages.txt" ALL_PACKAGES
     read_package_list "$SRC_DIR/shared/packages.txt" ALL_PACKAGES
+
+    # GPU packages (offline-repo-only: downloaded for post-install hw detection,
+    # NOT added to packages.x86_64 — the live ISO is a TUI, needs no GPU driver)
+    read_package_list "$SRC_DIR/shared/packages-gpu.txt" GPU_PACKAGES
     
     # Edition extra official packages (iterate all stacked editions)
     if [[ -n "${EDITIONS:-}" ]]; then
@@ -230,7 +235,8 @@ collect_packages() {
     [[ ${#AUR_PACKAGES[@]} -gt 0 ]] && AUR_PACKAGES=($(printf '%s\n' "${AUR_PACKAGES[@]}" | sort -u))
     
     log_info "Package counts:"
-    log_info "  Official: ${#ALL_PACKAGES[@]}"
+    log_info "  Official (live squashfs): ${#ALL_PACKAGES[@]}"
+    log_info "  GPU (offline-repo-only):  ${#GPU_PACKAGES[@]}"
     log_info "  AUR: ${#AUR_PACKAGES[@]}"
     log_info "  Flatpak: ${#FLATPAK_PACKAGES[@]}"
     log_info "  AppImage: ${#APPIMAGE_PACKAGES[@]}"
@@ -283,8 +289,8 @@ download_packages() {
     local releng_packages=()
     read_package_list "$PROFILE_DIR/packages.x86_64" releng_packages
     
-    # Combine all packages: releng base + our additions
-    local all_download_packages=("${releng_packages[@]}" "${ALL_PACKAGES[@]}")
+    # Combine all packages: releng base + ours + GPU-only (offline repo only)
+    local all_download_packages=("${releng_packages[@]}" "${ALL_PACKAGES[@]}" "${GPU_PACKAGES[@]}")
     
     # Remove duplicates
     all_download_packages=($(printf '%s\n' "${all_download_packages[@]}" | sort -u))
@@ -1291,6 +1297,14 @@ setup_airootfs() {
         
         # Copy helpers
         cp -r "$SRC_DIR/shared/installer/helpers/"* "$airootfs/root/smplos/install/helpers/"
+
+        # Copy hardware detection scripts (run post-install for GPU driver setup)
+        if [[ -d "$SRC_DIR/shared/installer/config/hardware" ]]; then
+            mkdir -p "$airootfs/root/smplos/install/config/hardware"
+            cp "$SRC_DIR/shared/installer/config/hardware/"*.sh \
+                "$airootfs/root/smplos/install/config/hardware/"
+            chmod +x "$airootfs/root/smplos/install/config/hardware/"*.sh
+        fi
         
         # Copy post-install script
         cp "$SRC_DIR/shared/installer/install.sh" "$airootfs/root/smplos/install.sh"
@@ -1703,9 +1717,10 @@ title    smplOS
 sort-key 01
 linux    /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen
 initrd   /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-zen.img
-# Keep boot output silent and pinned to tty1
-# No 'splash': Plymouth in the live initramfs hangs without KMS, blocking tty1 for minutes
-options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% quiet plymouth.nolog loglevel=3 rd.udev.log_level=3 rd.systemd.show_status=false systemd.show_status=false vt.global_cursor_default=0 console=tty1 mce=dont_log_ce nvidia-drm.modeset=1
+# nomodeset: EFI framebuffer works on every GPU (NVIDIA/AMD/Intel) for the TUI
+# installer. No proprietary driver needed. The installed system gets the correct
+# GPU driver via hardware detection (install/config/hardware/*.sh) post-install.
+options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% quiet plymouth.nolog loglevel=3 rd.udev.log_level=3 rd.systemd.show_status=false systemd.show_status=false vt.global_cursor_default=0 console=tty1 mce=dont_log_ce nomodeset
 ENTRY1
 
     cat > "$PROFILE_DIR/efiboot/loader/entries/02-smplos-safe.conf" << 'ENTRY2'
@@ -1734,9 +1749,9 @@ ENTRY3
     cat > "$PROFILE_DIR/grub/loopback.cfg" << 'LOOPBACKCFG'
 menuentry "smplOS" --class arch --class gnu-linux --class gnu --class os {
     set gfxpayload=keep
-    # Keep boot output silent and pinned to tty1 to avoid greetd/Plymouth handoff flash
-    # Note: no 'splash' here — Plymouth splash in the live ISO hangs without KMS and blocks tty1
-    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% quiet plymouth.nolog loglevel=3 rd.udev.log_level=3 rd.systemd.show_status=false systemd.show_status=false vt.global_cursor_default=0 console=tty1 mce=dont_log_ce nvidia-drm.modeset=1
+    # nomodeset: EFI framebuffer works on every GPU for the TUI installer.
+    # Post-install hardware detection installs the correct GPU driver offline.
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% quiet plymouth.nolog loglevel=3 rd.udev.log_level=3 rd.systemd.show_status=false systemd.show_status=false vt.global_cursor_default=0 console=tty1 mce=dont_log_ce nomodeset
     initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-zen.img
 }
 
@@ -1783,9 +1798,9 @@ LABEL arch
     MENU LABEL smplOS
     LINUX /%INSTALL_DIR%/boot/x86_64/vmlinuz-linux-zen
     INITRD /%INSTALL_DIR%/boot/x86_64/initramfs-linux-zen.img
-    # Keep boot output silent and pinned to tty1
-    # No 'splash': Plymouth in the live initramfs hangs without KMS, blocking tty1 for minutes
-    APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% quiet plymouth.nolog loglevel=3 rd.udev.log_level=3 rd.systemd.show_status=false systemd.show_status=false vt.global_cursor_default=0 console=tty1 mce=dont_log_ce nvidia-drm.modeset=1
+    # nomodeset: EFI framebuffer works on every GPU for the TUI installer.
+    # Post-install hardware detection installs the correct GPU driver offline.
+    APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% quiet plymouth.nolog loglevel=3 rd.udev.log_level=3 rd.systemd.show_status=false systemd.show_status=false vt.global_cursor_default=0 console=tty1 mce=dont_log_ce nomodeset
 
 LABEL arch_safe
     MENU LABEL smplOS (Safe Mode)
