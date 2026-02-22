@@ -1729,8 +1729,8 @@ setup_boot() {
     rm -rf "$PROFILE_DIR/efiboot/memtest86+" 2>/dev/null || true
 
     cat > "$PROFILE_DIR/efiboot/loader/loader.conf" << 'LOADERCONF'
-timeout 5
-default 01-smplos.conf
+timeout 10
+default 03-smplos-debug.conf
 LOADERCONF
 
     cat > "$PROFILE_DIR/efiboot/loader/entries/01-smplos.conf" << 'ENTRY1'
@@ -1780,7 +1780,7 @@ ENTRY3
 search --no-floppy --set=archiso_img_dev --file "${iso_path}"
 probe --set archiso_img_dev_uuid --fs-uuid "${archiso_img_dev}"
 
-set default=smplos
+set default=smplos-debug
 set timeout=10
 set timeout_style=menu
 
@@ -1865,9 +1865,9 @@ COM32 poweroff.c32
 SYSTAIL
 
     cat > "$PROFILE_DIR/syslinux/archiso_sys.cfg" << 'ARCHISOSYS'
-DEFAULT arch
+DEFAULT arch_debug
 PROMPT 1
-TIMEOUT 50
+TIMEOUT 100
 
 UI vesamenu.c32
 MENU TITLE smplOS Boot Menu
