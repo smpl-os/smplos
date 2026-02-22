@@ -1705,7 +1705,7 @@ linux    /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen
 initrd   /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-zen.img
 # Keep boot output silent and pinned to tty1 to avoid greetd/Plymouth handoff flash
 # nouveau.modeset=0: prevents nouveau KMS crash on NVIDIA Ada Lovelace (RTX 40xx) cards; harmless on Intel/AMD
-options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% quiet splash plymouth.nolog loglevel=3 rd.udev.log_level=3 rd.systemd.show_status=false systemd.show_status=false vt.global_cursor_default=0 console=tty1 mce=dont_log_ce nouveau.modeset=0
+options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% quiet splash plymouth.nolog loglevel=3 rd.udev.log_level=3 rd.systemd.show_status=false systemd.show_status=false vt.global_cursor_default=0 console=tty1 mce=dont_log_ce nvidia-drm.modeset=1
 ENTRY1
 
     cat > "$PROFILE_DIR/efiboot/loader/entries/02-smplos-safe.conf" << 'ENTRY2'
@@ -1723,7 +1723,7 @@ linux    /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen
 initrd   /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-zen.img
 # Full verbose boot: shows all kernel/initramfs/systemd messages on screen
 # Select this entry to diagnose black-screen or hang failures
-options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% nouveau.modeset=0 rd.debug rd.udev.log_level=7 systemd.log_level=info earlyprintk=efi,keep mce=dont_log_ce
+options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% nvidia-drm.modeset=1 rd.debug rd.udev.log_level=7 systemd.log_level=info earlyprintk=efi,keep mce=dont_log_ce
 ENTRY3
 
     # ── GRUB loopback.cfg for Ventoy / loopback booting ───────────────
@@ -1736,7 +1736,7 @@ menuentry "smplOS" --class arch --class gnu-linux --class gnu --class os {
     set gfxpayload=keep
     # Keep boot output silent and pinned to tty1 to avoid greetd/Plymouth handoff flash
     # nouveau.modeset=0: prevents nouveau KMS crash on NVIDIA Ada Lovelace (RTX 40xx) cards; harmless on Intel/AMD
-    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% quiet splash plymouth.nolog loglevel=3 rd.udev.log_level=3 rd.systemd.show_status=false systemd.show_status=false vt.global_cursor_default=0 console=tty1 mce=dont_log_ce nouveau.modeset=0
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% quiet splash plymouth.nolog loglevel=3 rd.udev.log_level=3 rd.systemd.show_status=false systemd.show_status=false vt.global_cursor_default=0 console=tty1 mce=dont_log_ce nvidia-drm.modeset=1
     initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-zen.img
 }
 
@@ -1750,7 +1750,7 @@ menuentry "smplOS (Debug)" --class arch --class gnu-linux --class gnu --class os
     set gfxpayload=keep
     # Full verbose boot: shows all kernel/initramfs/systemd messages on screen
     # Select this entry to diagnose black-screen or hang failures
-    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% nouveau.modeset=0 rd.debug rd.udev.log_level=7 systemd.log_level=info earlyprintk=efi,keep mce=dont_log_ce
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% nvidia-drm.modeset=1 rd.debug rd.udev.log_level=7 systemd.log_level=info earlyprintk=efi,keep mce=dont_log_ce
     initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-zen.img
 }
 LOOPBACKCFG
@@ -1785,7 +1785,7 @@ LABEL arch
     INITRD /%INSTALL_DIR%/boot/x86_64/initramfs-linux-zen.img
     # Keep boot output silent and pinned to tty1 to avoid greetd/Plymouth handoff flash
     # nouveau.modeset=0: prevents nouveau KMS crash on NVIDIA Ada Lovelace (RTX 40xx) cards; harmless on Intel/AMD
-    APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% quiet splash plymouth.nolog loglevel=3 rd.udev.log_level=3 rd.systemd.show_status=false systemd.show_status=false vt.global_cursor_default=0 console=tty1 mce=dont_log_ce nouveau.modeset=0
+    APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% quiet splash plymouth.nolog loglevel=3 rd.udev.log_level=3 rd.systemd.show_status=false systemd.show_status=false vt.global_cursor_default=0 console=tty1 mce=dont_log_ce nvidia-drm.modeset=1
 
 LABEL arch_safe
     MENU LABEL smplOS (Safe Mode)
@@ -1798,7 +1798,7 @@ LABEL arch_debug
     LINUX /%INSTALL_DIR%/boot/x86_64/vmlinuz-linux-zen
     INITRD /%INSTALL_DIR%/boot/x86_64/initramfs-linux-zen.img
     # Full verbose boot: shows all kernel/initramfs/systemd messages on screen
-    APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% nouveau.modeset=0 rd.debug rd.udev.log_level=7 systemd.log_level=info earlyprintk=efi,keep mce=dont_log_ce
+    APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% nvidia-drm.modeset=1 rd.debug rd.udev.log_level=7 systemd.log_level=info earlyprintk=efi,keep mce=dont_log_ce
 ARCHISOSYS
 
     log_info "Boot configuration updated"

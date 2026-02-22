@@ -119,6 +119,14 @@ edk2-shell
 intel-ucode
 amd-ucode
 
+# ── GPU Drivers ──────────────────────────────────────────────
+# nvidia-open-dkms: NVIDIA open kernel module (Turing RTX 20xx+, Ada RTX 40xx).
+# Compiles for linux-zen during ISO build. Enables proper KMS/DRM so Hyprland
+# can run on NVIDIA hardware. nouveau is disabled automatically when installed.
+# nvidia-utils: userspace libs (EGL, GLX, Vulkan, OpenCL, nvidia-smi).
+nvidia-open-dkms
+nvidia-utils
+
 # ── Installer ────────────────────────────────────────────────
 archinstall
 openssl
