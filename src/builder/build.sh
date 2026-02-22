@@ -1775,8 +1775,21 @@ ENTRY3
     cat > "$PROFILE_DIR/grub/loopback.cfg" << 'LOOPBACKCFG'
 # https://www.supergrubdisk.org/wiki/Loopback.cfg
 
+# Ventoy compatibility shim:
+# In Ventoy GRUB2 mode, iso_path is NOT set automatically — Ventoy only sets
+# vt_chosen_path (e.g. "/smplos.iso"). Without iso_path, the search below
+# would run `search --file ""` and silently fail, producing zero menu entries,
+# and GRUB would return instantly to the Ventoy menu.
+# Fix: copy vt_chosen_path → iso_path when we detect Ventoy's environment.
+if [ -z "${iso_path}" ]; then
+    if [ -n "${vt_chosen_path}" ]; then
+        set iso_path="${vt_chosen_path}"
+    elif [ -n "${vtoy_iso_path}" ]; then
+        set iso_path="${vtoy_iso_path}"
+    fi
+fi
+
 # Locate the device that holds the ISO image and capture its UUID.
-# ${iso_path} is set by Ventoy before sourcing this file.
 search --no-floppy --set=archiso_img_dev --file "${iso_path}"
 probe --set archiso_img_dev_uuid --fs-uuid "${archiso_img_dev}"
 
