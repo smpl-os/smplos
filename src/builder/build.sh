@@ -1747,8 +1747,8 @@ ENTRY1
     cat > "$PROFILE_DIR/efiboot/loader/entries/02-smplos-safe.conf" << 'ENTRY2'
 title    smplOS (Safe Mode)
 sort-key 02
-linux    /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux
-initrd   /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
+linux    /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen
+initrd   /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-zen.img
 options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% nomodeset mce=dont_log_ce
 ENTRY2
 
@@ -1766,27 +1766,43 @@ ENTRY3
     # When systemd-boot is the primary UEFI bootloader, mkarchiso still
     # copies grub/loopback.cfg to the ISO9660 for tools like Ventoy that
     # chain-load GRUB in loopback mode.
+    #
+    # IMPORTANT: loopback.cfg must set timeout + timeout_style=menu or
+    # Ventoy's inherited timeout=0 will auto-boot with no menu visible.
+    # Use the modern img_dev/img_loop format (not archisosearchuuid) so
+    # the initramfs can find the ISO when it is loop-mounted by Ventoy.
     mkdir -p "$PROFILE_DIR/grub"
     cat > "$PROFILE_DIR/grub/loopback.cfg" << 'LOOPBACKCFG'
-menuentry "smplOS" --class arch --class gnu-linux --class gnu --class os {
+# https://www.supergrubdisk.org/wiki/Loopback.cfg
+
+# Locate the device that holds the ISO image and capture its UUID.
+# ${iso_path} is set by Ventoy before sourcing this file.
+search --no-floppy --set=archiso_img_dev --file "${iso_path}"
+probe --set archiso_img_dev_uuid --fs-uuid "${archiso_img_dev}"
+
+set default=smplos
+set timeout=10
+set timeout_style=menu
+
+menuentry "smplOS" --id smplos --class arch --class gnu-linux --class gnu --class os {
     set gfxpayload=keep
     # nomodeset: EFI framebuffer works on every GPU for the TUI installer.
     # Post-install hardware detection installs the correct GPU driver offline.
-    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% quiet plymouth.nolog loglevel=3 rd.udev.log_level=3 rd.systemd.show_status=false systemd.show_status=false vt.global_cursor_default=0 console=tty1 mce=dont_log_ce nomodeset
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" quiet plymouth.nolog loglevel=3 rd.udev.log_level=3 rd.systemd.show_status=false systemd.show_status=false vt.global_cursor_default=0 console=tty1 mce=dont_log_ce nomodeset
     initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-zen.img
 }
 
-menuentry "smplOS (Safe Mode)" --class arch --class gnu-linux --class gnu --class os {
+menuentry "smplOS (Safe Mode)" --id smplos-safe --class arch --class gnu-linux --class gnu --class os {
     set gfxpayload=keep
-    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% nomodeset mce=dont_log_ce
-    initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" nomodeset mce=dont_log_ce
+    initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-zen.img
 }
 
-menuentry "smplOS (Debug)" --class arch --class gnu-linux --class gnu --class os {
+menuentry "smplOS (Debug)" --id smplos-debug --class arch --class gnu-linux --class gnu --class os {
     set gfxpayload=keep
     # Full verbose boot: shows all kernel/initramfs/systemd messages on screen
     # Select this entry to diagnose black-screen or hang failures
-    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% nvidia-drm.modeset=1 rd.debug rd.udev.log_level=7 systemd.log_level=info earlyprintk=efi,keep mce=dont_log_ce
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" nvidia-drm.modeset=1 rd.debug rd.udev.log_level=7 systemd.log_level=info earlyprintk=efi,keep mce=dont_log_ce
     initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-zen.img
 }
 LOOPBACKCFG
@@ -1866,8 +1882,8 @@ LABEL arch
 
 LABEL arch_safe
     MENU LABEL smplOS (Safe Mode)
-    LINUX /%INSTALL_DIR%/boot/x86_64/vmlinuz-linux
-    INITRD /%INSTALL_DIR%/boot/x86_64/initramfs-linux.img
+    LINUX /%INSTALL_DIR%/boot/x86_64/vmlinuz-linux-zen
+    INITRD /%INSTALL_DIR%/boot/x86_64/initramfs-linux-zen.img
     APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% nomodeset mce=dont_log_ce
 
 LABEL arch_debug
