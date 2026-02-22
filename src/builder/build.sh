@@ -1703,9 +1703,9 @@ title    smplOS
 sort-key 01
 linux    /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen
 initrd   /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-zen.img
-# Keep boot output silent and pinned to tty1 to avoid greetd/Plymouth handoff flash
-# nouveau.modeset=0: prevents nouveau KMS crash on NVIDIA Ada Lovelace (RTX 40xx) cards; harmless on Intel/AMD
-options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% quiet splash plymouth.nolog loglevel=3 rd.udev.log_level=3 rd.systemd.show_status=false systemd.show_status=false vt.global_cursor_default=0 console=tty1 mce=dont_log_ce nvidia-drm.modeset=1
+# Keep boot output silent and pinned to tty1
+# No 'splash': Plymouth in the live initramfs hangs without KMS, blocking tty1 for minutes
+options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% quiet plymouth.nolog loglevel=3 rd.udev.log_level=3 rd.systemd.show_status=false systemd.show_status=false vt.global_cursor_default=0 console=tty1 mce=dont_log_ce nvidia-drm.modeset=1
 ENTRY1
 
     cat > "$PROFILE_DIR/efiboot/loader/entries/02-smplos-safe.conf" << 'ENTRY2'
@@ -1735,8 +1735,8 @@ ENTRY3
 menuentry "smplOS" --class arch --class gnu-linux --class gnu --class os {
     set gfxpayload=keep
     # Keep boot output silent and pinned to tty1 to avoid greetd/Plymouth handoff flash
-    # nouveau.modeset=0: prevents nouveau KMS crash on NVIDIA Ada Lovelace (RTX 40xx) cards; harmless on Intel/AMD
-    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% quiet splash plymouth.nolog loglevel=3 rd.udev.log_level=3 rd.systemd.show_status=false systemd.show_status=false vt.global_cursor_default=0 console=tty1 mce=dont_log_ce nvidia-drm.modeset=1
+    # Note: no 'splash' here — Plymouth splash in the live ISO hangs without KMS and blocks tty1
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% quiet plymouth.nolog loglevel=3 rd.udev.log_level=3 rd.systemd.show_status=false systemd.show_status=false vt.global_cursor_default=0 console=tty1 mce=dont_log_ce nvidia-drm.modeset=1
     initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-zen.img
 }
 
@@ -1783,9 +1783,9 @@ LABEL arch
     MENU LABEL smplOS
     LINUX /%INSTALL_DIR%/boot/x86_64/vmlinuz-linux-zen
     INITRD /%INSTALL_DIR%/boot/x86_64/initramfs-linux-zen.img
-    # Keep boot output silent and pinned to tty1 to avoid greetd/Plymouth handoff flash
-    # nouveau.modeset=0: prevents nouveau KMS crash on NVIDIA Ada Lovelace (RTX 40xx) cards; harmless on Intel/AMD
-    APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% quiet splash plymouth.nolog loglevel=3 rd.udev.log_level=3 rd.systemd.show_status=false systemd.show_status=false vt.global_cursor_default=0 console=tty1 mce=dont_log_ce nvidia-drm.modeset=1
+    # Keep boot output silent and pinned to tty1
+    # No 'splash': Plymouth in the live initramfs hangs without KMS, blocking tty1 for minutes
+    APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% quiet plymouth.nolog loglevel=3 rd.udev.log_level=3 rd.systemd.show_status=false systemd.show_status=false vt.global_cursor_default=0 console=tty1 mce=dont_log_ce nvidia-drm.modeset=1
 
 LABEL arch_safe
     MENU LABEL smplOS (Safe Mode)
