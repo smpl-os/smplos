@@ -1661,11 +1661,11 @@ APPIMAGESETUP
     cat > "$airootfs/usr/local/bin/smplos-boot-log" << 'BOOTLOG'
 #!/bin/bash
 # smplos-boot-log: save boot logs to the Ventoy data partition for debugging.
-# The Ventoy data partition (label "Ventoy") is the exFAT/NTFS partition where
-# ISOs live. Logs appear in a smplos-boot-logs/ folder at its root.
+# Each boot run gets its own timestamped subdirectory under smplos-boot-logs/
+# so you can always tell which log is the most recent.
 set -euo pipefail
 
-LOG_DIR="smplos-boot-logs"
+LOG_ROOT="smplos-boot-logs"
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 
 # Find Ventoy data partition by its well-known label
@@ -1683,12 +1683,27 @@ if ! mount -o rw,noatime "$VENTOY_DEV" "$MNT" 2>/dev/null; then
     exit 1
 fi
 
-mkdir -p "$MNT/$LOG_DIR"
-dmesg > "$MNT/$LOG_DIR/dmesg-$TIMESTAMP.log"
-journalctl -b 0 --no-pager > "$MNT/$LOG_DIR/journal-$TIMESTAMP.log" 2>/dev/null || true
+# Each run gets its own subdirectory: YYYYMMDD-HHMMSS/
+RUN_DIR="$MNT/$LOG_ROOT/$TIMESTAMP"
+mkdir -p "$RUN_DIR"
+
+# ── Run summary: first thing to open when investigating a boot failure ────
+cat > "$RUN_DIR/summary.txt" << EOF
+=== smplOS Boot Log ===
+Timestamp : $TIMESTAMP
+Kernel    : $(uname -r)
+Cmdline   : $(cat /proc/cmdline)
+Hostname  : $(cat /etc/hostname 2>/dev/null || echo unknown)
+Uptime    : $(uptime -p 2>/dev/null || uptime)
+$(lspci 2>/dev/null | grep -iE 'vga|3d|display|nvidia|amd|intel' | sed 's/^/GPU       : /')
+======================
+EOF
+
+dmesg > "$RUN_DIR/dmesg.log"
+journalctl -b 0 --no-pager > "$RUN_DIR/journal.log" 2>/dev/null || true
 sync
 
-echo "smplos-boot-log: logs saved → $LOG_DIR/dmesg-$TIMESTAMP.log + journal-$TIMESTAMP.log"
+echo "smplos-boot-log: logs saved → $LOG_ROOT/$TIMESTAMP/{summary.txt,dmesg.log,journal.log}"
 BOOTLOG
     chmod +x "$airootfs/usr/local/bin/smplos-boot-log"
 }
@@ -1706,6 +1721,12 @@ setup_boot() {
     # and CachyOS all use.  Unlike GRUB, there is no fragile search for
     # the ISO9660 filesystem -- it just works on all UEFI firmware.
     mkdir -p "$PROFILE_DIR/efiboot/loader/entries"
+
+    # Remove every entry that releng shipped — Arch install medium, speech,
+    # memtest — so the user only sees our 3 smplOS entries.
+    rm -f "$PROFILE_DIR/efiboot/loader/entries/"*.conf
+    # Wipe memtest EFI binary copied by mkarchiso so firmware scanners don't surface it
+    rm -rf "$PROFILE_DIR/efiboot/memtest86+" 2>/dev/null || true
 
     cat > "$PROFILE_DIR/efiboot/loader/loader.conf" << 'LOADERCONF'
 timeout 5
@@ -1785,6 +1806,47 @@ CONFIG archiso_pxe.cfg
 LABEL sys
 CONFIG archiso_sys.cfg
 SYSLINUXCFG
+
+    # Overwrite the releng head so the menu title says smplOS, not Arch Linux
+    cat > "$PROFILE_DIR/syslinux/archiso_head.cfg" << 'SYSHEAD'
+SERIAL 0 115200
+UI vesamenu.c32
+MENU TITLE smplOS
+MENU BACKGROUND splash.png
+
+MENU WIDTH 78
+MENU MARGIN 4
+MENU ROWS 7
+MENU VSHIFT 10
+MENU TABMSGROW 14
+MENU CMDLINEROW 14
+MENU HELPMSGROW 16
+MENU HELPMSGENDROW 29
+
+MENU COLOR border       30;44   #40ffffff #a0000000 std
+MENU COLOR title        1;36;44 #9033ccff #a0000000 std
+MENU COLOR sel          7;37;40 #e0ffffff #20ffffff all
+MENU COLOR unsel        37;44   #50ffffff #a0000000 std
+MENU COLOR help         37;40   #c0ffffff #a0000000 std
+MENU COLOR timeout_msg  37;40   #80ffffff #00000000 std
+MENU COLOR timeout      1;37;40 #c0ffffff #00000000 std
+MENU COLOR msg07        37;40   #90ffffff #a0000000 std
+MENU COLOR tabmsg       31;40   #30ffffff #00000000 std
+
+MENU CLEAR
+MENU IMMEDIATE
+SYSHEAD
+
+    # Overwrite the releng tail — remove memtest, HDT, chain-boot; keep only reboot/poweroff
+    cat > "$PROFILE_DIR/syslinux/archiso_tail.cfg" << 'SYSTAIL'
+LABEL reboot
+MENU LABEL Reboot
+COM32 reboot.c32
+
+LABEL poweroff
+MENU LABEL Power Off
+COM32 poweroff.c32
+SYSTAIL
 
     cat > "$PROFILE_DIR/syslinux/archiso_sys.cfg" << 'ARCHISOSYS'
 DEFAULT arch
