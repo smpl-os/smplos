@@ -267,108 +267,6 @@ setup_profile() {
     rm -f "$PROFILE_DIR/airootfs/etc/motd" 2>/dev/null || true
 
     # Ventoy normal-mode fallback for archiso UUID search.
-    # In some Ventoy+firmware combinations, the virtual ISO block device is
-    # not exposed to initramfs in time (or at all). The stock archiso hook
-    # only scans physical partitions for /boot/<uuid>.uuid and fails.
-    #
-    # This hook is generic: it mounts LABEL=Ventoy, inspects ISO files, finds
-    # the one containing /boot/<archisosearchuuid>.uuid, then loop-mounts that
-    # ISO and hands off to archiso_mount_handler.
-    mkdir -p "$PROFILE_DIR/airootfs/usr/lib/initcpio/hooks"
-    mkdir -p "$PROFILE_DIR/airootfs/usr/lib/initcpio/install"
-
-    cat > "$PROFILE_DIR/airootfs/usr/lib/initcpio/hooks/archiso_ventoy" << 'VENTOYHOOK'
-#!/usr/bin/ash
-
-run_hook() {
-    # If loopback params already exist (GRUB2 path), do nothing.
-    [ -n "$(getarg 'img_dev')" ] && return
-
-    # Only activate for the standard UUID-search path.
-    local search_uuid
-    search_uuid="$(getarg 'archisosearchuuid')"
-    [ -z "${search_uuid}" ] && return
-
-    local ventoy_dev
-    ventoy_dev="$(blkid -l -o device -t LABEL=Ventoy 2>/dev/null)"
-    [ -z "${ventoy_dev}" ] && return
-
-    msg ":: Ventoy fallback active on ${ventoy_dev}"
-    export _archiso_ventoy_dev="${ventoy_dev}"
-    export _archiso_ventoy_uuid="${search_uuid}"
-    export mount_handler="archiso_ventoy_mount_handler"
-}
-
-archiso_ventoy_mount_handler() {
-    local newroot="${1}"
-    local ventoy_mnt="/run/archiso/vtoy"
-    local probe_mnt="/run/archiso/vtoy_probe"
-    local iso loop_dev matched_loop=""
-
-    mkdir -p "${ventoy_mnt}" "${probe_mnt}"
-    modprobe exfat 2>/dev/null || true
-
-    if ! mount -o ro,x-initrd.mount "${_archiso_ventoy_dev}" "${ventoy_mnt}" 2>/dev/null; then
-        echo "ERROR: Cannot mount Ventoy device ${_archiso_ventoy_dev}"
-        launch_interactive_shell
-        return
-    fi
-
-    for iso in "${ventoy_mnt}"/*.iso "${ventoy_mnt}"/*/*.iso "${ventoy_mnt}"/*/*/*.iso; do
-        [ -f "${iso}" ] || continue
-
-        loop_dev="$(losetup --find --show --read-only -- "${iso}" 2>/dev/null)" || continue
-        if mount -o ro,x-initrd.mount "${loop_dev}" "${probe_mnt}" 2>/dev/null; then
-            if [ -e "${probe_mnt}/boot/${_archiso_ventoy_uuid}.uuid" ]; then
-                umount "${probe_mnt}" 2>/dev/null
-                matched_loop="${loop_dev}"
-                msg ":: Ventoy matched ISO: ${iso##*/}"
-                break
-            fi
-            umount "${probe_mnt}" 2>/dev/null
-        fi
-        losetup -d "${loop_dev}" 2>/dev/null
-    done
-
-    if [ -z "${matched_loop}" ]; then
-        umount "${ventoy_mnt}" 2>/dev/null
-        echo "ERROR: Ventoy fallback could not find an ISO with /boot/${_archiso_ventoy_uuid}.uuid"
-        launch_interactive_shell
-        return
-    fi
-
-    export archisodevice="${matched_loop}"
-    unset archisosearchfilename
-    archiso_mount_handler "${newroot}"
-
-    if [ "${copytoram}" = "y" ]; then
-        losetup -d "${matched_loop}" 2>/dev/null
-        umount "${ventoy_mnt}" 2>/dev/null
-    fi
-}
-VENTOYHOOK
-    chmod +x "$PROFILE_DIR/airootfs/usr/lib/initcpio/hooks/archiso_ventoy"
-
-    cat > "$PROFILE_DIR/airootfs/usr/lib/initcpio/install/archiso_ventoy" << 'VENTOYINSTALL'
-#!/usr/bin/env bash
-
-build() {
-    add_runscript
-}
-
-help() {
-    cat <<HELPEOF
-  Ventoy normal-mode fallback: detect and loop-mount the ISO that contains
-  /boot/<archisosearchuuid>.uuid when direct UUID block-device search fails.
-HELPEOF
-}
-VENTOYINSTALL
-
-    if ! grep -q 'archiso_ventoy' "$PROFILE_DIR/airootfs/etc/mkinitcpio.conf.d/archiso.conf"; then
-        sed -i 's/archiso_loop_mnt/archiso_loop_mnt archiso_ventoy/' \
-            "$PROFILE_DIR/airootfs/etc/mkinitcpio.conf.d/archiso.conf"
-    fi
-    
     log_info "Base releng profile copied"
 }
 
@@ -1872,53 +1770,57 @@ ENTRY3
     # Use the modern img_dev/img_loop format (not archisosearchuuid) so
     # the initramfs can find the ISO when it is loop-mounted by Ventoy.
     mkdir -p "$PROFILE_DIR/grub"
+    # Identical structure to the official Arch Linux releng loopback.cfg.
+    # Do NOT add custom iso_path detection — it causes GRUB to error out
+    # silently and return to Ventoy with no menu shown.
     cat > "$PROFILE_DIR/grub/loopback.cfg" << 'LOOPBACKCFG'
 # https://www.supergrubdisk.org/wiki/Loopback.cfg
 
-# Ventoy compatibility shim:
-# In Ventoy GRUB2 mode, iso_path is NOT set automatically — Ventoy only sets
-# vt_chosen_path (e.g. "/smplos.iso"). Without iso_path, the search below
-# would run `search --file ""` and silently fail, producing zero menu entries,
-# and GRUB would return instantly to the Ventoy menu.
-# Fix: copy vt_chosen_path → iso_path when we detect Ventoy's environment.
-if [ -z "${iso_path}" ]; then
-    if [ -n "${vt_chosen_path}" ]; then
-        set iso_path="${vt_chosen_path}"
-    elif [ -n "${vtoy_iso_path}" ]; then
-        set iso_path="${vtoy_iso_path}"
-    fi
-fi
-
-# Locate the device that holds the ISO image and capture its UUID.
+# Search for the ISO volume
 search --no-floppy --set=archiso_img_dev --file "${iso_path}"
 probe --set archiso_img_dev_uuid --fs-uuid "${archiso_img_dev}"
 
-set default=smplos
-set timeout=10
-set timeout_style=menu
+# Get a human readable platform identifier
+if [ "${grub_platform}" == 'efi' ]; then
+    archiso_platform='UEFI'
+elif [ "${grub_platform}" == 'pc' ]; then
+    archiso_platform='BIOS'
+else
+    archiso_platform="${grub_cpu}-${grub_platform}"
+fi
 
-menuentry "smplOS" --id smplos --class arch --class gnu-linux --class gnu --class os {
+# Set default menu entry
+default=smplos
+timeout=15
+timeout_style=menu
+
+menuentry "smplOS (${archiso_platform})" --id smplos --class arch --class gnu-linux --class gnu --class os {
     set gfxpayload=keep
-    # nomodeset: EFI framebuffer works on every GPU for the TUI installer.
-    # Post-install hardware detection installs the correct GPU driver offline.
     linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}"
     initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
 }
 
-menuentry "smplOS (Safe Mode)" --id smplos-safe --class arch --class gnu-linux --class gnu --class os {
+menuentry "smplOS Safe Mode (${archiso_platform})" --id smplos-safe --class arch --class gnu-linux --class gnu --class os {
     set gfxpayload=keep
     linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" nomodeset nouveau.modeset=0
     initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
 }
 
-menuentry "smplOS (Debug)" --id smplos-debug --class arch --class gnu-linux --class gnu --class os {
+menuentry "smplOS Debug (${archiso_platform})" --id smplos-debug --class arch --class gnu-linux --class gnu --class os {
     set gfxpayload=keep
-    # Full verbose boot: shows all kernel/initramfs/systemd messages on screen
-    # Select this entry to diagnose black-screen or hang failures
-    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" nomodeset nouveau.modeset=0 rd.debug rd.udev.log_level=7 systemd.log_level=info
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" rd.debug rd.udev.log_level=7 systemd.log_level=info
     initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
 }
 
+menuentry 'System restart' --class reboot --class restart {
+    echo 'System rebooting...'
+    reboot
+}
+
+menuentry 'System shutdown' --class shutdown --class poweroff {
+    echo 'System shutting down...'
+    halt
+}
 LOOPBACKCFG
 
     # ── Syslinux for BIOS boot ────────────────────────────────────────
