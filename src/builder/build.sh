@@ -1945,7 +1945,6 @@ build_iso() {
         else
             new_name="${ISO_NAME}_${ISO_VERSION}.iso"
         fi
-        new_name="${new_name}-${ISO_VERSION}.iso"
         
         mv "$iso_file" "$RELEASE_DIR/$new_name"
         
