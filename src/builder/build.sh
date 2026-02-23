@@ -1762,6 +1762,15 @@ initrd   /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-zen.img
 options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=15 nomodeset nouveau.modeset=0 rd.debug rd.udev.log_level=7 systemd.log_level=info earlyprintk=efi,keep console=tty0 mce=dont_log_ce
 ENTRY3
 
+    cat > "$PROFILE_DIR/efiboot/loader/entries/04-smplos-ultrasafe.conf" << 'ENTRY4'
+title    smplOS (Ultra Safe)
+sort-key 04
+linux    /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen
+initrd   /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-zen.img
+# Last-resort hardware-compatibility profile for early firmware/ACPI hangs.
+options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=20 nomodeset nouveau.modeset=0 acpi=off noapic nolapic irqpoll mce=dont_log_ce
+ENTRY4
+
     # ── GRUB loopback.cfg for Ventoy / loopback booting ───────────────
     # When systemd-boot is the primary UEFI bootloader, mkarchiso still
     # copies grub/loopback.cfg to the ISO9660 for tools like Ventoy that
@@ -1816,6 +1825,13 @@ menuentry "smplOS (Debug)" --id smplos-debug --class arch --class gnu-linux --cl
     # Full verbose boot: shows all kernel/initramfs/systemd messages on screen
     # Select this entry to diagnose black-screen or hang failures
     linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" nomodeset nouveau.modeset=0 rd.debug rd.udev.log_level=7 systemd.log_level=info earlyprintk=efi,keep console=tty0 mce=dont_log_ce
+    initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-zen.img
+}
+
+menuentry "smplOS (Ultra Safe)" --id smplos-ultrasafe --class arch --class gnu-linux --class gnu --class os {
+    set gfxpayload=keep
+    # Last-resort hardware-compatibility profile for early firmware/ACPI hangs.
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" rootdelay=20 nomodeset nouveau.modeset=0 acpi=off noapic nolapic irqpoll mce=dont_log_ce
     initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-zen.img
 }
 LOOPBACKCFG
@@ -1905,6 +1921,13 @@ LABEL arch_debug
     INITRD /%INSTALL_DIR%/boot/x86_64/initramfs-linux-zen.img
     # Full verbose boot: shows all kernel/initramfs/systemd messages on screen
     APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=15 nomodeset nouveau.modeset=0 rd.debug rd.udev.log_level=7 systemd.log_level=info earlyprintk=efi,keep mce=dont_log_ce
+
+LABEL arch_ultrasafe
+    MENU LABEL smplOS (Ultra Safe)
+    LINUX /%INSTALL_DIR%/boot/x86_64/vmlinuz-linux-zen
+    INITRD /%INSTALL_DIR%/boot/x86_64/initramfs-linux-zen.img
+    # Last-resort hardware-compatibility profile for early firmware/ACPI hangs.
+    APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=20 nomodeset nouveau.modeset=0 acpi=off noapic nolapic irqpoll mce=dont_log_ce
 ARCHISOSYS
 
     log_info "Boot configuration updated"
