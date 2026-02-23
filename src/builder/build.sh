@@ -1844,7 +1844,7 @@ initrd   /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-zen.img
 # nomodeset: EFI framebuffer works on every GPU (NVIDIA/AMD/Intel) for the TUI
 # installer. No proprietary driver needed. The installed system gets the correct
 # GPU driver via hardware detection (install/config/hardware/*.sh) post-install.
-options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=15 quiet plymouth.nolog loglevel=3 rd.udev.log_level=3 rd.systemd.show_status=false systemd.show_status=false vt.global_cursor_default=0 console=tty1 nomodeset nouveau.modeset=0 mce=dont_log_ce
+options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=15 nomodeset nouveau.modeset=0 mce=dont_log_ce
 ENTRY1
 
     cat > "$PROFILE_DIR/efiboot/loader/entries/02-smplos-safe.conf" << 'ENTRY2'
@@ -1913,7 +1913,7 @@ menuentry "smplOS" --id smplos --class arch --class gnu-linux --class gnu --clas
     set gfxpayload=keep
     # nomodeset: EFI framebuffer works on every GPU for the TUI installer.
     # Post-install hardware detection installs the correct GPU driver offline.
-    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" quiet plymouth.nolog loglevel=3 rd.udev.log_level=3 rd.systemd.show_status=false systemd.show_status=false vt.global_cursor_default=0 console=tty1 nomodeset nouveau.modeset=0 mce=dont_log_ce
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" nomodeset nouveau.modeset=0 mce=dont_log_ce
     initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-zen.img
 }
 
@@ -2010,7 +2010,7 @@ LABEL arch
     INITRD /%INSTALL_DIR%/boot/x86_64/initramfs-linux-zen.img
     # nomodeset: EFI framebuffer works on every GPU for the TUI installer.
     # Post-install hardware detection installs the correct GPU driver offline.
-    APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=15 quiet plymouth.nolog loglevel=3 rd.udev.log_level=3 rd.systemd.show_status=false systemd.show_status=false vt.global_cursor_default=0 console=tty1 nomodeset nouveau.modeset=0 mce=dont_log_ce
+    APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=15 nomodeset nouveau.modeset=0 mce=dont_log_ce
 
 LABEL arch_safe
     MENU LABEL smplOS (Safe Mode)
