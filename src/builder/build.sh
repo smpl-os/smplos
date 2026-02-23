@@ -268,6 +268,109 @@ setup_profile() {
     
     # Remove the default motd
     rm -f "$PROFILE_DIR/airootfs/etc/motd" 2>/dev/null || true
+
+    # Ventoy normal-mode fallback for archiso UUID search.
+    # In some Ventoy+firmware combinations, the virtual ISO block device is
+    # not exposed to initramfs in time (or at all). The stock archiso hook
+    # only scans physical partitions for /boot/<uuid>.uuid and fails.
+    #
+    # This hook is generic: it mounts LABEL=Ventoy, inspects ISO files, finds
+    # the one containing /boot/<archisosearchuuid>.uuid, then loop-mounts that
+    # ISO and hands off to archiso_mount_handler.
+    mkdir -p "$PROFILE_DIR/airootfs/usr/lib/initcpio/hooks"
+    mkdir -p "$PROFILE_DIR/airootfs/usr/lib/initcpio/install"
+
+    cat > "$PROFILE_DIR/airootfs/usr/lib/initcpio/hooks/archiso_ventoy" << 'VENTOYHOOK'
+#!/usr/bin/ash
+
+run_hook() {
+    # If loopback params already exist (GRUB2 path), do nothing.
+    [ -n "$(getarg 'img_dev')" ] && return
+
+    # Only activate for the standard UUID-search path.
+    local search_uuid
+    search_uuid="$(getarg 'archisosearchuuid')"
+    [ -z "${search_uuid}" ] && return
+
+    local ventoy_dev
+    ventoy_dev="$(blkid -l -o device -t LABEL=Ventoy 2>/dev/null)"
+    [ -z "${ventoy_dev}" ] && return
+
+    msg ":: Ventoy fallback active on ${ventoy_dev}"
+    export _archiso_ventoy_dev="${ventoy_dev}"
+    export _archiso_ventoy_uuid="${search_uuid}"
+    export mount_handler="archiso_ventoy_mount_handler"
+}
+
+archiso_ventoy_mount_handler() {
+    local newroot="${1}"
+    local ventoy_mnt="/run/archiso/vtoy"
+    local probe_mnt="/run/archiso/vtoy_probe"
+    local iso loop_dev matched_loop=""
+
+    mkdir -p "${ventoy_mnt}" "${probe_mnt}"
+    modprobe exfat 2>/dev/null || true
+
+    if ! mount -o ro,x-initrd.mount "${_archiso_ventoy_dev}" "${ventoy_mnt}" 2>/dev/null; then
+        echo "ERROR: Cannot mount Ventoy device ${_archiso_ventoy_dev}"
+        launch_interactive_shell
+        return
+    fi
+
+    for iso in "${ventoy_mnt}"/*.iso "${ventoy_mnt}"/*/*.iso "${ventoy_mnt}"/*/*/*.iso; do
+        [ -f "${iso}" ] || continue
+
+        loop_dev="$(losetup --find --show --read-only -- "${iso}" 2>/dev/null)" || continue
+        if mount -o ro,x-initrd.mount "${loop_dev}" "${probe_mnt}" 2>/dev/null; then
+            if [ -e "${probe_mnt}/boot/${_archiso_ventoy_uuid}.uuid" ]; then
+                umount "${probe_mnt}" 2>/dev/null
+                matched_loop="${loop_dev}"
+                msg ":: Ventoy matched ISO: ${iso##*/}"
+                break
+            fi
+            umount "${probe_mnt}" 2>/dev/null
+        fi
+        losetup -d "${loop_dev}" 2>/dev/null
+    done
+
+    if [ -z "${matched_loop}" ]; then
+        umount "${ventoy_mnt}" 2>/dev/null
+        echo "ERROR: Ventoy fallback could not find an ISO with /boot/${_archiso_ventoy_uuid}.uuid"
+        launch_interactive_shell
+        return
+    fi
+
+    export archisodevice="${matched_loop}"
+    unset archisosearchfilename
+    archiso_mount_handler "${newroot}"
+
+    if [ "${copytoram}" = "y" ]; then
+        losetup -d "${matched_loop}" 2>/dev/null
+        umount "${ventoy_mnt}" 2>/dev/null
+    fi
+}
+VENTOYHOOK
+    chmod +x "$PROFILE_DIR/airootfs/usr/lib/initcpio/hooks/archiso_ventoy"
+
+    cat > "$PROFILE_DIR/airootfs/usr/lib/initcpio/install/archiso_ventoy" << 'VENTOYINSTALL'
+#!/usr/bin/env bash
+
+build() {
+    add_runscript
+}
+
+help() {
+    cat <<HELPEOF
+  Ventoy normal-mode fallback: detect and loop-mount the ISO that contains
+  /boot/<archisosearchuuid>.uuid when direct UUID block-device search fails.
+HELPEOF
+}
+VENTOYINSTALL
+
+    if ! grep -q 'archiso_ventoy' "$PROFILE_DIR/airootfs/etc/mkinitcpio.conf.d/archiso.conf"; then
+        sed -i 's/archiso_loop_mnt/archiso_loop_mnt archiso_ventoy/' \
+            "$PROFILE_DIR/airootfs/etc/mkinitcpio.conf.d/archiso.conf"
+    fi
     
     log_info "Base releng profile copied"
 }
