@@ -1833,7 +1833,7 @@ setup_boot() {
 
     cat > "$PROFILE_DIR/efiboot/loader/loader.conf" << 'LOADERCONF'
 timeout 10
-default 02-smplos-safe.conf
+default 01-smplos.conf
 LOADERCONF
 
     cat > "$PROFILE_DIR/efiboot/loader/entries/01-smplos.conf" << 'ENTRY1'
@@ -1844,7 +1844,7 @@ initrd   /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-zen.img
 # nomodeset: EFI framebuffer works on every GPU (NVIDIA/AMD/Intel) for the TUI
 # installer. No proprietary driver needed. The installed system gets the correct
 # GPU driver via hardware detection (install/config/hardware/*.sh) post-install.
-options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=15 nomodeset nouveau.modeset=0 mce=dont_log_ce
+options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=20
 ENTRY1
 
     cat > "$PROFILE_DIR/efiboot/loader/entries/02-smplos-safe.conf" << 'ENTRY2'
@@ -1852,7 +1852,7 @@ title    smplOS (Safe Mode)
 sort-key 02
 linux    /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen
 initrd   /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-zen.img
-options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=20 nomodeset nouveau.modeset=0 acpi=off noapic nolapic irqpoll mce=dont_log_ce
+options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=20 nomodeset nouveau.modeset=0
 ENTRY2
 
     cat > "$PROFILE_DIR/efiboot/loader/entries/03-smplos-debug.conf" << 'ENTRY3'
@@ -1862,7 +1862,7 @@ linux    /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen
 initrd   /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-zen.img
 # Full verbose boot: shows all kernel/initramfs/systemd messages on screen
 # Select this entry to diagnose black-screen or hang failures
-options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=15 nomodeset nouveau.modeset=0 rd.debug rd.udev.log_level=7 systemd.log_level=info earlyprintk=efi,keep console=tty0 mce=dont_log_ce
+options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=20 nomodeset nouveau.modeset=0 rd.debug rd.udev.log_level=7 systemd.log_level=info
 ENTRY3
 
     # ── GRUB loopback.cfg for Ventoy / loopback booting ───────────────
@@ -1896,7 +1896,7 @@ fi
 search --no-floppy --set=archiso_img_dev --file "${iso_path}"
 probe --set archiso_img_dev_uuid --fs-uuid "${archiso_img_dev}"
 
-set default=smplos-safe
+set default=smplos
 set timeout=10
 set timeout_style=menu
 
@@ -1904,13 +1904,13 @@ menuentry "smplOS" --id smplos --class arch --class gnu-linux --class gnu --clas
     set gfxpayload=keep
     # nomodeset: EFI framebuffer works on every GPU for the TUI installer.
     # Post-install hardware detection installs the correct GPU driver offline.
-    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" nomodeset nouveau.modeset=0 mce=dont_log_ce
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}"
     initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-zen.img
 }
 
 menuentry "smplOS (Safe Mode)" --id smplos-safe --class arch --class gnu-linux --class gnu --class os {
     set gfxpayload=keep
-    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" rootdelay=20 nomodeset nouveau.modeset=0 acpi=off noapic nolapic irqpoll mce=dont_log_ce
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" nomodeset nouveau.modeset=0
     initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-zen.img
 }
 
@@ -1918,7 +1918,7 @@ menuentry "smplOS (Debug)" --id smplos-debug --class arch --class gnu-linux --cl
     set gfxpayload=keep
     # Full verbose boot: shows all kernel/initramfs/systemd messages on screen
     # Select this entry to diagnose black-screen or hang failures
-    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" nomodeset nouveau.modeset=0 rd.debug rd.udev.log_level=7 systemd.log_level=info earlyprintk=efi,keep console=tty0 mce=dont_log_ce
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" nomodeset nouveau.modeset=0 rd.debug rd.udev.log_level=7 systemd.log_level=info
     initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-zen.img
 }
 
@@ -1982,7 +1982,7 @@ COM32 poweroff.c32
 SYSTAIL
 
     cat > "$PROFILE_DIR/syslinux/archiso_sys.cfg" << 'ARCHISOSYS'
-DEFAULT arch_safe
+DEFAULT arch
 PROMPT 1
 TIMEOUT 100
 
@@ -1995,20 +1995,20 @@ LABEL arch
     INITRD /%INSTALL_DIR%/boot/x86_64/initramfs-linux-zen.img
     # nomodeset: EFI framebuffer works on every GPU for the TUI installer.
     # Post-install hardware detection installs the correct GPU driver offline.
-    APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=15 nomodeset nouveau.modeset=0 mce=dont_log_ce
+    APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=20
 
 LABEL arch_safe
     MENU LABEL smplOS (Safe Mode)
     LINUX /%INSTALL_DIR%/boot/x86_64/vmlinuz-linux-zen
     INITRD /%INSTALL_DIR%/boot/x86_64/initramfs-linux-zen.img
-    APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=20 nomodeset nouveau.modeset=0 acpi=off noapic nolapic irqpoll mce=dont_log_ce
+    APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=20 nomodeset nouveau.modeset=0
 
 LABEL arch_debug
     MENU LABEL smplOS (Debug)
     LINUX /%INSTALL_DIR%/boot/x86_64/vmlinuz-linux-zen
     INITRD /%INSTALL_DIR%/boot/x86_64/initramfs-linux-zen.img
     # Full verbose boot: shows all kernel/initramfs/systemd messages on screen
-    APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=15 nomodeset nouveau.modeset=0 rd.debug rd.udev.log_level=7 systemd.log_level=info earlyprintk=efi,keep mce=dont_log_ce
+    APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=20 nomodeset nouveau.modeset=0 rd.debug rd.udev.log_level=7 systemd.log_level=info
 
 ARCHISOSYS
 
