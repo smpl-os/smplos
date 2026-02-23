@@ -1927,11 +1927,23 @@ build_iso() {
     iso_file=$(find "$RELEASE_DIR" -maxdepth 1 -name "*.iso" -type f -printf '%T@ %p\n' 2>/dev/null | sort -n | tail -1 | cut -d' ' -f2-)
     
     if [[ -n "$iso_file" && -f "$iso_file" ]]; then
-        local new_name="${ISO_NAME}-${COMPOSITOR}"
+        # Format: smplos_<editions>_<timestamp>.iso
+        # Editions use first-letter abbreviations: p=productivity c=creators
+        # m=communication d=development a=ai l=lite
+        # e.g. --all → smplos_pcmda_260223-0152.iso
+        local ed_slug=""
         if [[ -n "$EDITIONS" ]]; then
-            # Join edition names with + (e.g., productivity+development)
-            local ed_slug="${EDITIONS//,/+}"
-            new_name="${new_name}-${ed_slug}"
+            local -A ed_map=([productivity]=p [creators]=c [communication]=m [development]=d [ai]=a [lite]=l)
+            IFS=',' read -ra ed_list <<< "$EDITIONS"
+            for ed in "${ed_list[@]}"; do
+                ed_slug+="${ed_map[$ed]:-${ed:0:1}}"
+            done
+        fi
+        local new_name
+        if [[ -n "$ed_slug" ]]; then
+            new_name="${ISO_NAME}_${ed_slug}_${ISO_VERSION}.iso"
+        else
+            new_name="${ISO_NAME}_${ISO_VERSION}.iso"
         fi
         new_name="${new_name}-${ISO_VERSION}.iso"
         
