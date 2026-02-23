@@ -1730,7 +1730,7 @@ setup_boot() {
 
     cat > "$PROFILE_DIR/efiboot/loader/loader.conf" << 'LOADERCONF'
 timeout 10
-default 03-smplos-debug.conf
+default 02-smplos-safe.conf
 LOADERCONF
 
     cat > "$PROFILE_DIR/efiboot/loader/entries/01-smplos.conf" << 'ENTRY1'
@@ -1759,9 +1759,7 @@ linux    /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen
 initrd   /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-zen.img
 # Full verbose boot: shows all kernel/initramfs/systemd messages on screen
 # Select this entry to diagnose black-screen or hang failures
-# console=tty0: keep output on screen; console=ttyS0,115200: mirror to serial
-# → in QEMU test-iso.sh, all initramfs/systemd messages are saved to ./boot.log
-options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=15 nomodeset nouveau.modeset=0 rd.debug rd.udev.log_level=7 systemd.log_level=info earlyprintk=ttyS0,115200 earlyprintk=efi,keep console=tty0 console=ttyS0,115200 mce=dont_log_ce
+options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=15 nomodeset nouveau.modeset=0 rd.debug rd.udev.log_level=7 systemd.log_level=info earlyprintk=efi,keep console=tty0 mce=dont_log_ce
 ENTRY3
 
     # ── GRUB loopback.cfg for Ventoy / loopback booting ───────────────
@@ -1795,7 +1793,7 @@ fi
 search --no-floppy --set=archiso_img_dev --file "${iso_path}"
 probe --set archiso_img_dev_uuid --fs-uuid "${archiso_img_dev}"
 
-set default=smplos-debug
+set default=smplos-safe
 set timeout=10
 set timeout_style=menu
 
@@ -1817,7 +1815,7 @@ menuentry "smplOS (Debug)" --id smplos-debug --class arch --class gnu-linux --cl
     set gfxpayload=keep
     # Full verbose boot: shows all kernel/initramfs/systemd messages on screen
     # Select this entry to diagnose black-screen or hang failures
-    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" nomodeset nouveau.modeset=0 rd.debug rd.udev.log_level=7 systemd.log_level=info earlyprintk=ttyS0,115200 earlyprintk=efi,keep console=tty0 console=ttyS0,115200 mce=dont_log_ce
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" nomodeset nouveau.modeset=0 rd.debug rd.udev.log_level=7 systemd.log_level=info earlyprintk=efi,keep console=tty0 mce=dont_log_ce
     initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-zen.img
 }
 LOOPBACKCFG
@@ -1880,7 +1878,7 @@ COM32 poweroff.c32
 SYSTAIL
 
     cat > "$PROFILE_DIR/syslinux/archiso_sys.cfg" << 'ARCHISOSYS'
-DEFAULT arch_debug
+DEFAULT arch_safe
 PROMPT 1
 TIMEOUT 100
 
