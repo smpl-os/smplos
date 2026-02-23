@@ -1741,7 +1741,7 @@ initrd   /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-zen.img
 # nomodeset: EFI framebuffer works on every GPU (NVIDIA/AMD/Intel) for the TUI
 # installer. No proprietary driver needed. The installed system gets the correct
 # GPU driver via hardware detection (install/config/hardware/*.sh) post-install.
-options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% quiet plymouth.nolog loglevel=3 rd.udev.log_level=3 rd.systemd.show_status=false systemd.show_status=false vt.global_cursor_default=0 console=tty1 mce=dont_log_ce nomodeset
+options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=15 quiet plymouth.nolog loglevel=3 rd.udev.log_level=3 rd.systemd.show_status=false systemd.show_status=false vt.global_cursor_default=0 console=tty1 mce=dont_log_ce nomodeset
 ENTRY1
 
     cat > "$PROFILE_DIR/efiboot/loader/entries/02-smplos-safe.conf" << 'ENTRY2'
@@ -1749,7 +1749,7 @@ title    smplOS (Safe Mode)
 sort-key 02
 linux    /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen
 initrd   /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-zen.img
-options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% nomodeset mce=dont_log_ce
+options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=15 nomodeset mce=dont_log_ce
 ENTRY2
 
     cat > "$PROFILE_DIR/efiboot/loader/entries/03-smplos-debug.conf" << 'ENTRY3'
@@ -1759,7 +1759,9 @@ linux    /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen
 initrd   /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-zen.img
 # Full verbose boot: shows all kernel/initramfs/systemd messages on screen
 # Select this entry to diagnose black-screen or hang failures
-options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% nvidia-drm.modeset=1 rd.debug rd.udev.log_level=7 systemd.log_level=info earlyprintk=efi,keep mce=dont_log_ce
+# console=tty0: keep output on screen; console=ttyS0,115200: mirror to serial
+# → in QEMU test-iso.sh, all initramfs/systemd messages are saved to ./boot.log
+options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=15 nvidia-drm.modeset=1 rd.debug rd.udev.log_level=7 systemd.log_level=info earlyprintk=ttyS0,115200 earlyprintk=efi,keep console=tty0 console=ttyS0,115200 mce=dont_log_ce
 ENTRY3
 
     # ── GRUB loopback.cfg for Ventoy / loopback booting ───────────────
@@ -1815,7 +1817,7 @@ menuentry "smplOS (Debug)" --id smplos-debug --class arch --class gnu-linux --cl
     set gfxpayload=keep
     # Full verbose boot: shows all kernel/initramfs/systemd messages on screen
     # Select this entry to diagnose black-screen or hang failures
-    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" nvidia-drm.modeset=1 rd.debug rd.udev.log_level=7 systemd.log_level=info earlyprintk=efi,keep mce=dont_log_ce
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" nvidia-drm.modeset=1 rd.debug rd.udev.log_level=7 systemd.log_level=info earlyprintk=ttyS0,115200 earlyprintk=efi,keep console=tty0 console=ttyS0,115200 mce=dont_log_ce
     initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-zen.img
 }
 LOOPBACKCFG
@@ -1891,20 +1893,20 @@ LABEL arch
     INITRD /%INSTALL_DIR%/boot/x86_64/initramfs-linux-zen.img
     # nomodeset: EFI framebuffer works on every GPU for the TUI installer.
     # Post-install hardware detection installs the correct GPU driver offline.
-    APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% quiet plymouth.nolog loglevel=3 rd.udev.log_level=3 rd.systemd.show_status=false systemd.show_status=false vt.global_cursor_default=0 console=tty1 mce=dont_log_ce nomodeset
+    APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=15 quiet plymouth.nolog loglevel=3 rd.udev.log_level=3 rd.systemd.show_status=false systemd.show_status=false vt.global_cursor_default=0 console=tty1 mce=dont_log_ce nomodeset
 
 LABEL arch_safe
     MENU LABEL smplOS (Safe Mode)
     LINUX /%INSTALL_DIR%/boot/x86_64/vmlinuz-linux-zen
     INITRD /%INSTALL_DIR%/boot/x86_64/initramfs-linux-zen.img
-    APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% nomodeset mce=dont_log_ce
+    APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=15 nomodeset mce=dont_log_ce
 
 LABEL arch_debug
     MENU LABEL smplOS (Debug)
     LINUX /%INSTALL_DIR%/boot/x86_64/vmlinuz-linux-zen
     INITRD /%INSTALL_DIR%/boot/x86_64/initramfs-linux-zen.img
     # Full verbose boot: shows all kernel/initramfs/systemd messages on screen
-    APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% nvidia-drm.modeset=1 rd.debug rd.udev.log_level=7 systemd.log_level=info earlyprintk=efi,keep mce=dont_log_ce
+    APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=15 nvidia-drm.modeset=1 rd.debug rd.udev.log_level=7 systemd.log_level=info earlyprintk=efi,keep mce=dont_log_ce
 ARCHISOSYS
 
     log_info "Boot configuration updated"

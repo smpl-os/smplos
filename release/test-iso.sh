@@ -124,12 +124,18 @@ fi
 # 6. Launch QEMU
 # ------------------------------------------------------------
 
+# boot.log captures all serial console output (kernel + initramfs + systemd)
+# The debug boot entry sends output to ttyS0 — readable even after a crash
+BOOT_LOG="./boot-$(date +%Y%m%d-%H%M%S).log"
+echo "Boot log: $BOOT_LOG"
+
 qemu-system-x86_64 \
   -enable-kvm \
   -cpu host \
   -m 8192 \
   -smp "$(nproc)" \
   -machine q35 \
+  -serial file:"$BOOT_LOG" \
   -drive if=pflash,format=raw,unit=0,readonly=on,file="$OVMF_CODE" \
   -drive if=pflash,format=raw,unit=1,file="$LOCAL_VARS" \
   -drive file="$DISK",format=qcow2,if=none,id=drive0 \
