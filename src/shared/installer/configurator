@@ -2,6 +2,16 @@
 
 # smplOS Configurator - gum-based installation wizard
 # Step-based wizard with back/retry support (ESC never quits)
+# Secret exit: Ctrl+C (SIGINT) drops to a root shell
+
+_emergency_shell() {
+    clear
+    echo ""
+    echo "  Dropped to shell. Type 'configurator' to restart the installer."
+    echo ""
+    exec /bin/bash --login
+}
+trap '_emergency_shell' INT TERM
 
 source "$SMPLOS_INSTALL/helpers/all.sh"
 
