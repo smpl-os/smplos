@@ -1761,7 +1761,7 @@ initrd   /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-zen.img
 # Select this entry to diagnose black-screen or hang failures
 # console=tty0: keep output on screen; console=ttyS0,115200: mirror to serial
 # → in QEMU test-iso.sh, all initramfs/systemd messages are saved to ./boot.log
-options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=15 nvidia-drm.modeset=1 rd.debug rd.udev.log_level=7 systemd.log_level=info earlyprintk=ttyS0,115200 earlyprintk=efi,keep console=tty0 console=ttyS0,115200 mce=dont_log_ce
+options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=15 nomodeset rd.debug rd.udev.log_level=7 systemd.log_level=info earlyprintk=ttyS0,115200 earlyprintk=efi,keep console=tty0 console=ttyS0,115200 mce=dont_log_ce
 ENTRY3
 
     # ── GRUB loopback.cfg for Ventoy / loopback booting ───────────────
@@ -1817,7 +1817,7 @@ menuentry "smplOS (Debug)" --id smplos-debug --class arch --class gnu-linux --cl
     set gfxpayload=keep
     # Full verbose boot: shows all kernel/initramfs/systemd messages on screen
     # Select this entry to diagnose black-screen or hang failures
-    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" nvidia-drm.modeset=1 rd.debug rd.udev.log_level=7 systemd.log_level=info earlyprintk=ttyS0,115200 earlyprintk=efi,keep console=tty0 console=ttyS0,115200 mce=dont_log_ce
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" nomodeset rd.debug rd.udev.log_level=7 systemd.log_level=info earlyprintk=ttyS0,115200 earlyprintk=efi,keep console=tty0 console=ttyS0,115200 mce=dont_log_ce
     initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-zen.img
 }
 LOOPBACKCFG
@@ -1906,7 +1906,7 @@ LABEL arch_debug
     LINUX /%INSTALL_DIR%/boot/x86_64/vmlinuz-linux-zen
     INITRD /%INSTALL_DIR%/boot/x86_64/initramfs-linux-zen.img
     # Full verbose boot: shows all kernel/initramfs/systemd messages on screen
-    APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=15 nvidia-drm.modeset=1 rd.debug rd.udev.log_level=7 systemd.log_level=info earlyprintk=efi,keep mce=dont_log_ce
+    APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=15 nomodeset rd.debug rd.udev.log_level=7 systemd.log_level=info earlyprintk=efi,keep mce=dont_log_ce
 ARCHISOSYS
 
     log_info "Boot configuration updated"
