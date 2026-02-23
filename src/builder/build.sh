@@ -258,9 +258,6 @@ setup_profile() {
     # We base our ISO on the official arch ISO (releng) config
     cp -r /usr/share/archiso/configs/releng/* "$PROFILE_DIR/"
     
-    # Use linux-zen instead of the default linux kernel
-    sed -i 's/^linux$/linux-zen/' "$PROFILE_DIR/packages.x86_64"
-    
     # Remove reflector service (we'll use our offline mirror)
     rm -rf "$PROFILE_DIR/airootfs/etc/systemd/system/multi-user.target.wants/reflector.service" 2>/dev/null || true
     rm -rf "$PROFILE_DIR/airootfs/etc/systemd/system/reflector.service.d" 2>/dev/null || true
@@ -1839,8 +1836,8 @@ LOADERCONF
     cat > "$PROFILE_DIR/efiboot/loader/entries/01-smplos.conf" << 'ENTRY1'
 title    smplOS
 sort-key 01
-linux    /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen
-initrd   /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-zen.img
+linux    /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux
+initrd   /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
 # nomodeset: EFI framebuffer works on every GPU (NVIDIA/AMD/Intel) for the TUI
 # installer. No proprietary driver needed. The installed system gets the correct
 # GPU driver via hardware detection (install/config/hardware/*.sh) post-install.
@@ -1850,16 +1847,16 @@ ENTRY1
     cat > "$PROFILE_DIR/efiboot/loader/entries/02-smplos-safe.conf" << 'ENTRY2'
 title    smplOS (Safe Mode)
 sort-key 02
-linux    /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen
-initrd   /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-zen.img
+linux    /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux
+initrd   /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
 options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=20 nomodeset nouveau.modeset=0
 ENTRY2
 
     cat > "$PROFILE_DIR/efiboot/loader/entries/03-smplos-debug.conf" << 'ENTRY3'
 title    smplOS (Debug)
 sort-key 03
-linux    /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen
-initrd   /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-zen.img
+linux    /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux
+initrd   /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
 # Full verbose boot: shows all kernel/initramfs/systemd messages on screen
 # Select this entry to diagnose black-screen or hang failures
 options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=20 nomodeset nouveau.modeset=0 rd.debug rd.udev.log_level=7 systemd.log_level=info
@@ -1904,22 +1901,22 @@ menuentry "smplOS" --id smplos --class arch --class gnu-linux --class gnu --clas
     set gfxpayload=keep
     # nomodeset: EFI framebuffer works on every GPU for the TUI installer.
     # Post-install hardware detection installs the correct GPU driver offline.
-    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}"
-    initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-zen.img
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}"
+    initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
 }
 
 menuentry "smplOS (Safe Mode)" --id smplos-safe --class arch --class gnu-linux --class gnu --class os {
     set gfxpayload=keep
-    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" nomodeset nouveau.modeset=0
-    initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-zen.img
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" nomodeset nouveau.modeset=0
+    initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
 }
 
 menuentry "smplOS (Debug)" --id smplos-debug --class arch --class gnu-linux --class gnu --class os {
     set gfxpayload=keep
     # Full verbose boot: shows all kernel/initramfs/systemd messages on screen
     # Select this entry to diagnose black-screen or hang failures
-    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-zen archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" nomodeset nouveau.modeset=0 rd.debug rd.udev.log_level=7 systemd.log_level=info
-    initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-zen.img
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" nomodeset nouveau.modeset=0 rd.debug rd.udev.log_level=7 systemd.log_level=info
+    initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
 }
 
 LOOPBACKCFG
@@ -1991,22 +1988,22 @@ MENU TITLE smplOS Boot Menu
 
 LABEL arch
     MENU LABEL smplOS
-    LINUX /%INSTALL_DIR%/boot/x86_64/vmlinuz-linux-zen
-    INITRD /%INSTALL_DIR%/boot/x86_64/initramfs-linux-zen.img
+    LINUX /%INSTALL_DIR%/boot/x86_64/vmlinuz-linux
+    INITRD /%INSTALL_DIR%/boot/x86_64/initramfs-linux.img
     # nomodeset: EFI framebuffer works on every GPU for the TUI installer.
     # Post-install hardware detection installs the correct GPU driver offline.
     APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=20
 
 LABEL arch_safe
     MENU LABEL smplOS (Safe Mode)
-    LINUX /%INSTALL_DIR%/boot/x86_64/vmlinuz-linux-zen
-    INITRD /%INSTALL_DIR%/boot/x86_64/initramfs-linux-zen.img
+    LINUX /%INSTALL_DIR%/boot/x86_64/vmlinuz-linux
+    INITRD /%INSTALL_DIR%/boot/x86_64/initramfs-linux.img
     APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=20 nomodeset nouveau.modeset=0
 
 LABEL arch_debug
     MENU LABEL smplOS (Debug)
-    LINUX /%INSTALL_DIR%/boot/x86_64/vmlinuz-linux-zen
-    INITRD /%INSTALL_DIR%/boot/x86_64/initramfs-linux-zen.img
+    LINUX /%INSTALL_DIR%/boot/x86_64/vmlinuz-linux
+    INITRD /%INSTALL_DIR%/boot/x86_64/initramfs-linux.img
     # Full verbose boot: shows all kernel/initramfs/systemd messages on screen
     APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=20 nomodeset nouveau.modeset=0 rd.debug rd.udev.log_level=7 systemd.log_level=info
 
