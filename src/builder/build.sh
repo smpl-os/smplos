@@ -1776,7 +1776,7 @@ initrd   /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
 # nomodeset: EFI framebuffer works on every GPU (NVIDIA/AMD/Intel) for the TUI
 # installer. No proprietary driver needed. The installed system gets the correct
 # GPU driver via hardware detection (install/config/hardware/*.sh) post-install.
-options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=20 quiet loglevel=3 ${PLYMOUTH_SPLASH}
+options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=20 quiet loglevel=3
 ENTRY1
 
     cat > "$PROFILE_DIR/efiboot/loader/entries/02-smplos-safe.conf" << ENTRY2
@@ -1784,7 +1784,7 @@ title    smplOS (Safe Mode)
 sort-key 02
 linux    /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux
 initrd   /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
-options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=20 quiet loglevel=3 nomodeset nouveau.modeset=0 ${PLYMOUTH_SPLASH}
+options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=20 quiet loglevel=3 nomodeset nouveau.modeset=0
 ENTRY2
 
     cat > "$PROFILE_DIR/efiboot/loader/entries/03-smplos-debug.conf" << 'ENTRY3'
@@ -1833,13 +1833,13 @@ timeout_style=menu
 
 menuentry "smplOS (\${archiso_platform})" --id smplos --class arch --class gnu-linux --class gnu --class os {
     set gfxpayload=keep
-    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% img_dev=UUID=\${archiso_img_dev_uuid} img_loop="\${iso_path}" quiet loglevel=3 ${PLYMOUTH_SPLASH}
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% img_dev=UUID=\${archiso_img_dev_uuid} img_loop="\${iso_path}" quiet loglevel=3
     initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
 }
 
 menuentry "smplOS Safe Mode (\${archiso_platform})" --id smplos-safe --class arch --class gnu-linux --class gnu --class os {
     set gfxpayload=keep
-    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% img_dev=UUID=\${archiso_img_dev_uuid} img_loop="\${iso_path}" quiet loglevel=3 nomodeset nouveau.modeset=0 ${PLYMOUTH_SPLASH}
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% img_dev=UUID=\${archiso_img_dev_uuid} img_loop="\${iso_path}" quiet loglevel=3 nomodeset nouveau.modeset=0
     initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
 }
 
@@ -1931,13 +1931,13 @@ LABEL arch
     INITRD /%INSTALL_DIR%/boot/x86_64/initramfs-linux.img
     # nomodeset: EFI framebuffer works on every GPU for the TUI installer.
     # Post-install hardware detection installs the correct GPU driver offline.
-    APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=20 quiet loglevel=3 ${PLYMOUTH_SPLASH}
+    APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=20 quiet loglevel=3
 
 LABEL arch_safe
     MENU LABEL smplOS (Safe Mode)
     LINUX /%INSTALL_DIR%/boot/x86_64/vmlinuz-linux
     INITRD /%INSTALL_DIR%/boot/x86_64/initramfs-linux.img
-    APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=20 quiet loglevel=3 nomodeset nouveau.modeset=0 ${PLYMOUTH_SPLASH}
+    APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=20 quiet loglevel=3 nomodeset nouveau.modeset=0
 
 LABEL arch_debug
     MENU LABEL smplOS (Debug)
@@ -2035,9 +2035,6 @@ main() {
     build_kb_center
     build_disp_center
     build_app_center
-    # Plymouth splash param: empty string when NO_PLYMOUTH is set, 'splash' otherwise.
-    # Used in boot entry cmdlines so removing Plymouth is a single env flag.
-    PLYMOUTH_SPLASH="$([[ -z "${NO_PLYMOUTH:-}" ]] && echo 'splash' || echo '')"
     setup_boot
     build_iso
     
