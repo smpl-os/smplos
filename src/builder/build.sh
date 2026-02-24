@@ -1438,22 +1438,25 @@ SETUPEOF
         chmod +x "$airootfs/usr/local/bin/setup-plymouth"
         log_info "Plymouth theme and pacman hook installed (installed system)"
 
-        # 5. Live ISO Plymouth: activate theme + inject hook into initramfs
-        #    Skipped with NO_PLYMOUTH=1 if you need a plain text boot for debugging.
+        # 5. Live ISO Plymouth: pre-place plymouthd.conf so Plymouth can start
+        #    via systemd after the squashfs mounts (no initramfs hook needed).
+        #    Skipped with NO_PLYMOUTH=1 for plain text boot / debugging.
         if [[ -z "$NO_PLYMOUTH" ]]; then
-            log_info "Activating Plymouth splash on live ISO"
-            # Set theme in the live airootfs so mkinitcpio picks it up
+            log_info "Placing Plymouth config on live ISO (systemd-started, no initramfs hook)"
             mkdir -p "$airootfs/etc/plymouth"
             cat > "$airootfs/etc/plymouth/plymouthd.conf" << 'PLYMOUTHCONF'
 [Daemon]
 Theme=smplos
 ShowDelay=0
 PLYMOUTHCONF
-            # Inject 'plymouth' hook after 'udev' in the archiso mkinitcpio config
-            sed -i 's/\(base udev\)/\1 plymouth/' \
-                "$PROFILE_DIR/airootfs/etc/mkinitcpio.conf.d/archiso.conf" 2>/dev/null || true
+            # NOTE: We intentionally do NOT inject the 'plymouth' mkinitcpio hook.
+            # The hook requires DRM/KMS to initialise inside the initramfs, which
+            # fails on certain GPU/firmware combinations and causes Ventoy to
+            # reboot back to its menu.  Plymouth works fine when started by
+            # systemd after the squashfs is mounted — the initramfs phase on a
+            # live ISO is only a few seconds anyway.
         else
-            log_info "NO_PLYMOUTH set — skipping Plymouth splash on live ISO"
+            log_info "NO_PLYMOUTH set — skipping Plymouth on live ISO"
         fi
     fi
     
