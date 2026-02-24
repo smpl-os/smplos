@@ -1671,11 +1671,22 @@ LOG_ROOT="smplos-boot-logs"
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 
 # Find Ventoy data partition by its well-known label
-VENTOY_DEV=$(blkid -L Ventoy 2>/dev/null || true)
-if [[ -z "$VENTOY_DEV" ]]; then
+VENTOY_PART=$(blkid -L Ventoy 2>/dev/null || true)
+if [[ -z "$VENTOY_PART" ]]; then
     echo "smplos-boot-log: Ventoy partition not found (label 'Ventoy') — skipping"
     exit 0
 fi
+
+# Ventoy uses device mapper: /dev/sda1 gets locked by dm and can't be mounted
+# directly. Find the dm child device that is a slave of the Ventoy partition.
+VENTOY_DEV="$VENTOY_PART"
+PART_BASE=$(basename "$VENTOY_PART")
+for slave_path in /sys/block/dm-*/slaves/"$PART_BASE"; do
+    [[ -e "$slave_path" ]] || continue
+    dm_name=$(basename "$(dirname "$(dirname "$slave_path")")")
+    VENTOY_DEV="/dev/$dm_name"
+    break
+done
 
 MNT=$(mktemp -d /run/smplos-ventoy-XXXXXX)
 trap 'umount "$MNT" 2>/dev/null; rmdir "$MNT" 2>/dev/null' EXIT
