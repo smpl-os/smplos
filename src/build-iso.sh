@@ -57,6 +57,7 @@ Options:
     --skip-aur              Skip AUR packages (faster, no Rust compilation)
     --skip-flatpak          Skip Flatpak packages
     --skip-appimage         Skip AppImages
+    --no-plymouth           Skip Plymouth splash on live ISO (plain text boot)
     -h, --help              Show this help
 
 Examples:
@@ -80,6 +81,7 @@ VERBOSE=""
 SKIP_AUR=""
 SKIP_FLATPAK=""
 SKIP_APPIMAGE=""
+NO_PLYMOUTH=""
 
 parse_args() {
     while [[ $# -gt 0 ]]; do
@@ -97,6 +99,7 @@ parse_args() {
             --skip-aur)         SKIP_AUR="1"; shift ;;
             --skip-flatpak)     SKIP_FLATPAK="1"; shift ;;
             --skip-appimage)    SKIP_APPIMAGE="1"; shift ;;
+            --no-plymouth)      NO_PLYMOUTH="1"; shift ;;
             -h|--help)          show_help; exit 0 ;;
             *) die "Unknown option: $1 (see --help)" ;;
         esac
@@ -389,6 +392,7 @@ run_build() {
     [[ -n "$SKIP_AUR" ]]      && run_args+=(-e "SKIP_AUR=1")
     [[ -n "$SKIP_FLATPAK" ]]  && run_args+=(-e "SKIP_FLATPAK=1")
     [[ -n "$SKIP_APPIMAGE" ]] && run_args+=(-e "SKIP_APPIMAGE=1")
+    [[ -n "$NO_PLYMOUTH" ]]   && run_args+=(-e "NO_PLYMOUTH=1")
 
     log_info "Pulling Arch Linux image..."
     $CTR pull archlinux:latest
