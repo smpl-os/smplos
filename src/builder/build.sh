@@ -253,6 +253,10 @@ setup_profile() {
     mkdir -p "$CACHE_DIR"
     mkdir -p "$OFFLINE_MIRROR_DIR"
     mkdir -p "$WORK_DIR"
+
+    # Always wipe and recreate the profile dir so stale files from previous
+    # builds never contaminate the new ISO (e.g. old loopback.cfg, old hooks).
+    rm -rf "$PROFILE_DIR"
     mkdir -p "$PROFILE_DIR"
     
     # We base our ISO on the official arch ISO (releng) config
