@@ -19,7 +19,7 @@ OFFLINE_MIRROR_DIR="$CACHE_DIR/mirror/offline"
 WORK_DIR="$CACHE_DIR/work"
 PROFILE_DIR="$CACHE_DIR/profile"
 
-# From environment
+# Defaults — overridden by CLI flags below (env vars still work as fallback)
 COMPOSITOR="${COMPOSITOR:-hyprland}"
 EDITIONS="${EDITIONS:-}"
 VERBOSE="${VERBOSE:-}"
@@ -28,7 +28,47 @@ SKIP_FLATPAK="${SKIP_FLATPAK:-}"
 SKIP_APPIMAGE="${SKIP_APPIMAGE:-}"
 RELEASE="${RELEASE:-}"
 NO_CACHE="${NO_CACHE:-}"
-NO_PLYMOUTH="${NO_PLYMOUTH:-}"  # set to any value to skip Plymouth splash on live ISO
+NO_PLYMOUTH="${NO_PLYMOUTH:-}"
+
+usage() {
+    cat <<EOF
+Usage: build.sh [OPTIONS]
+
+Options:
+  --compositor NAME      Compositor to build (default: hyprland)
+  --editions LIST        Comma-separated edition list (e.g. productivity,creators)
+  --no-cache             Wipe offline package mirror and re-download everything
+  --no-plymouth          Skip Plymouth splash on live ISO (plain text boot)
+  --skip-aur             Skip AUR packages
+  --skip-flatpak         Skip Flatpak downloads
+  --skip-appimage        Skip AppImage downloads
+  --release              Enable release mode (max xz compression)
+  --verbose              Enable verbose output
+  -h, --help             Show this help
+
+Env vars (fallback if flag not given):
+  COMPOSITOR, EDITIONS, NO_CACHE, NO_PLYMOUTH, SKIP_AUR,
+  SKIP_FLATPAK, SKIP_APPIMAGE, RELEASE, VERBOSE
+EOF
+    exit 0
+}
+
+# Parse CLI arguments
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --compositor)   COMPOSITOR="$2"; shift 2 ;;
+        --editions)     EDITIONS="$2";   shift 2 ;;
+        --no-cache)     NO_CACHE=1;       shift ;;
+        --no-plymouth)  NO_PLYMOUTH=1;    shift ;;
+        --skip-aur)     SKIP_AUR=1;       shift ;;
+        --skip-flatpak) SKIP_FLATPAK=1;   shift ;;
+        --skip-appimage)SKIP_APPIMAGE=1;  shift ;;
+        --release)      RELEASE=1;        shift ;;
+        --verbose)      VERBOSE=1;        shift ;;
+        -h|--help)      usage ;;
+        *) echo "ERROR: Unknown option: $1" >&2; usage ;;
+    esac
+done
 
 # ISO metadata
 ISO_NAME="smplos"
@@ -2005,12 +2045,14 @@ build_iso() {
 main() {
     log_info "smplOS ISO Builder"
     log_info "=================="
-    log_info "Compositor: $COMPOSITOR"
-    [[ -n "$EDITIONS" ]] && log_info "Editions: $EDITIONS"
-    [[ -n "$RELEASE" ]] && log_info "Release mode: max xz compression"
-    [[ -n "$SKIP_AUR" ]] && log_info "AUR: disabled"
-    [[ -n "$SKIP_FLATPAK" ]] && log_info "Flatpak: disabled"
-    [[ -n "$SKIP_APPIMAGE" ]] && log_info "AppImage: disabled"
+    log_info "Compositor : $COMPOSITOR"
+    [[ -n "$EDITIONS" ]]     && log_info "Editions   : $EDITIONS"
+    [[ -n "$RELEASE" ]]      && log_info "Release    : max xz compression"
+    [[ -n "$NO_PLYMOUTH" ]]  && log_info "Plymouth   : disabled (--no-plymouth)"
+    [[ -n "$SKIP_AUR" ]]     && log_info "AUR        : disabled"
+    [[ -n "$SKIP_FLATPAK" ]] && log_info "Flatpak    : disabled"
+    [[ -n "$SKIP_APPIMAGE" ]]&& log_info "AppImage   : disabled"
+    [[ -n "$NO_CACHE" ]]     && log_info "Cache      : wiping (--no-cache)"
     log_info ""
     
     setup_build_env
