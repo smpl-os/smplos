@@ -1438,26 +1438,35 @@ SETUPEOF
         chmod +x "$airootfs/usr/local/bin/setup-plymouth"
         log_info "Plymouth theme and pacman hook installed (installed system)"
 
-        # 5. Live ISO Plymouth: pre-place plymouthd.conf so Plymouth can start
-        #    via systemd after the squashfs mounts (no initramfs hook needed).
-        #    Skipped with NO_PLYMOUTH=1 for plain text boot / debugging.
-        if [[ -z "$NO_PLYMOUTH" ]]; then
-            log_info "Placing Plymouth config on live ISO (systemd-started, no initramfs hook)"
-            mkdir -p "$airootfs/etc/plymouth"
-            cat > "$airootfs/etc/plymouth/plymouthd.conf" << 'PLYMOUTHCONF'
-[Daemon]
-Theme=smplos
-ShowDelay=0
-PLYMOUTHCONF
-            # NOTE: We intentionally do NOT inject the 'plymouth' mkinitcpio hook.
-            # The hook requires DRM/KMS to initialise inside the initramfs, which
-            # fails on certain GPU/firmware combinations and causes Ventoy to
-            # reboot back to its menu.  Plymouth works fine when started by
-            # systemd after the squashfs is mounted — the initramfs phase on a
-            # live ISO is only a few seconds anyway.
-        else
-            log_info "NO_PLYMOUTH set — skipping Plymouth on live ISO"
-        fi
+        # 5. Live ISO: mask Plymouth's pre-enabled sysinit services so they
+        #    cannot run during the live session.
+        #
+        #    Background: Plymouth ships with TWO units in sysinit.target.wants/:
+        #      • plymouth-start.service  — gated on ConditionKernelCommandLine=splash (safe)
+        #      • plymouth-read-write.service — NO condition, fires unconditionally
+        #    plymouth-read-write calls `/usr/bin/plymouth --newroot=/sysroot`.
+        #    If plymouthd.conf exists AND the plymouth client can trigger D-Bus
+        #    activation of plymouthd, the daemon starts, attempts DRM/KMS init,
+        #    and crashes on many GPUs — causing Ventoy to reload its menu.
+        #
+        #    Fix: mask both sysinit services in /etc/systemd/system/ so they
+        #    are inert on the live ISO.  The installed system is NOT affected
+        #    (this mask lives in the live airootfs overlay only).
+        #
+        #    We also do NOT write plymouthd.conf here.  The pacman hook that
+        #    runs setup-plymouth during the build fires BEFORE the airootfs
+        #    overlay is applied (packages install first), so the smplos theme
+        #    file isn't present yet → plymouth-set-default-theme fails silently
+        #    → no plymouthd.conf in the live squashfs.  Explicitly writing it
+        #    would re-introduce the D-Bus activation race.  The installed system
+        #    gets plymouthd.conf written by setup-plymouth after Plymouth is
+        #    installed with the theme files present.
+        mkdir -p "$airootfs/etc/systemd/system"
+        ln -sf /dev/null "$airootfs/etc/systemd/system/plymouth-start.service"
+        ln -sf /dev/null "$airootfs/etc/systemd/system/plymouth-read-write.service"
+        ln -sf /dev/null "$airootfs/etc/systemd/system/plymouth-quit.service"
+        ln -sf /dev/null "$airootfs/etc/systemd/system/plymouth-quit-wait.service"
+        log_info "Plymouth services masked on live ISO (installed system unaffected)"
     fi
     
     # Font cache hook: rebuild fc-cache after font packages install
