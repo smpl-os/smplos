@@ -28,6 +28,7 @@ SKIP_FLATPAK="${SKIP_FLATPAK:-}"
 SKIP_APPIMAGE="${SKIP_APPIMAGE:-}"
 RELEASE="${RELEASE:-}"
 NO_CACHE="${NO_CACHE:-}"
+NO_PLYMOUTH="${NO_PLYMOUTH:-}"  # set to any value to skip Plymouth splash on live ISO
 
 # ISO metadata
 ISO_NAME="smplos"
@@ -1435,7 +1436,25 @@ if [[ -f /usr/share/smplos/logo.png && -d "$SPINNER_DIR" ]]; then
 fi
 SETUPEOF
         chmod +x "$airootfs/usr/local/bin/setup-plymouth"
-        log_info "Plymouth theme and pacman hook installed"
+        log_info "Plymouth theme and pacman hook installed (installed system)"
+
+        # 5. Live ISO Plymouth: activate theme + inject hook into initramfs
+        #    Skipped with NO_PLYMOUTH=1 if you need a plain text boot for debugging.
+        if [[ -z "$NO_PLYMOUTH" ]]; then
+            log_info "Activating Plymouth splash on live ISO"
+            # Set theme in the live airootfs so mkinitcpio picks it up
+            mkdir -p "$airootfs/etc/plymouth"
+            cat > "$airootfs/etc/plymouth/plymouthd.conf" << 'PLYMOUTHCONF'
+[Daemon]
+Theme=smplos
+ShowDelay=0
+PLYMOUTHCONF
+            # Inject 'plymouth' hook after 'udev' in the archiso mkinitcpio config
+            sed -i 's/\(base udev\)/\1 plymouth/' \
+                "$PROFILE_DIR/airootfs/etc/mkinitcpio.conf.d/archiso.conf" 2>/dev/null || true
+        else
+            log_info "NO_PLYMOUTH set — skipping Plymouth splash on live ISO"
+        fi
     fi
     
     # Font cache hook: rebuild fc-cache after font packages install
@@ -1746,7 +1765,7 @@ timeout 10
 default 01-smplos.conf
 LOADERCONF
 
-    cat > "$PROFILE_DIR/efiboot/loader/entries/01-smplos.conf" << 'ENTRY1'
+    cat > "$PROFILE_DIR/efiboot/loader/entries/01-smplos.conf" << ENTRY1
 title    smplOS
 sort-key 01
 linux    /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux
@@ -1754,15 +1773,15 @@ initrd   /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
 # nomodeset: EFI framebuffer works on every GPU (NVIDIA/AMD/Intel) for the TUI
 # installer. No proprietary driver needed. The installed system gets the correct
 # GPU driver via hardware detection (install/config/hardware/*.sh) post-install.
-options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=20 quiet loglevel=3
+options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=20 quiet loglevel=3 ${PLYMOUTH_SPLASH}
 ENTRY1
 
-    cat > "$PROFILE_DIR/efiboot/loader/entries/02-smplos-safe.conf" << 'ENTRY2'
+    cat > "$PROFILE_DIR/efiboot/loader/entries/02-smplos-safe.conf" << ENTRY2
 title    smplOS (Safe Mode)
 sort-key 02
 linux    /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux
 initrd   /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
-options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=20 quiet loglevel=3 nomodeset nouveau.modeset=0
+options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=20 quiet loglevel=3 nomodeset nouveau.modeset=0 ${PLYMOUTH_SPLASH}
 ENTRY2
 
     cat > "$PROFILE_DIR/efiboot/loader/entries/03-smplos-debug.conf" << 'ENTRY3'
@@ -1788,20 +1807,20 @@ ENTRY3
     # Identical structure to the official Arch Linux releng loopback.cfg.
     # Do NOT add custom iso_path detection — it causes GRUB to error out
     # silently and return to Ventoy with no menu shown.
-    cat > "$PROFILE_DIR/grub/loopback.cfg" << 'LOOPBACKCFG'
+    cat > "$PROFILE_DIR/grub/loopback.cfg" << LOOPBACKCFG
 # https://www.supergrubdisk.org/wiki/Loopback.cfg
 
 # Search for the ISO volume
-search --no-floppy --set=archiso_img_dev --file "${iso_path}"
-probe --set archiso_img_dev_uuid --fs-uuid "${archiso_img_dev}"
+search --no-floppy --set=archiso_img_dev --file "\${iso_path}"
+probe --set archiso_img_dev_uuid --fs-uuid "\${archiso_img_dev}"
 
 # Get a human readable platform identifier
-if [ "${grub_platform}" == 'efi' ]; then
+if [ "\${grub_platform}" == 'efi' ]; then
     archiso_platform='UEFI'
-elif [ "${grub_platform}" == 'pc' ]; then
+elif [ "\${grub_platform}" == 'pc' ]; then
     archiso_platform='BIOS'
 else
-    archiso_platform="${grub_cpu}-${grub_platform}"
+    archiso_platform="\${grub_cpu}-\${grub_platform}"
 fi
 
 # Set default menu entry
@@ -1809,21 +1828,21 @@ default=smplos
 timeout=15
 timeout_style=menu
 
-menuentry "smplOS (${archiso_platform})" --id smplos --class arch --class gnu-linux --class gnu --class os {
+menuentry "smplOS (\${archiso_platform})" --id smplos --class arch --class gnu-linux --class gnu --class os {
     set gfxpayload=keep
-    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" quiet loglevel=3
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% img_dev=UUID=\${archiso_img_dev_uuid} img_loop="\${iso_path}" quiet loglevel=3 ${PLYMOUTH_SPLASH}
     initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
 }
 
-menuentry "smplOS Safe Mode (${archiso_platform})" --id smplos-safe --class arch --class gnu-linux --class gnu --class os {
+menuentry "smplOS Safe Mode (\${archiso_platform})" --id smplos-safe --class arch --class gnu-linux --class gnu --class os {
     set gfxpayload=keep
-    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" quiet loglevel=3 nomodeset nouveau.modeset=0
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% img_dev=UUID=\${archiso_img_dev_uuid} img_loop="\${iso_path}" quiet loglevel=3 nomodeset nouveau.modeset=0 ${PLYMOUTH_SPLASH}
     initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
 }
 
-menuentry "smplOS Debug (${archiso_platform})" --id smplos-debug --class arch --class gnu-linux --class gnu --class os {
+menuentry "smplOS Debug (\${archiso_platform})" --id smplos-debug --class arch --class gnu-linux --class gnu --class os {
     set gfxpayload=keep
-    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" rd.debug rd.udev.log_level=7 systemd.log_level=info
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% img_dev=UUID=\${archiso_img_dev_uuid} img_loop="\${iso_path}" rd.debug rd.udev.log_level=7 systemd.log_level=info
     initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
 }
 
@@ -1895,7 +1914,7 @@ MENU LABEL Power Off
 COM32 poweroff.c32
 SYSTAIL
 
-    cat > "$PROFILE_DIR/syslinux/archiso_sys.cfg" << 'ARCHISOSYS'
+    cat > "$PROFILE_DIR/syslinux/archiso_sys.cfg" << ARCHISOSYS
 DEFAULT arch
 PROMPT 1
 TIMEOUT 100
@@ -1909,13 +1928,13 @@ LABEL arch
     INITRD /%INSTALL_DIR%/boot/x86_64/initramfs-linux.img
     # nomodeset: EFI framebuffer works on every GPU for the TUI installer.
     # Post-install hardware detection installs the correct GPU driver offline.
-    APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=20 quiet loglevel=3
+    APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=20 quiet loglevel=3 ${PLYMOUTH_SPLASH}
 
 LABEL arch_safe
     MENU LABEL smplOS (Safe Mode)
     LINUX /%INSTALL_DIR%/boot/x86_64/vmlinuz-linux
     INITRD /%INSTALL_DIR%/boot/x86_64/initramfs-linux.img
-    APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=20 quiet loglevel=3 nomodeset nouveau.modeset=0
+    APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=20 quiet loglevel=3 nomodeset nouveau.modeset=0 ${PLYMOUTH_SPLASH}
 
 LABEL arch_debug
     MENU LABEL smplOS (Debug)
@@ -2011,6 +2030,9 @@ main() {
     build_kb_center
     build_disp_center
     build_app_center
+    # Plymouth splash param: empty string when NO_PLYMOUTH is set, 'splash' otherwise.
+    # Used in boot entry cmdlines so removing Plymouth is a single env flag.
+    PLYMOUTH_SPLASH="$([[ -z "${NO_PLYMOUTH:-}" ]] && echo 'splash' || echo '')"
     setup_boot
     build_iso
     
