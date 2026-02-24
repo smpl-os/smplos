@@ -1438,35 +1438,16 @@ SETUPEOF
         chmod +x "$airootfs/usr/local/bin/setup-plymouth"
         log_info "Plymouth theme and pacman hook installed (installed system)"
 
-        # 5. Live ISO: mask Plymouth's pre-enabled sysinit services so they
-        #    cannot run during the live session.
-        #
-        #    Background: Plymouth ships with TWO units in sysinit.target.wants/:
-        #      • plymouth-start.service  — gated on ConditionKernelCommandLine=splash (safe)
-        #      • plymouth-read-write.service — NO condition, fires unconditionally
-        #    plymouth-read-write calls `/usr/bin/plymouth --newroot=/sysroot`.
-        #    If plymouthd.conf exists AND the plymouth client can trigger D-Bus
-        #    activation of plymouthd, the daemon starts, attempts DRM/KMS init,
-        #    and crashes on many GPUs — causing Ventoy to reload its menu.
-        #
-        #    Fix: mask both sysinit services in /etc/systemd/system/ so they
-        #    are inert on the live ISO.  The installed system is NOT affected
-        #    (this mask lives in the live airootfs overlay only).
-        #
-        #    We also do NOT write plymouthd.conf here.  The pacman hook that
-        #    runs setup-plymouth during the build fires BEFORE the airootfs
-        #    overlay is applied (packages install first), so the smplos theme
-        #    file isn't present yet → plymouth-set-default-theme fails silently
-        #    → no plymouthd.conf in the live squashfs.  Explicitly writing it
-        #    would re-introduce the D-Bus activation race.  The installed system
-        #    gets plymouthd.conf written by setup-plymouth after Plymouth is
-        #    installed with the theme files present.
-        mkdir -p "$airootfs/etc/systemd/system"
-        ln -sf /dev/null "$airootfs/etc/systemd/system/plymouth-start.service"
-        ln -sf /dev/null "$airootfs/etc/systemd/system/plymouth-read-write.service"
-        ln -sf /dev/null "$airootfs/etc/systemd/system/plymouth-quit.service"
-        ln -sf /dev/null "$airootfs/etc/systemd/system/plymouth-quit-wait.service"
-        log_info "Plymouth services masked on live ISO (installed system unaffected)"
+        # 5. Live ISO: no plymouthd.conf is written here intentionally.
+        #    mkarchiso installs packages BEFORE applying the airootfs overlay,
+        #    so when the 89-smplos-plymouth.hook fires during pacstrap, the
+        #    smplos theme file is not yet present → plymouth-set-default-theme
+        #    fails silently → no plymouthd.conf is created in the live squashfs.
+        #    Without plymouthd.conf, plymouthd is never started on the live ISO
+        #    and all Plymouth sysinit services exit harmlessly.
+        #    The installed system gets plymouthd.conf via setup-plymouth which
+        #    runs post-install when the theme files ARE present.
+        log_info "Plymouth live ISO: no plymouthd.conf (safe — plymouthd will not start)"
     fi
     
     # Font cache hook: rebuild fc-cache after font packages install
@@ -1797,13 +1778,13 @@ options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay
 ENTRY2
 
     cat > "$PROFILE_DIR/efiboot/loader/entries/03-smplos-debug.conf" << 'ENTRY3'
-title    smplOS (Debug)
+title    smplOS (Debug -- use this to diagnose boot failures)
 sort-key 03
 linux    /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux
 initrd   /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
-# Full verbose boot: shows all kernel/initramfs/systemd messages on screen
-# Select this entry to diagnose black-screen or hang failures
-options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=20 nomodeset nouveau.modeset=0 rd.debug rd.udev.log_level=7 systemd.log_level=info
+# Full verbose boot: shows all kernel/initramfs/systemd messages on screen.
+# panic=-1: on kernel panic, freeze instead of rebooting so you can read the error.
+options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=20 nomodeset nouveau.modeset=0 rd.debug rd.udev.log_level=7 systemd.log_level=info panic=-1
 ENTRY3
 
     # ── GRUB loopback.cfg for Ventoy / loopback booting ───────────────
@@ -1854,7 +1835,7 @@ menuentry "smplOS Safe Mode (\${archiso_platform})" --id smplos-safe --class arc
 
 menuentry "smplOS Debug (\${archiso_platform})" --id smplos-debug --class arch --class gnu-linux --class gnu --class os {
     set gfxpayload=keep
-    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% img_dev=UUID=\${archiso_img_dev_uuid} img_loop="\${iso_path}" rd.debug rd.udev.log_level=7 systemd.log_level=info
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% img_dev=UUID=\${archiso_img_dev_uuid} img_loop="\${iso_path}" nomodeset rd.debug rd.udev.log_level=7 systemd.log_level=info panic=-1
     initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
 }
 
