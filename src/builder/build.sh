@@ -1390,19 +1390,35 @@ setup_airootfs() {
         log_info "Copying Plymouth theme"
         cp -r "$branding_plymouth/"* "$airootfs/root/smplos/branding/plymouth/"
         
-        # Install smplOS Plymouth theme into the airootfs overlay
-        # mkarchiso applies airootfs BEFORE installing packages, then runs
-        # pacstrap which triggers our hook to set the theme properly.
-        
-        # 1. Pre-place the theme files (they'll survive pacstrap)
-        mkdir -p "$airootfs/usr/share/plymouth/themes/smplos"
-        cp -r "$branding_plymouth/"* "$airootfs/usr/share/plymouth/themes/smplos/"
-        
-        # 2. Store logo for watermark replacement
+        # NOTE: We intentionally do NOT pre-place the theme files into
+        # airootfs/usr/share/plymouth/themes/smplos/.
+        #
+        # mkarchiso copies the airootfs overlay FIRST, then runs pacstrap.
+        # If the .plymouth file is present when pacstrap installs plymouth,
+        # the 89-smplos-plymouth.hook fires and "plymouth-set-default-theme
+        # smplos" succeeds — writing /etc/plymouth/plymouthd.conf into the
+        # squashfs.  On boot, plymouth-read-write.service (no conditions,
+        # always in sysinit.target.wants/) calls /usr/bin/plymouth, which
+        # activates plymouthd via D-Bus.  plymouthd then tries DRM/KMS init
+        # and crashes on many GPUs, returning control to Ventoy's firmware.
+        #
+        # Fix: keep theme files only in /root/smplos/branding/plymouth/
+        # (already copied above).  The hook fires during the ISO build,
+        # finds no theme at /usr/share/plymouth/themes/smplos/smplos.plymouth,
+        # skips plymouth-set-default-theme, and plymouthd.conf is never
+        # written.  Plymouth services start on the live ISO but exit
+        # harmlessly because plymouthd has no config and no theme to load.
+        #
+        # The installed system is not affected: post-install scripts copy
+        # the theme files to /usr/share/plymouth/themes/smplos/ before
+        # Plymouth is installed, so the hook fires correctly at that point
+        # and plymouthd.conf is written with the right theme.
+
+        # Store logo for spinner watermark replacement (post-install)
         mkdir -p "$airootfs/usr/share/smplos"
         cp "$branding_plymouth/logo.png" "$airootfs/usr/share/smplos/logo.png"
         
-        # 3. Pacman hook: runs after plymouth install, BEFORE mkinitcpio (89 < 90)
+        # Pacman hook: runs after plymouth install, BEFORE mkinitcpio (89 < 90)
         #    Sets our theme as default and replaces spinner watermark as fallback
         mkdir -p "$airootfs/etc/pacman.d/hooks"
         cat > "$airootfs/etc/pacman.d/hooks/89-smplos-plymouth.hook" << 'HOOKEOF'
@@ -1421,9 +1437,19 @@ HOOKEOF
         # 4. Setup script called by the hook
         cat > "$airootfs/usr/local/bin/setup-plymouth" << 'SETUPEOF'
 #!/bin/bash
-# Install and activate smplOS Plymouth theme
+# Install and activate smplOS Plymouth theme.
+# Called by the 89-smplos-plymouth pacman hook after Plymouth is installed.
 THEME_SRC="/usr/share/plymouth/themes/smplos"
+THEME_BRANDING="/root/smplos/branding/plymouth"
 SPINNER_DIR="/usr/share/plymouth/themes/spinner"
+
+# If theme files haven't been installed yet, copy them from the branding dir.
+# This handles the installed-system path where post-install scripts place
+# the branding files before Plymouth is installed from the offline repo.
+if [[ ! -f "$THEME_SRC/smplos.plymouth" && -d "$THEME_BRANDING" ]]; then
+    mkdir -p "$THEME_SRC"
+    cp -r "$THEME_BRANDING/"* "$THEME_SRC/"
+fi
 
 # Set smplOS as default Plymouth theme
 if [[ -f "$THEME_SRC/smplos.plymouth" ]]; then
@@ -1436,18 +1462,7 @@ if [[ -f /usr/share/smplos/logo.png && -d "$SPINNER_DIR" ]]; then
 fi
 SETUPEOF
         chmod +x "$airootfs/usr/local/bin/setup-plymouth"
-        log_info "Plymouth theme and pacman hook installed (installed system)"
-
-        # 5. Live ISO: no plymouthd.conf is written here intentionally.
-        #    mkarchiso installs packages BEFORE applying the airootfs overlay,
-        #    so when the 89-smplos-plymouth.hook fires during pacstrap, the
-        #    smplos theme file is not yet present → plymouth-set-default-theme
-        #    fails silently → no plymouthd.conf is created in the live squashfs.
-        #    Without plymouthd.conf, plymouthd is never started on the live ISO
-        #    and all Plymouth sysinit services exit harmlessly.
-        #    The installed system gets plymouthd.conf via setup-plymouth which
-        #    runs post-install when the theme files ARE present.
-        log_info "Plymouth live ISO: no plymouthd.conf (safe — plymouthd will not start)"
+        log_info "Plymouth theme and pacman hook installed"
     fi
     
     # Font cache hook: rebuild fc-cache after font packages install
