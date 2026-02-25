@@ -1778,14 +1778,23 @@ options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay
 ENTRY2
 
     cat > "$PROFILE_DIR/efiboot/loader/entries/03-smplos-debug.conf" << 'ENTRY3'
-title    smplOS (Debug -- use this to diagnose boot failures)
+title    smplOS (Debug)
 sort-key 03
 linux    /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux
 initrd   /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
-# Full verbose boot: shows all kernel/initramfs/systemd messages on screen.
-# panic=-1: on kernel panic, freeze instead of rebooting so you can read the error.
+# Full verbose boot. panic=-1: freeze on panic instead of rebooting.
 options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=20 nomodeset nouveau.modeset=0 rd.debug rd.udev.log_level=7 systemd.log_level=info panic=-1
 ENTRY3
+
+    cat > "$PROFILE_DIR/efiboot/loader/entries/04-smplos-break.conf" << 'ENTRY4'
+title    smplOS (Break -- initramfs shell for diagnosis)
+sort-key 04
+linux    /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux
+initrd   /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
+# rd.break: drops to an interactive shell inside the initramfs before switching root.
+# From the shell run: dmesg | tail -40  /  ls /run/archiso/  /  blkid  /  cat /proc/cmdline
+options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=20 nomodeset rd.break loglevel=7 panic=-1
+ENTRY4
 
     # ── GRUB loopback.cfg for Ventoy / loopback booting ───────────────
     # When systemd-boot is the primary UEFI bootloader, mkarchiso still
@@ -1836,6 +1845,12 @@ menuentry "smplOS Safe Mode (\${archiso_platform})" --id smplos-safe --class arc
 menuentry "smplOS Debug (\${archiso_platform})" --id smplos-debug --class arch --class gnu-linux --class gnu --class os {
     set gfxpayload=keep
     linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% img_dev=UUID=\${archiso_img_dev_uuid} img_loop="\${iso_path}" nomodeset rd.debug rd.udev.log_level=7 systemd.log_level=info panic=-1
+    initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
+}
+
+menuentry "smplOS Break -- initramfs shell (\${archiso_platform})" --id smplos-break --class arch --class gnu-linux --class gnu --class os {
+    set gfxpayload=keep
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% img_dev=UUID=\${archiso_img_dev_uuid} img_loop="\${iso_path}" nomodeset rd.break loglevel=7 panic=-1
     initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
 }
 
