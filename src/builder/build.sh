@@ -170,7 +170,7 @@ MIRRORS
     retry pacman --noconfirm -Sy
     
     # Install build dependencies (these go in the build container, not the ISO)
-    retry pacman --noconfirm -S archiso git sudo base-devel jq grub
+    retry pacman --noconfirm -S archiso git sudo base-devel jq grub ttf-dejavu
     
     # Create build user for any AUR packages we need to compile
     if ! id "builder" &>/dev/null; then
@@ -1698,6 +1698,20 @@ setup_boot() {
     # Remove releng efiboot directory — uefi.grub and uefi.systemd-boot
     # are mutually exclusive; leftover systemd-boot entries cause errors.
     rm -rf "$PROFILE_DIR/efiboot" 2>/dev/null || true
+
+    # ── Generate a HiDPI-friendly GRUB font ────────────────────────
+    # The default unicode.pf2 is 16px — unreadable on HiDPI laptops.
+    # Generate a 32px font from DejaVu Sans Mono (shipped with grub).
+    if command -v grub-mkfont &>/dev/null; then
+        local dejavu_ttf="/usr/share/fonts/TTF/DejaVuSansMono.ttf"
+        if [[ -f "$dejavu_ttf" ]]; then
+            log_info "Generating 32px GRUB font for HiDPI..."
+            mkdir -p "$PROFILE_DIR/grub/fonts"
+            grub-mkfont -s 32 -o "$PROFILE_DIR/grub/fonts/unicode.pf2" "$dejavu_ttf"
+        else
+            log_warn "DejaVu Sans Mono not found, using default GRUB font"
+        fi
+    fi
 
     # ── grub.cfg (vanilla Arch releng with smplOS labels) ───────────
     # Uses the EXACT vanilla Arch releng grub.cfg structure.

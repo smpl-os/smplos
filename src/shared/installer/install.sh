@@ -294,6 +294,26 @@ EOF
     sudo sed -i "s|^GRUB_CMDLINE_LINUX_DEFAULT=.*|GRUB_CMDLINE_LINUX_DEFAULT=\"$current_cmdline\"|" /etc/default/grub
 
     sudo sed -i 's/^GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="smplOS"/' /etc/default/grub
+
+    # Set GRUB to auto-detect resolution and use a HiDPI-friendly font
+    if ! grep -q '^GRUB_GFXMODE=' /etc/default/grub; then
+      echo 'GRUB_GFXMODE=auto' | sudo tee -a /etc/default/grub >/dev/null
+    else
+      sudo sed -i 's/^GRUB_GFXMODE=.*/GRUB_GFXMODE=auto/' /etc/default/grub
+    fi
+
+    # Generate a 32px GRUB font for HiDPI displays
+    dejavu_ttf="/usr/share/fonts/TTF/DejaVuSansMono.ttf"
+    if command -v grub-mkfont &>/dev/null && [[ -f "$dejavu_ttf" ]]; then
+      echo "    Generating HiDPI GRUB font..."
+      sudo grub-mkfont -s 32 -o /boot/grub/fonts/smplos.pf2 "$dejavu_ttf"
+      if ! grep -q '^GRUB_FONT=' /etc/default/grub; then
+        echo 'GRUB_FONT="/boot/grub/fonts/smplos.pf2"' | sudo tee -a /etc/default/grub >/dev/null
+      else
+        sudo sed -i 's|^GRUB_FONT=.*|GRUB_FONT="/boot/grub/fonts/smplos.pf2"|' /etc/default/grub
+      fi
+    fi
+
     sudo grub-mkconfig -o /boot/grub/grub.cfg
   fi
 
