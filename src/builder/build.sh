@@ -1758,13 +1758,7 @@ menuentry "smplOS (%ARCH%, ${archiso_platform})" --class arch --class gnu-linux 
 
 menuentry "smplOS Safe Mode (%ARCH%, ${archiso_platform})" --class arch --class gnu-linux --class gnu --class os --id 'smplos-safe' {
     set gfxpayload=keep
-    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% nomodeset nouveau.modeset=0
-    initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
-}
-
-menuentry "smplOS MCE Fix (%ARCH%, ${archiso_platform})" --class arch --class gnu-linux --class gnu --class os --id 'smplos-mce' {
-    set gfxpayload=keep
-    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% mce=off
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% nomodeset nouveau.modeset=0 mce=off
     initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
 }
 
@@ -1854,13 +1848,7 @@ menuentry "smplOS (%ARCH%, ${archiso_platform})" --class arch --class gnu-linux 
 
 menuentry "smplOS Safe Mode (%ARCH%, ${archiso_platform})" --class arch --class gnu-linux --class gnu --class os --id 'smplos-safe' {
     set gfxpayload=keep
-    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" nomodeset nouveau.modeset=0
-    initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
-}
-
-menuentry "smplOS MCE Fix (%ARCH%, ${archiso_platform})" --class arch --class gnu-linux --class gnu --class os --id 'smplos-mce' {
-    set gfxpayload=keep
-    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" mce=off
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" nomodeset nouveau.modeset=0 mce=off
     initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
 }
 
@@ -1998,30 +1986,12 @@ APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID%
 
 LABEL arch_safe
 TEXT HELP
-Boot smplOS in Safe Mode (nomodeset) on BIOS.
+Boot smplOS in Safe Mode (nomodeset, MCE off) on BIOS.
 ENDTEXT
 MENU LABEL smplOS Safe Mode (%ARCH%, BIOS)
 LINUX /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux
 INITRD /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
-APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% nomodeset nouveau.modeset=0
-
-LABEL arch_mce
-TEXT HELP
-Boot smplOS with MCE disabled (fixes crashes on some Gigabyte/AMD boards).
-ENDTEXT
-MENU LABEL smplOS MCE Fix (%ARCH%, BIOS)
-LINUX /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux
-INITRD /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
-APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% mce=off
-
-LABEL arch_debug
-TEXT HELP
-Boot smplOS in Debug Mode (verbose output) on BIOS.
-ENDTEXT
-MENU LABEL smplOS Debug (%ARCH%, BIOS)
-LINUX /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux
-INITRD /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
-APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rd.debug rd.udev.log_level=7 systemd.log_level=info
+APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% nomodeset nouveau.modeset=0 mce=off
 ARCHISOSYSLINUX
 
     log_info "Boot configuration updated"
