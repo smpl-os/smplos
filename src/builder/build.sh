@@ -1532,11 +1532,17 @@ setup_airootfs() {
         done
     fi
     
-    # Copy Plymouth theme files to post-install staging area ONLY.
-    # Vanilla Arch has no Plymouth in the live ISO.  Pre-placing the theme
-    # causes the pacman hook to write plymouthd.conf into the squashfs, which
-    # makes plymouthd start on live boot and crash on VMs / most GPUs.
-    # The installed system gets Plymouth via install.sh (run post-archinstall).
+    # Mask Plymouth services on the live ISO so plymouthd doesn't start.
+    # Plymouth is in packages.txt so archinstall installs it to the target,
+    # but we must prevent it from running during live boot (crashes VMs).
+    local sysd="$airootfs/etc/systemd/system"
+    ln -sf /dev/null "$sysd/plymouth-start.service" 2>/dev/null || true
+    ln -sf /dev/null "$sysd/plymouth-read-write.service" 2>/dev/null || true
+    ln -sf /dev/null "$sysd/plymouth-quit.service" 2>/dev/null || true
+    ln -sf /dev/null "$sysd/plymouth-quit-wait.service" 2>/dev/null || true
+    log_info "Plymouth services masked on live ISO"
+
+    # Copy Plymouth theme files to post-install staging area.
     local branding_plymouth="$SRC_DIR/shared/configs/smplos/branding/plymouth"
     if [[ -d "$branding_plymouth" ]]; then
         log_info "Staging Plymouth theme for post-install use"
@@ -1862,7 +1868,7 @@ insmod udf
 # Use graphics-mode output
 if loadfont "${prefix}/fonts/unicode.pf2" ; then
     insmod all_video
-    set gfxmode="auto"
+    set gfxmode="1024x768,auto"
     terminal_input console
     terminal_output console
 fi
@@ -1896,13 +1902,13 @@ timeout_style=menu
 # Menu entries
 
 menuentry "smplOS (%ARCH%, ${archiso_platform})" --class arch --class gnu-linux --class gnu --class os --id 'smplos' {
-    set gfxpayload=keep
+    set gfxpayload=1920x1080,keep
     linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID%
     initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
 }
 
 menuentry "smplOS Safe Mode (%ARCH%, ${archiso_platform})" --class arch --class gnu-linux --class gnu --class os --id 'smplos-safe' {
-    set gfxpayload=keep
+    set gfxpayload=1920x1080,keep
     linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% nomodeset nouveau.modeset=0 mce=off
     initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
 }
@@ -1935,13 +1941,13 @@ timeout_style=menu
 # Menu entries
 
 menuentry "smplOS (%ARCH%, ${archiso_platform})" --class arch --class gnu-linux --class gnu --class os --id 'smplos' {
-    set gfxpayload=keep
+    set gfxpayload=1920x1080,keep
     linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}"
     initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
 }
 
 menuentry "smplOS Safe Mode (%ARCH%, ${archiso_platform})" --class arch --class gnu-linux --class gnu --class os --id 'smplos-safe' {
-    set gfxpayload=keep
+    set gfxpayload=1920x1080,keep
     linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" nomodeset nouveau.modeset=0 mce=off
     initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
 }

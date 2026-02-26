@@ -242,16 +242,7 @@ EOF
 # Enable greetd
 sudo systemctl enable greetd.service
 
-# Install Plymouth from offline repo (it's downloaded but not in the live squashfs)
-echo "==> Installing Plymouth..."
-if [[ -d /var/cache/smplos/mirror/offline ]]; then
-  plymouth_pkg=$(find /var/cache/smplos/mirror/offline -name 'plymouth-[0-9]*.pkg.tar.*' ! -name '*-debug-*' 2>/dev/null | head -1)
-  if [[ -n "$plymouth_pkg" ]]; then
-    sudo pacman -U --noconfirm --needed "$plymouth_pkg" 2>/dev/null || true
-  fi
-fi
-
-# Setup Plymouth if installed
+# Setup Plymouth (installed by archinstall from packages.txt)
 if command -v plymouth-set-default-theme &>/dev/null; then
   echo "==> Configuring Plymouth..."
   
@@ -269,7 +260,7 @@ if command -v plymouth-set-default-theme &>/dev/null; then
   
   sudo mkdir -p /etc/mkinitcpio.conf.d
   sudo tee /etc/mkinitcpio.conf.d/smplos_hooks.conf <<EOF >/dev/null
-HOOKS=(base udev plymouth autodetect microcode modconf kms keyboard keymap consolefont block plymouth-encrypt filesystems fsck)
+HOOKS=(base udev plymouth autodetect microcode modconf kms keyboard keymap consolefont block encrypt filesystems fsck)
 EOF
 
   # Configure silent boot in GRUB

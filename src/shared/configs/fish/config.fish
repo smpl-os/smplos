@@ -70,6 +70,8 @@ alias yamax   'yt-dlp -f bestaudio'
 alias yah     'yt-dlp --extract-audio --audio-quality 0'
 alias yvh     'yt-dlp -f "bestvideo+bestaudio/best"'
 alias yvmax   'yt-dlp -f "bestvideo*+bestaudio/best" --merge-output-format mkv'
+alias ytc     'yt-dlp -o "%(channel)s/%(channel)s-%(title)s-%(id)s.%(ext)s"'
+
 
 # ffmpeg — trim video/audio without re-encoding: ev <file> <start> <end>
 function ev
