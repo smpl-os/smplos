@@ -78,13 +78,13 @@ show_logo() {
 
   local logo
   logo=$(cat <<EOF
-╭──────────╮
+┌──────────┐
 │   _____  │
 │ / _____/ │
 │ \______  │
 │ _______/ │
 │          │
-╰──────────╯ smplOS v${version}  
+└──────────┘ smplOS v${version}  
 EOF
   )
 

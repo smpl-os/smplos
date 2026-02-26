@@ -143,6 +143,9 @@ set_catppuccin_colors() {
 # Set Matrix-style color scheme for the terminal (bright green on black)
 set_matrix_colors() {
   if [[ $(tty) == "/dev/tty"* ]]; then
+    # Set a Unicode-capable console font (box-drawing characters)
+    setfont ter-v22n 2>/dev/null || true
+
     # Matrix color palette - bright green on pure black
     echo -en "\e]P0000000" # black (background - pure black)
     echo -en "\e]P100ff00" # red -> green
