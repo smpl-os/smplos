@@ -1762,6 +1762,12 @@ menuentry "smplOS Safe Mode (%ARCH%, ${archiso_platform})" --class arch --class 
     initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
 }
 
+menuentry "smplOS MCE Fix (%ARCH%, ${archiso_platform})" --class arch --class gnu-linux --class gnu --class os --id 'smplos-mce' {
+    set gfxpayload=keep
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% mce=off
+    initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
+}
+
 
 if [ "${grub_platform}" == 'efi' -a "${grub_cpu}" == 'x86_64' -a -f '/boot/memtest86+/memtest.efi' ]; then
     menuentry 'Run Memtest86+ (RAM test)' --class memtest86 --class memtest --class gnu --class tool {
@@ -1849,6 +1855,12 @@ menuentry "smplOS (%ARCH%, ${archiso_platform})" --class arch --class gnu-linux 
 menuentry "smplOS Safe Mode (%ARCH%, ${archiso_platform})" --class arch --class gnu-linux --class gnu --class os --id 'smplos-safe' {
     set gfxpayload=keep
     linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" nomodeset nouveau.modeset=0
+    initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
+}
+
+menuentry "smplOS MCE Fix (%ARCH%, ${archiso_platform})" --class arch --class gnu-linux --class gnu --class os --id 'smplos-mce' {
+    set gfxpayload=keep
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" mce=off
     initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
 }
 
@@ -1992,6 +2004,15 @@ MENU LABEL smplOS Safe Mode (%ARCH%, BIOS)
 LINUX /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux
 INITRD /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
 APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% nomodeset nouveau.modeset=0
+
+LABEL arch_mce
+TEXT HELP
+Boot smplOS with MCE disabled (fixes crashes on some Gigabyte/AMD boards).
+ENDTEXT
+MENU LABEL smplOS MCE Fix (%ARCH%, BIOS)
+LINUX /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux
+INITRD /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
+APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% mce=off
 
 LABEL arch_debug
 TEXT HELP
