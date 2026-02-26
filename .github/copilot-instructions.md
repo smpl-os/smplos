@@ -178,3 +178,27 @@ This is a hard requirement. Every package type is embedded in the ISO:
 - The build container's `$PROFILE_DIR/pacman.conf` (for mkarchiso) and
   `$PROFILE_DIR/airootfs/etc/pacman.conf` (for the live ISO) must both use
   the `[offline]` repo exclusively.
+
+### Boot & Ventoy Compatibility (CRITICAL)
+
+The ISO uses **two bootmodes**: `bios.syslinux` (legacy BIOS) + `uefi.grub` (UEFI).
+
+- **NEVER use `uefi.systemd-boot`.** It is incompatible with Ventoy. Ventoy uses
+  GRUB to chainload ISOs via `loopback.cfg`, which only works with `uefi.grub`.
+- **grub.cfg and loopback.cfg must match vanilla Arch releng** character-for-character,
+  with only these allowed changes: menu entry titles, default ID, and added entries
+  (e.g. Safe Mode). Do NOT deviate from vanilla Arch's quoting (single quotes),
+  terminal mode (`terminal_output console`), or platform detection logic.
+- The `grub/` directory in the profile contains both configs. mkarchiso's
+  `_make_common_bootmode_grub_cfg()` substitutes `%ARCH%`, `%INSTALL_DIR%`,
+  and `%ARCHISO_UUID%` at build time.
+- `loopback.cfg` uses `img_dev=UUID=` + `img_loop=` instead of `archisosearchuuid`
+  because Ventoy loop-mounts the ISO.
+
+### Known-Good Commits
+
+Rollback points — if something breaks, `git checkout <hash>`.
+
+| Commit | Date | Milestone |
+|--------|------|-----------|
+| `7b6416c` | 2026-02-25 | Ventoy UEFI boot working (uefi.grub + vanilla Arch releng grub configs) |
