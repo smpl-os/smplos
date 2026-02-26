@@ -195,10 +195,34 @@ The ISO uses **two bootmodes**: `bios.syslinux` (legacy BIOS) + `uefi.grub` (UEF
 - `loopback.cfg` uses `img_dev=UUID=` + `img_loop=` instead of `archisosearchuuid`
   because Ventoy loop-mounts the ISO.
 
-### Known-Good Commits
+### Known-Good Commits (CRITICAL — READ THIS FIRST)
 
-Rollback points — if something breaks, `git checkout <hash>`.
+**When live boot breaks**, do NOT spend time hunting through git. The answer is
+here. Check the **Last Known Good (LKG)** row — that is the most recent commit
+where the full live boot + installer flow was verified working on real hardware
+via Ventoy USB.
 
-| Commit | Date | Milestone |
-|--------|------|-----------|
-| `7b6416c` | 2026-02-25 | Ventoy UEFI boot working (uefi.grub + vanilla Arch releng grub configs) |
+**How to revert:**
+```bash
+# 1. See what changed since LKG
+git diff <LKG_HASH> HEAD -- src/builder/build.sh
+
+# 2. If boot configs diverged, restore ONLY the setup_boot() function:
+git show <LKG_HASH>:src/builder/build.sh | sed -n '/^setup_boot()/,/^[a-z_]*() {/p'
+# Then replace setup_boot() in current build.sh with that output.
+# Keep everything else (build functions, install.sh fixes, etc).
+```
+
+**The boot configs live in `setup_boot()` inside `src/builder/build.sh`.**
+That function writes: `grub.cfg`, `loopback.cfg`, and all `syslinux/*.cfg` files.
+
+| Commit | Date | Status | Milestone |
+|--------|------|--------|-----------|
+| `29e37e5` | 2026-02-25 | **LKG** | Live boot + installer working on Ventoy. 2-entry menu (smplOS + Safe Mode). All fixes: Plymouth, HiDPI auto-scale, start-menu, webapp-center, TTY font. |
+| `7b6416c` | 2026-02-25 | Good | First working Ventoy UEFI boot (uefi.grub + vanilla Arch releng grub configs) |
+
+**What broke boot last time (2026-02-25):** Adding `grub-mkfont -s 32` to
+generate a custom HiDPI font in the live ISO. mkarchiso's `grub-mkstandalone`
+embeds its own `unicode.pf2`; overriding it caused "syntax error" on Ventoy
+Normal mode. Fix: removed custom font from live ISO (commit `3257b39`), kept
+HiDPI font only for installed system in `install.sh`.
