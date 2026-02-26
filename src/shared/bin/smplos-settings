@@ -60,7 +60,10 @@ case "${1:-}" in
 
   about)
     local_ver=""
-    [[ -f /etc/smplos-release ]] && local_ver=$(cat /etc/smplos-release)
+    if [[ -f /etc/os-release ]]; then
+      local_ver=$(grep '^VERSION_ID=' /etc/os-release | head -1 | cut -d'=' -f2 | tr -d '"')
+      [[ -n "$local_ver" ]] && local_ver="v${local_ver}"
+    fi
     notify-send "smplOS" "Version: ${local_ver:-dev}\nKernel: $(uname -r)\nUptime: $(uptime -p | sed 's/up //')"
     ;;
 

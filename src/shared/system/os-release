@@ -1,8 +1,10 @@
 NAME="smplOS"
-PRETTY_NAME="smplOS"
+PRETTY_NAME="smplOS v@BUILD_VERSION@"
 ID=smplos
 ID_LIKE=arch
 BUILD_ID=rolling
+VERSION_ID="@BUILD_VERSION@"
+VERSION="v@BUILD_VERSION@"
 ANSI_COLOR="38;2;137;180;250"
 HOME_URL="https://smplos.org"
 LOGO=smplos

@@ -19,7 +19,7 @@ OFFLINE_MIRROR_DIR="$CACHE_DIR/mirror/offline"
 WORK_DIR="$CACHE_DIR/work"
 PROFILE_DIR="$CACHE_DIR/profile"
 
-# Passed in as env vars from build-iso.sh (via container -e flags)
+# From environment
 COMPOSITOR="${COMPOSITOR:-hyprland}"
 EDITIONS="${EDITIONS:-}"
 VERBOSE="${VERBOSE:-}"
@@ -28,7 +28,7 @@ SKIP_FLATPAK="${SKIP_FLATPAK:-}"
 SKIP_APPIMAGE="${SKIP_APPIMAGE:-}"
 RELEASE="${RELEASE:-}"
 NO_CACHE="${NO_CACHE:-}"
-NO_PLYMOUTH="${NO_PLYMOUTH:-}"
+BUILD_VERSION="${BUILD_VERSION:-0.1.0}"
 
 # ISO metadata
 ISO_NAME="smplos"
@@ -170,7 +170,7 @@ MIRRORS
     retry pacman --noconfirm -Sy
     
     # Install build dependencies (these go in the build container, not the ISO)
-    retry pacman --noconfirm -S archiso git sudo base-devel jq
+    retry pacman --noconfirm -S archiso git sudo base-devel jq grub
     
     # Create build user for any AUR packages we need to compile
     if ! id "builder" &>/dev/null; then
@@ -255,8 +255,8 @@ setup_profile() {
     mkdir -p "$OFFLINE_MIRROR_DIR"
     mkdir -p "$WORK_DIR"
 
-    # Always wipe and recreate the profile dir so stale files from previous
-    # builds never contaminate the new ISO (e.g. old loopback.cfg, old hooks).
+    # Always wipe profile dir so stale files from previous builds
+    # never contaminate the new ISO.
     rm -rf "$PROFILE_DIR"
     mkdir -p "$PROFILE_DIR"
     
@@ -271,7 +271,14 @@ setup_profile() {
     # Remove the default motd
     rm -f "$PROFILE_DIR/airootfs/etc/motd" 2>/dev/null || true
 
-    # Ventoy normal-mode fallback for archiso UUID search.
+    # Remove releng efiboot/ — we use uefi.grub (not uefi.systemd-boot).
+    # The two bootmodes are mutually exclusive in mkarchiso; leftover
+    # systemd-boot entries in efiboot/ would cause validation errors.
+    rm -rf "$PROFILE_DIR/efiboot" 2>/dev/null || true
+
+    # Remove releng grub/ — setup_boot() writes our own grub.cfg + loopback.cfg
+    rm -rf "$PROFILE_DIR/grub" 2>/dev/null || true
+
     log_info "Base releng profile copied"
 }
 
@@ -622,8 +629,7 @@ iso_application="smplOS Live/Installer"
 iso_version="$ISO_VERSION"
 install_dir="arch"
 buildmodes=('iso')
-bootmodes=('bios.syslinux'
-           'uefi.systemd-boot')
+bootmodes=('bios.syslinux' 'uefi.grub')
 arch="x86_64"
 pacman_conf="pacman.conf"
 airootfs_image_type="squashfs"
@@ -1115,12 +1121,14 @@ setup_airootfs() {
     
     # Deploy custom os-release (so fastfetch shows "smplOS" not "Arch Linux")
     if [[ -f "$SRC_DIR/shared/system/os-release" ]]; then
-        log_info "Deploying custom os-release"
+        log_info "Deploying custom os-release (v${BUILD_VERSION})"
         mkdir -p "$airootfs/etc"
-        cp "$SRC_DIR/shared/system/os-release" "$airootfs/etc/os-release"
+        sed "s/@BUILD_VERSION@/${BUILD_VERSION}/g" \
+            "$SRC_DIR/shared/system/os-release" > "$airootfs/etc/os-release"
         # Also stage for installer to deploy to installed system
         mkdir -p "$airootfs/root/smplos/system"
-        cp "$SRC_DIR/shared/system/os-release" "$airootfs/root/smplos/system/os-release"
+        sed "s/@BUILD_VERSION@/${BUILD_VERSION}/g" \
+            "$SRC_DIR/shared/system/os-release" > "$airootfs/root/smplos/system/os-release"
     fi
     
     # Copy EWW configs
@@ -1384,85 +1392,15 @@ setup_airootfs() {
         done
     fi
     
-    # Copy Plymouth theme
+    # Copy Plymouth theme files to post-install staging area ONLY.
+    # Vanilla Arch has no Plymouth in the live ISO.  Pre-placing the theme
+    # causes the pacman hook to write plymouthd.conf into the squashfs, which
+    # makes plymouthd start on live boot and crash on VMs / most GPUs.
+    # The installed system gets Plymouth via install.sh (run post-archinstall).
     local branding_plymouth="$SRC_DIR/shared/configs/smplos/branding/plymouth"
     if [[ -d "$branding_plymouth" ]]; then
-        log_info "Copying Plymouth theme"
+        log_info "Staging Plymouth theme for post-install use"
         cp -r "$branding_plymouth/"* "$airootfs/root/smplos/branding/plymouth/"
-        
-        # NOTE: We intentionally do NOT pre-place the theme files into
-        # airootfs/usr/share/plymouth/themes/smplos/.
-        #
-        # mkarchiso copies the airootfs overlay FIRST, then runs pacstrap.
-        # If the .plymouth file is present when pacstrap installs plymouth,
-        # the 89-smplos-plymouth.hook fires and "plymouth-set-default-theme
-        # smplos" succeeds — writing /etc/plymouth/plymouthd.conf into the
-        # squashfs.  On boot, plymouth-read-write.service (no conditions,
-        # always in sysinit.target.wants/) calls /usr/bin/plymouth, which
-        # activates plymouthd via D-Bus.  plymouthd then tries DRM/KMS init
-        # and crashes on many GPUs, returning control to Ventoy's firmware.
-        #
-        # Fix: keep theme files only in /root/smplos/branding/plymouth/
-        # (already copied above).  The hook fires during the ISO build,
-        # finds no theme at /usr/share/plymouth/themes/smplos/smplos.plymouth,
-        # skips plymouth-set-default-theme, and plymouthd.conf is never
-        # written.  Plymouth services start on the live ISO but exit
-        # harmlessly because plymouthd has no config and no theme to load.
-        #
-        # The installed system is not affected: post-install scripts copy
-        # the theme files to /usr/share/plymouth/themes/smplos/ before
-        # Plymouth is installed, so the hook fires correctly at that point
-        # and plymouthd.conf is written with the right theme.
-
-        # Store logo for spinner watermark replacement (post-install)
-        mkdir -p "$airootfs/usr/share/smplos"
-        cp "$branding_plymouth/logo.png" "$airootfs/usr/share/smplos/logo.png"
-        
-        # Pacman hook: runs after plymouth install, BEFORE mkinitcpio (89 < 90)
-        #    Sets our theme as default and replaces spinner watermark as fallback
-        mkdir -p "$airootfs/etc/pacman.d/hooks"
-        cat > "$airootfs/etc/pacman.d/hooks/89-smplos-plymouth.hook" << 'HOOKEOF'
-[Trigger]
-Type = Package
-Operation = Install
-Operation = Upgrade
-Target = plymouth
-
-[Action]
-Description = Setting up smplOS Plymouth theme...
-When = PostTransaction
-Exec = /usr/local/bin/setup-plymouth
-HOOKEOF
-        
-        # 4. Setup script called by the hook
-        cat > "$airootfs/usr/local/bin/setup-plymouth" << 'SETUPEOF'
-#!/bin/bash
-# Install and activate smplOS Plymouth theme.
-# Called by the 89-smplos-plymouth pacman hook after Plymouth is installed.
-THEME_SRC="/usr/share/plymouth/themes/smplos"
-THEME_BRANDING="/root/smplos/branding/plymouth"
-SPINNER_DIR="/usr/share/plymouth/themes/spinner"
-
-# If theme files haven't been installed yet, copy them from the branding dir.
-# This handles the installed-system path where post-install scripts place
-# the branding files before Plymouth is installed from the offline repo.
-if [[ ! -f "$THEME_SRC/smplos.plymouth" && -d "$THEME_BRANDING" ]]; then
-    mkdir -p "$THEME_SRC"
-    cp -r "$THEME_BRANDING/"* "$THEME_SRC/"
-fi
-
-# Set smplOS as default Plymouth theme
-if [[ -f "$THEME_SRC/smplos.plymouth" ]]; then
-    plymouth-set-default-theme smplos 2>/dev/null || true
-fi
-
-# Also replace spinner watermark as fallback
-if [[ -f /usr/share/smplos/logo.png && -d "$SPINNER_DIR" ]]; then
-    cp /usr/share/smplos/logo.png "$SPINNER_DIR/watermark.png"
-fi
-SETUPEOF
-        chmod +x "$airootfs/usr/local/bin/setup-plymouth"
-        log_info "Plymouth theme and pacman hook installed"
     fi
     
     # Font cache hook: rebuild fc-cache after font packages install
@@ -1698,22 +1636,11 @@ LOG_ROOT="smplos-boot-logs"
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 
 # Find Ventoy data partition by its well-known label
-VENTOY_PART=$(blkid -L Ventoy 2>/dev/null || true)
-if [[ -z "$VENTOY_PART" ]]; then
+VENTOY_DEV=$(blkid -L Ventoy 2>/dev/null || true)
+if [[ -z "$VENTOY_DEV" ]]; then
     echo "smplos-boot-log: Ventoy partition not found (label 'Ventoy') — skipping"
     exit 0
 fi
-
-# Ventoy uses device mapper: /dev/sda1 gets locked by dm and can't be mounted
-# directly. Find the dm child device that is a slave of the Ventoy partition.
-VENTOY_DEV="$VENTOY_PART"
-PART_BASE=$(basename "$VENTOY_PART")
-for slave_path in /sys/block/dm-*/slaves/"$PART_BASE"; do
-    [[ -e "$slave_path" ]] || continue
-    dm_name=$(basename "$(dirname "$(dirname "$slave_path")")")
-    VENTOY_DEV="/dev/$dm_name"
-    break
-done
 
 MNT=$(mktemp -d /run/smplos-ventoy-XXXXXX)
 trap 'umount "$MNT" 2>/dev/null; rmdir "$MNT" 2>/dev/null' EXIT
@@ -1755,89 +1682,64 @@ BOOTLOG
 setup_boot() {
     log_step "Configuring boot"
 
-    # ── systemd-boot for UEFI ─────────────────────────────────────────
-    # systemd-boot copies kernel+initramfs INTO the EFI FAT partition,
-    # making it self-contained.  This is what official Arch, EndeavourOS,
-    # and CachyOS all use.  Unlike GRUB, there is no fragile search for
-    # the ISO9660 filesystem -- it just works on all UEFI firmware.
-    mkdir -p "$PROFILE_DIR/efiboot/loader/entries"
-
-    # Remove every entry that releng shipped — Arch install medium, speech,
-    # memtest — so the user only sees our 3 smplOS entries.
-    rm -f "$PROFILE_DIR/efiboot/loader/entries/"*.conf
-    # Wipe memtest EFI binary copied by mkarchiso so firmware scanners don't surface it
-    rm -rf "$PROFILE_DIR/efiboot/memtest86+" 2>/dev/null || true
-
-    cat > "$PROFILE_DIR/efiboot/loader/loader.conf" << 'LOADERCONF'
-timeout 10
-default 01-smplos.conf
-LOADERCONF
-
-    cat > "$PROFILE_DIR/efiboot/loader/entries/01-smplos.conf" << ENTRY1
-title    smplOS
-sort-key 01
-linux    /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux
-initrd   /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
-# nomodeset: EFI framebuffer works on every GPU (NVIDIA/AMD/Intel) for the TUI
-# installer. No proprietary driver needed. The installed system gets the correct
-# GPU driver via hardware detection (install/config/hardware/*.sh) post-install.
-options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=20 quiet loglevel=3
-ENTRY1
-
-    cat > "$PROFILE_DIR/efiboot/loader/entries/02-smplos-safe.conf" << ENTRY2
-title    smplOS (Safe Mode)
-sort-key 02
-linux    /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux
-initrd   /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
-options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=20 quiet loglevel=3 nomodeset nouveau.modeset=0
-ENTRY2
-
-    cat > "$PROFILE_DIR/efiboot/loader/entries/03-smplos-debug.conf" << 'ENTRY3'
-title    smplOS (Debug)
-sort-key 03
-linux    /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux
-initrd   /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
-# Full verbose boot. panic=-1: freeze on panic instead of rebooting.
-options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=20 nomodeset nouveau.modeset=0 rd.debug rd.udev.log_level=7 systemd.log_level=info panic=-1
-ENTRY3
-
-    cat > "$PROFILE_DIR/efiboot/loader/entries/04-smplos-break.conf" << 'ENTRY4'
-title    smplOS (Break -- initramfs shell for diagnosis)
-sort-key 04
-linux    /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux
-initrd   /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
-# rd.break: drops to an interactive shell inside the initramfs before switching root.
-# From the shell run: dmesg | tail -40  /  ls /run/archiso/  /  blkid  /  cat /proc/cmdline
-options  archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=20 nomodeset rd.break loglevel=7 panic=-1
-ENTRY4
-
-    # ── GRUB loopback.cfg for Ventoy / loopback booting ───────────────
-    # When systemd-boot is the primary UEFI bootloader, mkarchiso still
-    # copies grub/loopback.cfg to the ISO9660 for tools like Ventoy that
-    # chain-load GRUB in loopback mode.
+    # ── GRUB for UEFI ────────────────────────────────────────────────
+    # Use uefi.grub bootmode (like Omarchy).  GRUB's embedded config
+    # searches for the ISO device at runtime, making it fully compatible
+    # with Ventoy (both "normal" and "GRUB2" modes), direct USB boot,
+    # and optical media.  systemd-boot does NOT work with Ventoy because
+    # Ventoy can't properly chain-load systemd-boot's EFI binary.
     #
-    # IMPORTANT: loopback.cfg must set timeout + timeout_style=menu or
-    # Ventoy's inherited timeout=0 will auto-boot with no menu visible.
-    # Use the modern img_dev/img_loop format (not archisosearchuuid) so
-    # the initramfs can find the ISO when it is loop-mounted by Ventoy.
-    mkdir -p "$PROFILE_DIR/grub"
-    # Identical structure to the official Arch Linux releng loopback.cfg.
-    # Do NOT add custom iso_path detection — it causes GRUB to error out
-    # silently and return to Ventoy with no menu shown.
-    cat > "$PROFILE_DIR/grub/loopback.cfg" << LOOPBACKCFG
-# https://www.supergrubdisk.org/wiki/Loopback.cfg
+    # mkarchiso's uefi.grub bootmode:
+    #   1. Processes grub/*.cfg with placeholder substitution
+    #   2. Creates GRUB EFI binaries via grub-mkstandalone
+    #   3. Embeds a search config that finds the ISO device
+    #   4. Copies grub.cfg + loopback.cfg to /boot/grub/ on the ISO
 
-# Search for the ISO volume
-search --no-floppy --set=archiso_img_dev --file "\${iso_path}"
-probe --set archiso_img_dev_uuid --fs-uuid "\${archiso_img_dev}"
+    # Remove releng efiboot directory — uefi.grub and uefi.systemd-boot
+    # are mutually exclusive; leftover systemd-boot entries cause errors.
+    rm -rf "$PROFILE_DIR/efiboot" 2>/dev/null || true
+
+    # ── grub.cfg (vanilla Arch releng with smplOS labels) ───────────
+    # Uses the EXACT vanilla Arch releng grub.cfg structure.
+    # Only changes: title text, default ID, added Safe Mode entry.
+    mkdir -p "$PROFILE_DIR/grub"
+    cat > "$PROFILE_DIR/grub/grub.cfg" << 'GRUBCFG'
+# Load partition table and file system modules
+insmod part_gpt
+insmod part_msdos
+insmod fat
+insmod iso9660
+insmod ntfs
+insmod ntfscomp
+insmod exfat
+insmod udf
+
+# Use graphics-mode output
+if loadfont "${prefix}/fonts/unicode.pf2" ; then
+    insmod all_video
+    set gfxmode="auto"
+    terminal_input console
+    terminal_output console
+fi
+
+# Enable serial console
+insmod serial
+insmod usbserial_common
+insmod usbserial_ftdi
+insmod usbserial_pl2303
+insmod usbserial_usbdebug
+if serial --unit=0 --speed=115200; then
+    terminal_input --append serial
+    terminal_output --append serial
+fi
 
 # Get a human readable platform identifier
-if [ "\${grub_platform}" == 'efi' ]; then
+if [ "${grub_platform}" == 'efi' ]; then
     archiso_platform='UEFI'
-elif [ "\${grub_platform}" == 'pc' ]; then
+elif [ "${grub_platform}" == 'pc' ]; then
     archiso_platform='BIOS'
 else
-    archiso_platform="\${grub_cpu}-\${grub_platform}"
+    archiso_platform="${grub_cpu}-${grub_platform}"
 fi
 
 # Set default menu entry
@@ -1845,38 +1747,160 @@ default=smplos
 timeout=15
 timeout_style=menu
 
-menuentry "smplOS (\${archiso_platform})" --id smplos --class arch --class gnu-linux --class gnu --class os {
+
+# Menu entries
+
+menuentry "smplOS (%ARCH%, ${archiso_platform})" --class arch --class gnu-linux --class gnu --class os --id 'smplos' {
     set gfxpayload=keep
-    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% img_dev=UUID=\${archiso_img_dev_uuid} img_loop="\${iso_path}" quiet loglevel=3
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID%
     initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
 }
 
-menuentry "smplOS Safe Mode (\${archiso_platform})" --id smplos-safe --class arch --class gnu-linux --class gnu --class os {
+menuentry "smplOS Safe Mode (%ARCH%, ${archiso_platform})" --class arch --class gnu-linux --class gnu --class os --id 'smplos-safe' {
     set gfxpayload=keep
-    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% img_dev=UUID=\${archiso_img_dev_uuid} img_loop="\${iso_path}" quiet loglevel=3 nomodeset nouveau.modeset=0
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% nomodeset nouveau.modeset=0
     initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
 }
 
-menuentry "smplOS Debug (\${archiso_platform})" --id smplos-debug --class arch --class gnu-linux --class gnu --class os {
-    set gfxpayload=keep
-    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% img_dev=UUID=\${archiso_img_dev_uuid} img_loop="\${iso_path}" nomodeset rd.debug rd.udev.log_level=7 systemd.log_level=info panic=-1
-    initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
-}
 
-menuentry "smplOS Break -- initramfs shell (\${archiso_platform})" --id smplos-break --class arch --class gnu-linux --class gnu --class os {
-    set gfxpayload=keep
-    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% img_dev=UUID=\${archiso_img_dev_uuid} img_loop="\${iso_path}" nomodeset rd.break loglevel=7 panic=-1
-    initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
+if [ "${grub_platform}" == 'efi' -a "${grub_cpu}" == 'x86_64' -a -f '/boot/memtest86+/memtest.efi' ]; then
+    menuentry 'Run Memtest86+ (RAM test)' --class memtest86 --class memtest --class gnu --class tool {
+        set gfxpayload=800x600,1024x768
+        linux /boot/memtest86+/memtest.efi
+    }
+fi
+if [ "${grub_platform}" == 'pc' -a -f '/boot/memtest86+/memtest' ]; then
+    menuentry 'Run Memtest86+ (RAM test)' --class memtest86 --class memtest --class gnu --class tool {
+        set gfxpayload=800x600,1024x768
+        linux /boot/memtest86+/memtest
+    }
+fi
+if [ "${grub_platform}" == 'efi' ]; then
+    if [ "${grub_cpu}" == 'x86_64' -a -f '/shellx64.efi' ]; then
+        menuentry 'UEFI Shell' --class efi {
+            chainloader /shellx64.efi
+        }
+    elif [ "${grub_cpu}" == 'i386' -a -f '/shellia32.efi' ]; then
+        menuentry 'UEFI Shell' --class efi {
+            chainloader /shellia32.efi
+        }
+    elif [ "${grub_cpu}" == 'arm64' -a -f '/shellaa64.efi' ]; then
+        menuentry 'UEFI Shell' --class efi {
+            chainloader /shellaa64.efi
+        }
+    elif [ "${grub_cpu}" == 'riscv64' -a -f '/shellriscv64.efi' ]; then
+        menuentry 'UEFI Shell' --class efi {
+            chainloader /shellriscv64.efi
+        }
+    elif [ "${grub_cpu}" == 'loongarch64' -a -f '/shellloongarch64.efi' ]; then
+        menuentry 'UEFI Shell' --class efi {
+            chainloader /shellloongarch64.efi
+        }
+    fi
+
+    menuentry 'UEFI Firmware Settings' --id 'uefi-firmware' {
+        fwsetup
+    }
+fi
+
+menuentry 'System shutdown' --class shutdown --class poweroff {
+    echo 'System shutting down...'
+    halt
 }
 
 menuentry 'System restart' --class reboot --class restart {
     echo 'System rebooting...'
     reboot
 }
+GRUBCFG
+
+    # ── loopback.cfg (vanilla Arch releng with smplOS labels) ────────
+    # For Ventoy / loopback booting. Uses img_dev/img_loop.
+    cat > "$PROFILE_DIR/grub/loopback.cfg" << 'LOOPBACKCFG'
+# https://www.supergrubdisk.org/wiki/Loopback.cfg
+
+# Search for the ISO volume
+search --no-floppy --set=archiso_img_dev --file "${iso_path}"
+probe --set archiso_img_dev_uuid --fs-uuid "${archiso_img_dev}"
+
+# Get a human readable platform identifier
+if [ "${grub_platform}" == 'efi' ]; then
+    archiso_platform='UEFI'
+elif [ "${grub_platform}" == 'pc' ]; then
+    archiso_platform='BIOS'
+else
+    archiso_platform="${grub_cpu}-${grub_platform}"
+fi
+
+# Set default menu entry
+default=smplos
+timeout=15
+timeout_style=menu
+
+
+# Menu entries
+
+menuentry "smplOS (%ARCH%, ${archiso_platform})" --class arch --class gnu-linux --class gnu --class os --id 'smplos' {
+    set gfxpayload=keep
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}"
+    initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
+}
+
+menuentry "smplOS Safe Mode (%ARCH%, ${archiso_platform})" --class arch --class gnu-linux --class gnu --class os --id 'smplos-safe' {
+    set gfxpayload=keep
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" nomodeset nouveau.modeset=0
+    initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
+}
+
+
+if [ "${grub_platform}" == 'efi' -a "${grub_cpu}" == 'x86_64' -a -f '/boot/memtest86+/memtest.efi' ]; then
+    menuentry 'Run Memtest86+ (RAM test)' --class memtest86 --class memtest --class gnu --class tool {
+        set gfxpayload=800x600,1024x768
+        linux /boot/memtest86+/memtest.efi
+    }
+fi
+if [ "${grub_platform}" == 'pc' -a -f '/boot/memtest86+/memtest' ]; then
+    menuentry 'Run Memtest86+ (RAM test)' --class memtest86 --class memtest --class gnu --class tool {
+        set gfxpayload=800x600,1024x768
+        linux /boot/memtest86+/memtest
+    }
+fi
+if [ "${grub_platform}" == 'efi' ]; then
+    if [ "${grub_cpu}" == 'x86_64' -a -f '/shellx64.efi' ]; then
+        menuentry 'UEFI Shell' --class efi {
+            chainloader /shellx64.efi
+        }
+    elif [ "${grub_cpu}" == 'i386' -a -f '/shellia32.efi' ]; then
+        menuentry 'UEFI Shell' --class efi {
+            chainloader /shellia32.efi
+        }
+    elif [ "${grub_cpu}" == 'arm64' -a -f '/shellaa64.efi' ]; then
+        menuentry 'UEFI Shell' --class efi {
+            chainloader /shellaa64.efi
+        }
+    elif [ "${grub_cpu}" == 'riscv64' -a -f '/shellriscv64.efi' ]; then
+        menuentry 'UEFI Shell' --class efi {
+            chainloader /shellriscv64.efi
+        }
+    elif [ "${grub_cpu}" == 'loongarch64' -a -f '/shellloongarch64.efi' ]; then
+        menuentry 'UEFI Shell' --class efi {
+            chainloader /shellloongarch64.efi
+        }
+    fi
+
+    menuentry 'UEFI Firmware Settings' --id 'uefi-firmware' {
+        fwsetup
+    }
+fi
 
 menuentry 'System shutdown' --class shutdown --class poweroff {
     echo 'System shutting down...'
     halt
+}
+
+menuentry 'System restart' --class reboot --class restart {
+    echo 'System rebooting...'
+    reboot
 }
 LOOPBACKCFG
 
@@ -1937,36 +1961,47 @@ MENU LABEL Power Off
 COM32 poweroff.c32
 SYSTAIL
 
-    cat > "$PROFILE_DIR/syslinux/archiso_sys.cfg" << ARCHISOSYS
+    # archiso_sys.cfg: vanilla Arch INCLUDE pattern (copied 1:1)
+    cat > "$PROFILE_DIR/syslinux/archiso_sys.cfg" << 'ARCHISOSYS'
+INCLUDE archiso_head.cfg
+
 DEFAULT arch
-PROMPT 1
-TIMEOUT 100
+TIMEOUT 150
 
-UI vesamenu.c32
-MENU TITLE smplOS Boot Menu
+INCLUDE archiso_sys-linux.cfg
 
+INCLUDE archiso_tail.cfg
+ARCHISOSYS
+
+    # archiso_sys-linux.cfg: smplOS boot entries (vanilla format, %ARCH% placeholder)
+    cat > "$PROFILE_DIR/syslinux/archiso_sys-linux.cfg" << 'ARCHISOSYSLINUX'
 LABEL arch
-    MENU LABEL smplOS
-    LINUX /%INSTALL_DIR%/boot/x86_64/vmlinuz-linux
-    INITRD /%INSTALL_DIR%/boot/x86_64/initramfs-linux.img
-    # nomodeset: EFI framebuffer works on every GPU for the TUI installer.
-    # Post-install hardware detection installs the correct GPU driver offline.
-    APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=20 quiet loglevel=3
+TEXT HELP
+Boot smplOS live / install medium on BIOS.
+ENDTEXT
+MENU LABEL smplOS (%ARCH%, BIOS)
+LINUX /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux
+INITRD /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
+APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID%
 
 LABEL arch_safe
-    MENU LABEL smplOS (Safe Mode)
-    LINUX /%INSTALL_DIR%/boot/x86_64/vmlinuz-linux
-    INITRD /%INSTALL_DIR%/boot/x86_64/initramfs-linux.img
-    APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=20 quiet loglevel=3 nomodeset nouveau.modeset=0
+TEXT HELP
+Boot smplOS in Safe Mode (nomodeset) on BIOS.
+ENDTEXT
+MENU LABEL smplOS Safe Mode (%ARCH%, BIOS)
+LINUX /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux
+INITRD /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
+APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% nomodeset nouveau.modeset=0
 
 LABEL arch_debug
-    MENU LABEL smplOS (Debug)
-    LINUX /%INSTALL_DIR%/boot/x86_64/vmlinuz-linux
-    INITRD /%INSTALL_DIR%/boot/x86_64/initramfs-linux.img
-    # Full verbose boot: shows all kernel/initramfs/systemd messages on screen
-    APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rootdelay=20 nomodeset nouveau.modeset=0 rd.debug rd.udev.log_level=7 systemd.log_level=info
-
-ARCHISOSYS
+TEXT HELP
+Boot smplOS in Debug Mode (verbose output) on BIOS.
+ENDTEXT
+MENU LABEL smplOS Debug (%ARCH%, BIOS)
+LINUX /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux
+INITRD /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
+APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% rd.debug rd.udev.log_level=7 systemd.log_level=info
+ARCHISOSYSLINUX
 
     log_info "Boot configuration updated"
 }
@@ -2011,6 +2046,17 @@ build_iso() {
         log_info "ISO built successfully!"
         log_info "File: $new_name"
         log_info "Size: $(du -h "$RELEASE_DIR/$new_name" | cut -f1)"
+
+        # Verify boot configs on the ISO
+        log_info ""
+        log_info "=== Boot config verification ==="
+        log_info "--- grub.cfg first 5 menuentry lines ---"
+        bsdtar -xOf "$RELEASE_DIR/$new_name" boot/grub/grub.cfg 2>/dev/null | grep -m5 'menuentry\|linux \|initrd ' || log_info "(no grub.cfg found)"
+        log_info "--- loopback.cfg first 5 menuentry lines ---"
+        bsdtar -xOf "$RELEASE_DIR/$new_name" boot/grub/loopback.cfg 2>/dev/null | grep -m5 'menuentry\|linux \|initrd ' || log_info "(no loopback.cfg found)"
+        log_info "--- EFI/BOOT contents ---"
+        bsdtar -tf "$RELEASE_DIR/$new_name" 2>/dev/null | grep -i 'EFI/BOOT' || log_info "(no EFI/BOOT found)"
+        log_info "=== End verification ==="
     else
         log_error "ISO file not found!"
         exit 1
@@ -2028,14 +2074,12 @@ build_iso() {
 main() {
     log_info "smplOS ISO Builder"
     log_info "=================="
-    log_info "Compositor : $COMPOSITOR"
-    [[ -n "$EDITIONS" ]]      && log_info "Editions   : $EDITIONS"
-    [[ -n "$RELEASE" ]]       && log_info "Release    : max xz compression"
-    [[ -n "$NO_PLYMOUTH" ]]   && log_info "Plymouth   : disabled"
-    [[ -n "$SKIP_AUR" ]]      && log_info "AUR        : disabled"
-    [[ -n "$SKIP_FLATPAK" ]]  && log_info "Flatpak    : disabled"
-    [[ -n "$SKIP_APPIMAGE" ]] && log_info "AppImage   : disabled"
-    [[ -n "$NO_CACHE" ]]      && log_info "Cache      : wiping"
+    log_info "Compositor: $COMPOSITOR"
+    [[ -n "$EDITIONS" ]] && log_info "Editions: $EDITIONS"
+    [[ -n "$RELEASE" ]] && log_info "Release mode: max xz compression"
+    [[ -n "$SKIP_AUR" ]] && log_info "AUR: disabled"
+    [[ -n "$SKIP_FLATPAK" ]] && log_info "Flatpak: disabled"
+    [[ -n "$SKIP_APPIMAGE" ]] && log_info "AppImage: disabled"
     log_info ""
     
     setup_build_env

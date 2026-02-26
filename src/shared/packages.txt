@@ -128,7 +128,6 @@ zram-generator
 # ── Login Manager / Boot Splash ──────────────────────────────
 greetd
 greetd-tuigreet
-plymouth
 
 # ── Applications ─────────────────────────────────────────────
 mpv

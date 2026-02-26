@@ -57,7 +57,6 @@ Options:
     --skip-aur              Skip AUR packages (faster, no Rust compilation)
     --skip-flatpak          Skip Flatpak packages
     --skip-appimage         Skip AppImages
-    --no-plymouth           Skip Plymouth splash on live ISO (plain text boot)
     -h, --help              Show this help
 
 Examples:
@@ -81,7 +80,6 @@ VERBOSE=""
 SKIP_AUR=""
 SKIP_FLATPAK=""
 SKIP_APPIMAGE=""
-NO_PLYMOUTH=""
 
 parse_args() {
     while [[ $# -gt 0 ]]; do
@@ -99,7 +97,6 @@ parse_args() {
             --skip-aur)         SKIP_AUR="1"; shift ;;
             --skip-flatpak)     SKIP_FLATPAK="1"; shift ;;
             --skip-appimage)    SKIP_APPIMAGE="1"; shift ;;
-            --no-plymouth)      NO_PLYMOUTH="1"; shift ;;
             -h|--help)          show_help; exit 0 ;;
             *) die "Unknown option: $1 (see --help)" ;;
         esac
@@ -385,6 +382,7 @@ run_build() {
         run_args+=(-v "$prebuilt_dir:/build/prebuilt:ro")
     fi
 
+    run_args+=(-e "BUILD_VERSION=${BUILD_VERSION:-0.1.0}")
     [[ -n "$EDITIONS" ]]       && run_args+=(-e "EDITIONS=$EDITIONS")
     [[ -n "$RELEASE" ]]       && run_args+=(-e "RELEASE=1")
     [[ -n "$NO_CACHE" ]]      && run_args+=(-e "NO_CACHE=1")
@@ -392,7 +390,6 @@ run_build() {
     [[ -n "$SKIP_AUR" ]]      && run_args+=(-e "SKIP_AUR=1")
     [[ -n "$SKIP_FLATPAK" ]]  && run_args+=(-e "SKIP_FLATPAK=1")
     [[ -n "$SKIP_APPIMAGE" ]] && run_args+=(-e "SKIP_APPIMAGE=1")
-    [[ -n "$NO_PLYMOUTH" ]]   && run_args+=(-e "NO_PLYMOUTH=1")
 
     log_info "Pulling Arch Linux image..."
     $CTR pull archlinux:latest
@@ -421,6 +418,22 @@ main() {
 
     parse_args "$@"
     check_prerequisites
+
+    # Increment build version (patch segment) and export for the container
+    local version_file="$SCRIPT_DIR/VERSION"
+    if [[ -f "$version_file" ]]; then
+        local current major minor patch
+        current=$(cat "$version_file")
+        major="${current%%.*}"; rest="${current#*.}"; minor="${rest%%.*}"; patch="${rest##*.}"
+        patch=$((patch + 1))
+        BUILD_VERSION="${major}.${minor}.${patch}"
+        echo "$BUILD_VERSION" > "$version_file"
+    else
+        BUILD_VERSION="0.1.0"
+        echo "$BUILD_VERSION" > "$version_file"
+    fi
+    export BUILD_VERSION
+    log_info "Build version: v${BUILD_VERSION}"
 
     # Keep sudo alive in the background (build takes 15+ min, default sudo
     # timeout is ~5 min).  Killed automatically when this script exits.

@@ -265,31 +265,26 @@ EOF
 
   # Configure silent boot in GRUB
   if [[ -f /etc/default/grub ]]; then
-    # Ensure cleaner boot logs (always enforce missing params)
     current_cmdline=$(grep '^GRUB_CMDLINE_LINUX_DEFAULT=' /etc/default/grub | sed -E 's/^GRUB_CMDLINE_LINUX_DEFAULT="(.*)"/\1/' || true)
 
-    # Drop live-ISO compatibility/debug args (used only for booting the installer
-    # from problematic media/firmware paths such as Ventoy normal mode).
-    # Installed system should boot with full hardware features enabled.
+    # Drop live-ISO compatibility/debug args
     for arg in nomodeset nouveau.modeset=0 acpi=off noapic nolapic irqpoll rd.debug earlyprintk=efi,keep console=tty0; do
       current_cmdline=$(echo "$current_cmdline" | sed -E "s/(^|[[:space:]])${arg}([[:space:]]|$)/ /g")
     done
 
-    # Remove variable-style args by key (e.g. rootdelay=15)
+    # Remove variable-style args by key
     current_cmdline=$(echo "$current_cmdline" | sed -E 's/(^|[[:space:]])rootdelay=[^[:space:]]+([[:space:]]|$)/ /g')
     current_cmdline=$(echo "$current_cmdline" | sed -E 's/(^|[[:space:]])rd\.udev\.log_level=[^[:space:]]+([[:space:]]|$)/ /g')
     current_cmdline=$(echo "$current_cmdline" | sed -E 's/(^|[[:space:]])systemd\.log_level=[^[:space:]]+([[:space:]]|$)/ /g')
 
-    # Force a quiet Plymouth→greeter transition (no status text flash)
+    # Force a quiet Plymouth→greeter transition
     for arg in quiet splash plymouth.nolog loglevel=3 rd.udev.log_level=3 rd.systemd.show_status=false systemd.show_status=false vt.global_cursor_default=0 console=tty1 mce=dont_log_ce; do
       [[ " $current_cmdline " == *" $arg "* ]] || current_cmdline+=" $arg"
     done
     current_cmdline=$(echo "$current_cmdline" | xargs)
     sudo sed -i "s|^GRUB_CMDLINE_LINUX_DEFAULT=.*|GRUB_CMDLINE_LINUX_DEFAULT=\"$current_cmdline\"|" /etc/default/grub
-    
-    # Branding: Set GRUB Distributor to smplOS
-    sudo sed -i 's/^GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="smplOS"/' /etc/default/grub
 
+    sudo sed -i 's/^GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="smplOS"/' /etc/default/grub
     sudo grub-mkconfig -o /boot/grub/grub.cfg
   fi
 
@@ -297,7 +292,6 @@ EOF
   sudo mkdir -p /etc/systemd/system/plymouth-quit.service.d/
   sudo tee /etc/systemd/system/plymouth-quit.service.d/wait-for-graphical.conf <<'EOF' >/dev/null
 [Unit]
-# Quit only after greeter/session handoff to avoid a text frame between splash and login
 After=greetd.service systemd-user-sessions.service
 
 [Service]

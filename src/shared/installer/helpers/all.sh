@@ -72,20 +72,22 @@ stop_log_output() {
 
 # Display the smplOS logo
 show_logo() {
+  local version
+  version=$(grep '^VERSION_ID=' /etc/os-release 2>/dev/null | head -1 | cut -d'=' -f2 | tr -d '"')
+  [[ -z "$version" ]] && version="dev"
+
   local logo
-  logo=$(cat <<'EOF'
-  ██████  ███▄ ▄███▓ ██▓███   ██▓     ▒█████    ██████ 
-▒██    ▒ ▓██▒▀█▀ ██▒▓██░  ██▒▓██▒    ▒██▒  ██▒▒██    ▒ 
-░ ▓██▄   ▓██    ▓██░▓██░ ██▓▒▒██░    ▒██░  ██▒░ ▓██▄   
-  ▒   ██▒▒██    ▒██ ▒██▄█▓▒ ▒▒██░    ▒██   ██░  ▒   ██▒
-▒██████▒▒▒██▒   ░██▒▒██▒ ░  ░░██████▒░ ████▓▒░▒██████▒▒
-▒ ▒▓▒ ▒ ░░ ▒░   ░  ░▒▓▒░ ░  ░░ ▒░▓  ░░ ▒░▒░▒░ ▒ ▒▓▒ ▒ ░
-░ ░▒  ░ ░░  ░      ░░▒ ░     ░ ░ ▒  ░  ░ ▒ ▒░ ░ ░▒  ░ ░
-░  ░  ░  ░      ░   ░░         ░ ░   ░ ░ ░ ▒  ░  ░  ░  
-      ░         ░                ░  ░    ░ ░        ░  
+  logo=$(cat <<EOF
+╭──────────╮
+│   _____  │
+│ / _____/ │
+│ \______  │
+│ _______/ │
+│          │
+╰──────────╯ smplOS v${version}  
 EOF
   )
-  
+
   gum style \
     --foreground "#00ff00" \
     --padding "1 $PADDING_LEFT" \

@@ -1,8 +1,57 @@
 #!/usr/bin/env bash
-set -euo pipefail
+#
+# smplOS live-session entry point
+# Modelled after the vanilla Arch releng automated_script.sh:
+#   1. If kernel cmdline has script=<url|path>, download/run it (automated install).
+#   2. Otherwise launch the interactive smplOS gum configurator.
+#
+# Chain: getty autologin → zsh → /root/.zlogin → this script
+#
 
-# smplOS Installer Entry Point
-# Based on Omarchy installer architecture
+# ── Vanilla Arch: automated install via kernel cmdline ──────────────────────
+# Pass script=https://... or script=/path/to/script on the kernel cmdline to
+# run an unattended install (CI, PXE, etc.).  Matches vanilla Arch behaviour.
+
+script_cmdline() {
+    local param
+    for param in $(</proc/cmdline); do
+        case "${param}" in
+            script=*)
+                echo "${param#*=}"
+                return 0
+                ;;
+        esac
+    done
+}
+
+automated_script() {
+    local script rt
+    script="$(script_cmdline)"
+    if [[ -n "${script}" && ! -x /tmp/startup_script ]]; then
+        if [[ "${script}" =~ ^((http|https|ftp|tftp)://) ]]; then
+            printf '%s: waiting for network-online.target\n' "$0"
+            until systemctl --quiet is-active network-online.target; do
+                sleep 1
+            done
+            printf '%s: downloading %s\n' "$0" "${script}"
+            curl "${script}" --location --retry-connrefused --retry 10 --fail -s \
+                -o /tmp/startup_script
+            rt=$?
+        else
+            cp "${script}" /tmp/startup_script
+            rt=$?
+        fi
+        if [[ ${rt} -eq 0 ]]; then
+            chmod +x /tmp/startup_script
+            printf '%s: executing automated script\n' "$0"
+            /tmp/startup_script
+        fi
+        return 0   # automated path done, skip interactive installer
+    fi
+    return 1       # no script= param, caller should run interactive installer
+}
+
+# ── smplOS installer helpers ─────────────────────────────────────────────────
 
 use_smplos_helpers() {
   export SMPLOS_PATH="/root/smplos"
@@ -202,6 +251,13 @@ chroot_bash() {
 }
 
 if [[ $(tty) == "/dev/tty1" ]]; then
+  # Vanilla Arch: run automated script if script= was passed on kernel cmdline
+  if automated_script; then
+    # Automated path ran — don't start the interactive installer
+    exit 0
+  fi
+
+  # Interactive path — launch the smplOS gum configurator
   use_smplos_helpers
   set_matrix_colors
   run_configurator
