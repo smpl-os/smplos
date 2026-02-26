@@ -6,10 +6,21 @@ How to extend, modify, and contribute to smplOS.
 
 ## Table of Contents
 
+- [Known-Good Commits](#known-good-commits)
 - [How the Build Works](#how-the-build-works)
 - [Development Iteration](#development-iteration)
 - [VM Testing](#vm-testing)
 - [Adding a Settings Entry](#adding-a-settings-entry)
+
+---
+
+## Known-Good Commits
+
+Rollback points for critical milestones. If something breaks, `git checkout <hash>`.
+
+| Commit | Date | Milestone |
+|--------|------|-----------|
+| `7b6416c` | 2026-02-25 | Ventoy UEFI boot working (uefi.grub + vanilla Arch releng grub configs) |
 
 ---
 
