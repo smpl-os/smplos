@@ -242,11 +242,20 @@ EOF
 # Enable greetd
 sudo systemctl enable greetd.service
 
+# Install Plymouth from offline repo (it's downloaded but not in the live squashfs)
+echo "==> Installing Plymouth..."
+if [[ -d /var/cache/smplos/mirror/offline ]]; then
+  plymouth_pkg=$(find /var/cache/smplos/mirror/offline -name 'plymouth-[0-9]*.pkg.tar.*' ! -name '*-debug-*' 2>/dev/null | head -1)
+  if [[ -n "$plymouth_pkg" ]]; then
+    sudo pacman -U --noconfirm --needed "$plymouth_pkg" 2>/dev/null || true
+  fi
+fi
+
 # Setup Plymouth if installed
 if command -v plymouth-set-default-theme &>/dev/null; then
   echo "==> Configuring Plymouth..."
   
-  plymouth_dir="$HOME/.config/smplos/branding/plymouth"
+  plymouth_dir="$SMPLOS_PATH/branding/plymouth"
   if [[ -d "$plymouth_dir" ]]; then
     sudo mkdir -p /usr/share/plymouth/themes/smplos
     sudo cp -r "$plymouth_dir/"* /usr/share/plymouth/themes/smplos/
@@ -260,7 +269,7 @@ if command -v plymouth-set-default-theme &>/dev/null; then
   
   sudo mkdir -p /etc/mkinitcpio.conf.d
   sudo tee /etc/mkinitcpio.conf.d/smplos_hooks.conf <<EOF >/dev/null
-HOOKS=(base udev plymouth autodetect microcode modconf kms keyboard keymap consolefont block encrypt filesystems fsck)
+HOOKS=(base udev plymouth autodetect microcode modconf kms keyboard keymap consolefont block plymouth-encrypt filesystems fsck)
 EOF
 
   # Configure silent boot in GRUB
