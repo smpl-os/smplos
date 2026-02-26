@@ -755,6 +755,76 @@ build_st() {
 }
 
 ###############################################################################
+# Build start-menu (Rust+Slint app launcher) from source
+###############################################################################
+
+build_start_menu() {
+    log_step "Building start-menu from source"
+
+    local airootfs="$PROFILE_DIR/airootfs"
+    local sm_src="$SRC_DIR/shared/start-menu"
+
+    if [[ ! -f "$sm_src/Cargo.toml" ]]; then
+        log_warn "start-menu source not found at $sm_src, skipping"
+        return
+    fi
+
+    # ── Source-hash cache: skip build if source hasn't changed ──
+    local bin_cache="/var/cache/smplos/binaries"
+    local src_hash
+    src_hash=$({ find "$sm_src/src" "$sm_src/ui" -type f -exec sha256sum {} + 2>/dev/null; \
+        sha256sum "$sm_src/Cargo.toml" "$sm_src/Cargo.lock" "$sm_src/build.rs" 2>/dev/null; \
+    } | sort | sha256sum | cut -d' ' -f1)
+    local cache_key="start-menu-${src_hash}"
+
+    if [[ -f "$bin_cache/$cache_key" ]]; then
+        log_info "start-menu source unchanged, using cached binary ($cache_key)"
+        install -Dm755 "$bin_cache/$cache_key" "$airootfs/usr/local/bin/start-menu"
+        install -Dm755 "$bin_cache/$cache_key" "$airootfs/root/smplos/bin/start-menu"
+        return 0
+    fi
+
+    # Install Rust toolchain and build deps (likely already installed by other builds)
+    pacman --noconfirm --needed -S rust cargo cmake pkgconf fontconfig freetype2 \
+        libxkbcommon wayland libglvnd mesa 2>/dev/null || true
+
+    # Build in a temp dir to avoid polluting the source tree
+    local build_dir="/tmp/start-menu-build"
+    rm -rf "$build_dir"
+    cp -r "$sm_src" "$build_dir"
+    cd "$build_dir"
+
+    log_info "Compiling start-menu (release)..."
+    cargo build --release
+
+    local bin_path="$build_dir/target/release/start-menu"
+    if [[ ! -x "$bin_path" ]]; then
+        log_warn "start-menu binary not found after build, skipping"
+        cd "$SRC_DIR"
+        rm -rf "$build_dir"
+        return
+    fi
+
+    # Install binary into the ISO
+    install -Dm755 "$bin_path" "$airootfs/usr/local/bin/start-menu"
+    strip "$airootfs/usr/local/bin/start-menu"
+
+    # Also stage for the installer to deploy to the installed system
+    install -Dm755 "$bin_path" "$airootfs/root/smplos/bin/start-menu"
+    strip "$airootfs/root/smplos/bin/start-menu"
+
+    # Save to cache for future builds
+    mkdir -p "$bin_cache"
+    cp "$airootfs/usr/local/bin/start-menu" "$bin_cache/$cache_key"
+    log_info "Cached start-menu binary as $cache_key"
+
+    cd "$SRC_DIR"
+    rm -rf "$build_dir"
+
+    log_info "start-menu built and installed successfully"
+}
+
+###############################################################################
 # Build notif-center (Rust+Slint notification center) from source
 ###############################################################################
 
@@ -1028,6 +1098,76 @@ build_app_center() {
     rm -rf "$build_dir"
 
     log_info "app-center built and installed successfully"
+}
+
+###############################################################################
+# Build webapp-center (Rust+Slint web app manager) from source
+###############################################################################
+
+build_webapp_center() {
+    log_step "Building webapp-center from source"
+
+    local airootfs="$PROFILE_DIR/airootfs"
+    local wc_src="$SRC_DIR/shared/webapp-center"
+
+    if [[ ! -f "$wc_src/Cargo.toml" ]]; then
+        log_warn "webapp-center source not found at $wc_src, skipping"
+        return
+    fi
+
+    # ── Source-hash cache: skip build if source hasn't changed ──
+    local bin_cache="/var/cache/smplos/binaries"
+    local src_hash
+    src_hash=$({ find "$wc_src/src" "$wc_src/ui" -type f -exec sha256sum {} + 2>/dev/null; \
+        sha256sum "$wc_src/Cargo.toml" "$wc_src/Cargo.lock" "$wc_src/build.rs" 2>/dev/null; \
+    } | sort | sha256sum | cut -d' ' -f1)
+    local cache_key="webapp-center-${src_hash}"
+
+    if [[ -f "$bin_cache/$cache_key" ]]; then
+        log_info "webapp-center source unchanged, using cached binary ($cache_key)"
+        install -Dm755 "$bin_cache/$cache_key" "$airootfs/usr/local/bin/webapp-center"
+        install -Dm755 "$bin_cache/$cache_key" "$airootfs/root/smplos/bin/webapp-center"
+        return 0
+    fi
+
+    # Install Rust toolchain and build deps (likely already installed by other builds)
+    pacman --noconfirm --needed -S rust cargo cmake pkgconf fontconfig freetype2 \
+        libxkbcommon wayland libglvnd mesa openssl 2>/dev/null || true
+
+    # Build in a temp dir to avoid polluting the source tree
+    local build_dir="/tmp/webapp-center-build"
+    rm -rf "$build_dir"
+    cp -r "$wc_src" "$build_dir"
+    cd "$build_dir"
+
+    log_info "Compiling webapp-center (release)..."
+    cargo build --release
+
+    local bin_path="$build_dir/target/release/webapp-center"
+    if [[ ! -x "$bin_path" ]]; then
+        log_warn "webapp-center binary not found after build, skipping"
+        cd "$SRC_DIR"
+        rm -rf "$build_dir"
+        return
+    fi
+
+    # Install binary into the ISO
+    install -Dm755 "$bin_path" "$airootfs/usr/local/bin/webapp-center"
+    strip "$airootfs/usr/local/bin/webapp-center"
+
+    # Also stage for the installer to deploy to the installed system
+    install -Dm755 "$bin_path" "$airootfs/root/smplos/bin/webapp-center"
+    strip "$airootfs/root/smplos/bin/webapp-center"
+
+    # Save to cache for future builds
+    mkdir -p "$bin_cache"
+    cp "$airootfs/usr/local/bin/webapp-center" "$bin_cache/$cache_key"
+    log_info "Cached webapp-center binary as $cache_key"
+
+    cd "$SRC_DIR"
+    rm -rf "$build_dir"
+
+    log_info "webapp-center built and installed successfully"
 }
 
 ###############################################################################
@@ -2100,10 +2240,12 @@ main() {
     update_profiledef
     setup_airootfs
     build_st
+    build_start_menu
     build_notif_center
     build_kb_center
     build_disp_center
     build_app_center
+    build_webapp_center
     setup_boot
     build_iso
     
