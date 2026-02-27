@@ -313,17 +313,23 @@ step_timezone() {
 step_review() {
   step "Review your settings..."
 
+  local disk_display
+  disk_display=$(get_disk_info "$disk")
+
   echo -e "Field,Value
 Username,$username
 Password,$(printf "%${#password}s" | tr ' ' '*')
 Hostname,$hostname
 Timezone,$timezone
 Keyboard,$keyboard
-Extra layout,${extra_layout:+${extra_layout}${extra_variant:+ ($extra_variant)}}${extra_layout:-[None]}" |
+Extra layout,${extra_layout:+${extra_layout}${extra_variant:+ ($extra_variant)}}${extra_layout:-[None]}
+Install disk,$disk_display" |
     gum table -s "," -p | sed "s/^/${PADDING_LEFT_SPACES}/"
 
   echo
-  if gum confirm --negative "No, start over" "Does this look right?"; then
+  gum style --foreground 1 --padding "0 0 0 $PADDING_LEFT" "WARNING: All data on $disk will be erased!"
+  echo
+  if gum confirm --affirmative "Yes, install" --negative "No, start over" "Proceed with installation?"; then
     return 0
   else
     return 1
@@ -349,9 +355,10 @@ get_disk_info() {
 step_disk() {
   step "Let's select where to install smplOS..."
 
-  # Don't offer the install media as an option
+  # Don't offer the install media (Ventoy USB) as an option.
+  # findmnt returns the partition (e.g. /dev/sda1), strip to whole disk.
   local exclude_disk
-  exclude_disk=$(findmnt -no SOURCE /run/archiso/bootmnt 2>/dev/null || true)
+  exclude_disk=$(findmnt -no SOURCE /run/archiso/bootmnt 2>/dev/null | sed 's/[0-9]*$//' | sed 's/p$//' || true)
 
   local available_disks
   available_disks=$(
@@ -360,6 +367,22 @@ step_disk() {
       grep -E '/dev/(sd|hd|vd|nvme|mmcblk|xv)' |
       { if [[ -n "$exclude_disk" ]]; then grep -Fvx "$exclude_disk"; else cat; fi; }
   )
+
+  # Sort: non-USB (SATA/NVMe) first, USB last — so the default selection
+  # is the internal disk, not the Ventoy USB stick.
+  local sorted_disks=""
+  local usb_disks=""
+  while IFS= read -r device; do
+    [[ -z "$device" ]] && continue
+    local tran
+    tran=$(lsblk -dno TRAN "$device" 2>/dev/null | xargs)
+    if [[ "$tran" == "usb" ]]; then
+      usb_disks+="$device"$'\n'
+    else
+      sorted_disks+="$device"$'\n'
+    fi
+  done <<<"$available_disks"
+  available_disks="${sorted_disks}${usb_disks}"
 
   local disk_options=""
   while IFS= read -r device; do
@@ -401,9 +424,8 @@ steps=(
   step_password
   step_hostname
   step_timezone
-  step_review
   step_disk
-  step_disk_confirm
+  step_review
 )
 
 current_step=0
@@ -444,7 +466,7 @@ cat <<-_EOF_ >user_credentials.json
     "users": [
         {
             "enc_password": $password_hash_escaped,
-            "groups": [],
+            "groups": ["video", "render", "audio", "input", "storage", "network", "realtime", "plugdev", "uucp"],
             "sudo": true,
             "username": $username_escaped
         }

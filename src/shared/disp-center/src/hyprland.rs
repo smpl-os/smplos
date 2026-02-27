@@ -112,6 +112,16 @@ impl DisplayBackend for HyprlandBackend {
 
         // Use hyprctl --batch for atomic application
         self.hyprctl(&["--batch", &batch])?;
+
+        // After scale change, EWW bar must redraw at the new geometry.
+        // Close and reopen it in a background thread so apply() returns immediately.
+        std::thread::spawn(|| {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            let _ = Command::new("bash")
+                .args(["-c", "bar-ctl stop; sleep 0.2; bar-ctl start"])
+                .output();
+        });
+
         Ok(())
     }
 

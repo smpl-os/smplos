@@ -345,10 +345,6 @@ run_build() {
     local cache_dir="$PROJECT_ROOT/.cache/build_${build_date}"
     mkdir -p "$cache_dir/pacman" "$cache_dir/offline-repo"
 
-    # Persistent binary cache (survives across days -- st / notif-center don't change often)
-    local bin_cache_dir="$PROJECT_ROOT/.cache/binaries"
-    mkdir -p "$bin_cache_dir"
-
     # Prune old caches (keep last 3 days)
     if [[ -d "$PROJECT_ROOT/.cache" ]]; then
         find "$PROJECT_ROOT/.cache" -maxdepth 1 -name 'build_*' -type d \
@@ -357,6 +353,13 @@ run_build() {
 
     local prebuilt_dir="$PROJECT_ROOT/build/prebuilt"
 
+    # ── Build all apps first (single source of truth) ──
+    # build-apps.sh builds Rust apps + st-wl in a container,
+    # outputs to .cache/app-binaries/. Same script used by dev-push.sh.
+    local app_bin_dir="$PROJECT_ROOT/.cache/app-binaries"
+    log_info "Building apps via build-apps.sh..."
+    "$SCRIPT_DIR/build-apps.sh" all
+
     local run_args=(
         --rm --privileged
         --network=host
@@ -364,7 +367,7 @@ run_build() {
         -v "$release_dir:/build/release"
         -v "$cache_dir/offline-repo:/var/cache/smplos/mirror/offline"
         -v "$cache_dir/pacman:/var/cache/smplos/pacman-cache"
-        -v "$bin_cache_dir:/var/cache/smplos/binaries"
+        -v "$app_bin_dir:/build/app-binaries:ro"
         -e "COMPOSITOR=$COMPOSITOR"
         -e "HOST_UID=$(id -u)"
         -e "HOST_GID=$(id -g)"

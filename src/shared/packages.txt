@@ -30,6 +30,7 @@ alsa-utils
 sof-firmware
 alsa-firmware
 rtkit
+realtime-privileges
 
 # ── Display / Input ──────────────────────────────────────────
 brightnessctl

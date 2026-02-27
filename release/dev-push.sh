@@ -58,121 +58,35 @@ log "Hypr: $(find "$SHARE/hypr" -type f | wc -l) files"
 cp -r "$SRC_DIR/shared/themes/"* "$SHARE/themes/"
 log "Themes: $(find "$SHARE/themes" -type f | wc -l) files"
 
-# Notification Center (build + copy binary)
-NOTIF_DIR="$SRC_DIR/shared/notif-center"
-NOTIF_BIN="$NOTIF_DIR/target/release/notif-center"
-if [[ -f "$NOTIF_DIR/Cargo.toml" ]]; then
-    log "Building notif-center..."
-    (cd "$NOTIF_DIR" && cargo build --release 2>&1 | tail -1)
-    if [[ -f "$NOTIF_BIN" ]]; then
-        cp "$NOTIF_BIN" "$SHARE/notif-center/"
-        log "notif-center: binary copied"
-    else
-        log "notif-center: build FAILED"
-    fi
-else
-    log "notif-center: source not found, skipping"
+# ── Rust apps + st-wl (use container-built binaries from build-apps.sh) ──
+BIN_DIR="$(dirname "$SCRIPT_DIR")/.cache/app-binaries"
+RUST_APPS=(notif-center kb-center disp-center webapp-center app-center start-menu)
+
+# Auto-build if any binary is missing
+needs_build=false
+for app in "${RUST_APPS[@]}"; do
+    [[ -f "$BIN_DIR/$app" ]] || { needs_build=true; break; }
+done
+if $needs_build; then
+    log "Binaries missing -- running build-apps.sh in container..."
+    "$SRC_DIR/../src/build-apps.sh" all
 fi
 
-# Keyboard Center (build + copy binary)
-KC_DIR="$SRC_DIR/shared/kb-center"
-KC_BIN="$KC_DIR/target/release/kb-center"
-if [[ -f "$KC_DIR/Cargo.toml" ]]; then
-    log "Building kb-center..."
-    (cd "$KC_DIR" && cargo build --release 2>&1 | tail -1)
-    if [[ -f "$KC_BIN" ]]; then
-        cp "$KC_BIN" "$SHARE/kb-center/"
-        log "kb-center: binary copied"
+for app in "${RUST_APPS[@]}"; do
+    mkdir -p "$SHARE/$app"
+    if [[ -f "$BIN_DIR/$app" ]]; then
+        cp "$BIN_DIR/$app" "$SHARE/$app/"
+        log "$app: binary staged"
     else
-        log "kb-center: build FAILED"
+        log "$app: binary not found (run: src/build-apps.sh)"
     fi
-else
-    log "kb-center: source not found, skipping"
-fi
+done
 
-# disp-center display manager (Rust+Slint display settings)
-DC_DIR="$SRC_DIR/shared/disp-center"
-DC_BIN="$DC_DIR/target/release/disp-center"
-if [[ -f "$DC_DIR/Cargo.toml" ]]; then
-    mkdir -p "$SHARE/disp-center"
-    log "Building disp-center..."
-    (cd "$DC_DIR" && cargo build --release 2>&1 | tail -1)
-    if [[ -f "$DC_BIN" ]]; then
-        cp "$DC_BIN" "$SHARE/disp-center/"
-        log "disp-center: binary copied"
-    else
-        log "disp-center: build FAILED"
-    fi
-else
-    log "disp-center: source not found at $DC_DIR, skipping"
-fi
-
-# Webapp Center (build + copy binary)
-WC_DIR="$SRC_DIR/shared/webapp-center"
-WC_BIN="$WC_DIR/target/release/webapp-center"
-if [[ -f "$WC_DIR/Cargo.toml" ]]; then
-    mkdir -p "$SHARE/webapp-center"
-    log "Building webapp-center..."
-    (cd "$WC_DIR" && cargo build --release 2>&1 | tail -1)
-    if [[ -f "$WC_BIN" ]]; then
-        cp "$WC_BIN" "$SHARE/webapp-center/"
-        log "webapp-center: binary copied"
-    else
-        log "webapp-center: build FAILED"
-    fi
-else
-    log "webapp-center: source not found at $WC_DIR, skipping"
-fi
-
-# App Center (build + copy binary)
-AC_DIR="$SRC_DIR/shared/app-center"
-AC_BIN="$AC_DIR/target/release/app-center"
-if [[ -f "$AC_DIR/Cargo.toml" ]]; then
-    mkdir -p "$SHARE/app-center"
-    log "Building app-center..."
-    (cd "$AC_DIR" && cargo build --release 2>&1 | tail -1)
-    if [[ -f "$AC_BIN" ]]; then
-        cp "$AC_BIN" "$SHARE/app-center/"
-        log "app-center: binary copied"
-    else
-        log "app-center: build FAILED"
-    fi
-else
-    log "app-center: source not found at $AC_DIR, skipping"
-fi
-
-# Start Menu (build + copy binary)
-SM_DIR="$SRC_DIR/shared/start-menu"
-SM_BIN="$SM_DIR/target/release/start-menu"
-if [[ -f "$SM_DIR/Cargo.toml" ]]; then
-    mkdir -p "$SHARE/start-menu"
-    log "Building start-menu..."
-    rm -f "$SM_BIN"
-    if (cd "$SM_DIR" && cargo build --release); then
-        cp "$SM_BIN" "$SHARE/start-menu/"
-        log "start-menu: binary copied"
-    else
-        log "start-menu: build FAILED"
-        exit 1
-    fi
-else
-    log "start-menu: source not found at $SM_DIR, skipping"
-fi
-
-# st-wl terminal (build from source, keep pinned VERSION from config.mk)
-ST_DIR="$SRC_DIR/compositors/hyprland/st"
-if [[ -f "$ST_DIR/st.c" ]]; then
-    cur_ver=$(grep '^VERSION' "$ST_DIR/config.mk" | sed 's/.*= *//')
-
-    log "Building st-wl $cur_ver..."
-    (cd "$ST_DIR" && rm -f config.h && make clean && make -j"$(nproc)") 2>&1 | tail -1
-    if [[ -f "$ST_DIR/st-wl" ]]; then
-        cp "$ST_DIR/st-wl" "$SHARE/st/"
-        cp "$ST_DIR/st-wl.desktop" "$SHARE/st/" 2>/dev/null || true
-        log "st-wl $cur_ver: binary copied"
-    else
-        log "st-wl: build FAILED"
-    fi
+if [[ -f "$BIN_DIR/st-wl" ]]; then
+    cp "$BIN_DIR/st-wl" "$SHARE/st/"
+    log "st-wl: binary staged"
+    ST_DIR="$SRC_DIR/compositors/hyprland/st"
+    [[ -f "$ST_DIR/st-wl.desktop" ]] && cp "$ST_DIR/st-wl.desktop" "$SHARE/st/" 2>/dev/null || true
 fi
 
 # Copy the apply script itself

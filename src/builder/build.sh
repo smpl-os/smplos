@@ -653,20 +653,26 @@ PROFILEDEF
 }
 
 ###############################################################################
-# Build st (suckless terminal) from source
+# Install pre-built apps into airootfs
+#
+# Apps are built BEFORE the ISO container starts by build-apps.sh (called from
+# build-iso.sh). Pre-built binaries are mounted at /build/app-binaries/.
+# This function just copies them into the right places in airootfs.
 ###############################################################################
 
-build_st() {
-    log_step "Building st from source"
+install_prebuilt_apps() {
+    log_step "Installing pre-built apps"
 
     local airootfs="$PROFILE_DIR/airootfs"
-    local st_src="$SRC_DIR/compositors/$COMPOSITOR/st"
+    local bin_dir="/build/app-binaries"
 
-    if [[ ! -f "$st_src/Makefile" ]]; then
-        log_info "No st source found for $COMPOSITOR, skipping"
-        return 0
+    if [[ ! -d "$bin_dir" ]]; then
+        log_warn "No pre-built binaries at $bin_dir -- apps will be missing!"
+        log_warn "Run build-apps.sh before build-iso.sh"
+        return
     fi
 
+    # ── st-wl / st terminal ──
     local bin_name
     if [[ "$COMPOSITOR" == "hyprland" ]]; then
         bin_name="st-wl"
@@ -674,18 +680,13 @@ build_st() {
         bin_name="st"
     fi
 
-    # ── Source-hash cache: skip build if source hasn't changed ──
-    local bin_cache="/var/cache/smplos/binaries"
-    local src_hash
-    src_hash=$(find "$st_src" -type f \( -name '*.c' -o -name '*.h' -o -name '*.def.h' -o -name 'Makefile' -o -name 'config.mk' \) \
-        -exec sha256sum {} + 2>/dev/null | sort | sha256sum | cut -d' ' -f1)
-    local cache_key="st-${COMPOSITOR}-${src_hash}"
+    if [[ -f "$bin_dir/$bin_name" ]]; then
+        install -Dm755 "$bin_dir/$bin_name" "$airootfs/usr/local/bin/$bin_name"
+        install -Dm755 "$bin_dir/$bin_name" "$airootfs/root/smplos/bin/$bin_name"
+        log_info "$bin_name: installed"
 
-    if [[ -f "$bin_cache/$cache_key" ]]; then
-        log_info "st source unchanged, using cached binary ($cache_key)"
-        install -Dm755 "$bin_cache/$cache_key" "$airootfs/usr/local/bin/$bin_name"
-        install -Dm755 "$bin_cache/$cache_key" "$airootfs/root/smplos/bin/$bin_name"
-        # Install terminfo from source (tiny, no compilation needed)
+        # Install terminfo + desktop file from source tree
+        local st_src="$SRC_DIR/compositors/$COMPOSITOR/st"
         if [[ -f "$st_src/${bin_name}.info" ]]; then
             tic -sx "$st_src/${bin_name}.info" -o "$airootfs/usr/share/terminfo" 2>/dev/null || true
         elif [[ -f "$st_src/st.info" ]]; then
@@ -694,480 +695,23 @@ build_st() {
         if [[ -f "$st_src/${bin_name}.desktop" ]]; then
             install -Dm644 "$st_src/${bin_name}.desktop" "$airootfs/usr/share/applications/${bin_name}.desktop"
         fi
-        return 0
-    fi
-
-    # Install build dependencies on the build host
-    local st_deps=()
-    if [[ "$COMPOSITOR" == "hyprland" ]]; then
-        st_deps=(wayland wayland-protocols libxkbcommon pixman fontconfig freetype2 harfbuzz pkg-config)
     else
-        st_deps=(libx11 libxft libxrender libxcursor fontconfig freetype2 harfbuzz imlib2 gd pkg-config)
-    fi
-    pacman --noconfirm --needed -S "${st_deps[@]}" 2>/dev/null || true
-
-    # Build in a temp dir to avoid polluting the source tree
-    local build_dir="/tmp/st-build"
-    rm -rf "$build_dir"
-    cp -r "$st_src" "$build_dir"
-    cd "$build_dir"
-
-    log_info "Compiling st ($COMPOSITOR)..."
-    # Always regenerate from .def.h (config.def.h is the source of truth)
-    rm -f "$build_dir/config.h" "$build_dir/patches.h"
-    make -j"$(nproc)"
-
-    install -Dm755 "$bin_name" "$airootfs/usr/local/bin/$bin_name"
-    # Only strip release builds; debug builds need symbols for crash analysis
-    if ! grep -q 'STWL_DEBUG' "$build_dir/config.mk"; then
-        strip "$airootfs/usr/local/bin/$bin_name"
-    else
-        log_info "Debug build detected, skipping strip"
+        log_warn "$bin_name: not found in $bin_dir"
     fi
 
-    # Also stage for the installer to deploy to the installed system
-    install -Dm755 "$bin_name" "$airootfs/root/smplos/bin/$bin_name"
-    if ! grep -q 'STWL_DEBUG' "$build_dir/config.mk"; then
-        strip "$airootfs/root/smplos/bin/$bin_name"
-    fi
-
-    # Save to cache for future builds
-    mkdir -p "$bin_cache"
-    cp "$airootfs/usr/local/bin/$bin_name" "$bin_cache/$cache_key"
-    log_info "Cached st binary as $cache_key"
-
-    # Install terminfo
-    if [[ -f "$build_dir/${bin_name}.info" ]]; then
-        tic -sx "$build_dir/${bin_name}.info" -o "$airootfs/usr/share/terminfo" 2>/dev/null || true
-    elif [[ -f "$build_dir/st.info" ]]; then
-        tic -sx "$build_dir/st.info" -o "$airootfs/usr/share/terminfo" 2>/dev/null || true
-    fi
-
-    # Install desktop file for xdg-terminal-exec
-    if [[ -f "$st_src/${bin_name}.desktop" ]]; then
-        install -Dm644 "$st_src/${bin_name}.desktop" "$airootfs/usr/share/applications/${bin_name}.desktop"
-    fi
-
-    cd "$SRC_DIR"
-    rm -rf "$build_dir"
-
-    log_info "st built and installed successfully"
-}
-
-###############################################################################
-# Build start-menu (Rust+Slint app launcher) from source
-###############################################################################
-
-build_start_menu() {
-    log_step "Building start-menu from source"
-
-    local airootfs="$PROFILE_DIR/airootfs"
-    local sm_src="$SRC_DIR/shared/start-menu"
-
-    if [[ ! -f "$sm_src/Cargo.toml" ]]; then
-        log_warn "start-menu source not found at $sm_src, skipping"
-        return
-    fi
-
-    # ── Source-hash cache: skip build if source hasn't changed ──
-    local bin_cache="/var/cache/smplos/binaries"
-    local src_hash
-    src_hash=$({ find "$sm_src/src" "$sm_src/ui" -type f -exec sha256sum {} + 2>/dev/null; \
-        sha256sum "$sm_src/Cargo.toml" "$sm_src/Cargo.lock" "$sm_src/build.rs" 2>/dev/null; \
-    } | sort | sha256sum | cut -d' ' -f1)
-    local cache_key="start-menu-${src_hash}"
-
-    if [[ -f "$bin_cache/$cache_key" ]]; then
-        log_info "start-menu source unchanged, using cached binary ($cache_key)"
-        install -Dm755 "$bin_cache/$cache_key" "$airootfs/usr/local/bin/start-menu"
-        install -Dm755 "$bin_cache/$cache_key" "$airootfs/root/smplos/bin/start-menu"
-        return 0
-    fi
-
-    # Install Rust toolchain and build deps (likely already installed by other builds)
-    pacman --noconfirm --needed -S rust cargo cmake pkgconf fontconfig freetype2 \
-        libxkbcommon wayland libglvnd mesa 2>/dev/null || true
-
-    # Build in a temp dir to avoid polluting the source tree
-    local build_dir="/tmp/start-menu-build"
-    rm -rf "$build_dir"
-    cp -r "$sm_src" "$build_dir"
-    cd "$build_dir"
-
-    log_info "Compiling start-menu (release)..."
-    cargo build --release
-
-    local bin_path="$build_dir/target/release/start-menu"
-    if [[ ! -x "$bin_path" ]]; then
-        log_warn "start-menu binary not found after build, skipping"
-        cd "$SRC_DIR"
-        rm -rf "$build_dir"
-        return
-    fi
-
-    # Install binary into the ISO
-    install -Dm755 "$bin_path" "$airootfs/usr/local/bin/start-menu"
-    strip "$airootfs/usr/local/bin/start-menu"
-
-    # Also stage for the installer to deploy to the installed system
-    install -Dm755 "$bin_path" "$airootfs/root/smplos/bin/start-menu"
-    strip "$airootfs/root/smplos/bin/start-menu"
-
-    # Save to cache for future builds
-    mkdir -p "$bin_cache"
-    cp "$airootfs/usr/local/bin/start-menu" "$bin_cache/$cache_key"
-    log_info "Cached start-menu binary as $cache_key"
-
-    cd "$SRC_DIR"
-    rm -rf "$build_dir"
-
-    log_info "start-menu built and installed successfully"
-}
-
-###############################################################################
-# Build notif-center (Rust+Slint notification center) from source
-###############################################################################
-
-build_notif_center() {
-    log_step "Building notif-center from source"
-
-    local airootfs="$PROFILE_DIR/airootfs"
-    local nc_src="$SRC_DIR/shared/notif-center"
-
-    if [[ ! -f "$nc_src/Cargo.toml" ]]; then
-        log_warn "notif-center source not found at $nc_src, skipping"
-        return
-    fi
-
-    # ── Source-hash cache: skip build if source hasn't changed ──
-    local bin_cache="/var/cache/smplos/binaries"
-    local src_hash
-    src_hash=$({ find "$nc_src/src" "$nc_src/ui" -type f -exec sha256sum {} + 2>/dev/null; \
-        sha256sum "$nc_src/Cargo.toml" "$nc_src/Cargo.lock" "$nc_src/build.rs" 2>/dev/null; \
-    } | sort | sha256sum | cut -d' ' -f1)
-    local cache_key="notif-center-${src_hash}"
-
-    if [[ -f "$bin_cache/$cache_key" ]]; then
-        log_info "notif-center source unchanged, using cached binary ($cache_key)"
-        install -Dm755 "$bin_cache/$cache_key" "$airootfs/usr/local/bin/notif-center"
-        install -Dm755 "$bin_cache/$cache_key" "$airootfs/root/smplos/bin/notif-center"
-        return 0
-    fi
-
-    # Install Rust toolchain and build deps
-    pacman --noconfirm --needed -S rust cargo cmake pkgconf fontconfig freetype2 \
-        libxkbcommon wayland libglvnd mesa 2>/dev/null || true
-
-    # Build in a temp dir to avoid polluting the source tree
-    local build_dir="/tmp/notif-center-build"
-    rm -rf "$build_dir"
-    cp -r "$nc_src" "$build_dir"
-    cd "$build_dir"
-
-    log_info "Compiling notif-center (release)..."
-    cargo build --release
-
-    local bin_path="$build_dir/target/release/notif-center"
-    if [[ ! -x "$bin_path" ]]; then
-        log_warn "notif-center binary not found after build, skipping"
-        cd "$SRC_DIR"
-        rm -rf "$build_dir"
-        return
-    fi
-
-    # Install binary into the ISO
-    install -Dm755 "$bin_path" "$airootfs/usr/local/bin/notif-center"
-    strip "$airootfs/usr/local/bin/notif-center"
-
-    # Also stage for the installer to deploy to the installed system
-    install -Dm755 "$bin_path" "$airootfs/root/smplos/bin/notif-center"
-    strip "$airootfs/root/smplos/bin/notif-center"
-
-    # Save to cache for future builds
-    mkdir -p "$bin_cache"
-    cp "$airootfs/usr/local/bin/notif-center" "$bin_cache/$cache_key"
-    log_info "Cached notif-center binary as $cache_key"
-
-    cd "$SRC_DIR"
-    rm -rf "$build_dir"
-
-    log_info "notif-center built and installed successfully"
-}
-
-###############################################################################
-# Build kb-center (Rust+Slint keyboard layout manager) from source
-###############################################################################
-
-build_kb_center() {
-    log_step "Building kb-center from source"
-
-    local airootfs="$PROFILE_DIR/airootfs"
-    local kc_src="$SRC_DIR/shared/kb-center"
-
-    if [[ ! -f "$kc_src/Cargo.toml" ]]; then
-        log_warn "kb-center source not found at $kc_src, skipping"
-        return
-    fi
-
-    # ── Source-hash cache: skip build if source hasn't changed ──
-    local bin_cache="/var/cache/smplos/binaries"
-    local src_hash
-    src_hash=$({ find "$kc_src/src" "$kc_src/ui" -type f -exec sha256sum {} + 2>/dev/null; \
-        sha256sum "$kc_src/Cargo.toml" "$kc_src/Cargo.lock" "$kc_src/build.rs" 2>/dev/null; \
-    } | sort | sha256sum | cut -d' ' -f1)
-    local cache_key="kb-center-${src_hash}"
-
-    if [[ -f "$bin_cache/$cache_key" ]]; then
-        log_info "kb-center source unchanged, using cached binary ($cache_key)"
-        install -Dm755 "$bin_cache/$cache_key" "$airootfs/usr/local/bin/kb-center"
-        install -Dm755 "$bin_cache/$cache_key" "$airootfs/root/smplos/bin/kb-center"
-        return 0
-    fi
-
-    # Install Rust toolchain and build deps (likely already installed by notif-center)
-    pacman --noconfirm --needed -S rust cargo cmake pkgconf fontconfig freetype2 \
-        libxkbcommon wayland libglvnd mesa 2>/dev/null || true
-
-    # Build in a temp dir to avoid polluting the source tree
-    local build_dir="/tmp/kb-center-build"
-    rm -rf "$build_dir"
-    cp -r "$kc_src" "$build_dir"
-    cd "$build_dir"
-
-    log_info "Compiling kb-center (release)..."
-    cargo build --release
-
-    local bin_path="$build_dir/target/release/kb-center"
-    if [[ ! -x "$bin_path" ]]; then
-        log_warn "kb-center binary not found after build, skipping"
-        cd "$SRC_DIR"
-        rm -rf "$build_dir"
-        return
-    fi
-
-    # Install binary into the ISO
-    install -Dm755 "$bin_path" "$airootfs/usr/local/bin/kb-center"
-    strip "$airootfs/usr/local/bin/kb-center"
-
-    # Also stage for the installer to deploy to the installed system
-    install -Dm755 "$bin_path" "$airootfs/root/smplos/bin/kb-center"
-    strip "$airootfs/root/smplos/bin/kb-center"
-
-    # Save to cache for future builds
-    mkdir -p "$bin_cache"
-    cp "$airootfs/usr/local/bin/kb-center" "$bin_cache/$cache_key"
-    log_info "Cached kb-center binary as $cache_key"
-
-    cd "$SRC_DIR"
-    rm -rf "$build_dir"
-
-    log_info "kb-center built and installed successfully"
-}
-
-###############################################################################
-# Build disp-center (Rust+Slint display manager) from source
-###############################################################################
-
-build_disp_center() {
-    log_step "Building disp-center from source"
-
-    local airootfs="$PROFILE_DIR/airootfs"
-    local dc_src="$SRC_DIR/shared/disp-center"
-
-    if [[ ! -f "$dc_src/Cargo.toml" ]]; then
-        log_warn "disp-center source not found at $dc_src, skipping"
-        return
-    fi
-
-    # ── Source-hash cache: skip build if source hasn't changed ──
-    local bin_cache="/var/cache/smplos/binaries"
-    local src_hash
-    src_hash=$({ find "$dc_src/src" "$dc_src/ui" -type f -exec sha256sum {} + 2>/dev/null; \
-        sha256sum "$dc_src/Cargo.toml" "$dc_src/Cargo.lock" "$dc_src/build.rs" 2>/dev/null; \
-    } | sort | sha256sum | cut -d' ' -f1)
-    local cache_key="disp-center-${src_hash}"
-
-    if [[ -f "$bin_cache/$cache_key" ]]; then
-        log_info "disp-center source unchanged, using cached binary ($cache_key)"
-        install -Dm755 "$bin_cache/$cache_key" "$airootfs/usr/local/bin/disp-center"
-        install -Dm755 "$bin_cache/$cache_key" "$airootfs/root/smplos/bin/disp-center"
-        return 0
-    fi
-
-    # Install Rust toolchain and build deps (likely already installed by notif-center)
-    pacman --noconfirm --needed -S rust cargo cmake pkgconf fontconfig freetype2 \
-        libxkbcommon wayland libglvnd mesa 2>/dev/null || true
-
-    # Build in a temp dir to avoid polluting the source tree
-    local build_dir="/tmp/disp-center-build"
-    rm -rf "$build_dir"
-    cp -r "$dc_src" "$build_dir"
-    cd "$build_dir"
-
-    log_info "Compiling disp-center (release)..."
-    cargo build --release
-
-    local bin_path="$build_dir/target/release/disp-center"
-    if [[ ! -x "$bin_path" ]]; then
-        log_warn "disp-center binary not found after build, skipping"
-        cd "$SRC_DIR"
-        rm -rf "$build_dir"
-        return
-    fi
-
-    # Install binary into the ISO
-    install -Dm755 "$bin_path" "$airootfs/usr/local/bin/disp-center"
-    strip "$airootfs/usr/local/bin/disp-center"
-
-    # Also stage for the installer to deploy to the installed system
-    install -Dm755 "$bin_path" "$airootfs/root/smplos/bin/disp-center"
-    strip "$airootfs/root/smplos/bin/disp-center"
-
-    # Save to cache for future builds
-    mkdir -p "$bin_cache"
-    cp "$airootfs/usr/local/bin/disp-center" "$bin_cache/$cache_key"
-    log_info "Cached disp-center binary as $cache_key"
-
-    cd "$SRC_DIR"
-    rm -rf "$build_dir"
-
-    log_info "disp-center built and installed successfully"
-}
-
-build_app_center() {
-    log_step "Building app-center from source"
-
-    local airootfs="$PROFILE_DIR/airootfs"
-    local ac_src="$SRC_DIR/shared/app-center"
-
-    if [[ ! -f "$ac_src/Cargo.toml" ]]; then
-        log_warn "app-center source not found at $ac_src, skipping"
-        return
-    fi
-
-    # ── Source-hash cache: skip build if source hasn't changed ──
-    local bin_cache="/var/cache/smplos/binaries"
-    local src_hash
-    src_hash=$({ find "$ac_src/src" "$ac_src/ui" -type f -exec sha256sum {} + 2>/dev/null; \
-        sha256sum "$ac_src/Cargo.toml" "$ac_src/Cargo.lock" "$ac_src/build.rs" 2>/dev/null; \
-    } | sort | sha256sum | cut -d' ' -f1)
-    local cache_key="app-center-${src_hash}"
-
-    if [[ -f "$bin_cache/$cache_key" ]]; then
-        log_info "app-center source unchanged, using cached binary ($cache_key)"
-        install -Dm755 "$bin_cache/$cache_key" "$airootfs/usr/local/bin/app-center"
-        install -Dm755 "$bin_cache/$cache_key" "$airootfs/root/smplos/bin/app-center"
-        return 0
-    fi
-
-    # Install Rust toolchain and build deps (likely already installed by other builds)
-    pacman --noconfirm --needed -S rust cargo cmake pkgconf fontconfig freetype2 \
-        libxkbcommon wayland libglvnd mesa openssl 2>/dev/null || true
-
-    # Build in a temp dir to avoid polluting the source tree
-    local build_dir="/tmp/app-center-build"
-    rm -rf "$build_dir"
-    cp -r "$ac_src" "$build_dir"
-    cd "$build_dir"
-
-    log_info "Compiling app-center (release)..."
-    cargo build --release
-
-    local bin_path="$build_dir/target/release/app-center"
-    if [[ ! -x "$bin_path" ]]; then
-        log_warn "app-center binary not found after build, skipping"
-        cd "$SRC_DIR"
-        rm -rf "$build_dir"
-        return
-    fi
-
-    # Install binary into the ISO
-    install -Dm755 "$bin_path" "$airootfs/usr/local/bin/app-center"
-    strip "$airootfs/usr/local/bin/app-center"
-
-    # Also stage for the installer to deploy to the installed system
-    install -Dm755 "$bin_path" "$airootfs/root/smplos/bin/app-center"
-    strip "$airootfs/root/smplos/bin/app-center"
-
-    # Save to cache for future builds
-    mkdir -p "$bin_cache"
-    cp "$airootfs/usr/local/bin/app-center" "$bin_cache/$cache_key"
-    log_info "Cached app-center binary as $cache_key"
-
-    cd "$SRC_DIR"
-    rm -rf "$build_dir"
-
-    log_info "app-center built and installed successfully"
-}
-
-###############################################################################
-# Build webapp-center (Rust+Slint web app manager) from source
-###############################################################################
-
-build_webapp_center() {
-    log_step "Building webapp-center from source"
-
-    local airootfs="$PROFILE_DIR/airootfs"
-    local wc_src="$SRC_DIR/shared/webapp-center"
-
-    if [[ ! -f "$wc_src/Cargo.toml" ]]; then
-        log_warn "webapp-center source not found at $wc_src, skipping"
-        return
-    fi
-
-    # ── Source-hash cache: skip build if source hasn't changed ──
-    local bin_cache="/var/cache/smplos/binaries"
-    local src_hash
-    src_hash=$({ find "$wc_src/src" "$wc_src/ui" -type f -exec sha256sum {} + 2>/dev/null; \
-        sha256sum "$wc_src/Cargo.toml" "$wc_src/Cargo.lock" "$wc_src/build.rs" 2>/dev/null; \
-    } | sort | sha256sum | cut -d' ' -f1)
-    local cache_key="webapp-center-${src_hash}"
-
-    if [[ -f "$bin_cache/$cache_key" ]]; then
-        log_info "webapp-center source unchanged, using cached binary ($cache_key)"
-        install -Dm755 "$bin_cache/$cache_key" "$airootfs/usr/local/bin/webapp-center"
-        install -Dm755 "$bin_cache/$cache_key" "$airootfs/root/smplos/bin/webapp-center"
-        return 0
-    fi
-
-    # Install Rust toolchain and build deps (likely already installed by other builds)
-    pacman --noconfirm --needed -S rust cargo cmake pkgconf fontconfig freetype2 \
-        libxkbcommon wayland libglvnd mesa openssl 2>/dev/null || true
-
-    # Build in a temp dir to avoid polluting the source tree
-    local build_dir="/tmp/webapp-center-build"
-    rm -rf "$build_dir"
-    cp -r "$wc_src" "$build_dir"
-    cd "$build_dir"
-
-    log_info "Compiling webapp-center (release)..."
-    cargo build --release
-
-    local bin_path="$build_dir/target/release/webapp-center"
-    if [[ ! -x "$bin_path" ]]; then
-        log_warn "webapp-center binary not found after build, skipping"
-        cd "$SRC_DIR"
-        rm -rf "$build_dir"
-        return
-    fi
-
-    # Install binary into the ISO
-    install -Dm755 "$bin_path" "$airootfs/usr/local/bin/webapp-center"
-    strip "$airootfs/usr/local/bin/webapp-center"
-
-    # Also stage for the installer to deploy to the installed system
-    install -Dm755 "$bin_path" "$airootfs/root/smplos/bin/webapp-center"
-    strip "$airootfs/root/smplos/bin/webapp-center"
-
-    # Save to cache for future builds
-    mkdir -p "$bin_cache"
-    cp "$airootfs/usr/local/bin/webapp-center" "$bin_cache/$cache_key"
-    log_info "Cached webapp-center binary as $cache_key"
-
-    cd "$SRC_DIR"
-    rm -rf "$build_dir"
-
-    log_info "webapp-center built and installed successfully"
+    # ── Rust apps ──
+    local rust_apps=(start-menu notif-center kb-center disp-center app-center webapp-center)
+    for app in "${rust_apps[@]}"; do
+        if [[ -f "$bin_dir/$app" ]]; then
+            install -Dm755 "$bin_dir/$app" "$airootfs/usr/local/bin/$app"
+            install -Dm755 "$bin_dir/$app" "$airootfs/root/smplos/bin/$app"
+            log_info "$app: installed"
+        else
+            log_warn "$app: not found in $bin_dir"
+        fi
+    done
+
+    log_info "All pre-built apps installed"
 }
 
 ###############################################################################
@@ -2134,13 +1678,7 @@ main() {
     update_package_list
     update_profiledef
     setup_airootfs
-    build_st
-    build_start_menu
-    build_notif_center
-    build_kb_center
-    build_disp_center
-    build_app_center
-    build_webapp_center
+    install_prebuilt_apps
     setup_boot
     build_iso
     
