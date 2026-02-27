@@ -10,6 +10,7 @@ struct AppItem {
     has_icon: bool,
     is_web_app: bool,
     source: string,
+    is_pinned: bool,
 }
 
 struct CategoryItem {
@@ -166,7 +167,9 @@ component AppRow inherits Rectangle {
     in property <string> source: "";
     in property <bool> show_badge: true;
     in property <bool> highlighted: false;
+    in property <bool> is_pinned: false;
     callback clicked();
+    callback right-clicked();
 
     property <color> badge_color:
         root.category_key == "multimedia" ? Theme.red :
@@ -184,6 +187,11 @@ component AppRow inherits Rectangle {
 
     touch := TouchArea {
         clicked => { root.clicked(); }
+        pointer-event(event) => {
+            if (event.button == PointerEventButton.right && event.kind == PointerEventKind.down) {
+                root.right-clicked();
+            }
+        }
         mouse-cursor: pointer;
     }
 
@@ -261,6 +269,73 @@ component AppRow inherits Rectangle {
     }
 }
 
+// ── Pinned app tile (grid item) ──
+
+component PinnedTile inherits Rectangle {
+    in property <string> name;
+    in property <string> initial;
+    in property <image> icon_image;
+    in property <bool> has_icon: false;
+    callback clicked();
+    callback right-clicked();
+
+    border-radius: 8px;
+    background: touch.has-hover ? Theme.bg_light.transparentize(0.3) : transparent;
+
+    touch := TouchArea {
+        clicked => { root.clicked(); }
+        pointer-event(event) => {
+            if (event.button == PointerEventButton.right && event.kind == PointerEventKind.down) {
+                root.right-clicked();
+            }
+        }
+        mouse-cursor: pointer;
+    }
+
+    VerticalLayout {
+        alignment: center;
+        spacing: 4px;
+        padding: 6px;
+
+        HorizontalLayout {
+            alignment: center;
+
+            Rectangle {
+                width: 36px;
+                height: 36px;
+                border-radius: 8px;
+                background: root.has_icon ? transparent : Theme.accent.transparentize(0.82);
+
+                if root.has_icon: Image {
+                    source: root.icon_image;
+                    width: 32px;
+                    height: 32px;
+                    x: 2px;
+                    y: 2px;
+                    image-fit: contain;
+                }
+
+                if !root.has_icon: Text {
+                    text: root.initial;
+                    color: Theme.accent;
+                    font-size: 14px;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        Text {
+            text: root.name;
+            color: Theme.fg;
+            font-size: 10px;
+            horizontal-alignment: center;
+            overflow: elide;
+        }
+    }
+}
+
 // ── Main window ──
 
 export component MainWindow inherits Window {
@@ -283,6 +358,18 @@ export component MainWindow inherits Window {
     in-out property <string> version: "";
     in-out property <int> power-menu-index: 0;
 
+    // Pinned apps
+    in-out property <[AppItem]> pinned-apps;
+    in-out property <int> pinned-count: 0;
+    property <bool> show-pinned-grid: !root.is-searching && root.active-category < 0 && root.pinned-count > 0;
+    property <int> pinned-rows: Math.ceil(root.pinned-count / 4);
+
+    // Context menu
+    in-out property <bool> show-context-menu: false;
+    in-out property <string> context-menu-exec: "";
+    in-out property <bool> context-menu-is-pinned: false;
+    in-out property <length> context-menu-y: 0;
+
     // Callbacks
     callback filter-changed();
     callback launch-app(int);
@@ -290,6 +377,8 @@ export component MainWindow inherits Window {
     callback start-drag();
     callback open-webapp-center();
     callback power-action(string);  // "lock", "restart", "shutdown"
+    callback toggle-pin(string);    // exec string of app to pin/unpin
+    callback launch-pinned(int);    // index in pinned-apps model
 
     // Power menu state
     in-out property <bool> show-power-menu: false;
@@ -703,13 +792,54 @@ export component MainWindow inherits Window {
                         }
 
                         app-flick := Flickable {
-                            viewport-height: root.app-count * 38px + 10px;
+                            viewport-height: root.show-pinned-grid ?
+                                40px + root.pinned-rows * 80px + 10px :
+                                root.app-count * 38px + 10px;
 
                             VerticalLayout {
                                 padding-top: 5px;
                                 padding-bottom: 5px;
                                 spacing: 0px;
 
+                                // Pinned grid (home state)
+                                if root.show-pinned-grid: VerticalLayout {
+                                    padding-left: 8px;
+                                    padding-right: 8px;
+                                    padding-bottom: 4px;
+                                    spacing: 6px;
+
+                                    Text {
+                                        text: "Pinned";
+                                        color: Theme.fg_dim;
+                                        font-size: 11px;
+                                        font-weight: 600;
+                                    }
+
+                                    Rectangle {
+                                        height: root.pinned-rows * 80px;
+
+                                        for pin[i] in root.pinned-apps: PinnedTile {
+                                            x: Math.mod(i, 4) * (parent.width / 4);
+                                            y: Math.floor(i / 4) * 80px;
+                                            width: parent.width / 4;
+                                            height: 80px;
+                                            name: pin.name;
+                                            icon_image: pin.icon_image;
+                                            has_icon: pin.has_icon;
+                                            initial: pin.initial;
+
+                                            clicked => { root.launch-pinned(i); }
+                                            right-clicked => {
+                                                root.context-menu-exec = pin.exec;
+                                                root.context-menu-is-pinned = true;
+                                                root.context-menu-y = 100px + Math.floor(i / 4) * 80px + 40px;
+                                                root.show-context-menu = true;
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Normal app list
                                 for app[i] in root.apps: AppRow {
                                     name: app.name;
                                     category: app.category;
@@ -720,15 +850,22 @@ export component MainWindow inherits Window {
                                     is_web_app: app.is_web_app;
                                     source: app.source;
                                     show_badge: true;
+                                    is_pinned: app.is_pinned;
                                     highlighted: root.focus-zone == 2 && root.selected-app == i;
 
                                     clicked => { root.launch-app(i); }
+                                    right-clicked => {
+                                        root.context-menu-exec = app.exec;
+                                        root.context-menu-is-pinned = app.is_pinned;
+                                        root.context-menu-y = 82px + 5px + i * 38px + app-flick.viewport-y + 19px;
+                                        root.show-context-menu = true;
+                                    }
                                 }
                             }
                         }
 
-                        // Empty state
-                        if root.app-count == 0: VerticalLayout {
+                        // Empty state (searching/browsing with no results)
+                        if root.app-count == 0 && !root.show-pinned-grid: VerticalLayout {
                             alignment: center;
                             spacing: 6px;
                             padding-left: 16px;
@@ -736,9 +873,17 @@ export component MainWindow inherits Window {
 
                             Text {
                                 text: root.is-searching ? "No apps found" :
+                                    root.active-category >= 0 ? "No apps in this category" :
                                     "Search or pick a category";
                                 color: Theme.fg_dim;
                                 font-size: 12px;
+                                horizontal-alignment: center;
+                            }
+
+                            if !root.is-searching && root.active-category < 0: Text {
+                                text: "Right-click apps to pin them here";
+                                color: Theme.fg_dim.transparentize(0.3);
+                                font-size: 11px;
                                 horizontal-alignment: center;
                             }
                         }
@@ -878,6 +1023,79 @@ export component MainWindow inherits Window {
                         active: power-menu-scope.visual-power-index == 2;
                         pointer-moved => { root.power-menu-follow-hover = true; root.power-menu-index = 2; }
                         clicked => { root.show-power-menu = false; root.power-action("shutdown"); }
+                    }
+                }
+            }
+        }
+
+        // ── Context menu overlay (right-click pin/unpin) ──
+        if root.show-context-menu: ctx-scope := FocusScope {
+            width: root.width;
+            height: root.height;
+
+            init => { ctx-scope.focus(); }
+
+            key-pressed(event) => {
+                if (event.text == Key.Escape) {
+                    root.show-context-menu = false;
+                    root.focus-search();
+                    return accept;
+                }
+                if (event.text == Key.Return) {
+                    root.toggle-pin(root.context-menu-exec);
+                    root.show-context-menu = false;
+                    root.focus-search();
+                    return accept;
+                }
+                return reject;
+            }
+
+            // Click-away backdrop
+            TouchArea {
+                clicked => { root.show-context-menu = false; root.focus-search(); }
+            }
+
+            // Context menu card
+            Rectangle {
+                x: 240px;
+                y: Math.clamp(root.context-menu-y - 18px, 60px, root.height - 60px);
+                width: 170px;
+                height: 40px;
+                border-radius: 8px;
+                background: Theme.bg.transparentize(0.05);
+                border-width: 1px;
+                border-color: Theme.bg_lighter.transparentize(0.5);
+                clip: true;
+
+                VerticalLayout {
+                    padding: 4px;
+
+                    Rectangle {
+                        height: 32px;
+                        border-radius: 6px;
+                        background: ctx-touch.has-hover ? Theme.accent.transparentize(0.8) : transparent;
+
+                        ctx-touch := TouchArea {
+                            clicked => {
+                                root.toggle-pin(root.context-menu-exec);
+                                root.show-context-menu = false;
+                                root.focus-search();
+                            }
+                            mouse-cursor: pointer;
+                        }
+
+                        HorizontalLayout {
+                            padding-left: 10px;
+                            padding-right: 10px;
+                            spacing: 8px;
+
+                            Text {
+                                text: root.context-menu-is-pinned ? "Unpin from Start" : "Pin to Start";
+                                color: Theme.fg;
+                                font-size: 12px;
+                                vertical-alignment: center;
+                            }
+                        }
                     }
                 }
             }

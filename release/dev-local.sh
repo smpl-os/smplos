@@ -204,14 +204,26 @@ if do_component rust; then
     BIN_DIR="$(dirname "$SCRIPT_DIR")/.cache/app-binaries"
     RUST_APPS=(notif-center kb-center disp-center webapp-center app-center start-menu)
 
-    # Auto-build if any binary is missing
-    needs_build=false
+    # Auto-build if any binary is missing OR source is newer than binary
+    stale_apps=()
     for app in "${RUST_APPS[@]}"; do
-        [[ -f "$BIN_DIR/$app" ]] || { needs_build=true; break; }
+        if [[ ! -f "$BIN_DIR/$app" ]]; then
+            log "$app: binary missing"
+            stale_apps+=("$app"); continue
+        fi
+        app_src="$SRC_DIR/shared/$app"
+        if [[ -d "$app_src" ]]; then
+            newest_src=$(find "$app_src" -path '*/target' -prune -o \( -name '*.rs' -o -name '*.slint' -o -name 'Cargo.toml' \) -print | xargs stat -c '%Y' 2>/dev/null | sort -rn | head -1)
+            bin_time=$(stat -c '%Y' "$BIN_DIR/$app" 2>/dev/null || echo 0)
+            if [[ -n "$newest_src" && "$newest_src" -gt "$bin_time" ]]; then
+                log "$app: source newer than binary"
+                stale_apps+=("$app")
+            fi
+        fi
     done
-    if $needs_build; then
-        log "Binaries missing -- running build-apps.sh in container..."
-        "$SRC_DIR/build-apps.sh" all
+    if [[ ${#stale_apps[@]} -gt 0 ]]; then
+        log "Rebuilding: ${stale_apps[*]}"
+        "$SRC_DIR/build-apps.sh" "${stale_apps[@]}"
     fi
 
     for app in "${RUST_APPS[@]}"; do

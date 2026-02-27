@@ -2,6 +2,7 @@ mod theme;
 
 use i_slint_backend_winit::WinitWindowAccessor;
 use slint::{Image, Model, ModelRc, SharedString, VecModel};
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::Path;
 use std::rc::Rc;
@@ -84,6 +85,27 @@ fn load_apps() -> Vec<AppEntry> {
     }
 
     apps
+}
+
+// ── Pinned apps persistence ──
+
+fn load_pinned() -> Vec<String> {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let path = format!("{}/.config/smplos/pinned-apps.txt", home);
+    std::fs::read_to_string(&path)
+        .unwrap_or_default()
+        .lines()
+        .filter(|l| !l.trim().is_empty())
+        .map(|l| l.trim().to_string())
+        .collect()
+}
+
+fn save_pinned(pinned: &[String]) {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let dir = format!("{}/.config/smplos", home);
+    let _ = std::fs::create_dir_all(&dir);
+    let path = format!("{}/pinned-apps.txt", dir);
+    let _ = std::fs::write(&path, pinned.join("\n") + "\n");
 }
 
 // ── Icon resolution ──
@@ -197,7 +219,7 @@ fn filter_apps(all: &[AppEntry], category_key: &str, query: &str) -> Vec<AppEntr
 
 // ── Convert to Slint model item ──
 
-fn to_ui_item(app: &AppEntry, icon_cache: &HashMap<String, Image>) -> AppItem {
+fn to_ui_item(app: &AppEntry, icon_cache: &HashMap<String, Image>, pinned: &[String]) -> AppItem {
     let initial = app
         .name
         .chars()
@@ -234,6 +256,7 @@ fn to_ui_item(app: &AppEntry, icon_cache: &HashMap<String, Image>) -> AppItem {
         has_icon,
         is_web_app,
         source: SharedString::from(source),
+        is_pinned: pinned.contains(&app.exec),
     }
 }
 
@@ -246,13 +269,32 @@ fn update_view(
     icon_cache: &HashMap<String, Image>,
     category_key: &str,
     query: &str,
+    pinned: &[String],
 ) {
     let filtered = filter_apps(all_apps, category_key, query);
-    model.set_vec(filtered.iter().map(|a| to_ui_item(a, icon_cache)).collect::<Vec<_>>());
+    model.set_vec(filtered.iter().map(|a| to_ui_item(a, icon_cache, pinned)).collect::<Vec<_>>());
     ui.set_apps(ModelRc::from(model.clone()));
     ui.set_app_count(model.row_count() as i32);
     ui.set_selected_app(if model.row_count() > 0 { 0 } else { -1 });
     ui.set_is_searching(!query.trim().is_empty());
+}
+
+fn update_pinned_model(
+    ui: &MainWindow,
+    all_apps: &[AppEntry],
+    pinned_model: &Rc<VecModel<AppItem>>,
+    icon_cache: &HashMap<String, Image>,
+    pinned: &[String],
+) {
+    let items: Vec<AppItem> = pinned
+        .iter()
+        .filter_map(|exec| all_apps.iter().find(|a| &a.exec == exec))
+        .map(|a| to_ui_item(a, icon_cache, pinned))
+        .collect();
+    let count = items.len() as i32;
+    pinned_model.set_vec(items);
+    ui.set_pinned_apps(ModelRc::from(pinned_model.clone()));
+    ui.set_pinned_count(count);
 }
 
 // ── Theme ──
@@ -309,6 +351,8 @@ fn main() -> Result<(), slint::PlatformError> {
     let all_apps = Rc::new(load_apps());
     let icon_cache = Rc::new(build_icon_cache(&all_apps));
     let model = Rc::new(VecModel::<AppItem>::default());
+    let pinned = Rc::new(RefCell::new(load_pinned()));
+    let pinned_model = Rc::new(VecModel::<AppItem>::default());
 
     // ── Build category sidebar ──
     let cat_model = Rc::new(VecModel::<CategoryItem>::default());
@@ -335,6 +379,9 @@ fn main() -> Result<(), slint::PlatformError> {
     ui.set_active_category(-1);
     ui.set_app_count(0);
 
+    // ── Load pinned apps ──
+    update_pinned_model(&ui, &all_apps, &pinned_model, &icon_cache, &pinned.borrow());
+
     // ── Filter callback (search text or category changed) ──
     {
         let ui_weak = ui.as_weak();
@@ -342,11 +389,13 @@ fn main() -> Result<(), slint::PlatformError> {
         let icon_cache = icon_cache.clone();
         let model = model.clone();
         let cat_model = cat_model.clone();
+        let pinned = pinned.clone();
 
         ui.on_filter_changed(move || {
             let Some(ui) = ui_weak.upgrade() else {
                 return;
             };
+            ui.set_show_context_menu(false);
             let search = ui.get_search_text().to_string();
             let cat_idx = ui.get_active_category() as usize;
 
@@ -365,7 +414,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 .map(|c| c.key.to_string())
                 .unwrap_or_else(|| "all".to_string());
 
-            update_view(&ui, &all_apps, &model, &icon_cache, &cat_key, &search);
+            update_view(&ui, &all_apps, &model, &icon_cache, &cat_key, &search, &pinned.borrow());
         });
     }
 
@@ -381,6 +430,59 @@ fn main() -> Result<(), slint::PlatformError> {
                     .arg(&exec)
                     .spawn();
                 std::process::exit(0);
+            }
+        });
+    }
+
+    // ── Launch pinned app ──
+    {
+        let pinned_model = pinned_model.clone();
+        ui.on_launch_pinned(move |index| {
+            let idx = index as usize;
+            if let Some(item) = pinned_model.row_data(idx) {
+                let exec = item.exec.to_string();
+                let _ = std::process::Command::new("sh")
+                    .arg("-c")
+                    .arg(&exec)
+                    .spawn();
+                std::process::exit(0);
+            }
+        });
+    }
+
+    // ── Toggle pin ──
+    {
+        let ui_weak = ui.as_weak();
+        let all_apps = all_apps.clone();
+        let icon_cache = icon_cache.clone();
+        let model = model.clone();
+        let pinned = pinned.clone();
+        let pinned_model = pinned_model.clone();
+        let cat_model = cat_model.clone();
+
+        ui.on_toggle_pin(move |exec| {
+            let Some(ui) = ui_weak.upgrade() else { return; };
+            let exec = exec.to_string();
+            {
+                let mut p = pinned.borrow_mut();
+                if let Some(pos) = p.iter().position(|e| *e == exec) {
+                    p.remove(pos);
+                } else {
+                    p.push(exec);
+                }
+                save_pinned(&p);
+            }
+            let p = pinned.borrow();
+            update_pinned_model(&ui, &all_apps, &pinned_model, &icon_cache, &p);
+            // Refresh current view to update is_pinned flags
+            let search = ui.get_search_text().to_string();
+            let cat_idx = ui.get_active_category() as usize;
+            if !search.is_empty() || cat_idx < cat_model.row_count() {
+                let cat_key = cat_model
+                    .row_data(cat_idx)
+                    .map(|c| c.key.to_string())
+                    .unwrap_or_else(|| "all".to_string());
+                update_view(&ui, &all_apps, &model, &icon_cache, &cat_key, &search, &p);
             }
         });
     }
