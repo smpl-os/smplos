@@ -1,45 +1,31 @@
 #!/bin/bash
-# Toggle smplOS Start Menu (with exclusive focus capture)
-# Uses: pin + stay_focused (windowrule),
-#       follow_mouse=3 + focus_on_activate=false (prevent mouse/app focus steal).
+# Toggle smplOS Start Menu
+# Uses a Hyprland bindn (non-consuming bind) on left click to detect
+# clicks outside the start-menu window and dismiss it.
 
 APP_NAME="start-menu"
 BIN_PATH="/usr/local/bin/$APP_NAME"
 [[ -f "$BIN_PATH" ]] || BIN_PATH="$HOME/Documents/sources/smplos/src/shared/start-menu/target/release/$APP_NAME"
 
-STATE_FILE="/tmp/.start-menu-focus-state"
-
-lock_focus() {
-    local fm fa
-    fm=$(hyprctl getoption input:follow_mouse -j 2>/dev/null | jq -r '.int // 0')
-    fa=$(hyprctl getoption misc:focus_on_activate -j 2>/dev/null | jq -r '.int // 0')
-    echo "$fm $fa" > "$STATE_FILE"
-
-    # follow_mouse=3: keyboard focus completely independent of cursor position
-    # focus_on_activate=false: other apps cannot request focus
-    hyprctl --batch "\
-        keyword input:follow_mouse 3 ; \
-        keyword misc:focus_on_activate false" 2>/dev/null
-}
-
-unlock_focus() {
-    local fm=0 fa=0
-    if [[ -f "$STATE_FILE" ]]; then
-        read -r fm fa < "$STATE_FILE"
-        rm -f "$STATE_FILE"
-    fi
-    hyprctl --batch "\
-        keyword input:follow_mouse ${fm:-0} ; \
-        keyword misc:focus_on_activate ${fa:-0}" 2>/dev/null
+cleanup_bind() {
+    hyprctl keyword unbind ", mouse:272" 2>/dev/null
 }
 
 if pkill -x "$APP_NAME" 2>/dev/null; then
-    unlock_focus
+    cleanup_bind
 else
-    lock_focus
     "$BIN_PATH" &
     disown
-    bg_pid=$!
-    (while kill -0 $bg_pid 2>/dev/null; do sleep 0.2; done; unlock_focus) &
+    local_pid=$!
+
+    # Add non-consuming bind: every left click runs the check script
+    # bindn = click passes through to the window, script also runs
+    sleep 0.15
+    hyprctl keyword bindn ", mouse:272, exec, start-menu-click-check" 2>/dev/null
+
+    # Cleanup bind when start-menu exits (however it exits)
+    (while kill -0 $local_pid 2>/dev/null; do sleep 0.2; done
+     cleanup_bind
+    ) &
     disown
 fi

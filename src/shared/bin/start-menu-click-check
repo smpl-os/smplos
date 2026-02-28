@@ -1,0 +1,14 @@
+#!/bin/bash
+# Called by Hyprland bindn on every left click while start-menu is open.
+# If the click is outside the start-menu window, dismiss it.
+
+GEOM=$(hyprctl clients -j 2>/dev/null | jq -r '.[] | select(.class == "start-menu") | "\(.at[0]) \(.at[1]) \(.size[0]) \(.size[1])"')
+[[ -z "$GEOM" ]] && exit 0
+
+read -r wx wy ww wh <<< "$GEOM"
+CURSOR=$(hyprctl cursorpos -j 2>/dev/null | jq -r '"\(.x) \(.y)"')
+read -r cx cy <<< "$CURSOR"
+
+if (( cx < wx || cx > wx + ww || cy < wy || cy > wy + wh )); then
+    pkill -x start-menu
+fi

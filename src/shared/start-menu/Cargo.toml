@@ -1,6 +1,6 @@
 [package]
 name = "start-menu"
-version = "0.1.12"
+version = "0.1.17"
 edition = "2021"
 
 [dependencies]
