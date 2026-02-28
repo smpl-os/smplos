@@ -169,6 +169,32 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
+    // -- Tab switching --
+    {
+        let ui_weak = ui.as_weak();
+        let state = state.clone();
+        let model = model.clone();
+        ui.on_switch_tab(move |tab_index| {
+            let Some(ui) = ui_weak.upgrade() else { return };
+
+            if tab_index == 1 {
+                let recommended = sources::recommended::get_recommended();
+                update_results(&ui, &state, &model, recommended);
+            } else {
+                let q = ui.get_search_text().to_string();
+                if q.is_empty() {
+                    update_results(&ui, &state, &model, Vec::new());
+                } else {
+                    let aur = ui.get_filter_aur();
+                    let flatpak = ui.get_filter_flatpak();
+                    let appimage = ui.get_filter_appimage();
+                    let results = do_search(&q, aur, flatpak, appimage);
+                    update_results(&ui, &state, &model, results);
+                }
+            }
+        });
+    }
+
     // -- Select app: show detail view --
     {
         let ui_weak = ui.as_weak();
@@ -184,6 +210,9 @@ fn main() -> Result<(), slint::PlatformError> {
             let app = &borrowed[idx];
             ui.set_selected_index(index);
             ui.set_install_status(SharedString::default());
+            ui.set_console_output(SharedString::default());
+            ui.set_process_finished(false);
+            ui.set_process_success(false);
 
             // For Flatpak apps, fetch richer details
             if app.source == Source::Flatpak && !app.id.is_empty() {
@@ -200,15 +229,47 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // -- Channel for async install/uninstall results --
-    // (index, is_install, success, message)
-    let (install_tx, install_rx) = std::sync::mpsc::channel::<(usize, bool, bool, String)>();
+    // -- Active process state --
+    struct ActiveInstall {
+        idx: usize,
+        is_install: bool,
+        process: installer::StreamingProcess,
+    }
+    let active_install: Rc<RefCell<Option<ActiveInstall>>> = Rc::new(RefCell::new(None));
 
-    // -- Install app (async) --
+    // Helper: handle immediate (non-streaming) results
+    fn handle_immediate(
+        ui: &MainWindow,
+        state: &Rc<RefCell<Vec<AppEntry>>>,
+        model: &Rc<VecModel<AppItem>>,
+        idx: usize,
+        is_install: bool,
+        result: &installer::ImmediateResult,
+    ) {
+        ui.set_installing(false);
+        ui.set_process_finished(true);
+        ui.set_process_success(result.success);
+        ui.set_console_output(SharedString::from(&result.message));
+        if result.success {
+            let new_state = is_install;
+            let mut borrowed = state.borrow_mut();
+            if let Some(entry) = borrowed.get_mut(idx) {
+                entry.installed = new_state;
+            }
+            drop(borrowed);
+            if let Some(mut item) = model.row_data(idx) {
+                item.installed = new_state;
+                model.set_row_data(idx, item);
+            }
+        }
+    }
+
+    // -- Install app --
     {
         let ui_weak = ui.as_weak();
         let state = state.clone();
-        let tx = install_tx.clone();
+        let model = model.clone();
+        let active = active_install.clone();
         ui.on_install_app(move |index| {
             let Some(ui) = ui_weak.upgrade() else { return };
             if ui.get_installing() { return; }
@@ -220,21 +281,32 @@ fn main() -> Result<(), slint::PlatformError> {
             drop(borrowed);
 
             ui.set_installing(true);
-            ui.set_install_status(SharedString::from(format!("Installing {}...", app.name)));
+            ui.set_console_output(SharedString::default());
+            ui.set_console_last_line(SharedString::default());
+            ui.set_process_finished(false);
+            ui.set_process_success(false);
 
-            let tx = tx.clone();
-            std::thread::spawn(move || {
-                let result = installer::install(&app.source, &app.id);
-                let _ = tx.send((idx, true, result.success, result.message));
-            });
+            match installer::spawn_install(&app.source, &app.id) {
+                installer::SpawnResult::Streaming(process) => {
+                    *active.borrow_mut() = Some(ActiveInstall {
+                        idx,
+                        is_install: true,
+                        process,
+                    });
+                }
+                installer::SpawnResult::Immediate(result) => {
+                    handle_immediate(&ui, &state, &model, idx, true, &result);
+                }
+            }
         });
     }
 
-    // -- Uninstall app (async) --
+    // -- Uninstall app --
     {
         let ui_weak = ui.as_weak();
         let state = state.clone();
-        let tx = install_tx.clone();
+        let model = model.clone();
+        let active = active_install.clone();
         ui.on_uninstall_app(move |index| {
             let Some(ui) = ui_weak.upgrade() else { return };
             if ui.get_installing() { return; }
@@ -246,30 +318,110 @@ fn main() -> Result<(), slint::PlatformError> {
             drop(borrowed);
 
             ui.set_installing(true);
-            ui.set_install_status(SharedString::from(format!("Removing {}...", app.name)));
+            ui.set_console_output(SharedString::default());
+            ui.set_console_last_line(SharedString::default());
+            ui.set_process_finished(false);
+            ui.set_process_success(false);
 
-            let tx = tx.clone();
-            std::thread::spawn(move || {
-                let result = installer::uninstall(&app.source, &app.id, &app.name);
-                let _ = tx.send((idx, false, result.success, result.message));
-            });
+            match installer::spawn_uninstall(&app.source, &app.id, &app.name) {
+                installer::SpawnResult::Streaming(process) => {
+                    *active.borrow_mut() = Some(ActiveInstall {
+                        idx,
+                        is_install: false,
+                        process,
+                    });
+                }
+                installer::SpawnResult::Immediate(result) => {
+                    handle_immediate(&ui, &state, &model, idx, false, &result);
+                }
+            }
         });
     }
 
-    // -- Poll install results from background thread --
+    // -- Console input --
+    {
+        let active = active_install.clone();
+        ui.on_send_console_input(move |text| {
+            if let Some(ref mut ai) = *active.borrow_mut() {
+                ai.process.send_input(&text);
+            }
+        });
+    }
+
+    // -- Cancel install --
+    {
+        let ui_weak = ui.as_weak();
+        let active = active_install.clone();
+        ui.on_cancel_install(move || {
+            let Some(ui) = ui_weak.upgrade() else { return };
+            let mut guard = active.borrow_mut();
+            if let Some(ref mut ai) = *guard {
+                ai.process.kill();
+            }
+            *guard = None;
+            drop(guard);
+
+            ui.set_installing(false);
+            ui.set_process_finished(true);
+            ui.set_process_success(false);
+            ui.set_console_output(SharedString::from("Cancelled by user"));
+            ui.set_console_last_line(SharedString::default());
+        });
+    }
+
+    // -- Poll active process for output and completion --
     {
         let ui_weak = ui.as_weak();
         let state = state.clone();
         let model = model.clone();
+        let active = active_install.clone();
+        // Accumulate full output in Rust (not on the UI during install)
+        let full_output: Rc<RefCell<String>> = Rc::new(RefCell::new(String::new()));
         let poll_timer = slint::Timer::default();
         poll_timer.start(
             slint::TimerMode::Repeated,
-            std::time::Duration::from_millis(100),
+            std::time::Duration::from_millis(50),
             move || {
-                while let Ok((idx, is_install, success, message)) = install_rx.try_recv() {
-                    let Some(ui) = ui_weak.upgrade() else { continue };
+                let Some(ui) = ui_weak.upgrade() else { return };
+                let mut guard = active.borrow_mut();
+                let Some(ref mut ai) = *guard else { return };
+
+                // Append new output lines, track last meaningful line
+                let new_lines = ai.process.poll_output();
+                if !new_lines.is_empty() {
+                    let mut buf = full_output.borrow_mut();
+                    for line in &new_lines {
+                        if !buf.is_empty() {
+                            buf.push('\n');
+                        }
+                        buf.push_str(line);
+
+                        // Update live status with last non-junk line
+                        let trimmed = line.trim();
+                        if !trimmed.is_empty()
+                            && !trimmed.chars().all(|c| c == '#' || c == ' ')
+                        {
+                            ui.set_console_last_line(SharedString::from(trimmed));
+                        }
+                    }
+                }
+
+                // Check if process finished
+                if let Some(success) = ai.process.try_wait() {
+                    let idx = ai.idx;
+                    let is_install = ai.is_install;
+                    drop(guard);
+
                     ui.set_installing(false);
-                    ui.set_install_status(SharedString::from(&message));
+                    ui.set_process_finished(true);
+                    ui.set_process_success(success);
+
+                    // Set full output (shown only on failure in the UI)
+                    ui.set_console_output(SharedString::from(
+                        full_output.borrow().as_str(),
+                    ));
+                    full_output.borrow_mut().clear();
+
                     if success {
                         let new_state = is_install;
                         let mut borrowed = state.borrow_mut();
@@ -282,6 +434,8 @@ fn main() -> Result<(), slint::PlatformError> {
                             model.set_row_data(idx, item);
                         }
                     }
+
+                    *active.borrow_mut() = None;
                 }
             },
         );

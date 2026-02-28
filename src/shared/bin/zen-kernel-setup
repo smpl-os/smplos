@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# zen-kernel-setup - Switch from linux-lts to linux-zen
+# Usage: zen-kernel-setup {install|uninstall|check}
+set -euo pipefail
+
+log() { echo "[zen-kernel-setup] $*"; }
+die() { log "ERROR: $*" >&2; exit 1; }
+
+do_check() {
+    pacman -Q linux-zen &>/dev/null
+}
+
+do_install() {
+    log "Installing linux-zen kernel..."
+
+    # Install zen kernel + headers
+    pkexec bash -c '
+        pacman -S --noconfirm --needed linux-zen linux-zen-headers || exit 1
+
+        # Rebuild GRUB so zen appears in boot menu
+        if [[ -f /boot/grub/grub.cfg ]]; then
+            grub-mkconfig -o /boot/grub/grub.cfg || true
+        fi
+
+        # Rebuild initramfs for zen
+        mkinitcpio -p linux-zen 2>/dev/null || true
+    ' || die "Failed to install linux-zen"
+
+    # Verify
+    pacman -Q linux-zen &>/dev/null || die "linux-zen not found after install"
+    log "linux-zen installed. Reboot to use it."
+    log "Your LTS kernel is still available in the GRUB menu as a fallback."
+}
+
+do_uninstall() {
+    # Safety: don't remove zen if it's the only kernel
+    if ! pacman -Q linux-lts &>/dev/null && ! pacman -Q linux &>/dev/null; then
+        die "Cannot remove linux-zen: no other kernel installed. Install linux-lts first."
+    fi
+
+    log "Removing linux-zen kernel..."
+
+    pkexec bash -c '
+        pacman -Rns --noconfirm linux-zen linux-zen-headers 2>/dev/null || true
+
+        # Rebuild GRUB to remove zen entries
+        if [[ -f /boot/grub/grub.cfg ]]; then
+            grub-mkconfig -o /boot/grub/grub.cfg || true
+        fi
+    ' || die "Failed to remove linux-zen"
+
+    log "linux-zen removed. System will boot linux-lts on next reboot."
+}
+
+case "${1:-}" in
+    install)   do_install   ;;
+    uninstall) do_uninstall ;;
+    check)     do_check     ;;
+    *)         echo "Usage: zen-kernel-setup {install|uninstall|check}" >&2; exit 1 ;;
+esac

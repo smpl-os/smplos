@@ -1,0 +1,157 @@
+#!/usr/bin/env bash
+# fl-studio-setup - Download and install FL Studio via Wine
+# Usage: fl-studio-setup {install|uninstall|check}
+set -euo pipefail
+
+WINEPREFIX="${HOME}/.local/share/wineprefixes/flstudio"
+DOWNLOAD_URL="https://support.image-line.com/redirect/flstudio_win_installer"
+CACHE_DIR="${HOME}/.cache/smplos/fl-studio"
+INSTALLER="${CACHE_DIR}/flstudio_installer.exe"
+DESKTOP_FILE="${HOME}/.local/share/applications/fl-studio.desktop"
+LOGFILE="/mnt/fl-studio-install.log"
+
+log() { echo "[fl-studio-setup] $*"; }
+die() { log "ERROR: $*" >&2; exit 1; }
+
+# Tee all output (stdout + stderr) to log file
+exec > >(tee -a "$LOGFILE") 2>&1
+echo "=== fl-studio-setup started: $(date) ===" >> "$LOGFILE"
+
+ensure_deps() {
+    local missing=()
+
+    # wine and wine-staging conflict -- accept either one
+    if ! pacman -Q wine-staging &>/dev/null && ! pacman -Q wine &>/dev/null; then
+        missing+=("wine")
+    fi
+    if ! pacman -Q winetricks &>/dev/null; then
+        missing+=("winetricks")
+    fi
+
+    [[ ${#missing[@]} -eq 0 ]] && return 0
+
+    log "Installing dependencies: ${missing[*]}"
+    if command -v paru &>/dev/null && paru --version &>/dev/null; then
+        paru -S --noconfirm "${missing[@]}" || die "Failed to install dependencies"
+    else
+        pkexec pacman -S --noconfirm "${missing[@]}" || die "Failed to install dependencies"
+    fi
+
+    for pkg in "${missing[@]}"; do
+        pacman -Q "$pkg" &>/dev/null || die "$pkg failed to install"
+    done
+    log "Dependencies ready"
+}
+
+download_installer() {
+    mkdir -p "$CACHE_DIR"
+
+    if [[ -f "$INSTALLER" ]]; then
+        log "Using cached installer"
+        return 0
+    fi
+
+    log "Downloading FL Studio installer (~1 GB)..."
+    curl -L --fail --progress-bar -o "${INSTALLER}.part" "$DOWNLOAD_URL" \
+        || die "Download failed. Check your internet connection."
+    mv "${INSTALLER}.part" "$INSTALLER"
+    log "Download complete"
+}
+
+setup_prefix() {
+    export WINEPREFIX WINEARCH=win64
+    # Suppress Mono/Gecko install dialogs that hang in non-interactive mode
+    export WINEDLLOVERRIDES="mscoree=d;mshtml=d"
+
+    if [[ ! -d "$WINEPREFIX" ]]; then
+        log "Creating Wine prefix at ${WINEPREFIX}..."
+        mkdir -p "$WINEPREFIX"
+        wineboot --init 2>&1 || die "wineboot --init failed"
+        # Wait for wineserver to finish
+        wineserver --wait 2>/dev/null || true
+        log "Wine prefix ready"
+        log "Installing font dependencies..."
+        winetricks -q corefonts 2>&1 || log "WARN: corefonts install had issues (non-fatal)"
+    else
+        log "Wine prefix already exists"
+    fi
+}
+
+create_desktop_entry() {
+    local fl_exe
+    fl_exe=$(find "${WINEPREFIX}/drive_c/Program Files/Image-Line/" \
+        -name "FL64.exe" -type f 2>/dev/null | head -1)
+
+    if [[ -z "$fl_exe" ]]; then
+        fl_exe=$(find "${WINEPREFIX}/drive_c/Program Files/Image-Line/" \
+            -name "FL.exe" -type f 2>/dev/null | head -1)
+    fi
+
+    [[ -n "$fl_exe" ]] || die "Could not find FL Studio executable after install"
+
+    mkdir -p "$(dirname "$DESKTOP_FILE")"
+    cat > "$DESKTOP_FILE" << EOF
+[Desktop Entry]
+Name=FL Studio
+Comment=Digital Audio Workstation (via Wine)
+Exec=env WINEPREFIX=${WINEPREFIX} wine "${fl_exe}"
+Type=Application
+Categories=Audio;Music;AudioVideo;
+Terminal=false
+StartupWMClass=fl64.exe
+EOF
+    log "Desktop entry created"
+}
+
+do_install() {
+    ensure_deps
+    download_installer
+    setup_prefix
+
+    export WINEPREFIX WINEARCH=win64
+    export WINEDLLOVERRIDES="mscoree=d;mshtml=d"
+    log "Running FL Studio installer (unattended)..."
+    # Wine often returns non-zero even on success; don't die on exit code
+    wine "$INSTALLER" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- 2>&1 || true
+    wineserver --wait 2>/dev/null || true
+
+    # Verify installation by checking for the executable
+    local fl_exe
+    fl_exe=$(find "${WINEPREFIX}/drive_c/Program Files/Image-Line/" \
+        -name "FL64.exe" -o -name "FL.exe" 2>/dev/null | head -1)
+    [[ -n "$fl_exe" ]] || die "FL Studio installer ran but FL64.exe was not found. Installation may have failed."
+
+    create_desktop_entry
+    log "FL Studio installed successfully!"
+    log "Launch from your app menu or run: fl-studio-setup launch"
+}
+
+do_uninstall() {
+    rm -f "$DESKTOP_FILE"
+
+    if [[ -d "$WINEPREFIX" ]]; then
+        log "Removing Wine prefix at ${WINEPREFIX}..."
+        rm -rf "$WINEPREFIX"
+    fi
+
+    log "FL Studio removed"
+}
+
+do_check() {
+    # Exit 0 if installed, 1 if not
+    [[ -f "$DESKTOP_FILE" ]] && exit 0 || exit 1
+}
+
+do_launch() {
+    [[ -f "$DESKTOP_FILE" ]] || die "FL Studio is not installed"
+    gtk-launch "$(basename "$DESKTOP_FILE" .desktop)" 2>/dev/null \
+        || die "Failed to launch FL Studio"
+}
+
+case "${1:-}" in
+    install)   do_install ;;
+    uninstall) do_uninstall ;;
+    check)     do_check ;;
+    launch)    do_launch ;;
+    *)         echo "Usage: $(basename "$0") {install|uninstall|check|launch}" ;;
+esac

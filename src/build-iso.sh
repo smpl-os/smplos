@@ -57,6 +57,7 @@ Options:
     --skip-aur              Skip AUR packages (faster, no Rust compilation)
     --skip-flatpak          Skip Flatpak packages
     --skip-appimage         Skip AppImages
+    --clean-apps            Wipe app build cache before compiling (full rebuild)
     -h, --help              Show this help
 
 Examples:
@@ -80,6 +81,7 @@ VERBOSE=""
 SKIP_AUR=""
 SKIP_FLATPAK=""
 SKIP_APPIMAGE=""
+CLEAN_APPS=""
 
 parse_args() {
     while [[ $# -gt 0 ]]; do
@@ -97,6 +99,7 @@ parse_args() {
             --skip-aur)         SKIP_AUR="1"; shift ;;
             --skip-flatpak)     SKIP_FLATPAK="1"; shift ;;
             --skip-appimage)    SKIP_APPIMAGE="1"; shift ;;
+            --clean-apps)       CLEAN_APPS="1"; shift ;;
             -h|--help)          show_help; exit 0 ;;
             *) die "Unknown option: $1 (see --help)" ;;
         esac
@@ -358,7 +361,9 @@ run_build() {
     # outputs to .cache/app-binaries/. Same script used by dev-push.sh.
     local app_bin_dir="$PROJECT_ROOT/.cache/app-binaries"
     log_info "Building apps via build-apps.sh..."
-    "$SCRIPT_DIR/build-apps.sh" all
+    build_apps_args=(all)
+    [[ -n "$CLEAN_APPS" ]] && build_apps_args=(--clean all)
+    "$SCRIPT_DIR/build-apps.sh" "${build_apps_args[@]}"
 
     local run_args=(
         --rm --privileged

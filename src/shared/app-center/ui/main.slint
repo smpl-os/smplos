@@ -74,6 +74,33 @@ component FilterPill inherits Rectangle {
     }
 }
 
+// -- Tab button --
+component TabButton inherits Rectangle {
+    in property <string> label;
+    in property <bool> active: false;
+    callback clicked();
+
+    height: 28px;
+    border-radius: 14px;
+    background: root.active ? Theme.accent.transparentize(0.85) :
+        (tab-touch.has-hover ? Theme.bg_light : transparent);
+    width: tab-label.preferred-width + 20px;
+
+    tab-label := Text {
+        text: root.label;
+        color: root.active ? Theme.accent : Theme.fg_dim;
+        font-size: 11px;
+        font-weight: root.active ? 600 : 400;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    tab-touch := TouchArea {
+        clicked => { root.clicked(); }
+        mouse-cursor: pointer;
+    }
+}
+
 // -- Header button (close, help) --
 component HeaderButton inherits Rectangle {
     in property <string> label;
@@ -139,6 +166,7 @@ component AppCard inherits Rectangle {
     in property <string> source;
     in property <string> version;
     in property <string> description;
+    in property <string> icon_path;
     in property <bool> installed;
     in property <bool> selected: false;
     callback clicked();
@@ -159,22 +187,26 @@ component AppCard inherits Rectangle {
         padding: 10px;
         spacing: 10px;
 
-        // Icon placeholder - first letter
+        // Icon placeholder
         Rectangle {
             width: 40px;
             height: 40px;
             border-radius: 8px;
             background: root.source == "AUR" ? Theme.cyan.transparentize(0.8) :
                 root.source == "Flatpak" ? Theme.accent.transparentize(0.8) :
-                Theme.green.transparentize(0.8);
+                root.source == "AppImage" ? Theme.green.transparentize(0.8) :
+                Theme.yellow.transparentize(0.8);
             vertical-stretch: 0;
 
             Text {
-                text: root.source == "AUR" ? "A" : root.source == "Flatpak" ? "F" : "I";
+                text: root.icon_path != "" ? root.icon_path :
+                    root.source == "AUR" ? "A" : root.source == "Flatpak" ? "F" :
+                    root.source == "AppImage" ? "I" : "S";
                 color: root.source == "AUR" ? Theme.cyan :
                     root.source == "Flatpak" ? Theme.accent :
-                    Theme.green;
-                font-size: 18px;
+                    root.source == "AppImage" ? Theme.green :
+                    Theme.yellow;
+                font-size: root.icon_path != "" ? 22px : 18px;
                 font-weight: 700;
                 horizontal-alignment: center;
                 vertical-alignment: center;
@@ -207,7 +239,8 @@ component AppCard inherits Rectangle {
                     label: root.source;
                     badge-color: root.source == "AUR" ? Theme.cyan :
                         root.source == "Flatpak" ? Theme.accent :
-                        Theme.green;
+                        root.source == "AppImage" ? Theme.green :
+                        Theme.yellow;
                 }
                 if root.installed: SourceBadge {
                     label: "installed";
@@ -246,6 +279,13 @@ export component MainWindow inherits Window {
     in-out property <bool> show-help: false;
     in-out property <bool> installing: false;
     in-out property <string> install-status: "";
+    in-out property <string> console-output: "";
+    in-out property <string> console-last-line: "";
+    in-out property <bool> process-finished: false;
+    in-out property <bool> process-success: false;
+
+    // Tab state
+    in-out property <int> current-tab: 0;  // 0 = search, 1 = recommended
 
     // Filter states
     in-out property <bool> filter-aur: true;
@@ -262,6 +302,9 @@ export component MainWindow inherits Window {
     callback close();
     callback start-drag();
     callback filter-changed();
+    callback send-console-input(string);
+    callback cancel-install();
+    callback switch-tab(int);
 
     // -- Public functions --
     public function focus-search() {
@@ -314,6 +357,20 @@ export component MainWindow inherits Window {
     // -- Keyboard handler --
     key-scope := FocusScope {
         key-pressed(event) => {
+            // Ctrl+Tab / Ctrl+Shift+Tab: cycle tabs (works everywhere)
+            if (event.modifiers.control && event.text == Key.Tab) {
+                if (event.modifiers.shift) {
+                    // Previous tab
+                    root.current-tab = root.current-tab == 0 ? 1 : 0;
+                } else {
+                    // Next tab
+                    root.current-tab = root.current-tab == 1 ? 0 : 1;
+                }
+                root.show-detail = false;
+                root.switch-tab(root.current-tab);
+                return accept;
+            }
+
             // Help overlay intercepts
             if (root.show-help) {
                 if (event.text == Key.Escape || event.text == "?" || event.text == "/") {
@@ -325,6 +382,10 @@ export component MainWindow inherits Window {
 
             // Detail view
             if (root.show-detail) {
+                // Let Ctrl+C / Ctrl+A pass through to TextInput for copy/select-all
+                if (event.modifiers.control && (event.text == "c" || event.text == "a")) {
+                    return reject;
+                }
                 if (event.text == Key.Escape || event.text == "q") {
                     root.go-back();
                     return accept;
@@ -358,6 +419,11 @@ export component MainWindow inherits Window {
                 if (event.text == "?") {
                     root.show-help = true;
                     return accept;
+                }
+                if (root.current-tab != 0) {
+                    root.current-tab = 0;
+                    root.show-detail = false;
+                    root.switch-tab(0);
                 }
                 search-input.focus();
                 return accept;
@@ -455,10 +521,50 @@ export component MainWindow inherits Window {
             }
         }
 
-        // == Search bar ==
+        // == Tab bar ==
         Rectangle {
-            height: 44px;
+            height: 36px;
             background: transparent;
+
+            HorizontalLayout {
+                padding-left: 14px;
+                padding-right: 14px;
+                padding-top: 4px;
+                padding-bottom: 4px;
+                spacing: 4px;
+                alignment: start;
+
+                TabButton {
+                    label: "Search";
+                    active: root.current-tab == 0;
+                    clicked => {
+                        if (root.current-tab != 0) {
+                            root.current-tab = 0;
+                            root.show-detail = false;
+                            root.switch-tab(0);
+                        }
+                    }
+                }
+
+                TabButton {
+                    label: "Recommended";
+                    active: root.current-tab == 1;
+                    clicked => {
+                        if (root.current-tab != 1) {
+                            root.current-tab = 1;
+                            root.show-detail = false;
+                            root.switch-tab(1);
+                        }
+                    }
+                }
+            }
+        }
+
+        // == Search bar (search tab only) ==
+        Rectangle {
+            height: root.current-tab == 0 ? 44px : 0px;
+            clip: true;
+            visible: root.current-tab == 0;
 
             HorizontalLayout {
                 padding-left: 14px;
@@ -541,9 +647,11 @@ export component MainWindow inherits Window {
             }
         }
 
-        // == Filter pills ==
+        // == Filter pills (search tab only) ==
         Rectangle {
-            height: 34px;
+            height: root.current-tab == 0 ? 34px : 0px;
+            clip: true;
+            visible: root.current-tab == 0;
             background: transparent;
 
             HorizontalLayout {
@@ -593,6 +701,7 @@ export component MainWindow inherits Window {
         Rectangle {
             horizontal-stretch: 1;
             vertical-stretch: 1;
+            clip: true;
 
             // -- Searching indicator --
             if !root.show-detail && root.searching: Rectangle {
@@ -609,7 +718,7 @@ export component MainWindow inherits Window {
             }
 
             // -- No results --
-            if !root.show-detail && !root.searching && root.results.length == 0 && root.search-text != "": Rectangle {
+            if !root.show-detail && !root.searching && root.results.length == 0 && root.search-text != "" && root.current-tab == 0: Rectangle {
                 vertical-stretch: 1;
                 VerticalLayout {
                     alignment: center;
@@ -631,7 +740,7 @@ export component MainWindow inherits Window {
             }
 
             // -- Welcome screen --
-            if !root.show-detail && !root.searching && root.results.length == 0 && root.search-text == "": Rectangle {
+            if !root.show-detail && !root.searching && root.results.length == 0 && root.search-text == "" && root.current-tab == 0: Rectangle {
                 vertical-stretch: 1;
                 VerticalLayout {
                     alignment: center;
@@ -651,6 +760,8 @@ export component MainWindow inherits Window {
             list_flick := Flickable {
                 visible: !root.show-detail && !root.searching && root.results.length > 0;
                 vertical-stretch: 1;
+                width: parent.width;
+                height: parent.height;
                 viewport-height: root.results.length * root.row-step;
 
                 VerticalLayout {
@@ -662,6 +773,7 @@ export component MainWindow inherits Window {
                         source: item.source;
                         version: item.version;
                         description: item.description;
+                        icon_path: item.icon_path;
                         installed: item.installed;
                         selected: idx == root.selected-index;
                         clicked => {
@@ -674,9 +786,12 @@ export component MainWindow inherits Window {
 
             // -- Detail view --
             if root.show-detail && root.selected-index >= 0 && root.selected-index < root.results.length: Rectangle {
-                vertical-stretch: 1;
+                width: parent.width;
+                height: parent.height;
 
                 Flickable {
+                    width: parent.width;
+                    height: parent.height;
                     VerticalLayout {
                         padding: 20px;
                         spacing: 12px;
@@ -703,17 +818,24 @@ export component MainWindow inherits Window {
                                     ? Theme.cyan.transparentize(0.8) :
                                     root.results[root.selected-index].source == "Flatpak"
                                     ? Theme.accent.transparentize(0.8) :
-                                    Theme.green.transparentize(0.8);
+                                    root.results[root.selected-index].source == "AppImage"
+                                    ? Theme.green.transparentize(0.8) :
+                                    Theme.yellow.transparentize(0.8);
                                 vertical-stretch: 0;
 
                                 Text {
-                                    text: root.results[root.selected-index].source == "AUR" ? "A" :
-                                        root.results[root.selected-index].source == "Flatpak" ? "F" : "I";
+                                    text: root.results[root.selected-index].icon_path != ""
+                                        ? root.results[root.selected-index].icon_path :
+                                        root.results[root.selected-index].source == "AUR" ? "A" :
+                                        root.results[root.selected-index].source == "Flatpak" ? "F" :
+                                        root.results[root.selected-index].source == "AppImage" ? "I" : "S";
                                     color: root.results[root.selected-index].source == "AUR"
                                         ? Theme.cyan :
                                         root.results[root.selected-index].source == "Flatpak"
-                                        ? Theme.accent : Theme.green;
-                                    font-size: 24px;
+                                        ? Theme.accent :
+                                        root.results[root.selected-index].source == "AppImage"
+                                        ? Theme.green : Theme.yellow;
+                                    font-size: root.results[root.selected-index].icon_path != "" ? 32px : 24px;
                                     font-weight: 700;
                                     horizontal-alignment: center;
                                     vertical-alignment: center;
@@ -739,7 +861,9 @@ export component MainWindow inherits Window {
                                         badge-color: root.results[root.selected-index].source == "AUR"
                                             ? Theme.cyan :
                                             root.results[root.selected-index].source == "Flatpak"
-                                            ? Theme.accent : Theme.green;
+                                            ? Theme.accent :
+                                            root.results[root.selected-index].source == "AppImage"
+                                            ? Theme.green : Theme.yellow;
                                     }
                                     if root.results[root.selected-index].version != "": Text {
                                         text: root.results[root.selected-index].version;
@@ -779,55 +903,6 @@ export component MainWindow inherits Window {
                             }
                         }
 
-                        // Install status with spinner
-                        if root.install-status != "": Rectangle {
-                            height: 30px;
-                            border-radius: Theme.button_radius;
-                            background: Theme.bg_light;
-
-                            HorizontalLayout {
-                                padding-left: 10px;
-                                padding-right: 10px;
-                                spacing: 8px;
-
-                                // Animated spinner dots when installing
-                                if root.installing: HorizontalLayout {
-                                    spacing: 3px;
-                                    alignment: center;
-                                    width: 24px;
-
-                                    Rectangle {
-                                        width: 5px;
-                                        height: 5px;
-                                        border-radius: 2.5px;
-                                        background: Theme.accent;
-                                        opacity: 0.3 + 0.7 * abs(sin(animation-tick() / 5ms * 1deg));
-                                    }
-                                    Rectangle {
-                                        width: 5px;
-                                        height: 5px;
-                                        border-radius: 2.5px;
-                                        background: Theme.accent;
-                                        opacity: 0.3 + 0.7 * abs(sin((animation-tick() / 5ms + 120) * 1deg));
-                                    }
-                                    Rectangle {
-                                        width: 5px;
-                                        height: 5px;
-                                        border-radius: 2.5px;
-                                        background: Theme.accent;
-                                        opacity: 0.3 + 0.7 * abs(sin((animation-tick() / 5ms + 240) * 1deg));
-                                    }
-                                }
-
-                                Text {
-                                    text: root.install-status;
-                                    color: root.installing ? Theme.accent : Theme.fg_dim;
-                                    font-size: 11px;
-                                    vertical-alignment: center;
-                                }
-                            }
-                        }
-
                         // Separator
                         Rectangle {
                             height: 1px;
@@ -858,6 +933,183 @@ export component MainWindow inherits Window {
                                 font-size: 11px;
                             }
                         }
+
+                        // Status area during install
+                        if root.installing: Rectangle {
+                            height: 80px;
+                            border-radius: Theme.card_radius;
+                            background: Theme.bg_light;
+                            vertical-stretch: 0;
+
+                            VerticalLayout {
+                                padding: 12px;
+                                spacing: 8px;
+
+                                // Spinner + status text + cancel
+                                HorizontalLayout {
+                                    spacing: 8px;
+                                    alignment: start;
+
+                                    HorizontalLayout {
+                                        spacing: 3px;
+                                        alignment: center;
+                                        width: 20px;
+
+                                        Rectangle {
+                                            width: 4px;
+                                            height: 4px;
+                                            border-radius: 2px;
+                                            background: Theme.accent;
+                                            opacity: 0.3 + 0.7 * abs(sin(animation-tick() / 5ms * 1deg));
+                                        }
+                                        Rectangle {
+                                            width: 4px;
+                                            height: 4px;
+                                            border-radius: 2px;
+                                            background: Theme.accent;
+                                            opacity: 0.3 + 0.7 * abs(sin((animation-tick() / 5ms + 120) * 1deg));
+                                        }
+                                        Rectangle {
+                                            width: 4px;
+                                            height: 4px;
+                                            border-radius: 2px;
+                                            background: Theme.accent;
+                                            opacity: 0.3 + 0.7 * abs(sin((animation-tick() / 5ms + 240) * 1deg));
+                                        }
+                                    }
+
+                                    Text {
+                                        text: "Installing...";
+                                        color: Theme.accent;
+                                        font-size: 12px;
+                                        vertical-alignment: center;
+                                        horizontal-stretch: 1;
+                                    }
+
+                                    // Cancel button
+                                    Rectangle {
+                                        width: 60px;
+                                        height: 22px;
+                                        border-radius: 4px;
+                                        background: cancel-touch.has-hover ? Theme.red.transparentize(0.6) : Theme.red.transparentize(0.8);
+
+                                        cancel-touch := TouchArea {
+                                            clicked => { root.cancel-install(); }
+                                        }
+
+                                        Text {
+                                            text: "Cancel";
+                                            color: Theme.red;
+                                            font-size: 10px;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+                                }
+
+                                // Live status line (last meaningful output)
+                                Text {
+                                    text: root.console-last-line;
+                                    color: Theme.fg_dim;
+                                    font-size: 11px;
+                                    font-family: "JetBrainsMono Nerd Font";
+                                    overflow: elide;
+                                }
+
+                                // Input row for answering prompts
+                                Rectangle {
+                                    height: 24px;
+                                    border-radius: 4px;
+                                    background: Theme.bg.darker(0.1);
+                                    vertical-stretch: 0;
+
+                                    HorizontalLayout {
+                                        padding-left: 8px;
+                                        padding-right: 8px;
+                                        spacing: 6px;
+
+                                        Text {
+                                            text: ">";
+                                            color: Theme.accent;
+                                            font-size: 11px;
+                                            font-family: "JetBrainsMono Nerd Font";
+                                            vertical-alignment: center;
+                                        }
+
+                                        console-input := TextInput {
+                                            color: Theme.fg;
+                                            font-size: 11px;
+                                            font-family: "JetBrainsMono Nerd Font";
+                                            horizontal-stretch: 1;
+                                            vertical-alignment: center;
+                                            accepted => {
+                                                root.send-console-input(self.text);
+                                                self.text = "";
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Success message
+                        if root.process-finished && root.process-success: Rectangle {
+                            height: 36px;
+                            border-radius: Theme.card_radius;
+                            background: Theme.green.transparentize(0.85);
+                            vertical-stretch: 0;
+
+                            HorizontalLayout {
+                                padding-left: 12px;
+                                spacing: 8px;
+                                alignment: start;
+
+                                Text {
+                                    text: "\u{2713}";
+                                    color: Theme.green;
+                                    font-size: 14px;
+                                    vertical-alignment: center;
+                                }
+                                Text {
+                                    text: "Installed successfully";
+                                    color: Theme.green;
+                                    font-size: 12px;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+
+                        // Error output (only on failure, scrollable via outer Flickable)
+                        if root.process-finished && !root.process-success: Rectangle {
+                            border-radius: Theme.card_radius;
+                            background: Theme.bg_light;
+                            vertical-stretch: 0;
+
+                            VerticalLayout {
+                                padding: 10px;
+                                spacing: 6px;
+
+                                HorizontalLayout {
+                                    spacing: 6px;
+                                    alignment: start;
+
+                                    Text {
+                                        text: "\u{2717} Failed";
+                                        color: Theme.red;
+                                        font-size: 11px;
+                                        font-weight: 600;
+                                    }
+                                }
+
+                                Text {
+                                    text: root.console-output;
+                                    color: Theme.fg_dim;
+                                    font-size: 11px;
+                                    font-family: "JetBrainsMono Nerd Font";
+                                    wrap: word-wrap;
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -866,14 +1118,16 @@ export component MainWindow inherits Window {
         // == Bottom status bar ==
         Rectangle {
             height: 24px;
+            vertical-stretch: 0;
             background: Theme.bg.darker(0.05);
 
             HorizontalLayout {
                 padding-left: 14px;
                 padding-right: 14px;
                 Text {
-                    text: root.show-detail ? "Esc: back  i: install  u: remove  o: homepage" :
-                        "/: search  j/k: navigate  Enter: details  ?: help";
+                    text: root.show-detail ? "Esc: back  i: install  u: remove  o: homepage  Ctrl+Tab: switch tab" :
+                        root.current-tab == 0 ? "/: search  j/k: navigate  Enter: details  Ctrl+Tab: switch tab  ?: help" :
+                        "j/k: navigate  Enter: details  /: search  Ctrl+Tab: switch tab  ?: help";
                     color: Theme.fg;
                     font-size: 10px;
                     vertical-alignment: center;
@@ -908,6 +1162,7 @@ export component MainWindow inherits Window {
             Rectangle { height: 12px; }
 
             for entry in [
+                { key: "Ctrl+Tab", desc: "Switch tab" },
                 { key: "/", desc: "Focus search" },
                 { key: "Esc", desc: "Clear search / close" },
                 { key: "j / Down", desc: "Next result" },

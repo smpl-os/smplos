@@ -1111,6 +1111,21 @@ When = PostTransaction
 Exec = /usr/bin/fc-cache -f
 FCHOOK
     log_info "Font cache pacman hook installed"
+
+    # Paru rebuild hook: auto-rebuild paru when pacman/libalpm updates
+    cat > "$airootfs/etc/pacman.d/hooks/90-rebuild-paru.hook" << 'PARUHOOK'
+[Trigger]
+Type = Package
+Operation = Upgrade
+Target = pacman
+
+[Action]
+Description = Checking if paru needs rebuild after pacman upgrade...
+When = PostTransaction
+Exec = /usr/local/bin/rebuild-paru
+NeedsTargets
+PARUHOOK
+    log_info "Paru rebuild pacman hook installed"
     
     # Copy configs for post-install
     if [[ -d "$SRC_DIR/shared/configs" ]]; then

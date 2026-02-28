@@ -1,138 +1,228 @@
 use crate::catalog::Source;
-use std::process::Command;
+use std::io::{BufRead, BufReader, Write};
+use std::process::{Child, ChildStdin, Command, Stdio};
+use std::sync::mpsc;
 
-/// Result of an install/uninstall operation.
-pub struct InstallResult {
+/// A running process with streaming output and interactive input.
+pub struct StreamingProcess {
+    child: Child,
+    output_rx: mpsc::Receiver<String>,
+    stdin: Option<ChildStdin>,
+}
+
+/// Result for operations that complete instantly (no streaming needed).
+pub struct ImmediateResult {
     pub success: bool,
     pub message: String,
 }
 
-/// Install a package from the given source.
-pub fn install(source: &Source, id: &str) -> InstallResult {
-    match source {
-        Source::Aur => install_aur(id),
-        Source::Flatpak => install_flatpak(id),
-        Source::AppImage => install_appimage(id),
-    }
+/// Either a live streaming process or an instant result.
+pub enum SpawnResult {
+    Streaming(StreamingProcess),
+    Immediate(ImmediateResult),
 }
 
-/// Uninstall a package from the given source.
-pub fn uninstall(source: &Source, id: &str, name: &str) -> InstallResult {
-    match source {
-        Source::Aur => uninstall_aur(id),
-        Source::Flatpak => uninstall_flatpak(id),
-        Source::AppImage => uninstall_appimage(name),
-    }
-}
-
-fn install_aur(name: &str) -> InstallResult {
-    // Use paru if available (handles AUR), else fall back to pacman
-    let (cmd, args) = if which_exists("paru") {
-        ("paru", vec!["-S", "--noconfirm", name])
-    } else {
-        ("pkexec", vec!["pacman", "-S", "--noconfirm", name])
-    };
-
-    run_install_cmd(cmd, &args, &format!("Installing {} from AUR...", name))
-}
-
-fn install_flatpak(app_id: &str) -> InstallResult {
-    if !which_exists("flatpak") {
-        return InstallResult {
-            success: false,
-            message: "flatpak is not installed. Run: sudo pacman -S flatpak".into(),
-        };
+impl StreamingProcess {
+    /// Drain all available output lines without blocking.
+    pub fn poll_output(&self) -> Vec<String> {
+        let mut lines = Vec::new();
+        while let Ok(line) = self.output_rx.try_recv() {
+            lines.push(line);
+        }
+        lines
     }
 
-    // Ensure Flathub remote exists (no-op if already added)
-    let _ = Command::new("flatpak")
-        .args(["remote-add", "--if-not-exists", "--user", "flathub",
-               "https://dl.flathub.org/repo/flathub.flatpakrepo"])
-        .output();
-
-    run_install_cmd(
-        "flatpak",
-        &["install", "-y", "--user", "flathub", app_id],
-        &format!("Installing {} from Flathub...", app_id),
-    )
-}
-
-fn install_appimage(name: &str) -> InstallResult {
-    // AppImages don't have a standard install mechanism from the catalog.
-    // We would need a download URL. For now, show guidance.
-    InstallResult {
-        success: false,
-        message: format!(
-            "Visit appimage.github.io to download {}.AppImage, then place it in ~/.local/bin/",
-            name
-        ),
-    }
-}
-
-fn uninstall_aur(name: &str) -> InstallResult {
-    let (cmd, args) = if which_exists("paru") {
-        ("paru", vec!["-R", "--noconfirm", name])
-    } else {
-        ("pkexec", vec!["pacman", "-R", "--noconfirm", name])
-    };
-
-    run_install_cmd(cmd, &args, &format!("Removing {}...", name))
-}
-
-fn uninstall_flatpak(app_id: &str) -> InstallResult {
-    run_install_cmd(
-        "flatpak",
-        &["uninstall", "-y", "--user", app_id],
-        &format!("Removing {}...", app_id),
-    )
-}
-
-fn uninstall_appimage(name: &str) -> InstallResult {
-    let home = std::env::var("HOME").unwrap_or_default();
-    let paths = [
-        format!("/opt/appimages/{}.AppImage", name),
-        format!("{}/.local/bin/{}.AppImage", home, name),
-    ];
-
-    for path in &paths {
-        if std::path::Path::new(path).exists() {
-            let _ = std::fs::remove_file(path);
+    /// Send a line of text to the process stdin.
+    pub fn send_input(&mut self, text: &str) {
+        if let Some(ref mut stdin) = self.stdin {
+            let _ = writeln!(stdin, "{}", text);
+            let _ = stdin.flush();
         }
     }
 
-    // Also remove desktop entry
-    let desktop = format!(
-        "{}/.local/share/applications/{}-appimage.desktop",
-        home,
-        name.to_lowercase()
-    );
-    let _ = std::fs::remove_file(&desktop);
+    /// Check if the process exited. Returns None if still running.
+    pub fn try_wait(&mut self) -> Option<bool> {
+        match self.child.try_wait() {
+            Ok(Some(status)) => Some(status.success()),
+            _ => None,
+        }
+    }
 
-    InstallResult {
-        success: true,
-        message: format!("Removed {}", name),
+    /// Kill the process and all its children.
+    pub fn kill(&mut self) {
+        // Drop stdin first to unblock any reads
+        self.stdin.take();
+        let _ = self.child.kill();
+        let _ = self.child.wait();
     }
 }
 
-fn run_install_cmd(cmd: &str, args: &[&str], _msg: &str) -> InstallResult {
-    match Command::new(cmd).args(args).output() {
-        Ok(output) => {
-            if output.status.success() {
-                InstallResult {
-                    success: true,
-                    message: "Installed successfully".into(),
-                }
-            } else {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                InstallResult {
-                    success: false,
-                    message: format!("Failed: {}", stderr.trim()),
+/// Strip ANSI escape sequences for clean display.
+fn strip_ansi(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\x1b' {
+            if chars.peek() == Some(&'[') {
+                chars.next();
+                for c in chars.by_ref() {
+                    if c.is_ascii_alphabetic() {
+                        break;
+                    }
                 }
             }
+        } else if c != '\r' {
+            out.push(c);
         }
-        Err(e) => InstallResult {
+    }
+    out
+}
+
+fn spawn_process(cmd: &str, args: &[&str]) -> Result<StreamingProcess, String> {
+    let mut child = Command::new(cmd)
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Could not run {}: {}", cmd, e))?;
+
+    let stdin = child.stdin.take();
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+    let (tx, rx) = mpsc::channel::<String>();
+
+    if let Some(out) = stdout {
+        let tx = tx.clone();
+        std::thread::spawn(move || {
+            for line in BufReader::new(out).lines().flatten() {
+                let _ = tx.send(strip_ansi(&line));
+            }
+        });
+    }
+
+    if let Some(err) = stderr {
+        let tx = tx.clone();
+        std::thread::spawn(move || {
+            for line in BufReader::new(err).lines().flatten() {
+                let _ = tx.send(strip_ansi(&line));
+            }
+        });
+    }
+
+    Ok(StreamingProcess {
+        child,
+        output_rx: rx,
+        stdin,
+    })
+}
+
+/// Spawn an install process with streaming output.
+pub fn spawn_install(source: &Source, id: &str) -> SpawnResult {
+    match source {
+        Source::Aur => {
+            let (cmd, args): (&str, Vec<&str>) = if paru_works() {
+                ("paru", vec!["-S", "--noconfirm", id])
+            } else {
+                ("pkexec", vec!["pacman", "-S", "--noconfirm", id])
+            };
+            match spawn_process(cmd, &args) {
+                Ok(p) => SpawnResult::Streaming(p),
+                Err(e) => SpawnResult::Immediate(ImmediateResult {
+                    success: false,
+                    message: e,
+                }),
+            }
+        }
+        Source::Flatpak => {
+            if !which_exists("flatpak") {
+                return SpawnResult::Immediate(ImmediateResult {
+                    success: false,
+                    message: "flatpak is not installed. Run: sudo pacman -S flatpak".into(),
+                });
+            }
+            let _ = Command::new("flatpak")
+                .args([
+                    "remote-add", "--if-not-exists", "--user", "flathub",
+                    "https://dl.flathub.org/repo/flathub.flatpakrepo",
+                ])
+                .output();
+            match spawn_process("flatpak", &["install", "-y", "--user", "flathub", id]) {
+                Ok(p) => SpawnResult::Streaming(p),
+                Err(e) => SpawnResult::Immediate(ImmediateResult {
+                    success: false,
+                    message: e,
+                }),
+            }
+        }
+        Source::Script => match spawn_process(id, &["install"]) {
+            Ok(p) => SpawnResult::Streaming(p),
+            Err(e) => SpawnResult::Immediate(ImmediateResult {
+                success: false,
+                message: e,
+            }),
+        },
+        Source::AppImage => SpawnResult::Immediate(ImmediateResult {
             success: false,
-            message: format!("Could not run {}: {}", cmd, e),
+            message: format!(
+                "Visit appimage.github.io to download {}.AppImage, then place it in ~/.local/bin/",
+                id
+            ),
+        }),
+    }
+}
+
+/// Spawn an uninstall process with streaming output.
+pub fn spawn_uninstall(source: &Source, id: &str, name: &str) -> SpawnResult {
+    match source {
+        Source::Aur => {
+            let (cmd, args): (&str, Vec<&str>) = if paru_works() {
+                ("paru", vec!["-Rns", "--noconfirm", id])
+            } else {
+                ("pkexec", vec!["pacman", "-R", "--noconfirm", id])
+            };
+            match spawn_process(cmd, &args) {
+                Ok(p) => SpawnResult::Streaming(p),
+                Err(e) => SpawnResult::Immediate(ImmediateResult {
+                    success: false,
+                    message: e,
+                }),
+            }
+        }
+        Source::Flatpak => {
+            match spawn_process("flatpak", &["uninstall", "-y", "--user", id]) {
+                Ok(p) => SpawnResult::Streaming(p),
+                Err(e) => SpawnResult::Immediate(ImmediateResult {
+                    success: false,
+                    message: e,
+                }),
+            }
+        }
+        Source::AppImage => {
+            let home = std::env::var("HOME").unwrap_or_default();
+            for path in &[
+                format!("/opt/appimages/{}.AppImage", name),
+                format!("{}/.local/bin/{}.AppImage", home, name),
+            ] {
+                let _ = std::fs::remove_file(path);
+            }
+            let desktop = format!(
+                "{}/.local/share/applications/{}-appimage.desktop",
+                home,
+                name.to_lowercase()
+            );
+            let _ = std::fs::remove_file(&desktop);
+            SpawnResult::Immediate(ImmediateResult {
+                success: true,
+                message: format!("Removed {}", name),
+            })
+        }
+        Source::Script => match spawn_process(id, &["uninstall"]) {
+            Ok(p) => SpawnResult::Streaming(p),
+            Err(e) => SpawnResult::Immediate(ImmediateResult {
+                success: false,
+                message: e,
+            }),
         },
     }
 }
@@ -140,8 +230,19 @@ fn run_install_cmd(cmd: &str, args: &[&str], _msg: &str) -> InstallResult {
 fn which_exists(name: &str) -> bool {
     Command::new("which")
         .arg(name)
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+/// Check that paru exists AND can actually run (libalpm ABI match).
+fn paru_works() -> bool {
+    Command::new("paru")
+        .arg("--version")
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
         .status()
         .map(|s| s.success())
         .unwrap_or(false)

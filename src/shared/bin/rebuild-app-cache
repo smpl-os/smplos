@@ -87,10 +87,13 @@ scan_desktop_dirs() {
 
   for dir in "${dirs[@]}"; do
     [[ -d "$dir" ]] || continue
+    # Use -maxdepth 2 for user dir to pick up Wine subdirectories
+    local depth_flag=(-maxdepth 1)
+    [[ "$dir" == "$HOME/.local/share/applications"* ]] && depth_flag=()
     while IFS= read -r -d '' file; do
       [[ -r "$file" ]] || continue
       parse_desktop "$file"
-    done < <(find "$dir" -maxdepth 1 -name '*.desktop' -print0 2>/dev/null)
+    done < <(find "$dir" "${depth_flag[@]}" -name '*.desktop' -print0 2>/dev/null)
   done
 }
 

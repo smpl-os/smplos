@@ -9,6 +9,7 @@ pub enum Source {
     Aur,
     Flatpak,
     AppImage,
+    Script,
 }
 
 impl Source {
@@ -17,6 +18,7 @@ impl Source {
             Source::Aur => "AUR",
             Source::Flatpak => "Flatpak",
             Source::AppImage => "AppImage",
+            Source::Script => "Setup",
         }
     }
 }
@@ -128,6 +130,17 @@ pub fn is_appimage_installed(name: &str) -> bool {
         format!("/usr/local/bin/{}.AppImage", home),
     ];
     locations.iter().any(|p| std::path::Path::new(p).exists())
+}
+
+/// Check if a script-based app is installed by running `<script_id> check`.
+pub fn is_script_installed(script_id: &str) -> bool {
+    std::process::Command::new(script_id)
+        .arg("check")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
 }
 
 /// Strip HTML tags and collapse whitespace.

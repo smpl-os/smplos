@@ -1,17 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 #
-# build-apps.sh -- Build all Rust apps in a Podman container (same as ISO build)
+# build-apps.sh -- Build all Rust apps + st-wl in a Podman container
 #
-# This ensures dev builds use the exact same environment as the ISO,
-# and the host machine never needs Rust/cargo installed.
-#
-# Usage:  ./build-apps.sh                    # build all apps
+# Usage:  ./build-apps.sh                    # build all apps (incremental)
 #         ./build-apps.sh start-menu         # build one app
 #         ./build-apps.sh disp-center st     # build specific apps + st-wl
+#         ./build-apps.sh --clean            # wipe build cache, full rebuild
+#         ./build-apps.sh --clean all        # clean + rebuild everything
 #
-# Outputs binaries to: .cache/binaries/<app-name>-latest
-# These are consumed by dev-push.sh and dev-local.sh
+# Outputs binaries to: .cache/app-binaries/
+# Build cache persists at .cache/build-cache/ so cargo and make do incremental
+# builds automatically on subsequent runs. Pass --clean to force a full rebuild.
 #
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -48,29 +48,35 @@ detect_runtime() {
 # ── Parse arguments ──
 ALL_APPS=(start-menu notif-center kb-center disp-center app-center webapp-center)
 BUILD_ST=false
+CLEAN_BUILD=false
 REQUESTED_APPS=()
 
-if [[ $# -eq 0 ]]; then
+for arg in "$@"; do
+    case "$arg" in
+        --clean) CLEAN_BUILD=true ;;
+        st|st-wl) BUILD_ST=true ;;
+        all) REQUESTED_APPS=("${ALL_APPS[@]}"); BUILD_ST=true ;;
+        *) REQUESTED_APPS+=("$arg") ;;
+    esac
+done
+
+# Default: build all Rust apps (no-arg, or --clean with no specific apps)
+if [[ ${#REQUESTED_APPS[@]} -eq 0 && "$BUILD_ST" == "false" ]]; then
     REQUESTED_APPS=("${ALL_APPS[@]}")
-else
-    for arg in "$@"; do
-        if [[ "$arg" == "st" || "$arg" == "st-wl" ]]; then
-            BUILD_ST=true
-        elif [[ "$arg" == "all" ]]; then
-            REQUESTED_APPS=("${ALL_APPS[@]}")
-            BUILD_ST=true
-        else
-            REQUESTED_APPS+=("$arg")
-        fi
-    done
 fi
 
 # ── Main ──
 detect_runtime
 
-# Persistent binary output dir (same as ISO build uses)
 BIN_OUTPUT="$PROJECT_ROOT/.cache/app-binaries"
-mkdir -p "$BIN_OUTPUT"
+BUILD_CACHE="$PROJECT_ROOT/.cache/build-cache"
+mkdir -p "$BIN_OUTPUT" "$BUILD_CACHE/cargo" "$BUILD_CACHE/st-build"
+
+if [[ "$CLEAN_BUILD" == "true" ]]; then
+    warn "Clean build requested — wiping build cache"
+    rm -rf "$BUILD_CACHE"
+    mkdir -p "$BUILD_CACHE/cargo" "$BUILD_CACHE/st-build"
+fi
 
 # Build script that runs inside the container
 INNER_SCRIPT=$(cat << 'INNER'
@@ -79,10 +85,14 @@ set -euo pipefail
 
 SRC_DIR="/build/src"
 OUT_DIR="/build/out"
+CACHE_DIR="/build/cache"
 
-# Install common build deps once
-pacman -Sy --noconfirm --needed rust cargo cmake pkgconf fontconfig freetype2 \
-    libxkbcommon wayland libglvnd mesa openssl 2>/dev/null
+# Install all build deps in one shot
+pacman -Sy --noconfirm --needed \
+    base-devel rust cargo cmake pkgconf \
+    fontconfig freetype2 harfbuzz imlib2 \
+    libxkbcommon wayland wayland-protocols pixman \
+    libglvnd mesa openssl 2>/dev/null
 
 # Build each requested Rust app
 for app in $APPS; do
@@ -93,13 +103,18 @@ for app in $APPS; do
     fi
 
     echo "[build] Building $app..."
-    build_dir="/tmp/${app}-build"
-    rm -rf "$build_dir"
-    cp -r "$app_src" "$build_dir"
-    cd "$build_dir"
-    cargo build --release 2>&1 | tail -5
+    target_dir="$CACHE_DIR/cargo/$app"
+    src_copy="$CACHE_DIR/src/$app"
+    mkdir -p "$target_dir" "$src_copy"
 
-    bin_path="$build_dir/target/release/$app"
+    # Copy source to writable location (so cargo can update Cargo.lock)
+    # target/ stays in persistent cache via CARGO_TARGET_DIR for incremental builds
+    cp -r "$app_src/." "$src_copy/"
+
+    CARGO_TARGET_DIR="$target_dir" cargo build --release \
+        --manifest-path "$src_copy/Cargo.toml" 2>&1 | tail -5
+
+    bin_path="$target_dir/release/$app"
     if [[ -x "$bin_path" ]]; then
         strip "$bin_path"
         cp "$bin_path" "$OUT_DIR/$app"
@@ -107,30 +122,29 @@ for app in $APPS; do
     else
         echo "[build] $app: FAILED"
     fi
-    rm -rf "$build_dir"
 done
 
 # Build st-wl if requested
 if [[ "$BUILD_ST" == "true" ]]; then
     echo "[build] Building st-wl..."
     ST_SRC="$SRC_DIR/compositors/hyprland/st"
+    BUILD_DIR="$CACHE_DIR/st-build"
     if [[ -f "$ST_SRC/st.c" ]]; then
-        pacman --noconfirm --needed -S wayland wayland-protocols libxkbcommon \
-            pixman fontconfig freetype2 harfbuzz pkg-config 2>/dev/null
-        build_dir="/tmp/st-build"
-        rm -rf "$build_dir"
-        cp -r "$ST_SRC" "$build_dir"
-        cd "$build_dir"
-        rm -f config.h
-        make clean && make -j"$(nproc)" 2>&1 | tail -3
-        if [[ -f "$build_dir/st-wl" ]]; then
-            strip "$build_dir/st-wl"
-            cp "$build_dir/st-wl" "$OUT_DIR/st-wl"
+        # Sync source into persistent build dir so make sees file changes
+        mkdir -p "$BUILD_DIR"
+        cp -r "$ST_SRC/." "$BUILD_DIR/"
+        cd "$BUILD_DIR"
+        rm -f config.h patches.h  # always regenerate from .def.h
+        [[ "$CLEAN_BUILD" == "true" ]] && make clean
+        make -j"$(nproc)" 2>&1 | tail -5
+        if [[ -f "$BUILD_DIR/st-wl" ]]; then
+            strip "$BUILD_DIR/st-wl"
+            cp "$BUILD_DIR/st-wl" "$OUT_DIR/st-wl"
             echo "[build] st-wl: OK"
         else
             echo "[build] st-wl: FAILED"
+            exit 1
         fi
-        rm -rf "$build_dir"
     fi
 fi
 
@@ -140,21 +154,22 @@ ls -lh "$OUT_DIR/"
 INNER
 )
 
-# Mount host pacman cache if on Arch (speeds up pacman -Sy enormously)
 run_args=(--rm --network=host)
 run_args+=(-v "$SCRIPT_DIR:/build/src:ro")
 run_args+=(-v "$BIN_OUTPUT:/build/out")
+run_args+=(-v "$BUILD_CACHE:/build/cache")
 if [[ -d /var/cache/pacman/pkg ]]; then
     run_args+=(-v "/var/cache/pacman/pkg:/var/cache/pacman/pkg:ro")
 fi
 
-# Pass the app list and st flag as env vars
-run_args+=(-e "APPS=${REQUESTED_APPS[*]}")
+run_args+=(-e "APPS=${REQUESTED_APPS[*]:-}")
 run_args+=(-e "BUILD_ST=$BUILD_ST")
+run_args+=(-e "CLEAN_BUILD=$CLEAN_BUILD")
 
-log "Building: ${REQUESTED_APPS[*]}${BUILD_ST:+ st-wl}"
+log "Building: ${REQUESTED_APPS[*]:-}${BUILD_ST:+ st-wl}${CLEAN_BUILD:+ (clean)}"
 log "Container: archlinux:latest via ${CTR}"
-log "Output: $BIN_OUTPUT/"
+log "Cache:     $BUILD_CACHE/"
+log "Output:    $BIN_OUTPUT/"
 echo ""
 
 $CTR pull archlinux:latest 2>/dev/null

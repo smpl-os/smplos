@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+# rebuild-paru - Rebuild paru-bin from AUR when libalpm changes
+# Called by pacman hook after pacman upgrades, or manually.
+set -euo pipefail
+
+LOG_TAG="[rebuild-paru]"
+log()  { echo "$LOG_TAG $*"; }
+die()  { echo "$LOG_TAG ERROR: $*" >&2; exit 1; }
+
+# Only rebuild if paru is actually installed
+command -v paru &>/dev/null || exit 0
+
+# Quick check: does paru still work?
+if paru --version &>/dev/null 2>&1; then
+    log "paru is working, no rebuild needed"
+    exit 0
+fi
+
+log "paru is broken (likely libalpm mismatch), rebuilding..."
+
+# Need base-devel + git for makepkg
+for dep in makepkg git; do
+    command -v "$dep" &>/dev/null || die "$dep not found -- install base-devel and git"
+done
+
+BUILD_DIR=$(mktemp -d /tmp/rebuild-paru.XXXXXX)
+trap 'rm -rf "$BUILD_DIR"' EXIT
+
+cd "$BUILD_DIR"
+
+# Clone the AUR PKGBUILD
+if ! git clone --depth 1 https://aur.archlinux.org/paru-bin.git . 2>/dev/null; then
+    die "Failed to clone paru-bin from AUR (no internet?)"
+fi
+
+# Build as nobody if running as root, otherwise as current user
+if [[ $EUID -eq 0 ]]; then
+    # makepkg refuses to run as root -- use a temp user
+    useradd -m _parutmp 2>/dev/null || true
+    chown -R _parutmp:_parutmp "$BUILD_DIR"
+    su _parutmp -c "cd '$BUILD_DIR' && makepkg -s --noconfirm" || die "makepkg failed"
+    userdel -r _parutmp 2>/dev/null || true
+else
+    makepkg -s --noconfirm || die "makepkg failed"
+fi
+
+# Install the freshly built package
+PKG_FILE=$(ls "$BUILD_DIR"/paru-bin-*.pkg.tar.* 2>/dev/null | head -1)
+[[ -f "$PKG_FILE" ]] || die "No package file produced by makepkg"
+
+if [[ $EUID -eq 0 ]]; then
+    pacman -U --noconfirm "$PKG_FILE" || die "pacman -U failed"
+else
+    sudo pacman -U --noconfirm "$PKG_FILE" || die "pacman -U failed"
+fi
+
+# Verify
+if paru --version &>/dev/null 2>&1; then
+    log "paru rebuilt successfully: $(paru --version 2>&1 | head -1)"
+else
+    die "paru still broken after rebuild"
+fi

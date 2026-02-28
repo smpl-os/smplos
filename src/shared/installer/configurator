@@ -466,7 +466,7 @@ cat <<-_EOF_ >user_credentials.json
     "users": [
         {
             "enc_password": $password_hash_escaped,
-            "groups": ["video", "render", "audio", "input", "storage", "network", "realtime", "plugdev", "uucp"],
+            "groups": ["video", "render", "audio", "input", "storage", "network"],
             "sudo": true,
             "username": $username_escaped
         }
@@ -487,12 +487,7 @@ boot_partition_size=$((2 * gib))
 main_partition_start=$((boot_partition_size + boot_partition_start))
 main_partition_size=$((disk_size_in_mib - main_partition_start - gpt_backup_reserve))
 
-# Detect T2 Mac and set appropriate kernel
-if lspci -nn 2>/dev/null | grep -q "106b:180[12]"; then
-  kernel_choice="linux-t2"
-else
-  kernel_choice="linux-zen"
-fi
+kernel_choice="linux-lts"
 
 # Build package list dynamically from packages.txt
 # These are ISO-only packages that should NOT go to the installed system

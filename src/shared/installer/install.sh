@@ -57,6 +57,13 @@ if [[ -d "$SMPLOS_PATH/config" ]]; then
   ls -la "$HOME/.config/eww/" 2>/dev/null || echo "    WARNING: eww config dir missing!"
 fi
 
+# Add user to optional groups (created by packages like realtime-privileges)
+for grp in realtime plugdev uucp; do
+  if getent group "$grp" &>/dev/null; then
+    sudo usermod -aG "$grp" "$USER" 2>/dev/null || true
+  fi
+done
+
 # Configure extra keyboard layout (if user chose one during install)
 if [[ -n "${SMPLOS_EXTRA_LAYOUT:-}" ]]; then
   echo "==> Configuring extra keyboard layout: ${SMPLOS_EXTRA_LAYOUT}${SMPLOS_EXTRA_VARIANT:+ ($SMPLOS_EXTRA_VARIANT)}..."
@@ -135,6 +142,22 @@ if [[ -f "$SMPLOS_PATH/system/os-release" ]]; then
   echo "==> Setting os-release..."
   sudo cp "$SMPLOS_PATH/system/os-release" /etc/os-release
 fi
+
+# Deploy pacman hooks
+echo "==> Installing pacman hooks..."
+sudo mkdir -p /etc/pacman.d/hooks
+sudo tee /etc/pacman.d/hooks/90-rebuild-paru.hook >/dev/null << 'PARUHOOK'
+[Trigger]
+Type = Package
+Operation = Upgrade
+Target = pacman
+
+[Action]
+Description = Checking if paru needs rebuild after pacman upgrade...
+When = PostTransaction
+Exec = /usr/local/bin/rebuild-paru
+NeedsTargets
+PARUHOOK
 
 # Apply default theme (catppuccin) to generate all config files
 echo "==> Setting default theme..."
@@ -373,10 +396,10 @@ if command -v reflector &>/dev/null; then
 fi
 
 # Surface hardware: install linux-surface kernel + drivers online.
-# The ISO ships with linux-zen only (keeps ISO size down). On Surface devices
+# The ISO ships with linux-lts only (keeps ISO size down). On Surface devices
 # we add the linux-surface kernel alongside it so touch/pen/wifi work properly.
-# Both kernels remain in GRUB — linux-surface as default, linux-zen as fallback.
-# Requires internet; if offline, the system still works with linux-zen (no touch/pen).
+# Both kernels remain in GRUB — linux-surface as default, linux-lts as fallback.
+# Requires internet; if offline, the system still works with linux-lts (no touch/pen).
 # Runs AFTER mirrorlist is established so pacman can resolve dependencies.
 if [[ "$(cat /sys/devices/virtual/dmi/id/sys_vendor 2>/dev/null)" == "Microsoft Corporation" ]] \
   && [[ "$(cat /sys/devices/virtual/dmi/id/product_name 2>/dev/null)" == Surface* ]]; then
@@ -393,7 +416,7 @@ if [[ "$(cat /sys/devices/virtual/dmi/id/sys_vendor 2>/dev/null)" == "Microsoft 
   fi
 
   if curl -sf --max-time 10 --head https://pkg.surfacelinux.com >/dev/null 2>&1; then
-    # Install Surface kernel + drivers (keeps linux-zen as fallback)
+    # Install Surface kernel + drivers (keeps linux-lts as fallback)
     if sudo pacman --noconfirm -Sy linux-surface linux-surface-headers iptsd linux-firmware-marvell; then
       # Enable touch/pen input daemon
       chrootable_systemctl_enable iptsd || echo "    WARNING: failed to enable iptsd service"
@@ -406,12 +429,12 @@ if [[ "$(cat /sys/devices/virtual/dmi/id/sys_vendor 2>/dev/null)" == "Microsoft 
         # Set the default to the first linux-surface entry
         sudo grub-set-default "$(grep -m1 'menuentry.*linux-surface' /boot/grub/grub.cfg | sed "s/menuentry '\\([^']*\\)'.*/\\1/")" 2>/dev/null || true
       fi
-      echo "    Surface kernel installed successfully (linux-zen kept as fallback)"
+      echo "    Surface kernel installed successfully (linux-lts kept as fallback)"
     else
-      echo "    WARNING: Surface package install failed, continuing with linux-zen"
+      echo "    WARNING: Surface package install failed, continuing with linux-lts"
     fi
   else
-    echo "    No internet -- skipping Surface kernel install (linux-zen still works)"
+    echo "    No internet -- skipping Surface kernel install (linux-lts still works)"
     echo "    Run after connecting: sudo pacman -Sy linux-surface linux-surface-headers iptsd linux-firmware-marvell"
   fi
 fi

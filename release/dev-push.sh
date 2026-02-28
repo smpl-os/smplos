@@ -18,6 +18,11 @@ NC='\033[0m'
 
 log() { echo -e "${GREEN}[push]${NC} $*"; }
 
+CLEAN_BUILD=false
+for arg in "$@"; do
+    [[ "$arg" == "--clean" ]] && CLEAN_BUILD=true
+done
+
 # Clean and recreate
 rm -rf "$SHARE"/{eww,bin,hypr,themes,configs,icons,st,notif-center,kb-center,disp-center,webapp-center,app-center,start-menu,applications}
 mkdir -p "$SHARE"/{eww,bin,hypr,themes,configs,icons,st,notif-center,kb-center,disp-center,webapp-center,app-center,start-menu,applications}
@@ -62,27 +67,41 @@ log "Themes: $(find "$SHARE/themes" -type f | wc -l) files"
 BIN_DIR="$(dirname "$SCRIPT_DIR")/.cache/app-binaries"
 RUST_APPS=(notif-center kb-center disp-center webapp-center app-center start-menu)
 
-# Auto-build if any binary is missing OR source is newer than binary
-stale_apps=()
-for app in "${RUST_APPS[@]}"; do
-    if [[ ! -f "$BIN_DIR/$app" ]]; then
-        log "$app: binary missing"
-        stale_apps+=("$app"); continue
-    fi
-    # Check if any source file is newer than the binary (exclude target/ build artifacts)
-    app_src="$SRC_DIR/shared/$app"
-    if [[ -d "$app_src" ]]; then
-        newest_src=$(find "$app_src" -path '*/target' -prune -o \( -name '*.rs' -o -name '*.slint' -o -name 'Cargo.toml' \) -print | xargs stat -c '%Y' 2>/dev/null | sort -rn | head -1)
-        bin_time=$(stat -c '%Y' "$BIN_DIR/$app" 2>/dev/null || echo 0)
-        if [[ -n "$newest_src" && "$newest_src" -gt "$bin_time" ]]; then
-            log "$app: source newer than binary"
-            stale_apps+=("$app")
+if [[ "$CLEAN_BUILD" == "true" ]]; then
+    log "Clean build: rebuilding all apps"
+    "$SRC_DIR/../src/build-apps.sh" --clean all
+else
+    # Auto-build if any binary is missing OR source is newer than binary
+    stale_apps=()
+    for app in "${RUST_APPS[@]}"; do
+        if [[ ! -f "$BIN_DIR/$app" ]]; then
+            log "$app: binary missing"
+            stale_apps+=("$app"); continue
         fi
+        # Check if any source file is newer than the binary (exclude target/ build artifacts)
+        app_src="$SRC_DIR/shared/$app"
+        if [[ -d "$app_src" ]]; then
+            newest_src=$(find "$app_src" -path '*/target' -prune -o \( -name '*.rs' -o -name '*.slint' -o -name 'Cargo.toml' \) -print | xargs stat -c '%Y' 2>/dev/null | sort -rn | head -1)
+            bin_time=$(stat -c '%Y' "$BIN_DIR/$app" 2>/dev/null || echo 0)
+            if [[ -n "$newest_src" && "$newest_src" -gt "$bin_time" ]]; then
+                log "$app: source newer than binary"
+                stale_apps+=("$app")
+            fi
+        fi
+    done
+
+    # Check st-wl separately
+    st_args=()
+    if [[ ! -f "$BIN_DIR/st-wl" ]]; then
+        log "st-wl: binary missing"
+        st_args=(st)
     fi
-done
-if [[ ${#stale_apps[@]} -gt 0 ]]; then
-    log "Rebuilding: ${stale_apps[*]}"
-    "$SRC_DIR/../src/build-apps.sh" "${stale_apps[@]}"
+
+    rebuild_args=("${stale_apps[@]}" "${st_args[@]}")
+    if [[ ${#rebuild_args[@]} -gt 0 ]]; then
+        log "Rebuilding: ${rebuild_args[*]}"
+        "$SRC_DIR/../src/build-apps.sh" "${rebuild_args[@]}"
+    fi
 fi
 
 for app in "${RUST_APPS[@]}"; do

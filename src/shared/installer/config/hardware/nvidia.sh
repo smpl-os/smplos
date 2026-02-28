@@ -17,7 +17,7 @@ echo "  [GPU] NVIDIA detected: $NVIDIA"
 
 # Detect which kernel is installed and select matching headers package
 KERNEL_HEADERS="$(pacman -Qqs '^linux(-zen|-lts|-hardened)?$' 2>/dev/null | head -1)-headers"
-[[ "$KERNEL_HEADERS" == "-headers" ]] && KERNEL_HEADERS="linux-zen-headers"
+[[ "$KERNEL_HEADERS" == "-headers" ]] && KERNEL_HEADERS="linux-lts-headers"
 
 # ── Turing+ (GTX 16xx, RTX 20xx–50xx, Ada RTX 40xx, Quadro RTX) ─────────────
 # These have NVIDIA GSP firmware and support the open-source kernel module.
