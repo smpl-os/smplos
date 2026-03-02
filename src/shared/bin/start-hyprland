@@ -1,0 +1,15 @@
+#!/bin/bash
+# smplOS Hyprland session wrapper
+# Called by greetd as the initial_session command.
+#
+# Responsibilities:
+# - Disable hardware cursors in virtual machines (VirtIO/QEMU doesn't support them)
+# - Launch Hyprland
+
+# In a VM (QEMU, VirtualBox, etc.) the VirtIO GPU doesn't support hardware
+# cursors. Without this flag Hyprland may crash or render no cursor at all.
+if systemd-detect-virt -q 2>/dev/null; then
+    export WLR_NO_HARDWARE_CURSORS=1
+fi
+
+exec Hyprland "$@"
