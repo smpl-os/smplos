@@ -331,16 +331,17 @@ EOF
     sudo grub-mkconfig -o /boot/grub/grub.cfg
   fi
 
-  # Delay plymouth-quit slightly so the splash doesn't vanish before greetd
-  # starts, but DO NOT wait for greetd.service -- if Hyprland fails to start in
-  # a VM, greetd never finishes and Plymouth holds DRM master forever, making
-  # every TTY black with no way to recover.
+  # Keep Plymouth visible until greetd is on its VT -- this closes the gap
+  # where a blank/text console would flash between Plymouth quit and Hyprland's
+  # first rendered frame.
+  # Safe: greetd is Type=simple so it becomes 'active' the instant it starts,
+  # NOT when Hyprland finishes. No deadlock risk.
   sudo mkdir -p /etc/systemd/system/plymouth-quit.service.d/
   sudo tee /etc/systemd/system/plymouth-quit.service.d/wait-for-graphical.conf <<'EOF' >/dev/null
 [Unit]
-# Release DRM once basic services are up; do NOT wait for greetd/Hyprland
-# (if greetd fails the framebuffer would be held forever -- black screen)
-After=multi-user.target
+# Quit only after greetd has opened its VT, so Plymouth covers the gap
+# between its last frame and Hyprland's first frame.
+After=greetd.service
 
 [Service]
 ExecStart=
