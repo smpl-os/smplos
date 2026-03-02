@@ -1,0 +1,60 @@
+#!/bin/bash
+# Install and configure Voxtype for global dictation on smplOS.
+# Voxtype runs a local Whisper AI model — no cloud, fully offline.
+# After setup, press SUPER+CTRL+X to start/stop speaking.
+
+set -e
+
+die() { echo "ERROR: $*" >&2; exit 1; }
+log() { echo "  $*"; }
+
+echo ""
+echo "  smplOS Dictation Setup (Voxtype)"
+echo ""
+echo "  This will install:"
+echo "    - wtype        (~50 KB, Wayland text injector)"
+echo "    - voxtype-bin  (local Whisper AI daemon)"
+echo "    - Whisper model (~150 MB, downloaded on first run)"
+echo ""
+read -r -p "  Continue? [y/N] " ans
+[[ "${ans,,}" == "y" ]] || exit 0
+
+# ── Install packages ──────────────────────────────────────────────────────────
+log "Installing wtype and voxtype-bin..."
+if command -v paru &>/dev/null; then
+    paru -S --noconfirm --needed wtype voxtype-bin
+elif command -v yay &>/dev/null; then
+    yay -S --noconfirm --needed wtype voxtype-bin
+else
+    die "No AUR helper found. Install paru first: paru -S paru-bin"
+fi
+
+# ── Default config ────────────────────────────────────────────────────────────
+mkdir -p ~/.config/voxtype
+if [[ ! -f ~/.config/voxtype/config.toml ]]; then
+    log "Writing default config to ~/.config/voxtype/config.toml..."
+    cat > ~/.config/voxtype/config.toml << 'EOF'
+# Voxtype configuration for smplOS
+# Docs: https://github.com/dustinblackman/voxtype
+
+[typing]
+# wtype injects text directly into the focused Wayland window
+engine = "wtype"
+EOF
+fi
+
+# ── Download model + systemd service ─────────────────────────────────────────
+log "Downloading Whisper AI model (~150 MB, this may take a minute)..."
+voxtype setup --download --no-post-install
+
+log "Installing systemd user service..."
+voxtype setup systemd
+
+# ── Done ──────────────────────────────────────────────────────────────────────
+echo ""
+echo "  Dictation is ready!"
+echo "  Press SUPER+CTRL+X to start speaking. Press again to stop and type."
+echo ""
+notify-send "Dictation ready" \
+    "Press Super+Ctrl+X to start/stop speaking.\nVoxtype types into the focused window." \
+    -i microphone -u normal -t 8000
