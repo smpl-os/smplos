@@ -78,6 +78,54 @@ if [[ "$CLEAN_BUILD" == "true" ]]; then
     mkdir -p "$BUILD_CACHE/cargo" "$BUILD_CACHE/st-build"
 fi
 
+# ── Git-based staleness check ──
+# Use git's own tree-object SHA for a repo-relative path at HEAD.
+# This is what git already computed — no manual file hashing needed.
+git_tree_hash() {
+    git -C "$PROJECT_ROOT" rev-parse "HEAD:$1" 2>/dev/null || echo ""
+}
+# Exit 0 if the working tree is clean for the given repo-relative path.
+git_tree_clean() {
+    git -C "$PROJECT_ROOT" diff --quiet HEAD -- "$1" 2>/dev/null
+}
+# Exit 0 if the app binary is missing or stale; exit 1 if up to date.
+app_is_stale() {
+    local app="$1" rel_dir="$2"
+    [[ -f "$BIN_OUTPUT/$app" ]] || return 0
+    local current stored
+    current=$(git_tree_hash "$rel_dir"); [[ -z "$current" ]] && return 0
+    stored=$(cat "$BIN_OUTPUT/$app.built-at" 2>/dev/null) || return 0
+    [[ "$current" == "$stored" ]] || return 0
+    git_tree_clean "$rel_dir" || return 0
+    return 1
+}
+
+# Skip up-to-date apps before entering the container (skips pacman + container overhead).
+# In clean builds we skip this and let cargo/make decide what to recompile internally.
+if [[ "$CLEAN_BUILD" == "false" ]]; then
+    filtered_apps=()
+    for app in "${REQUESTED_APPS[@]}"; do
+        if app_is_stale "$app" "src/shared/$app"; then
+            filtered_apps+=("$app")
+        else
+            log "$app: up to date"
+        fi
+    done
+    REQUESTED_APPS=("${filtered_apps[@]}")
+
+    if [[ "$BUILD_ST" == "true" ]]; then
+        if ! app_is_stale "st-wl" "src/compositors/hyprland/st"; then
+            log "st-wl: up to date"
+            BUILD_ST=false
+        fi
+    fi
+fi
+
+if [[ ${#REQUESTED_APPS[@]} -eq 0 && "$BUILD_ST" == "false" ]]; then
+    log "All apps up to date — nothing to build"
+    exit 0
+fi
+
 # Build script that runs inside the container
 INNER_SCRIPT=$(cat << 'INNER'
 #!/bin/bash
@@ -186,20 +234,18 @@ if [[ $rc -ne 0 ]]; then
     die "Container build failed (exit $rc)"
 fi
 
-# Record content hashes so dev-push.sh can skip unchanged apps on next run.
-# Uses file content (not git state) so works with uncommitted changes too.
-src_hash() {
-    local dir="$1"
-    find "$dir" -type f \( -name '*.rs' -o -name '*.toml' -o -name '*.slint' \
-                          -o -name '*.h'  -o -name '*.c' \) \
-        | LC_ALL=C sort | xargs sha256sum 2>/dev/null | sha256sum | cut -d' ' -f1
-}
+# Save the git tree-object SHA for each successfully built app so the next
+# run can skip it. Only written when the working tree is clean — dirty local
+# edits stay stale until committed, forcing a rebuild after the commit.
 for app in "${REQUESTED_APPS[@]}"; do
-    [[ -f "$BIN_OUTPUT/$app" ]] && \
-        src_hash "$SCRIPT_DIR/shared/$app" > "$BIN_OUTPUT/$app.git-hash" || true
+    if [[ -f "$BIN_OUTPUT/$app" ]] && git_tree_clean "src/shared/$app"; then
+        git_tree_hash "src/shared/$app" > "$BIN_OUTPUT/$app.built-at"
+    fi
 done
 if [[ "$BUILD_ST" == "true" && -f "$BIN_OUTPUT/st-wl" ]]; then
-    src_hash "$SCRIPT_DIR/compositors/hyprland/st" > "$BIN_OUTPUT/st-wl.git-hash" || true
+    if git_tree_clean "src/compositors/hyprland/st"; then
+        git_tree_hash "src/compositors/hyprland/st" > "$BIN_OUTPUT/st-wl.built-at"
+    fi
 fi
 
 echo ""
