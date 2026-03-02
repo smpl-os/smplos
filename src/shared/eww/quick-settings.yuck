@@ -14,6 +14,9 @@
 ;; System menu extras (airplane, night light)
 (deflisten sysmenu-data :initial '{"airplane":"off","nightlight":"off"}' `scripts/sysmenu-listener.sh`)
 
+;; Dictation state (installed? recording?)
+(deflisten dictation-data :initial '{"installed":false,"recording":false}' `scripts/dictation-listener.sh`)
+
 ;; Volume slider needs a numeric poll
 (defpoll qs-volume-value :interval "500ms"
   `pactl get-sink-volume @DEFAULT_SINK@ 2>/dev/null | awk -F'/' 'NR==1{gsub(/ |%/,"",$2); print $2}' || echo 0`)
@@ -111,6 +114,18 @@
     :arrow-cmd ""
     :tooltip "Do Not Disturb"))
 
+;; ── Row 3: Dictation ──
+
+(defwidget qs-dictation []
+  (qs-pill
+    :icon ""
+    :icon-path {dictation-data.recording ? "icons/status/dictation-on.svg" : "icons/status/dictation.svg"}
+    :label {dictation-data.recording ? "Recording..." : "Dictation"}
+    :active {dictation-data.recording}
+    :onclick "dictation-toggle toggle &"
+    :arrow-cmd "dictation-settings &"
+    :tooltip {dictation-data.installed ? "Hold SUPER+D to record, release to type" : "Dictation not set up — click ❯ to install"}))
+
 ;; ============================================================================
 ;; SLIDERS
 ;; ============================================================================
@@ -177,7 +192,8 @@
       (box :orientation "h" :space-evenly true :spacing 8
         (qs-airplane)
         (qs-nightlight)
-        (qs-dnd)))
+        (qs-dnd))
+      (qs-dictation))
     ;; Sliders
     (box :class "qs-sliders" :orientation "v" :space-evenly false :spacing 10
       (qs-volume-slider)

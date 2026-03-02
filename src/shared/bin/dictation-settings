@@ -1,0 +1,19 @@
+#!/bin/bash
+# Open dictation settings
+# Not installed → runs dictation-setup in a new terminal
+# Installed     → opens ~/.config/voxtype/config.toml in the default editor
+
+if ! command -v voxtype &>/dev/null; then
+    st -e bash -c 'dictation-setup; exec bash'
+    exit 0
+fi
+
+cfg="$HOME/.config/voxtype/config.toml"
+
+if command -v nvim &>/dev/null; then
+    st -e nvim "$cfg"
+elif command -v nano &>/dev/null; then
+    st -e nano "$cfg"
+else
+    st -e bash -c "cat \"$cfg\"; echo; echo 'Press Enter to exit'; read"
+fi
