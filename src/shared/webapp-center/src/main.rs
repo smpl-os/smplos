@@ -15,6 +15,7 @@ fn to_ui_item(app: &WebApp) -> WebAppItem {
         slug: app.slug.clone().into(),
         url: app.url.clone().into(),
         secure: app.secure,
+        clear_on_exit: app.clear_on_exit,
         vpn_iface: app.vpn_iface.clone().into(),
         vpn_required: app.vpn_required,
         icon: app.icon.clone().into(),
@@ -225,7 +226,7 @@ fn main() -> Result<(), slint::PlatformError> {
         let ui_weak = ui.as_weak();
         let state = state.clone();
         let model = model.clone();
-        ui.on_save_app(move |name, url, secure, vpn, vpn_required| {
+        ui.on_save_app(move |name, url, secure, clear_on_exit, vpn, vpn_required| {
             let editing_index = ui_weak.upgrade().map(|ui| ui.get_form_editing_index()).unwrap_or(-1);
 
             // If editing, delete old entry first
@@ -243,6 +244,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 name.as_str(),
                 url.as_str(),
                 secure,
+                clear_on_exit,
                 vpn.as_str(),
                 vpn_required,
             ) {
