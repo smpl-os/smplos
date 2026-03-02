@@ -2,6 +2,8 @@ use chrono::{DateTime, Local};
 use serde_json::Value;
 use std::process::Command;
 
+const MAX_NOTIFICATIONS: usize = 50;
+
 #[derive(Clone, Debug)]
 pub struct Notification {
     pub id: i32,
@@ -296,6 +298,7 @@ pub fn get_notifications() -> Vec<Notification> {
         });
     }
 
+    notifications.truncate(MAX_NOTIFICATIONS);
     notifications
 }
 

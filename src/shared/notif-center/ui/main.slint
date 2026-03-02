@@ -176,7 +176,7 @@ export component MainWindow inherits Window {
             border-radius: 0px;
             border-width: 1px;
             border-color: Theme.bg_lighter;
-            background: Theme.bg;
+            background: transparent;
 
             Rectangle {
                 x: 6px;
@@ -184,7 +184,7 @@ export component MainWindow inherits Window {
                 width: parent.width - 12px;
                 height: parent.height - 2px;
                 border-radius: 0px;
-                background: Theme.bg;
+                background: transparent;
 
             VerticalLayout {
                 padding: 4px;
@@ -507,7 +507,7 @@ export component MainWindow inherits Window {
                         y: 0px;
                         width: parent.width;
                         height: parent.height;
-                        background: Theme.bg;
+                        background: transparent;
 
                         help_flick := Flickable {
                             width: parent.width;
