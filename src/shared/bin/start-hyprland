@@ -2,10 +2,14 @@
 # smplOS Hyprland session wrapper
 # Called by greetd as the initial_session command.
 #
-# Responsibilities:
-# - Disable hardware cursors in virtual machines (VirtIO/QEMU doesn't support them)
-# - Use software rendering in VMs (virtio-gpu may not expose full OpenGL)
-# - Launch Hyprland
+# Sets VM-specific env vars, then delegates to the real start-hyprland binary
+# (/usr/bin/start-hyprland, shipped by the hyprland package).
+#
+# The real binary is a C++ watchdog that:
+#   1. Opens a pipe and passes --watchdog-fd <fd> to Hyprland
+#   2. Monitors Hyprland and restarts it in safe mode on an unclean exit
+# Without it, Hyprland logs: "WARNING: Hyprland is being launched without
+# start-hyprland. This is highly advised against." (src/main.cpp)
 
 # In a VM (QEMU, VirtualBox, etc.) virtio-gpu doesn't support hardware cursors
 # and may not expose OpenGL -- both cause Hyprland to crash on first launch.
@@ -13,8 +17,15 @@ if systemd-detect-virt -q 2>/dev/null; then
     export WLR_NO_HARDWARE_CURSORS=1
     # Allow wlroots to fall back to software rendering if the virtual GPU
     # doesn't support the renderer Hyprland tries first (gles2/vulkan).
-    # Without this, Hyprland crashes on virtio-gpu before rendering anything.
     export WLR_RENDERER_ALLOW_SOFTWARE=1
 fi
 
-Hyprland "$@"
+# exec replaces this process image in the same PID, so greetd keeps tracking
+# the correct PID and env vars above are inherited by the child Hyprland.
+if [[ -x /usr/bin/start-hyprland ]]; then
+    exec /usr/bin/start-hyprland "$@"
+fi
+
+# Fallback: real binary not found (shouldn't happen on a normal install).
+# Warning will appear in logs but Hyprland will still run.
+exec Hyprland "$@"
