@@ -129,6 +129,14 @@ if [[ -d "$SHARE/bin" && "$(ls -A "$SHARE/bin" 2>/dev/null)" ]]; then
     log "  $(ls "$SHARE/bin" | wc -l) scripts installed"
 fi
 
+# ── Dictation hint ──────────────────────────────────────────
+if command -v voxtype &>/dev/null; then
+    vox_ver=$(voxtype --version 2>/dev/null | head -1 || echo "installed")
+    log "Dictation: voxtype $vox_ver ready (SUPER+D to record)"
+else
+    warn "Dictation: voxtype not installed — run 'dictation-setup' in the VM to set it up"
+fi
+
 # ── Shared configs ──────────────────────────────────────────
 if [[ -d "$SHARE/configs" && "$(ls -A "$SHARE/configs" 2>/dev/null)" ]]; then
     log "Applying shared configs..."
