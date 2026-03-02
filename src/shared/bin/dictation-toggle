@@ -1,6 +1,10 @@
 #!/bin/bash
-# Toggle global dictation via Voxtype (local Whisper AI, types into focused window)
-# Keybinding: SUPER+CTRL+X
+# Global dictation via Voxtype (local Whisper AI, types into focused window)
+# Usage: dictation-toggle [start|stop|toggle]
+#   start  — begin recording (key-press binding)
+#   stop   — stop recording, transcribe, type result (key-release binding)
+#   toggle — press once to start, press again to stop (default)
+# Keybinding: SUPER+D (hold = start, release = stop)
 # Run 'dictation-setup' to install Voxtype if not present.
 
 if ! command -v voxtype &>/dev/null; then
@@ -10,4 +14,8 @@ if ! command -v voxtype &>/dev/null; then
     exit 0
 fi
 
-voxtype toggle
+case "${1:-toggle}" in
+    start)  voxtype record start ;;
+    stop)   voxtype record stop ;;
+    toggle) voxtype record toggle ;;
+esac
