@@ -139,6 +139,7 @@ keepassxc
 btop
 flameshot
 kooha
+wtype                 # Wayland text injector (used by dictation-toggle / Voxtype)
 
 # ── Media Codecs ─────────────────────────────────────────────
 ffmpeg

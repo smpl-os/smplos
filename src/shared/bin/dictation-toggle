@@ -1,0 +1,13 @@
+#!/bin/bash
+# Toggle global dictation via Voxtype (local Whisper AI, types into focused window)
+# Keybinding: SUPER+CTRL+X
+# Run 'dictation-setup' to install Voxtype if not present.
+
+if ! command -v voxtype &>/dev/null; then
+    notify-send "Dictation not set up" \
+        "Run 'dictation-setup' in a terminal to install Voxtype (local AI, ~150 MB)." \
+        -i microphone -u normal -t 7000
+    exit 0
+fi
+
+voxtype toggle
