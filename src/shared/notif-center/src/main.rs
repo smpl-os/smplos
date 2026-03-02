@@ -82,7 +82,7 @@ fn main() -> Result<(), slint::PlatformError> {
 
     // Set up backend with app_id, no CSD, and correct size
     let backend = i_slint_backend_winit::Backend::builder()
-        .with_renderer_name("renderer-femtovg")
+        .with_renderer_name("software")
         .with_window_attributes_hook(|attrs| {
             use i_slint_backend_winit::winit::platform::wayland::WindowAttributesExtWayland;
             use i_slint_backend_winit::winit::dpi::LogicalSize;

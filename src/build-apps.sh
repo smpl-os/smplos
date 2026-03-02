@@ -163,7 +163,7 @@ for app in $APPS; do
     cp -r "$app_src/." "$src_copy/"
 
     CARGO_TARGET_DIR="$target_dir" cargo build --release \
-        --manifest-path "$src_copy/Cargo.toml" 2>&1 | tail -5
+        --manifest-path "$src_copy/Cargo.toml"
 
     bin_path="$target_dir/release/$app"
     if [[ -x "$bin_path" ]]; then
@@ -187,7 +187,7 @@ if [[ "$BUILD_ST" == "true" ]]; then
         cd "$BUILD_DIR"
         rm -f config.h patches.h  # always regenerate from .def.h
         [[ "$CLEAN_BUILD" == "true" ]] && make clean
-        make -j"$(nproc)" 2>&1 | tail -5
+        make -j"$(nproc)"
         if [[ -f "$BUILD_DIR/st-wl" ]]; then
             strip "$BUILD_DIR/st-wl"
             cp "$BUILD_DIR/st-wl" "$OUT_DIR/st-wl"
