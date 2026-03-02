@@ -395,12 +395,15 @@ if command -v plymouth-set-default-theme &>/dev/null; then
         done
     fi
 
-    # 3) Keep splash until greetd/user sessions are up
+    # 3) Keep splash until multi-user.target -- do NOT wait for greetd.service
+    #    If Hyprland fails in a VM, greetd never finishes and Plymouth holds
+    #    DRM master forever, making every TTY black with no way to recover.
     mkdir -p /etc/systemd/system/plymouth-quit.service.d/
     cat > /etc/systemd/system/plymouth-quit.service.d/wait-for-graphical.conf <<'EOF'
 [Unit]
-# Quit only after greeter/session handoff to avoid one-frame console text flash
-After=greetd.service systemd-user-sessions.service
+# Release DRM once basic services are up; do NOT wait for greetd/Hyprland
+# (if greetd fails the framebuffer would be held forever -- black screen)
+After=multi-user.target
 
 [Service]
 ExecStart=

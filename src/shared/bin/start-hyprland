@@ -4,12 +4,17 @@
 #
 # Responsibilities:
 # - Disable hardware cursors in virtual machines (VirtIO/QEMU doesn't support them)
+# - Use software rendering in VMs (virtio-gpu may not expose full OpenGL)
 # - Launch Hyprland
 
-# In a VM (QEMU, VirtualBox, etc.) the VirtIO GPU doesn't support hardware
-# cursors. Without this flag Hyprland may crash or render no cursor at all.
+# In a VM (QEMU, VirtualBox, etc.) virtio-gpu doesn't support hardware cursors
+# and may not expose OpenGL -- both cause Hyprland to crash on first launch.
 if systemd-detect-virt -q 2>/dev/null; then
     export WLR_NO_HARDWARE_CURSORS=1
+    # Allow wlroots to fall back to software rendering if the virtual GPU
+    # doesn't support the renderer Hyprland tries first (gles2/vulkan).
+    # Without this, Hyprland crashes on virtio-gpu before rendering anything.
+    export WLR_RENDERER_ALLOW_SOFTWARE=1
 fi
 
 exec Hyprland "$@"
