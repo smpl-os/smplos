@@ -395,15 +395,16 @@ if command -v plymouth-set-default-theme &>/dev/null; then
         done
     fi
 
-    # 3) Keep Plymouth visible until greetd is on its VT to avoid text flash.
-    #    greetd is Type=simple: becomes 'active' when the process starts,
-    #    NOT when Hyprland finishes -- so this ordering is not a deadlock risk.
+    # Plymouth must fully quit before greetd starts Hyprland.
+    # After=greetd.service races: greetd fires initial_session immediately
+    # (Type=simple) so Hyprland tries to open DRM while Plymouth still holds
+    # it -> Hyprland crashes -> black screen.
+    # --retain-splash keeps the last Plymouth frame on screen until Hyprland
+    # renders, so no visible flash despite Plymouth quitting first.
     mkdir -p /etc/systemd/system/plymouth-quit.service.d/
     cat > /etc/systemd/system/plymouth-quit.service.d/wait-for-graphical.conf <<'EOF'
 [Unit]
-# Quit only after greetd has opened its VT, so Plymouth covers the gap
-# between its last frame and Hyprland's first frame.
-After=greetd.service
+After=multi-user.target
 
 [Service]
 ExecStart=
