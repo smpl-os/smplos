@@ -199,6 +199,23 @@ if command -v rebuild-app-cache &>/dev/null; then
     run_as_user "rebuild-app-cache" 2>/dev/null && log "  done" || warn "  failed"
 fi
 
+# ── Pacman hook: auto-rebuild app cache on package install/remove ──
+log "Installing pacman app-cache hook..."
+mkdir -p /etc/pacman.d/hooks
+cat > /etc/pacman.d/hooks/91-smplos-app-cache.hook << 'APPCACHEHOOK'
+[Trigger]
+Type = Path
+Operation = Install
+Operation = Remove
+Operation = Upgrade
+Target = usr/share/applications/*.desktop
+
+[Action]
+Description = Rebuilding smplOS app index...
+When = PostTransaction
+Exec = /bin/sh -c 'sudo -u "${SUDO_USER:-$(logname 2>/dev/null || echo $USER)}" /usr/local/bin/rebuild-app-cache'
+APPCACHEHOOK
+
 # ── notif-center ─────────────────────────────────────────────
 if [[ -f "$SHARE/notif-center/notif-center" ]]; then
     log "Applying notif-center binary..."

@@ -159,6 +159,41 @@ Exec = /usr/local/bin/rebuild-paru
 NeedsTargets
 PARUHOOK
 
+# Rebuild start-menu app index after any package install/remove/upgrade.
+# Pacman hooks run as root; we sudo to the real user so the cache lands in
+# their $HOME. USER is set by pacman from the invoking environment.
+sudo tee /etc/pacman.d/hooks/91-smplos-app-cache.hook >/dev/null << 'APPCACHEHOOK'
+[Trigger]
+Type = Path
+Operation = Install
+Operation = Remove
+Operation = Upgrade
+Target = usr/share/applications/*.desktop
+
+[Action]
+Description = Rebuilding smplOS app index...
+When = PostTransaction
+Exec = /bin/sh -c 'sudo -u "${SUDO_USER:-$(logname 2>/dev/null || echo $USER)}" /usr/local/bin/rebuild-app-cache'
+APPCACHEHOOK
+
+# Enable the user systemd path unit so it also watches for Flatpak / AppImage
+# / user-installed .desktop changes (pacman hook only covers /usr/share/applications).
+echo "==> Enabling smplos-app-cache path watcher..."
+SYSTEMD_USER_DIR="$HOME/.config/systemd/user"
+WANTS_DIR="$SYSTEMD_USER_DIR/default.target.wants"
+mkdir -p "$WANTS_DIR"
+for unit in smplos-app-cache.service smplos-app-cache.path; do
+  if [[ -f "$SYSTEMD_USER_DIR/$unit" ]]; then
+    ln -sf "../$unit" "$WANTS_DIR/$unit"
+  fi
+done
+systemctl --user daemon-reload 2>/dev/null || true
+systemctl --user start smplos-app-cache.path 2>/dev/null || true
+
+# Build the initial app index now so start-menu works on first boot
+echo "==> Building initial app index..."
+rebuild-app-cache || echo "    WARNING: rebuild-app-cache failed"
+
 # Apply default theme (catppuccin) to generate all config files
 echo "==> Setting default theme..."
 theme-set catppuccin || echo "    WARNING: theme-set failed (exit $?)"
