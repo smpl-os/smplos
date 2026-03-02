@@ -17,4 +17,4 @@ if systemd-detect-virt -q 2>/dev/null; then
     export WLR_RENDERER_ALLOW_SOFTWARE=1
 fi
 
-exec Hyprland "$@"
+Hyprland "$@"
