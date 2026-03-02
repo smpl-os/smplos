@@ -14,6 +14,18 @@
    <a href="CREATING_MODIFYING_A_THEME.md">Theme Authoring Guide</a>
 </p>
 
+<p align="center">
+  <strong>Latest release: v0.5.0</strong>
+</p>
+
+---
+
+## What's new in v0.5.0
+
+- **Transparent GUI apps** — All Rust/Slint apps (notif-center, kb-center, disp-center, start-menu, webapp-center) now use the software renderer, enabling proper alpha transparency and blur through Hyprland. Previously only app-center had working transparency.
+- **Reliable Hyprland session startup** — greetd now launches via the real `start-hyprland` watchdog binary, which restarts Hyprland in safe mode on crash instead of leaving a black screen.
+- **Faster dev iteration** — `build-apps.sh` skips the container entirely for apps whose git tree hash hasn't changed since last build.
+
 ---
 
 ## What is smplOS?
