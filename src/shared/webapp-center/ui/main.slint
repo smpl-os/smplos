@@ -401,7 +401,7 @@ export component MainWindow inherits Window {
             border-radius: 0px;
             border-width: 1px;
             border-color: Theme.bg_lighter;
-            background: Theme.bg;
+            background: transparent;
 
             Rectangle {
                 x: 6px;
@@ -1093,7 +1093,7 @@ export component MainWindow inherits Window {
                                     }
 
                                     ToggleRow {
-                                        label: "Clear all data on exit (cookies, history, passwords)";
+                                        label: "Clear all data on exit";
                                         checked <=> root.form-clear-on-exit;
                                     }
 
