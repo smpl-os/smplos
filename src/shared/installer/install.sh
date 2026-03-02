@@ -401,6 +401,13 @@ fi
 # "database file does not exist".
 echo "==> Syncing package databases..."
 sudo pacman -Sy --noconfirm 2>/dev/null || echo "    WARNING: pacman -Sy failed (no internet?), users can run 'sudo pacman -Sy' later"
+
+if [[ "$(cat /sys/devices/virtual/dmi/id/sys_vendor 2>/dev/null)" == "Microsoft Corporation" ]] \
+  && [[ "$(cat /sys/devices/virtual/dmi/id/product_name 2>/dev/null)" == Surface* ]]; then
+  echo "==> Surface device detected, setting up Surface-optimized kernel..."
+
+  # Always configure the linux-surface repo + key, even if we can't install
+  # right now. This way the user can install later with just `pacman -Sy`.
   if ! grep -q '^\[linux-surface\]' /etc/pacman.conf; then
     curl -s https://raw.githubusercontent.com/linux-surface/linux-surface/master/pkg/keys/surface.asc \
       | sudo pacman-key --add - 2>/dev/null || true
