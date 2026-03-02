@@ -15,7 +15,7 @@
 (deflisten sysmenu-data :initial '{"airplane":"off","nightlight":"off"}' `scripts/sysmenu-listener.sh`)
 
 ;; Dictation state (installed? recording?)
-(deflisten dictation-data :initial '{"installed":false,"recording":false}' `scripts/dictation-listener.sh`)
+(deflisten dictation-data :initial '{"installed":"no","recording":"no"}' `scripts/dictation-listener.sh`)
 
 ;; Volume slider needs a numeric poll
 (defpoll qs-volume-value :interval "500ms"
@@ -119,12 +119,12 @@
 (defwidget qs-dictation []
   (qs-pill
     :icon ""
-    :icon-path {dictation-data.recording ? "icons/status/dictation-on.svg" : "icons/status/dictation.svg"}
-    :label {dictation-data.recording ? "Recording..." : "Dictation"}
-    :active {dictation-data.recording}
+    :icon-path {dictation-data.recording == "yes" ? "icons/status/dictation-on.svg" : "icons/status/dictation.svg"}
+    :label {dictation-data.recording == "yes" ? "Recording..." : "Dictation"}
+    :active {dictation-data.recording == "yes"}
     :onclick "dictation-toggle toggle &"
     :arrow-cmd "dictation-settings &"
-    :tooltip {dictation-data.installed ? "Hold SUPER+D to record, release to type" : "Dictation not set up — click ❯ to install"}))
+    :tooltip {dictation-data.installed == "yes" ? "Hold SUPER+D to record, release to type" : "Dictation not set up -- click > to install"}))
 
 ;; ============================================================================
 ;; SLIDERS
