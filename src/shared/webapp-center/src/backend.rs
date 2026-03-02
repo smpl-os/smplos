@@ -8,6 +8,7 @@ pub struct WebApp {
     pub slug: String,
     pub url: String,
     pub secure: bool,
+    pub clear_on_exit: bool,
     pub vpn_iface: String,
     pub vpn_required: bool,
     pub icon: String,
@@ -78,6 +79,7 @@ pub fn scan_webapps() -> Vec<WebApp> {
 
         let url = extract_url(exec_line).unwrap_or_default();
         let secure = exec_line.contains("--secure");
+        let clear_on_exit = exec_line.contains("--clear-on-exit");
         let vpn_iface = parse_exec_flag(exec_line, "--vpn-interface").unwrap_or_default();
         let vpn_required = exec_line.contains("--vpn-required");
 
@@ -86,6 +88,7 @@ pub fn scan_webapps() -> Vec<WebApp> {
             slug,
             url,
             secure,
+            clear_on_exit,
             vpn_iface,
             vpn_required,
             icon,
@@ -163,6 +166,7 @@ pub fn save_webapp(
     name: &str,
     url: &str,
     secure: bool,
+    clear_on_exit: bool,
     vpn_iface: &str,
     vpn_required: bool,
 ) -> Result<String, String> {
@@ -228,6 +232,9 @@ pub fn save_webapp(
     let mut exec = String::from("launch-webapp");
     if secure {
         exec.push_str(" \"--secure\"");
+    }
+    if clear_on_exit {
+        exec.push_str(" \"--clear-on-exit\"");
     }
     if !vpn_iface.is_empty() {
         exec.push_str(&format!(" \"--vpn-interface\" \"{vpn_iface}\""));

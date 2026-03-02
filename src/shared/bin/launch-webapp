@@ -16,7 +16,7 @@
 # Uses the default browser if it supports --app (Brave, Chrome, Chromium,
 # Edge, etc.), otherwise falls back to brave-browser.
 
-url="" app_name="" secure="" vpn_iface="" vpn_required="" hypr_internal="0"
+url="" app_name="" secure="" clear_on_exit="" vpn_iface="" vpn_required="" hypr_internal="0"
 window_float_mode="auto"   # auto | on | off
 ORIG_ARGS=("$@")
 LOG_FILE="${XDG_CACHE_HOME:-$HOME/.cache}/smplos/launch-webapp.log"
@@ -45,6 +45,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --name)           app_name="$2"; shift 2 ;;
     --secure)         secure=1; shift ;;
+    --clear-on-exit)  clear_on_exit=1; shift ;;
     --vpn-interface)  vpn_iface="$2"; shift 2 ;;
     --vpn-required)   vpn_required=1; shift ;;
     --no-float)       window_float_mode="off"; shift ;;
@@ -272,6 +273,27 @@ printf '%s [launch-webapp] browser=%s cmd=%s real=%s opt_bind=%s\n' \
 bwrap_output=$(bwrap "${bwrap_args[@]}" "$real_bin" --app="$url" --user-data-dir="$profile_dir" "${secure_flags[@]}" 2>&1)
 rc=$?
 [[ -n "$bwrap_output" ]] && printf '%s [launch-webapp] bwrap=%s\n' "$(date '+%F %T')" "$bwrap_output" >> "$LOG_FILE"
+
+# Clear browsing data on exit if requested
+if [[ "$clear_on_exit" == "1" ]]; then
+  profile_default="$profile_dir/Default"
+  if [[ -d "$profile_default" ]]; then
+    rm -f  "$profile_default/Cookies" "$profile_default/Cookies-journal"
+    rm -f  "$profile_default/Login Data" "$profile_default/Login Data-journal"
+    rm -f  "$profile_default/Web Data" "$profile_default/Web Data-journal"
+    rm -f  "$profile_default/History" "$profile_default/History-journal"
+    rm -f  "$profile_default/Visited Links"
+    rm -rf "$profile_default/Local Storage/"
+    rm -rf "$profile_default/Session Storage/"
+    rm -rf "$profile_default/IndexedDB/"
+    rm -rf "$profile_default/databases/"
+    rm -rf "$profile_default/Cache/"
+    rm -rf "$profile_default/Code Cache/"
+    rm -rf "$profile_default/Network/"
+    printf '%s [launch-webapp] cleared browsing data for %s\n' "$(date '+%F %T')" "$app_name" >> "$LOG_FILE"
+  fi
+fi
+
 if [[ $rc -ne 0 ]]; then
   show_error "Failed to launch web app sandbox (exit $rc). Check $LOG_FILE for details."
 fi

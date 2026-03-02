@@ -3,6 +3,7 @@ struct WebAppItem {
     slug: string,
     url: string,
     secure: bool,
+    clear_on_exit: bool,
     vpn_iface: string,
     vpn_required: bool,
     icon: string,
@@ -197,6 +198,7 @@ export component MainWindow inherits Window {
     in-out property <string> form-name: "";
     in-out property <string> form-url: "";
     in-out property <bool> form-secure: false;
+    in-out property <bool> form-clear-on-exit: false;
     in-out property <string> form-vpn: "";
     in-out property <bool> form-vpn-required: false;
     in-out property <bool> form-vpn-is-known: false;
@@ -210,7 +212,7 @@ export component MainWindow inherits Window {
     callback refresh();
     callback delete-app(int);
     callback delete-all();
-    callback save-app(string, string, bool, string, bool);
+    callback save-app(string, string, bool, bool, string, bool);
     callback close();
     callback start-drag();
     callback toggle-mark(int);
@@ -222,6 +224,7 @@ export component MainWindow inherits Window {
         root.form-name = "";
         root.form-url = "";
         root.form-secure = false;
+        root.form-clear-on-exit = false;
         root.form-vpn = "";
         root.form-vpn-required = false;
         root.form-vpn-is-known = false;
@@ -236,6 +239,7 @@ export component MainWindow inherits Window {
         root.form-name = root.webapps[index].name;
         root.form-url = root.webapps[index].url;
         root.form-secure = root.webapps[index].secure;
+        root.form-clear-on-exit = root.webapps[index].clear_on_exit;
         root.form-vpn = root.webapps[index].vpn-iface;
         root.form-vpn-required = root.webapps[index].vpn-required;
         root.form-vpn-is-known = false;
@@ -385,7 +389,7 @@ export component MainWindow inherits Window {
                     return accept;
                 }
                 if (event.modifiers.control && (event.text == "s" || event.text == "S")) {
-                    root.save-app(root.form-name, root.form-url, root.form-secure, root.form-vpn, root.form-vpn-required);
+                    root.save-app(root.form-name, root.form-url, root.form-secure, root.form-clear-on-exit, root.form-vpn, root.form-vpn-required);
                     return accept;
                 }
                 return reject;
@@ -611,7 +615,7 @@ export component MainWindow inherits Window {
 
                                     save_touch := TouchArea {
                                         clicked => {
-                                            root.save-app(root.form-name, root.form-url, root.form-secure, root.form-vpn, root.form-vpn-required);
+                                            root.save-app(root.form-name, root.form-url, root.form-secure, root.form-clear-on-exit, root.form-vpn, root.form-vpn-required);
                                         }
                                     }
                                 }
@@ -727,6 +731,21 @@ export component MainWindow inherits Window {
                                                 VerticalLayout {
                                                     alignment: center;
                                                     spacing: 2px;
+                                                    if app.clear_on_exit: Rectangle {
+                                                        height: 16px;
+                                                        min-width: 16px;
+                                                        border-radius: 3px;
+                                                        background: Theme.warning.transparentize(0.7);
+                                                        HorizontalLayout {
+                                                            alignment: center;
+                                                            Text {
+                                                                text: "C";
+                                                                color: Theme.warning;
+                                                                font-size: 9px;
+                                                                vertical-alignment: center;
+                                                            }
+                                                        }
+                                                    }
                                                     if app.secure: Rectangle {
                                                         height: 16px;
                                                         min-width: 16px;
@@ -1069,8 +1088,13 @@ export component MainWindow inherits Window {
                                         placeholder: "My App";
                                         value <=> root.form-name;
                                         accepted => {
-                                            root.save-app(root.form-name, root.form-url, root.form-secure, root.form-vpn, root.form-vpn-required);
+                                            root.save-app(root.form-name, root.form-url, root.form-secure, root.form-clear-on-exit, root.form-vpn, root.form-vpn-required);
                                         }
+                                    }
+
+                                    ToggleRow {
+                                        label: "Clear all data on exit (cookies, history, passwords)";
+                                        checked <=> root.form-clear-on-exit;
                                     }
 
                                     ToggleRow {
