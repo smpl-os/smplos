@@ -66,55 +66,15 @@ log "Themes: $(find "$SHARE/themes" -type f | wc -l) files"
 # ── Rust apps + st-wl (use container-built binaries from build-apps.sh) ──
 BIN_DIR="$(dirname "$SCRIPT_DIR")/.cache/app-binaries"
 RUST_APPS=(notif-center kb-center disp-center webapp-center app-center start-menu)
-SRC_ROOT="$(dirname "$SRC_DIR")"
 
-# Hash .rs / .toml / .slint / .h / .c files under a directory.
-# Works on working tree directly -- git commit state is irrelevant.
-src_hash() {
-    local dir="$1"
-    find "$dir" -type f \( -name '*.rs' -o -name '*.toml' -o -name '*.slint' \
-                          -o -name '*.h'  -o -name '*.c' \) \
-        | LC_ALL=C sort | xargs sha256sum 2>/dev/null | sha256sum | cut -d' ' -f1
-}
-
+# Staleness checking is handled inside build-apps.sh via git tree-object hashes.
+# It skips apps whose git tree SHA matches the stored .built-at marker and whose
+# working tree is clean. Dirty local edits always trigger a rebuild.
 if [[ "$CLEAN_BUILD" == "true" ]]; then
     log "Clean build: rebuilding all apps"
     "$SRC_DIR/../src/build-apps.sh" --clean all
 else
-    stale_apps=()
-    for app in "${RUST_APPS[@]}"; do
-        if [[ ! -f "$BIN_DIR/$app" ]]; then
-            log "$app: binary missing"
-            stale_apps+=("$app"); continue
-        fi
-        current_hash=$(src_hash "$SRC_ROOT/src/shared/$app")
-        stored_hash=$(cat "$BIN_DIR/$app.git-hash" 2>/dev/null || echo "")
-        if [[ "$current_hash" == "$stored_hash" ]]; then
-            continue  # source unchanged since last build
-        fi
-        log "$app: source changed"
-        stale_apps+=("$app")
-    done
-
-    # Check st-wl separately
-    st_args=()
-    if [[ ! -f "$BIN_DIR/st-wl" ]]; then
-        log "st-wl: binary missing"
-        st_args=(st)
-    else
-        current_hash=$(src_hash "$SRC_ROOT/src/compositors/hyprland/st")
-        stored_hash=$(cat "$BIN_DIR/st-wl.git-hash" 2>/dev/null || echo "")
-        if [[ "$current_hash" != "$stored_hash" ]]; then
-            log "st-wl: source changed"
-            st_args=(st)
-        fi
-    fi
-
-    rebuild_args=("${stale_apps[@]}" "${st_args[@]}")
-    if [[ ${#rebuild_args[@]} -gt 0 ]]; then
-        log "Rebuilding: ${rebuild_args[*]}"
-        "$SRC_DIR/../src/build-apps.sh" "${rebuild_args[@]}"
-    fi
+    "$SRC_DIR/../src/build-apps.sh" all
 fi
 
 for app in "${RUST_APPS[@]}"; do
