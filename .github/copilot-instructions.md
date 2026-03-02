@@ -280,8 +280,17 @@ That function writes: `grub.cfg`, `loopback.cfg`, and all `syslinux/*.cfg` files
 
 | Commit | Date | Status | Milestone |
 |--------|------|--------|-----------|
-| `29e37e5` | 2026-02-25 | **LKG** | Live boot + installer working on Ventoy. 2-entry menu (smplOS + Safe Mode). All fixes: Plymouth, HiDPI auto-scale, start-menu, webapp-center, TTY font. |
+| `bebe972` | 2026-03-01 | **LKG** | Live boot + post-install desktop working in QEMU. All fixes: start-hyprland, Plymouth DRM ordering, gfxpayload. |
+| `29e37e5` | 2026-02-25 | Good | Live boot + installer working on Ventoy. 2-entry menu (smplOS + Safe Mode). All fixes: Plymouth, HiDPI auto-scale, start-menu, webapp-center, TTY font. |
 | `7b6416c` | 2026-02-25 | Good | First working Ventoy UEFI boot (uefi.grub + vanilla Arch releng grub configs) |
+
+**What broke boot last time (2026-03-01):** `After=greetd.service` in the
+`plymouth-quit.service.d` override. greetd is `Type=simple` so systemd marks
+it active immediately, but Hyprland fires instantly and races Plymouth for the
+DRM master — Plymouth still holds it. Hyprland crashes. Black screen on all
+TTYs. Fix: **always use `After=multi-user.target`** in that drop-in. The
+`--retain-splash` flag covers the visual gap until Hyprland renders.
+Do NOT change this to `After=greetd.service`.
 
 **What broke boot last time (2026-02-25):** Adding `grub-mkfont -s 32` to
 generate a custom HiDPI font in the live ISO. mkarchiso's `grub-mkstandalone`
