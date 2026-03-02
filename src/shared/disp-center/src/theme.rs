@@ -9,10 +9,10 @@ pub struct ThemePalette {
     pub accent: Color,
     pub bg_light: Color,
     pub bg_lighter: Color,
-    pub red: Color,
-    pub green: Color,
-    pub yellow: Color,
-    pub cyan: Color,
+    pub danger: Color,
+    pub success: Color,
+    pub warning: Color,
+    pub info: Color,
     pub opacity: f32,
 }
 
@@ -25,10 +25,10 @@ impl Default for ThemePalette {
             accent: parse_hex_color("#89b4fa").unwrap(),
             bg_light: parse_hex_color("#45475a").unwrap(),
             bg_lighter: parse_hex_color("#585b70").unwrap(),
-            red: parse_hex_color("#f38ba8").unwrap(),
-            green: parse_hex_color("#a6e3a1").unwrap(),
-            yellow: parse_hex_color("#f9e2af").unwrap(),
-            cyan: parse_hex_color("#94e2d5").unwrap(),
+            danger: parse_hex_color("#f38ba8").unwrap(),
+            success: parse_hex_color("#a6e3a1").unwrap(),
+            warning: parse_hex_color("#f9e2af").unwrap(),
+            info: parse_hex_color("#94e2d5").unwrap(),
             opacity: 0.40,
         }
     }
@@ -81,10 +81,10 @@ pub fn load_theme_from_eww_scss(path: &str) -> ThemePalette {
     set_color("accent", &mut palette.accent);
     set_color("bg-light", &mut palette.bg_light);
     set_color("bg-lighter", &mut palette.bg_lighter);
-    set_color("red", &mut palette.red);
-    set_color("green", &mut palette.green);
-    set_color("yellow", &mut palette.yellow);
-    set_color("cyan", &mut palette.cyan);
+    set_color("danger", &mut palette.danger);
+    set_color("success", &mut palette.success);
+    set_color("warning", &mut palette.warning);
+    set_color("info", &mut palette.info);
 
     if let Some(v) = vars.get("popup-opacity") {
         if let Ok(parsed) = v.parse::<f32>() {

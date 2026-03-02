@@ -1,0 +1,40 @@
+#!/bin/bash
+# heal-paru -- Rebuild paru-bin from AUR when libalpm version bumps break it.
+# Safe to run as a normal user. Must NOT be run as root.
+# Exits 0 if paru is already working or was healed successfully.
+
+set -euo pipefail
+
+[[ $EUID -eq 0 ]] && { echo "heal-paru: do not run as root" >&2; exit 1; }
+
+# Already works -- nothing to do
+if paru --version &>/dev/null 2>&1; then
+    exit 0
+fi
+
+echo "── Healing paru (libalpm mismatch detected) ──"
+
+# Require internet before we waste time cloning
+if ! curl -sf --max-time 5 https://aur.archlinux.org > /dev/null; then
+    echo "heal-paru: no internet connection, cannot rebuild paru" >&2
+    exit 1
+fi
+
+WORK_DIR=$(mktemp -d)
+trap "rm -rf '$WORK_DIR'" EXIT
+
+echo "Fetching latest paru-bin from AUR..."
+if ! git clone --depth=1 https://aur.archlinux.org/paru-bin.git "$WORK_DIR/paru-bin"; then
+    echo "heal-paru: git clone failed" >&2
+    exit 1
+fi
+
+cd "$WORK_DIR/paru-bin"
+echo "Building paru-bin (downloads pre-compiled binary, no Rust needed)..."
+if makepkg -si --noconfirm; then
+    echo "── paru healed successfully ──"
+    exit 0
+else
+    echo "heal-paru: makepkg failed" >&2
+    exit 1
+fi

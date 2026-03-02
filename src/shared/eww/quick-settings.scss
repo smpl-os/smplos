@@ -30,7 +30,7 @@
 }
 
 .qs-close:hover {
-  background-color: $red;
+  background-color: $danger;
   color: $bg;
 }
 
@@ -187,9 +187,9 @@
 }
 
 .qs-power {
-  color: $red;
+  color: $danger;
 }
 
 .qs-power:hover {
-  background: rgba($red, 0.15);
+  background: rgba($danger, 0.15);
 }

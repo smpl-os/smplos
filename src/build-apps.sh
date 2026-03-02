@@ -92,7 +92,10 @@ pacman -Sy --noconfirm --needed \
     base-devel rust cargo cmake pkgconf \
     fontconfig freetype2 harfbuzz imlib2 \
     libxkbcommon wayland wayland-protocols pixman \
-    libglvnd mesa openssl 2>/dev/null
+    libglvnd mesa openssl mold 2>/dev/null
+
+# Use mold linker -- significantly faster than GNU ld for Rust link step
+export RUSTFLAGS="-C link-arg=-fuse-ld=mold"
 
 # Build each requested Rust app
 for app in $APPS; do
@@ -154,13 +157,14 @@ ls -lh "$OUT_DIR/"
 INNER
 )
 
-run_args=(--rm --network=host)
+# Persist downloaded packages across container runs -- pacman reuses cached tarballs
+mkdir -p "$BUILD_CACHE/pacman-pkg"
+
+run_args=(--rm --network=host --cpus "$(nproc)")
 run_args+=(-v "$SCRIPT_DIR:/build/src:ro")
 run_args+=(-v "$BIN_OUTPUT:/build/out")
 run_args+=(-v "$BUILD_CACHE:/build/cache")
-if [[ -d /var/cache/pacman/pkg ]]; then
-    run_args+=(-v "/var/cache/pacman/pkg:/var/cache/pacman/pkg:ro")
-fi
+run_args+=(-v "$BUILD_CACHE/pacman-pkg:/var/cache/pacman/pkg")
 
 run_args+=(-e "APPS=${REQUESTED_APPS[*]:-}")
 run_args+=(-e "BUILD_ST=$BUILD_ST")
@@ -180,6 +184,22 @@ $CTR run "${run_args[@]}" archlinux:latest \
 rc=$?
 if [[ $rc -ne 0 ]]; then
     die "Container build failed (exit $rc)"
+fi
+
+# Record content hashes so dev-push.sh can skip unchanged apps on next run.
+# Uses file content (not git state) so works with uncommitted changes too.
+src_hash() {
+    local dir="$1"
+    find "$dir" -type f \( -name '*.rs' -o -name '*.toml' -o -name '*.slint' \
+                          -o -name '*.h'  -o -name '*.c' \) \
+        | LC_ALL=C sort | xargs sha256sum 2>/dev/null | sha256sum | cut -d' ' -f1
+}
+for app in "${REQUESTED_APPS[@]}"; do
+    [[ -f "$BIN_OUTPUT/$app" ]] && \
+        src_hash "$SCRIPT_DIR/shared/$app" > "$BIN_OUTPUT/$app.git-hash" || true
+done
+if [[ "$BUILD_ST" == "true" && -f "$BIN_OUTPUT/st-wl" ]]; then
+    src_hash "$SCRIPT_DIR/compositors/hyprland/st" > "$BIN_OUTPUT/st-wl.git-hash" || true
 fi
 
 echo ""

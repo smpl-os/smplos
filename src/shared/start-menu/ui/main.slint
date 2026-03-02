@@ -26,10 +26,10 @@ export global Theme {
     in-out property <color> accent: #89b4fa;
     in-out property <color> bg_light: #45475a;
     in-out property <color> bg_lighter: #585b70;
-    in-out property <color> red: #f38ba8;
-    in-out property <color> green: #a6e3a1;
-    in-out property <color> yellow: #f9e2af;
-    in-out property <color> cyan: #94e2d5;
+    in-out property <color> danger: #f38ba8;
+    in-out property <color> success: #a6e3a1;
+    in-out property <color> warning: #f9e2af;
+    in-out property <color> info: #94e2d5;
     in-out property <float> opacity: 0.40;
     in-out property <length> border_radius: 12px;
 }
@@ -172,11 +172,11 @@ component AppRow inherits Rectangle {
     callback right-clicked();
 
     property <color> badge_color:
-        root.category_key == "multimedia" ? Theme.red :
-        root.category_key == "development" ? Theme.cyan :
-        root.category_key == "graphics" ? Theme.green :
+        root.category_key == "multimedia" ? Theme.danger :
+        root.category_key == "development" ? Theme.info :
+        root.category_key == "graphics" ? Theme.success :
         root.category_key == "internet" ? Theme.accent :
-        root.category_key == "office" ? Theme.yellow :
+        root.category_key == "office" ? Theme.warning :
         root.category_key == "settings" ? Theme.accent :
         Theme.fg_dim;
 
@@ -251,15 +251,15 @@ component AppRow inherits Rectangle {
             height: 18px;
             border-radius: 3px;
             background: root.source == "Flatpak" ? Theme.accent.transparentize(0.88) :
-                root.source == "AppImage" ? Theme.green.transparentize(0.88) :
-                root.source == "Web App" ? Theme.cyan.transparentize(0.88) :
+                root.source == "AppImage" ? Theme.success.transparentize(0.88) :
+                root.source == "Web App" ? Theme.info.transparentize(0.88) :
                 Theme.fg_dim.transparentize(0.88);
 
             src-text := Text {
                 text: root.source;
                 color: root.source == "Flatpak" ? Theme.accent :
-                    root.source == "AppImage" ? Theme.green :
-                    root.source == "Web App" ? Theme.cyan :
+                    root.source == "AppImage" ? Theme.success :
+                    root.source == "Web App" ? Theme.info :
                     Theme.fg_dim;
                 font-size: 9px;
                 horizontal-alignment: center;

@@ -18,10 +18,9 @@ else
     disown
     local_pid=$!
 
-    # Add non-consuming bind: every left click runs the check script
-    # bindn = click passes through to the window, script also runs
-    sleep 0.15
-    hyprctl keyword bindn ", mouse:272, exec, start-menu-click-check" 2>/dev/null
+    # Add non-consuming bind in background (don't block launch)
+    (sleep 0.1; hyprctl keyword bindn ", mouse:272, exec, start-menu-click-check" 2>/dev/null) &
+    disown
 
     # Cleanup bind when start-menu exits (however it exits)
     (while kill -0 $local_pid 2>/dev/null; do sleep 0.2; done

@@ -18,10 +18,10 @@ export global Theme {
     in-out property <color> accent: #89b4fa;
     in-out property <color> bg_light: #45475a;
     in-out property <color> bg_lighter: #585b70;
-    in-out property <color> red: #f38ba8;
-    in-out property <color> green: #a6e3a1;
-    in-out property <color> yellow: #f9e2af;
-    in-out property <color> cyan: #94e2d5;
+    in-out property <color> danger: #f38ba8;
+    in-out property <color> success: #a6e3a1;
+    in-out property <color> warning: #f9e2af;
+    in-out property <color> info: #94e2d5;
     in-out property <float> opacity: 0.40;
     in-out property <length> card_radius: 6px;
     in-out property <length> button_radius: 4px;
@@ -140,9 +140,18 @@ component ActionButton inherits Rectangle {
 
     height: 30px;
     border-radius: Theme.button_radius;
-    background: root.busy ? Theme.bg_lighter :
-        (action-touch.has-hover ? root.btn-color.brighter(0.1) : root.btn-color);
+    background: root.busy         ? Theme.bg_lighter :
+        action-touch.pressed      ? root.btn-color.darker(0.15) :
+        action-touch.has-hover    ? root.btn-color.brighter(0.25) :
+                                    root.btn-color;
     width: action-label.preferred-width + 24px;
+    // Subtle lift on hover
+    drop-shadow-blur: action-touch.has-hover ? 8px : 0px;
+    drop-shadow-color: root.btn-color.transparentize(0.5);
+    drop-shadow-offset-y: action-touch.has-hover ? 2px : 0px;
+
+    animate background { duration: 120ms; }
+    animate drop-shadow-blur { duration: 120ms; }
 
     action-label := Text {
         text: root.busy ? "..." : root.label;
@@ -192,20 +201,23 @@ component AppCard inherits Rectangle {
             width: 40px;
             height: 40px;
             border-radius: 8px;
-            background: root.source == "AUR" ? Theme.cyan.transparentize(0.8) :
-                root.source == "Flatpak" ? Theme.accent.transparentize(0.8) :
-                root.source == "AppImage" ? Theme.green.transparentize(0.8) :
-                Theme.yellow.transparentize(0.8);
+            background: root.source == "Pacman" ? Theme.accent.transparentize(0.8) :
+                root.source == "AUR" ? Theme.info.transparentize(0.8) :
+                root.source == "Flatpak" ? Theme.fg_dim.transparentize(0.8) :
+                root.source == "AppImage" ? Theme.success.transparentize(0.8) :
+                Theme.warning.transparentize(0.8);
             vertical-stretch: 0;
 
             Text {
                 text: root.icon_path != "" ? root.icon_path :
+                    root.source == "Pacman" ? "P" :
                     root.source == "AUR" ? "A" : root.source == "Flatpak" ? "F" :
                     root.source == "AppImage" ? "I" : "S";
-                color: root.source == "AUR" ? Theme.cyan :
-                    root.source == "Flatpak" ? Theme.accent :
-                    root.source == "AppImage" ? Theme.green :
-                    Theme.yellow;
+                color: root.source == "Pacman" ? Theme.accent :
+                    root.source == "AUR" ? Theme.info :
+                    root.source == "Flatpak" ? Theme.fg_dim :
+                    root.source == "AppImage" ? Theme.success :
+                    Theme.warning;
                 font-size: root.icon_path != "" ? 22px : 18px;
                 font-weight: 700;
                 horizontal-alignment: center;
@@ -237,14 +249,15 @@ component AppCard inherits Rectangle {
                 }
                 SourceBadge {
                     label: root.source;
-                    badge-color: root.source == "AUR" ? Theme.cyan :
-                        root.source == "Flatpak" ? Theme.accent :
-                        root.source == "AppImage" ? Theme.green :
-                        Theme.yellow;
+                    badge-color: root.source == "Pacman" ? Theme.accent :
+                        root.source == "AUR" ? Theme.info :
+                        root.source == "Flatpak" ? Theme.fg_dim :
+                        root.source == "AppImage" ? Theme.success :
+                        Theme.warning;
                 }
                 if root.installed: SourceBadge {
                     label: "installed";
-                    badge-color: Theme.green;
+                    badge-color: Theme.success;
                 }
             }
 
@@ -277,6 +290,7 @@ export component MainWindow inherits Window {
     in-out property <bool> searching: false;
     in-out property <bool> show-detail: false;
     in-out property <bool> show-help: false;
+    in property <string> app-version: "";
     in-out property <bool> installing: false;
     in-out property <string> install-status: "";
     in-out property <string> console-output: "";
@@ -291,6 +305,10 @@ export component MainWindow inherits Window {
     in-out property <bool> filter-aur: true;
     in-out property <bool> filter-flatpak: true;
     in-out property <bool> filter-appimage: true;
+    in-out property <bool> filter-pacman: true;
+
+    // Update confirm dialog
+    in-out property <bool> show-update-os-confirm: false;
 
     // -- Callbacks --
     callback search(string);
@@ -305,6 +323,8 @@ export component MainWindow inherits Window {
     callback send-console-input(string);
     callback cancel-install();
     callback switch-tab(int);
+    callback update-apps();
+    callback update-os();
 
     // -- Public functions --
     public function focus-search() {
@@ -513,7 +533,7 @@ export component MainWindow inherits Window {
                         HeaderButton {
                             label: "\u{2715}";
                             bg-color: Theme.bg_light;
-                            hover-color: Theme.red;
+                            hover-color: Theme.danger;
                             clicked => { root.close(); }
                         }
                     }
@@ -528,11 +548,10 @@ export component MainWindow inherits Window {
 
             HorizontalLayout {
                 padding-left: 14px;
-                padding-right: 14px;
+                padding-right: 8px;
                 padding-top: 4px;
                 padding-bottom: 4px;
                 spacing: 4px;
-                alignment: start;
 
                 TabButton {
                     label: "Search";
@@ -555,6 +574,29 @@ export component MainWindow inherits Window {
                             root.show-detail = false;
                             root.switch-tab(1);
                         }
+                    }
+                }
+
+                // Spacer
+                Rectangle { horizontal-stretch: 1; }
+
+                // Update Apps button
+                VerticalLayout {
+                    alignment: center;
+                    ActionButton {
+                        label: "Update Apps";
+                        btn-color: Theme.accent;
+                        clicked => { root.update-apps(); }
+                    }
+                }
+
+                // Update OS button (shows confirm dialog)
+                VerticalLayout {
+                    alignment: center;
+                    ActionButton {
+                        label: "Update OS";
+                        btn-color: Theme.danger;
+                        clicked => { root.show-update-os-confirm = true; }
                     }
                 }
             }
@@ -660,6 +702,11 @@ export component MainWindow inherits Window {
                 spacing: 6px;
                 alignment: start;
 
+                FilterPill {
+                    label: "Pacman";
+                    active <=> root.filter-pacman;
+                    clicked => { root.filter-changed(); }
+                }
                 FilterPill {
                     label: "AUR";
                     active <=> root.filter-aur;
@@ -814,27 +861,32 @@ export component MainWindow inherits Window {
                                 width: 64px;
                                 height: 64px;
                                 border-radius: 12px;
-                                background: root.results[root.selected-index].source == "AUR"
-                                    ? Theme.cyan.transparentize(0.8) :
-                                    root.results[root.selected-index].source == "Flatpak"
+                                background: root.results[root.selected-index].source == "Pacman"
                                     ? Theme.accent.transparentize(0.8) :
+                                    root.results[root.selected-index].source == "AUR"
+                                    ? Theme.info.transparentize(0.8) :
+                                    root.results[root.selected-index].source == "Flatpak"
+                                    ? Theme.fg_dim.transparentize(0.8) :
                                     root.results[root.selected-index].source == "AppImage"
-                                    ? Theme.green.transparentize(0.8) :
-                                    Theme.yellow.transparentize(0.8);
+                                    ? Theme.success.transparentize(0.8) :
+                                    Theme.warning.transparentize(0.8);
                                 vertical-stretch: 0;
 
                                 Text {
                                     text: root.results[root.selected-index].icon_path != ""
                                         ? root.results[root.selected-index].icon_path :
+                                        root.results[root.selected-index].source == "Pacman" ? "P" :
                                         root.results[root.selected-index].source == "AUR" ? "A" :
                                         root.results[root.selected-index].source == "Flatpak" ? "F" :
                                         root.results[root.selected-index].source == "AppImage" ? "I" : "S";
-                                    color: root.results[root.selected-index].source == "AUR"
-                                        ? Theme.cyan :
-                                        root.results[root.selected-index].source == "Flatpak"
+                                    color: root.results[root.selected-index].source == "Pacman"
                                         ? Theme.accent :
+                                        root.results[root.selected-index].source == "AUR"
+                                        ? Theme.info :
+                                        root.results[root.selected-index].source == "Flatpak"
+                                        ? Theme.fg_dim :
                                         root.results[root.selected-index].source == "AppImage"
-                                        ? Theme.green : Theme.yellow;
+                                        ? Theme.success : Theme.warning;
                                     font-size: root.results[root.selected-index].icon_path != "" ? 32px : 24px;
                                     font-weight: 700;
                                     horizontal-alignment: center;
@@ -858,12 +910,14 @@ export component MainWindow inherits Window {
                                     spacing: 8px;
                                     SourceBadge {
                                         label: root.results[root.selected-index].source;
-                                        badge-color: root.results[root.selected-index].source == "AUR"
-                                            ? Theme.cyan :
-                                            root.results[root.selected-index].source == "Flatpak"
+                                        badge-color: root.results[root.selected-index].source == "Pacman"
                                             ? Theme.accent :
+                                            root.results[root.selected-index].source == "AUR"
+                                            ? Theme.info :
+                                            root.results[root.selected-index].source == "Flatpak"
+                                            ? Theme.fg_dim :
                                             root.results[root.selected-index].source == "AppImage"
-                                            ? Theme.green : Theme.yellow;
+                                            ? Theme.success : Theme.warning;
                                     }
                                     if root.results[root.selected-index].version != "": Text {
                                         text: root.results[root.selected-index].version;
@@ -873,7 +927,7 @@ export component MainWindow inherits Window {
                                     }
                                     if root.results[root.selected-index].installed: SourceBadge {
                                         label: "installed";
-                                        badge-color: Theme.green;
+                                        badge-color: Theme.success;
                                     }
                                 }
                             }
@@ -892,7 +946,7 @@ export component MainWindow inherits Window {
                             }
                             if root.results[root.selected-index].installed: ActionButton {
                                 label: "Remove";
-                                btn-color: Theme.red;
+                                btn-color: Theme.danger;
                                 busy: root.installing;
                                 clicked => { root.uninstall-app(root.selected-index); }
                             }
@@ -991,7 +1045,7 @@ export component MainWindow inherits Window {
                                         width: 60px;
                                         height: 22px;
                                         border-radius: 4px;
-                                        background: cancel-touch.has-hover ? Theme.red.transparentize(0.6) : Theme.red.transparentize(0.8);
+                                        background: cancel-touch.has-hover ? Theme.danger.transparentize(0.6) : Theme.danger.transparentize(0.8);
 
                                         cancel-touch := TouchArea {
                                             clicked => { root.cancel-install(); }
@@ -999,7 +1053,7 @@ export component MainWindow inherits Window {
 
                                         Text {
                                             text: "Cancel";
-                                            color: Theme.red;
+                                            color: Theme.danger;
                                             font-size: 10px;
                                             horizontal-alignment: center;
                                             vertical-alignment: center;
@@ -1056,7 +1110,7 @@ export component MainWindow inherits Window {
                         if root.process-finished && root.process-success: Rectangle {
                             height: 36px;
                             border-radius: Theme.card_radius;
-                            background: Theme.green.transparentize(0.85);
+                            background: Theme.success.transparentize(0.85);
                             vertical-stretch: 0;
 
                             HorizontalLayout {
@@ -1066,13 +1120,13 @@ export component MainWindow inherits Window {
 
                                 Text {
                                     text: "\u{2713}";
-                                    color: Theme.green;
+                                    color: Theme.success;
                                     font-size: 14px;
                                     vertical-alignment: center;
                                 }
                                 Text {
                                     text: "Installed successfully";
-                                    color: Theme.green;
+                                    color: Theme.success;
                                     font-size: 12px;
                                     vertical-alignment: center;
                                 }
@@ -1095,7 +1149,7 @@ export component MainWindow inherits Window {
 
                                     Text {
                                         text: "\u{2717} Failed";
-                                        color: Theme.red;
+                                        color: Theme.danger;
                                         font-size: 11px;
                                         font-weight: 600;
                                     }
@@ -1132,6 +1186,75 @@ export component MainWindow inherits Window {
                     font-size: 10px;
                     vertical-alignment: center;
                     opacity: 0.5;
+                }
+            }
+        }
+    }
+
+    // == Update OS confirmation dialog ==
+    if root.show-update-os-confirm: Rectangle {
+        background: Theme.bg.transparentize(0.15);
+
+        TouchArea {
+            clicked => { root.show-update-os-confirm = false; }
+        }
+
+        Rectangle {
+            width: 380px;
+            height: 180px;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            border-radius: 8px;
+            background: Theme.bg.darker(0.12);
+            border-width: 1px;
+            border-color: Theme.warning.transparentize(0.6);
+
+            VerticalLayout {
+                padding: 20px;
+                spacing: 10px;
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: start;
+                    Text {
+                        text: "\u{26A0}";
+                        color: Theme.warning;
+                        font-size: 16px;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        text: "Full System Update";
+                        color: Theme.warning;
+                        font-size: 14px;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                    }
+                }
+
+                Text {
+                    text: "Updates kernel, drivers, and bootloader.\nChanges take effect after reboot.\nClose other apps before proceeding.";
+                    color: Theme.fg;
+                    font-size: 11px;
+                    wrap: word-wrap;
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: end;
+
+                    ActionButton {
+                        label: "Cancel";
+                        btn-color: Theme.bg_lighter;
+                        clicked => { root.show-update-os-confirm = false; }
+                    }
+                    ActionButton {
+                        label: "Update Now";
+                        btn-color: Theme.warning;
+                        clicked => {
+                            root.show-update-os-confirm = false;
+                            root.update-os();
+                        }
+                    }
                 }
             }
         }
@@ -1197,6 +1320,14 @@ export component MainWindow inherits Window {
             }
 
             Rectangle { height: 16px; }
+
+            if root.app-version != "": Text {
+                text: "App Center v" + root.app-version;
+                color: Theme.fg_dim;
+                font-size: 11px;
+                horizontal-alignment: center;
+                opacity: 0.5;
+            }
 
             Text {
                 text: "Press ? or Esc to close";

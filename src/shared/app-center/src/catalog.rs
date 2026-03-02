@@ -10,6 +10,7 @@ pub enum Source {
     Flatpak,
     AppImage,
     Script,
+    Pacman,
 }
 
 impl Source {
@@ -19,6 +20,7 @@ impl Source {
             Source::Flatpak => "Flatpak",
             Source::AppImage => "AppImage",
             Source::Script => "Setup",
+            Source::Pacman => "Pacman",
         }
     }
 }

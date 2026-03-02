@@ -9,10 +9,10 @@ export global Theme {
     in-out property <color> accent: #89b4fa;
     in-out property <color> bg_light: #45475a;
     in-out property <color> bg_lighter: #585b70;
-    in-out property <color> red: #f38ba8;
-    in-out property <color> green: #a6e3a1;
-    in-out property <color> yellow: #f9e2af;
-    in-out property <color> cyan: #94e2d5;
+    in-out property <color> danger: #f38ba8;
+    in-out property <color> success: #a6e3a1;
+    in-out property <color> warning: #f9e2af;
+    in-out property <color> info: #94e2d5;
     in-out property <float> opacity: 0.40;
 }
 
@@ -501,7 +501,7 @@ export component App inherits Window {
                                     width: 26px;
                                     height: 26px;
                                     border-radius: 4px;
-                                    background: close-touch.has-hover ? Theme.red : Theme.bg_light;
+                                    background: close-touch.has-hover ? Theme.danger : Theme.bg_light;
 
                                     Text {
                                         text: "\u{2715}";
@@ -710,7 +710,7 @@ export component App inherits Window {
                                 border-radius: 4px;
                                 background: !root.has-changes
                                     ? Theme.bg_light.darker(0.2)
-                                    : revert-touch.has-hover ? Theme.yellow : Theme.bg_light;
+                                    : revert-touch.has-hover ? Theme.warning : Theme.bg_light;
 
                                 revert-layout := HorizontalLayout {
                                     alignment: center;
@@ -775,7 +775,7 @@ export component App inherits Window {
                                 border-radius: 4px;
                                 background: !root.has-changes
                                     ? Theme.bg_light.darker(0.2)
-                                    : apply-touch.has-hover ? Theme.green : Theme.bg_light;
+                                    : apply-touch.has-hover ? Theme.success : Theme.bg_light;
 
                                 apply-layout := HorizontalLayout {
                                     alignment: center;

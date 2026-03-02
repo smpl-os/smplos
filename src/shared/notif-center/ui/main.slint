@@ -14,10 +14,10 @@ export global Theme {
     in-out property <color> accent: #89b4fa;
     in-out property <color> bg_light: #45475a;
     in-out property <color> bg_lighter: #585b70;
-    in-out property <color> red: #f38ba8;
-    in-out property <color> green: #a6e3a1;
-    in-out property <color> yellow: #f9e2af;
-    in-out property <color> cyan: #94e2d5;
+    in-out property <color> danger: #f38ba8;
+    in-out property <color> success: #a6e3a1;
+    in-out property <color> warning: #f9e2af;
+    in-out property <color> info: #94e2d5;
     in-out property <float> opacity: 0.40;
     in-out property <length> card_radius: 6px;
     in-out property <length> button_radius: 4px;
@@ -224,7 +224,7 @@ export component MainWindow inherits Window {
                              Rectangle {
                                 visible: root.notifications.length > 0 && !root.show-help;
                                 border-radius: Theme.button_radius;
-                                background: clear_touch.has-hover ? Theme.red : Theme.bg_light;
+                                background: clear_touch.has-hover ? Theme.danger : Theme.bg_light;
                                 min-width: 78px;
                                 height: 26px;
                                 HorizontalLayout {
@@ -289,7 +289,7 @@ export component MainWindow inherits Window {
                              alignment: center;
                              Rectangle {
                                 border-radius: Theme.button_radius;
-                                background: close_touch.has-hover ? Theme.red : Theme.bg_light;
+                                background: close_touch.has-hover ? Theme.danger : Theme.bg_light;
                                 width: 26px;
                                 height: 26px;
                                 Text {
@@ -424,7 +424,7 @@ export component MainWindow inherits Window {
                                             padding-top: 2px;
                                             Rectangle {
                                                 border-radius: Theme.button_radius;
-                                                background: dismiss_touch.has-hover ? Theme.red : transparent;
+                                                background: dismiss_touch.has-hover ? Theme.danger : transparent;
                                                 width: 24px;
                                                 height: 24px;
                                                 opacity: row_touch.has-hover || dismiss_touch.has-hover ? 1.0 : 0.4;

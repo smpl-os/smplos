@@ -1,5 +1,28 @@
 # smplOS Development Principles
 
+## For AI Assistants: How to Handle Guideline Conflicts
+
+These instructions exist to prevent regressions and enforce hard-won decisions.
+**However:** if you believe a guideline is wrong, outdated, or that a better
+approach exists, **do not silently comply or silently avoid the better path.**
+
+Instead, explicitly flag it:
+
+> "The copilot instructions say X, but I think Y would be better because Z.
+> Want me to proceed with Y, or stick with the guidelines?"
+
+Examples of when to flag:
+- You know a newer API/pattern that would improve on an established one
+- A guideline would cause a bug in the current context
+- Two guidelines conflict with each other
+- You're about to do something the instructions prohibit but the user seems to want it
+
+**Never silently do the "wrong" thing to comply with instructions, and never
+silently skip a better solution because it conflicts with instructions. Always
+ask first.**
+
+---
+
 ## Architecture: Cross-Compositor First
 
 smplOS supports multiple compositors (Hyprland/Wayland, DWM/X11). Every feature
@@ -131,6 +154,45 @@ src/compositors/dwm/        ← ONLY DWM-specific config (future)
   `st-256color` or `xterm-256color` — custom names like `st-wl-256color` will
   break `clear`, `ncurses`, and other terminfo-dependent tools unless you also
   install a matching terminfo entry.
+
+### Transparent Rust Apps (Slint + Winit) — NEVER REGRESS THIS
+
+All smplOS GUI apps (`start-menu`, `notif-center`, `kb-center`, `disp-center`,
+`app-center`, `webapp-center`) share one architecture for transparency + blur.
+**Deviating from any of these points silently breaks the look.**
+
+```rust
+let backend = i_slint_backend_winit::Backend::builder()
+    .with_renderer_name("software")          // MUST be "software" — see below
+    .with_window_attributes_hook(|attrs| {
+        use i_slint_backend_winit::winit::platform::wayland::WindowAttributesExtWayland;
+        use i_slint_backend_winit::winit::dpi::LogicalSize;
+        attrs
+            .with_name("app-id", "app-id")   // sets Wayland app_id for windowrulev2
+            .with_decorations(false)          // MUST be false
+            .with_inner_size(LogicalSize::new(W as f64, H as f64))
+    })
+    .build()?;
+slint::platform::set_platform(Box::new(backend))
+    .map_err(|e| slint::PlatformError::Other(e.to_string()))?;
+```
+
+**Rules — each one has caused a regression:**
+
+- **`renderer-software` is mandatory.** `femtovg`, `skia`, and other GPU renderers
+  composite to an opaque surface before passing pixels to the compositor — alpha is
+  destroyed. The software renderer outputs raw RGBA pixels that Hyprland can blur through.
+- **`with_decorations(false)` is mandatory.** CSD adds an opaque frame, destroying the
+  borderless transparent look.
+- **`with_name(app_id, instance)` is mandatory.** Without it the Wayland `app_id` is
+  empty/generic and `windowrulev2` in `windows.conf` can't target the window for
+  float/opacity/blur rules. Convention: both args match the binary name.
+- **Background alpha comes from the theme palette.** The `bg` color in `theme-colors.scss`
+  carries an alpha component (e.g. `rgba(20,20,20,0.85)`). `apply_theme()` reads it and
+  sets it on the Slint `Theme` struct. Never hardcode a fully-opaque `#rrggbb` background
+  in a `.slint` file — always pull from the palette so themes control opacity.
+- **Hyprland rules** in `windows.conf` target `initialClass` matching the `app_id`:
+  `windowrulev2 = float, initialClass:start-menu`.
 
 ### Packages
 

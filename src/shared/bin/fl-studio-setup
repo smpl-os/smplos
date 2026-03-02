@@ -13,6 +13,9 @@ LOGFILE="/mnt/fl-studio-install.log"
 log() { echo "[fl-studio-setup] $*"; }
 die() { log "ERROR: $*" >&2; exit 1; }
 
+# Wine needs access to the display -- sudo strips DISPLAY/XAUTHORITY/XDG_RUNTIME_DIR
+[[ $EUID -eq 0 ]] && die "Do not run as root/sudo. Run as your normal user: fl-studio-setup install"
+
 # Tee all output (stdout + stderr) to log file
 exec > >(tee -a "$LOGFILE") 2>&1
 echo "=== fl-studio-setup started: $(date) ===" >> "$LOGFILE"
@@ -62,6 +65,8 @@ setup_prefix() {
     export WINEPREFIX WINEARCH=win64
     # Suppress Mono/Gecko install dialogs that hang in non-interactive mode
     export WINEDLLOVERRIDES="mscoree=d;mshtml=d"
+    # Force XWayland -- native Wayland Wine causes a blank ghost window on Hyprland
+    export WINE_DISABLE_WAYLAND=1
 
     if [[ ! -d "$WINEPREFIX" ]]; then
         log "Creating Wine prefix at ${WINEPREFIX}..."
@@ -70,8 +75,6 @@ setup_prefix() {
         # Wait for wineserver to finish
         wineserver --wait 2>/dev/null || true
         log "Wine prefix ready"
-        log "Installing font dependencies..."
-        winetricks -q corefonts 2>&1 || log "WARN: corefonts install had issues (non-fatal)"
     else
         log "Wine prefix already exists"
     fi
@@ -94,7 +97,7 @@ create_desktop_entry() {
 [Desktop Entry]
 Name=FL Studio
 Comment=Digital Audio Workstation (via Wine)
-Exec=env WINEPREFIX=${WINEPREFIX} wine "${fl_exe}"
+Exec=env WINEPREFIX=${WINEPREFIX} WINE_DISABLE_WAYLAND=1 wine "${fl_exe}"
 Type=Application
 Categories=Audio;Music;AudioVideo;
 Terminal=false
@@ -110,6 +113,7 @@ do_install() {
 
     export WINEPREFIX WINEARCH=win64
     export WINEDLLOVERRIDES="mscoree=d;mshtml=d"
+    export WINE_DISABLE_WAYLAND=1
     log "Running FL Studio installer (unattended)..."
     # Wine often returns non-zero even on success; don't die on exit code
     wine "$INSTALLER" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- 2>&1 || true
@@ -118,8 +122,13 @@ do_install() {
     # Verify installation by checking for the executable
     local fl_exe
     fl_exe=$(find "${WINEPREFIX}/drive_c/Program Files/Image-Line/" \
-        -name "FL64.exe" -o -name "FL.exe" 2>/dev/null | head -1)
-    [[ -n "$fl_exe" ]] || die "FL Studio installer ran but FL64.exe was not found. Installation may have failed."
+        \( -name "FL64.exe" -o -name "FL.exe" \) -type f 2>/dev/null | head -1)
+
+    if [[ -z "$fl_exe" ]]; then
+        log "Contents of Image-Line dir (if any):"
+        find "${WINEPREFIX}/drive_c/Program Files/Image-Line/" 2>/dev/null || log "(directory not found)"
+        die "FL Studio installer ran but FL64.exe was not found. Installation may have failed."
+    fi
 
     create_desktop_entry
     log "FL Studio installed successfully!"

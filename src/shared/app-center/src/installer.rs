@@ -117,23 +117,55 @@ fn spawn_process(cmd: &str, args: &[&str]) -> Result<StreamingProcess, String> {
     })
 }
 
+/// Install an official-repo package. Falls back to pkexec pacman if paru is broken.
+fn spawn_pacman_install(id: &str) -> SpawnResult {
+    let (cmd, args): (&str, Vec<&str>) = if paru_works() {
+        ("paru", vec!["-S", "--noconfirm", id])
+    } else {
+        ("pkexec", vec!["pacman", "-S", "--noconfirm", id])
+    };
+    match spawn_process(cmd, &args) {
+        Ok(p) => SpawnResult::Streaming(p),
+        Err(e) => SpawnResult::Immediate(ImmediateResult { success: false, message: e }),
+    }
+}
+
+/// Install an AUR package. Auto-heals paru if libalpm bumped it, then installs.
+fn spawn_aur_install(id: &str) -> SpawnResult {
+    // Inline heal + install so the user sees a single streaming log
+    let script = format!(
+        "set -euo pipefail\n\
+         if ! paru --version &>/dev/null 2>&1; then\n\
+           echo '── Healing paru (system update changed libalpm) ──'\n\
+           heal-paru || {{ echo 'ERROR: paru heal failed'; exit 1; }}\n\
+         fi\n\
+         paru -S --noconfirm '{}'\n",
+        id.replace('\'', "'\\''")
+    );
+    match spawn_process("bash", &["-c", &script]) {
+        Ok(p) => SpawnResult::Streaming(p),
+        Err(e) => SpawnResult::Immediate(ImmediateResult { success: false, message: e }),
+    }
+}
+
+/// Remove a package. Falls back to pkexec pacman if paru is broken.
+fn spawn_pacman_remove(id: &str) -> SpawnResult {
+    let (cmd, args): (&str, Vec<&str>) = if paru_works() {
+        ("paru", vec!["-Rns", "--noconfirm", id])
+    } else {
+        ("pkexec", vec!["pacman", "-R", "--noconfirm", id])
+    };
+    match spawn_process(cmd, &args) {
+        Ok(p) => SpawnResult::Streaming(p),
+        Err(e) => SpawnResult::Immediate(ImmediateResult { success: false, message: e }),
+    }
+}
+
 /// Spawn an install process with streaming output.
 pub fn spawn_install(source: &Source, id: &str) -> SpawnResult {
     match source {
-        Source::Aur => {
-            let (cmd, args): (&str, Vec<&str>) = if paru_works() {
-                ("paru", vec!["-S", "--noconfirm", id])
-            } else {
-                ("pkexec", vec!["pacman", "-S", "--noconfirm", id])
-            };
-            match spawn_process(cmd, &args) {
-                Ok(p) => SpawnResult::Streaming(p),
-                Err(e) => SpawnResult::Immediate(ImmediateResult {
-                    success: false,
-                    message: e,
-                }),
-            }
-        }
+        Source::Aur => spawn_aur_install(id),
+        Source::Pacman => spawn_pacman_install(id),
         Source::Flatpak => {
             if !which_exists("flatpak") {
                 return SpawnResult::Immediate(ImmediateResult {
@@ -175,20 +207,7 @@ pub fn spawn_install(source: &Source, id: &str) -> SpawnResult {
 /// Spawn an uninstall process with streaming output.
 pub fn spawn_uninstall(source: &Source, id: &str, name: &str) -> SpawnResult {
     match source {
-        Source::Aur => {
-            let (cmd, args): (&str, Vec<&str>) = if paru_works() {
-                ("paru", vec!["-Rns", "--noconfirm", id])
-            } else {
-                ("pkexec", vec!["pacman", "-R", "--noconfirm", id])
-            };
-            match spawn_process(cmd, &args) {
-                Ok(p) => SpawnResult::Streaming(p),
-                Err(e) => SpawnResult::Immediate(ImmediateResult {
-                    success: false,
-                    message: e,
-                }),
-            }
-        }
+        Source::Aur | Source::Pacman => spawn_pacman_remove(id),
         Source::Flatpak => {
             match spawn_process("flatpak", &["uninstall", "-y", "--user", id]) {
                 Ok(p) => SpawnResult::Streaming(p),

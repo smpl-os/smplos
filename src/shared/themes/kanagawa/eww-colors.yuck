@@ -4,5 +4,5 @@
 (defvar theme-fg-dim "#dcd7ba")
 (defvar theme-accent "#7e9cd8")
 (defvar theme-accent-alt "#957fb8")
-(defvar theme-green "#76946a")
-(defvar theme-red "#c34043")
+(defvar theme-success "#76946a")
+(defvar theme-danger "#c34043")

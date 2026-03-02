@@ -13,11 +13,11 @@ $theme-fg: #cdd6f4 !default;
 $theme-fg-dim: #a6adc8 !default;
 $theme-accent: #89b4fa !default;
 $theme-accent-alt: #f5c2e7 !default;
-$theme-green: #a6e3a1 !default;
-$theme-red: #f38ba8 !default;
-$theme-yellow: #f9e2af !default;
-$theme-orange: #f9e2af !default;
-$theme-cyan: #94e2d5 !default;
+$theme-success: #a6e3a1 !default;
+$theme-danger: #f38ba8 !default;
+$theme-warning: #f9e2af !default;
+$theme-warning-alt: #f9e2af !default;
+$theme-info: #94e2d5 !default;
 $theme-popup-opacity: 0.75 !default;
 
 /* Override with active theme colors (written by theme-set) */
@@ -31,10 +31,10 @@ $fg: $theme-fg;
 $fg-dim: $theme-fg-dim;
 $accent: $theme-accent;
 $accent-alt: $theme-accent-alt;
-$green: $theme-green;
-$red: $theme-red;
-$yellow: $theme-yellow;
-$orange: $theme-orange;
+$success: $theme-success;
+$danger: $theme-danger;
+$warning: $theme-warning;
+$warning-alt: $theme-warning-alt;
 $popup-opacity: $theme-popup-opacity;
 $border-radius: 2px;
 $font: "JetBrains Mono Nerd Font";
@@ -239,7 +239,7 @@ window {
 }
 
 .cal-close:hover {
-  background-color: $red;
+  background-color: $danger;
   color: $bg;
 }
 
@@ -307,7 +307,7 @@ window {
 }
 
 .usb-close:hover {
-  background-color: $red;
+  background-color: $danger;
   color: $bg;
 }
 
@@ -347,8 +347,8 @@ window {
 }
 
 .usb-eject:hover {
-  color: $red;
-  background-color: rgba($red, 0.15);
+  color: $danger;
+  background-color: rgba($danger, 0.15);
 }
 
 /* Quick Settings panel */

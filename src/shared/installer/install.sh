@@ -395,18 +395,12 @@ if command -v reflector &>/dev/null; then
   fi
 fi
 
-# Surface hardware: install linux-surface kernel + drivers online.
-# The ISO ships with linux-lts only (keeps ISO size down). On Surface devices
-# we add the linux-surface kernel alongside it so touch/pen/wifi work properly.
-# Both kernels remain in GRUB — linux-surface as default, linux-lts as fallback.
-# Requires internet; if offline, the system still works with linux-lts (no touch/pen).
-# Runs AFTER mirrorlist is established so pacman can resolve dependencies.
-if [[ "$(cat /sys/devices/virtual/dmi/id/sys_vendor 2>/dev/null)" == "Microsoft Corporation" ]] \
-  && [[ "$(cat /sys/devices/virtual/dmi/id/product_name 2>/dev/null)" == Surface* ]]; then
-  echo "==> Surface device detected, setting up Surface-optimized kernel..."
-
-  # Always configure the linux-surface repo + key, even if we can't install
-  # right now. This way the user can install later with just `pacman -Sy`.
+# Sync package databases now that online repos are configured.
+# The offline [offline] repo had its own db; core/extra/multilib dbs don't
+# exist yet -- without this, every `pacman -S` after install fails with
+# "database file does not exist".
+echo "==> Syncing package databases..."
+sudo pacman -Sy --noconfirm 2>/dev/null || echo "    WARNING: pacman -Sy failed (no internet?), users can run 'sudo pacman -Sy' later"
   if ! grep -q '^\[linux-surface\]' /etc/pacman.conf; then
     curl -s https://raw.githubusercontent.com/linux-surface/linux-surface/master/pkg/keys/surface.asc \
       | sudo pacman-key --add - 2>/dev/null || true

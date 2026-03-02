@@ -39,21 +39,24 @@ fn apply_theme(ui: &MainWindow) {
     theme.set_accent(palette.accent);
     theme.set_bg_light(palette.bg_light);
     theme.set_bg_lighter(palette.bg_lighter);
-    theme.set_red(palette.red);
-    theme.set_green(palette.green);
-    theme.set_yellow(palette.yellow);
-    theme.set_cyan(palette.cyan);
+    theme.set_danger(palette.danger);
+    theme.set_success(palette.success);
+    theme.set_warning(palette.warning);
+    theme.set_info(palette.info);
     theme.set_opacity(palette.opacity);
 }
 
 /// Perform a search across enabled sources.
-fn do_search(query: &str, aur: bool, flatpak: bool, appimage: bool) -> Vec<AppEntry> {
+fn do_search(query: &str, aur: bool, flatpak: bool, appimage: bool, pacman: bool) -> Vec<AppEntry> {
     if query.is_empty() {
         return Vec::new();
     }
 
     let mut results = Vec::new();
 
+    if pacman {
+        results.extend(sources::pacman::search(query));
+    }
     if aur {
         results.extend(sources::aur::search(query));
     }
@@ -103,7 +106,7 @@ fn main() -> Result<(), slint::PlatformError> {
     }
 
     let backend = i_slint_backend_winit::Backend::builder()
-        .with_renderer_name("renderer-software")
+        .with_renderer_name("software")
         .with_window_attributes_hook(|attrs| {
             use i_slint_backend_winit::winit::dpi::LogicalSize;
             use i_slint_backend_winit::winit::platform::wayland::WindowAttributesExtWayland;
@@ -118,6 +121,7 @@ fn main() -> Result<(), slint::PlatformError> {
 
     let ui = MainWindow::new()?;
     apply_theme(&ui);
+    ui.set_app_version(env!("CARGO_PKG_VERSION").into());
 
     let state: Rc<RefCell<Vec<AppEntry>>> = Rc::new(RefCell::new(Vec::new()));
     let model = Rc::new(VecModel::<AppItem>::default());
@@ -141,9 +145,10 @@ fn main() -> Result<(), slint::PlatformError> {
             let aur = ui.get_filter_aur();
             let flatpak = ui.get_filter_flatpak();
             let appimage = ui.get_filter_appimage();
+            let pacman = ui.get_filter_pacman();
 
-            // Run search (blocking but fast for AUR; local for cached Flatpak/AppImage)
-            let results = do_search(&q, aur, flatpak, appimage);
+            // Run search (blocking but fast for AUR/Pacman; local for cached Flatpak/AppImage)
+            let results = do_search(&q, aur, flatpak, appimage, pacman);
             update_results(&ui, &state, &model, results);
         });
     }
@@ -163,8 +168,9 @@ fn main() -> Result<(), slint::PlatformError> {
             let aur = ui.get_filter_aur();
             let flatpak = ui.get_filter_flatpak();
             let appimage = ui.get_filter_appimage();
+            let pacman = ui.get_filter_pacman();
 
-            let results = do_search(&q, aur, flatpak, appimage);
+            let results = do_search(&q, aur, flatpak, appimage, pacman);
             update_results(&ui, &state, &model, results);
         });
     }
@@ -188,7 +194,8 @@ fn main() -> Result<(), slint::PlatformError> {
                     let aur = ui.get_filter_aur();
                     let flatpak = ui.get_filter_flatpak();
                     let appimage = ui.get_filter_appimage();
-                    let results = do_search(&q, aur, flatpak, appimage);
+                    let pacman = ui.get_filter_pacman();
+                    let results = do_search(&q, aur, flatpak, appimage, pacman);
                     update_results(&ui, &state, &model, results);
                 }
             }
@@ -261,6 +268,8 @@ fn main() -> Result<(), slint::PlatformError> {
                 item.installed = new_state;
                 model.set_row_data(idx, item);
             }
+            // Refresh start-menu app cache so newly installed apps appear immediately
+            let _ = std::process::Command::new("rebuild-app-cache").spawn();
         }
     }
 
@@ -433,6 +442,8 @@ fn main() -> Result<(), slint::PlatformError> {
                             item.installed = new_state;
                             model.set_row_data(idx, item);
                         }
+                        // Refresh start-menu app cache so newly installed apps appear immediately
+                        let _ = std::process::Command::new("rebuild-app-cache").spawn();
                     }
 
                     *active.borrow_mut() = None;
@@ -475,6 +486,24 @@ fn main() -> Result<(), slint::PlatformError> {
     {
         ui.on_close(move || {
             std::process::exit(0);
+        });
+    }
+
+    // -- Update Apps (kernel/driver packages excluded) --
+    {
+        ui.on_update_apps(move || {
+            let _ = std::process::Command::new("smplos-update")
+                .args(["--mode", "apps"])
+                .spawn();
+        });
+    }
+
+    // -- Update OS (full system update, kernel + drivers) --
+    {
+        ui.on_update_os(move || {
+            let _ = std::process::Command::new("smplos-update")
+                .args(["--mode", "full"])
+                .spawn();
         });
     }
 

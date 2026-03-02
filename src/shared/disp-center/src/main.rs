@@ -153,10 +153,10 @@ fn apply_theme(ui: &App) {
     theme.set_accent(palette.accent);
     theme.set_bg_light(palette.bg_light);
     theme.set_bg_lighter(palette.bg_lighter);
-    theme.set_red(palette.red);
-    theme.set_green(palette.green);
-    theme.set_yellow(palette.yellow);
-    theme.set_cyan(palette.cyan);
+    theme.set_danger(palette.danger);
+    theme.set_success(palette.success);
+    theme.set_warning(palette.warning);
+    theme.set_info(palette.info);
     theme.set_opacity(palette.opacity);
 }
 
@@ -202,7 +202,7 @@ fn main() -> Result<(), slint::PlatformError> {
 
     // Set up winit backend with app_id for Hyprland matching, no CSD, femtovg renderer
     let backend = i_slint_backend_winit::Backend::builder()
-        .with_renderer_name("renderer-software")
+        .with_renderer_name("renderer-femtovg")
         .with_window_attributes_hook(|attrs| {
             use i_slint_backend_winit::winit::platform::wayland::WindowAttributesExtWayland;
             use i_slint_backend_winit::winit::dpi::LogicalSize;

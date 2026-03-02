@@ -21,6 +21,16 @@ find_terminal() {
     fi
 }
 
+# Parse --mode flag: 'apps' skips kernel/drivers; 'full' is a complete system update
+UPDATE_MODE="full"
+for arg in "$@"; do
+    case "$arg" in
+        --mode) ;;
+        apps)   UPDATE_MODE="apps" ;;
+        full)   UPDATE_MODE="full" ;;
+    esac
+done
+
 TERM_CMD=$(find_terminal)
 if [[ -z "$TERM_CMD" ]]; then
     notify-send "smplOS Update" "No terminal emulator found"
@@ -28,26 +38,61 @@ if [[ -z "$TERM_CMD" ]]; then
 fi
 
 UPDATE_SCRIPT=$(mktemp /tmp/smplos-update.XXXXXX.sh)
-cat > "$UPDATE_SCRIPT" << 'EOF'
+
+# Write mode into the script (unquoted heredoc for variable substitution)
+cat > "$UPDATE_SCRIPT" << PREAMBLE
 #!/bin/bash
-echo "══════════════════════════════════════"
-echo "  smplOS System Update"
-echo "══════════════════════════════════════"
+UPDATE_MODE="$UPDATE_MODE"
+PREAMBLE
+
+# Append the body (single-quoted: no substitution; uses UPDATE_MODE set above)
+cat >> "$UPDATE_SCRIPT" << 'EOF'
+
+# Packages to preserve in apps-only mode: kernel, drivers, bootloader, AND pacman itself
+# (pacman update bumps libalpm which breaks paru -- only update these via Update OS)
+KERNEL_IGNORE="linux,linux-lts,linux-zen,linux-hardened,linux-headers,linux-lts-headers,linux-zen-headers,linux-hardened-headers,nvidia,nvidia-lts,nvidia-dkms,nvidia-utils,lib32-nvidia-utils,mesa,lib32-mesa,vulkan-radeon,lib32-vulkan-radeon,amdvlk,lib32-amdvlk,xf86-video-amdgpu,xf86-video-intel,xf86-video-nouveau,amd-ucode,intel-ucode,grub,mkinitcpio,mkinitcpio-busybox,pacman,libalpm"
+
+if [[ "$UPDATE_MODE" == "apps" ]]; then
+    echo "══════════════════════════════════════"
+    echo "  smplOS App Update"
+    echo "  (kernel & drivers preserved)"
+    echo "══════════════════════════════════════"
+else
+    echo "══════════════════════════════════════"
+    echo "  smplOS Full System Update"
+    echo "══════════════════════════════════════"
+fi
 echo
 
-# 1. Official repos
-echo "── Pacman ──"
-sudo pacman -Syu --noconfirm
+# 1. Official repos + AUR
+if [[ "$UPDATE_MODE" == "apps" ]]; then
+    echo "── Pacman (apps only) ──"
+    sudo pacman -Syu --noconfirm --ignore "$KERNEL_IGNORE"
+else
+    echo "── Pacman ──"
+    sudo pacman -Syu --noconfirm
+fi
 echo
 
-# 2. AUR packages (paru)
-if command -v paru &>/dev/null; then
-    echo "── AUR (paru) ──"
-    paru -Sua --noconfirm
+# 2. AUR packages (paru) -- auto-heal if libalpm was bumped by pacman update
+paru_ok() { paru --version &>/dev/null 2>&1; }
+if command -v paru &>/dev/null && ! paru_ok; then
+    echo "── Healing paru (libalpm mismatch) ──"
+    heal-paru || echo "WARNING: paru heal failed, AUR updates skipped"
+    echo
+fi
+if paru_ok; then
+    if [[ "$UPDATE_MODE" == "apps" ]]; then
+        echo "── AUR (apps only) ──"
+        paru -Sua --noconfirm --ignore "$KERNEL_IGNORE"
+    else
+        echo "── AUR ──"
+        paru -Sua --noconfirm
+    fi
     echo
 fi
 
-# 3. Flatpak
+# 3. Flatpak (always safe -- sandboxed, no kernel interaction)
 if command -v flatpak &>/dev/null; then
     installed=$(flatpak list --app 2>/dev/null | wc -l)
     if [[ "$installed" -gt 0 ]]; then
@@ -71,6 +116,9 @@ done
 
 echo "══════════════════════════════════════"
 echo "  Update complete!"
+if [[ "$UPDATE_MODE" == "full" ]]; then
+    echo "  Reboot recommended to apply kernel/driver changes."
+fi
 echo "══════════════════════════════════════"
 echo
 read -rp "Press Enter to close..."

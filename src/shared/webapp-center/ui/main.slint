@@ -16,10 +16,10 @@ export global Theme {
     in-out property <color> accent: #89b4fa;
     in-out property <color> bg_light: #45475a;
     in-out property <color> bg_lighter: #585b70;
-    in-out property <color> red: #f38ba8;
-    in-out property <color> green: #a6e3a1;
-    in-out property <color> yellow: #f9e2af;
-    in-out property <color> cyan: #94e2d5;
+    in-out property <color> danger: #f38ba8;
+    in-out property <color> success: #a6e3a1;
+    in-out property <color> warning: #f9e2af;
+    in-out property <color> info: #94e2d5;
     in-out property <float> opacity: 0.40;
     in-out property <length> card_radius: 6px;
     in-out property <length> button_radius: 4px;
@@ -535,7 +535,7 @@ export component MainWindow inherits Window {
                                 alignment: center;
                                 HeaderButton {
                                     label: "Del All";
-                                    hover-color: Theme.red;
+                                    hover-color: Theme.danger;
                                     clicked => {
                                         key_scope.focus();
                                         root.delete-all();
@@ -622,7 +622,7 @@ export component MainWindow inherits Window {
                                 alignment: center;
                                 Rectangle {
                                     border-radius: Theme.button_radius;
-                                    background: close_touch.has-hover ? Theme.red : Theme.bg_light;
+                                    background: close_touch.has-hover ? Theme.danger : Theme.bg_light;
                                     width: 26px;
                                     height: 26px;
                                     Text {
@@ -699,7 +699,7 @@ export component MainWindow inherits Window {
                                                     Text {
                                                         width: 22px;
                                                         text: app.marked ? "v" : "o";
-                                                        color: app.marked ? Theme.green : Theme.accent;
+                                                        color: app.marked ? Theme.success : Theme.accent;
                                                         font-size: 16px;
                                                         horizontal-alignment: center;
                                                     }
@@ -731,12 +731,12 @@ export component MainWindow inherits Window {
                                                         height: 16px;
                                                         min-width: 16px;
                                                         border-radius: 3px;
-                                                        background: Theme.green.transparentize(0.7);
+                                                        background: Theme.success.transparentize(0.7);
                                                         HorizontalLayout {
                                                             alignment: center;
                                                             Text {
                                                                 text: "S";
-                                                                color: Theme.green;
+                                                                color: Theme.success;
                                                                 font-size: 9px;
                                                                 vertical-alignment: center;
                                                             }
@@ -746,12 +746,12 @@ export component MainWindow inherits Window {
                                                         height: 16px;
                                                         min-width: 16px;
                                                         border-radius: 3px;
-                                                        background: Theme.cyan.transparentize(0.7);
+                                                        background: Theme.info.transparentize(0.7);
                                                         HorizontalLayout {
                                                             alignment: center;
                                                             Text {
                                                                 text: "V";
-                                                                color: Theme.cyan;
+                                                                color: Theme.info;
                                                                 font-size: 9px;
                                                                 vertical-alignment: center;
                                                             }
@@ -763,7 +763,7 @@ export component MainWindow inherits Window {
                                                     alignment: center;
                                                     Rectangle {
                                                         border-radius: Theme.button_radius;
-                                                        background: del_touch.has-hover ? Theme.red : transparent;
+                                                        background: del_touch.has-hover ? Theme.danger : transparent;
                                                         width: 24px;
                                                         height: 24px;
                                                         opacity: row_touch.has-hover || del_touch.has-hover ? 1.0 : 0.4;
@@ -1098,7 +1098,7 @@ export component MainWindow inherits Window {
                                     Text {
                                         visible: root.form-error != "";
                                         text: root.form-error;
-                                        color: Theme.red;
+                                        color: Theme.danger;
                                         font-size: 12px;
                                         wrap: word-wrap;
                                     }

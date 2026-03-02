@@ -1,10 +1,10 @@
 [package]
 name = "start-menu"
-version = "0.1.17"
+version = "0.1.18"
 edition = "2021"
 
 [dependencies]
-slint = { version = "1.8", default-features = false, features = ["backend-winit", "renderer-software", "compat-1-2"] }
+slint = { version = "1.8", default-features = false, features = ["backend-winit", "renderer-femtovg", "compat-1-2"] }
 i-slint-backend-winit = "1.8"
 
 [build-dependencies]

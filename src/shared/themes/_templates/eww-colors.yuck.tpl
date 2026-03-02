@@ -4,5 +4,5 @@
 (defvar theme-fg-dim "{{ color15 }}")
 (defvar theme-accent "{{ accent }}")
 (defvar theme-accent-alt "{{ color5 }}")
-(defvar theme-green "{{ color2 }}")
-(defvar theme-red "{{ color1 }}")
+(defvar theme-success "{{ color2 }}")
+(defvar theme-danger "{{ color1 }}")

@@ -172,28 +172,17 @@ fn resolve_icon_path(icon_name: &str) -> Option<String> {
     None
 }
 
-/// Pre-load all app icons into a cache keyed by icon name.
-fn build_icon_cache(apps: &[AppEntry]) -> HashMap<String, Image> {
+/// Pre-resolve icon paths (fast: just stat calls, no image decoding).
+fn build_icon_path_cache(apps: &[AppEntry]) -> HashMap<String, String> {
     let mut cache = HashMap::new();
-    let mut found = 0;
-    let mut missing: Vec<String> = Vec::new();
     for app in apps {
         if app.icon.is_empty() || cache.contains_key(&app.icon) {
             continue;
         }
         if let Some(path) = resolve_icon_path(&app.icon) {
-            if let Ok(img) = Image::load_from_path(Path::new(&path)) {
-                cache.insert(app.icon.clone(), img);
-                found += 1;
-            } else {
-                eprintln!("[icon] failed to load: {} -> {}", app.icon, path);
-            }
-        } else {
-            missing.push(app.icon.clone());
+            cache.insert(app.icon.clone(), path);
         }
     }
-    eprintln!("[icon] loaded {}, missing {}: {:?}", found, missing.len(),
-        missing.iter().take(10).collect::<Vec<_>>());
     cache
 }
 
@@ -219,7 +208,7 @@ fn filter_apps(all: &[AppEntry], category_key: &str, query: &str) -> Vec<AppEntr
 
 // ── Convert to Slint model item ──
 
-fn to_ui_item(app: &AppEntry, icon_cache: &HashMap<String, Image>, pinned: &[String]) -> AppItem {
+fn to_ui_item(app: &AppEntry, path_cache: &HashMap<String, String>, img_cache: &RefCell<HashMap<String, Image>>, pinned: &[String]) -> AppItem {
     let initial = app
         .name
         .chars()
@@ -227,9 +216,24 @@ fn to_ui_item(app: &AppEntry, icon_cache: &HashMap<String, Image>, pinned: &[Str
         .map(|c| c.to_uppercase().to_string())
         .unwrap_or_default();
 
-    let (icon_image, has_icon) = match icon_cache.get(&app.icon) {
-        Some(img) => (img.clone(), true),
-        None => (Image::default(), false),
+    // Lazy image load: check image cache first, then try loading from path cache
+    let (icon_image, has_icon) = {
+        let cache = img_cache.borrow();
+        if let Some(img) = cache.get(&app.icon) {
+            (img.clone(), true)
+        } else {
+            drop(cache);
+            if let Some(path) = path_cache.get(&app.icon) {
+                if let Ok(img) = Image::load_from_path(Path::new(path)) {
+                    img_cache.borrow_mut().insert(app.icon.clone(), img.clone());
+                    (img, true)
+                } else {
+                    (Image::default(), false)
+                }
+            } else {
+                (Image::default(), false)
+            }
+        }
     };
 
     let is_web_app = app.exec.contains("launch-webapp");
@@ -266,13 +270,14 @@ fn update_view(
     ui: &MainWindow,
     all_apps: &[AppEntry],
     model: &Rc<VecModel<AppItem>>,
-    icon_cache: &HashMap<String, Image>,
+    path_cache: &HashMap<String, String>,
+    img_cache: &RefCell<HashMap<String, Image>>,
     category_key: &str,
     query: &str,
     pinned: &[String],
 ) {
     let filtered = filter_apps(all_apps, category_key, query);
-    model.set_vec(filtered.iter().map(|a| to_ui_item(a, icon_cache, pinned)).collect::<Vec<_>>());
+    model.set_vec(filtered.iter().map(|a| to_ui_item(a, path_cache, img_cache, pinned)).collect::<Vec<_>>());
     ui.set_apps(ModelRc::from(model.clone()));
     ui.set_app_count(model.row_count() as i32);
     ui.set_selected_app(if model.row_count() > 0 { 0 } else { -1 });
@@ -283,13 +288,14 @@ fn update_pinned_model(
     ui: &MainWindow,
     all_apps: &[AppEntry],
     pinned_model: &Rc<VecModel<AppItem>>,
-    icon_cache: &HashMap<String, Image>,
+    path_cache: &HashMap<String, String>,
+    img_cache: &RefCell<HashMap<String, Image>>,
     pinned: &[String],
 ) {
     let items: Vec<AppItem> = pinned
         .iter()
         .filter_map(|exec| all_apps.iter().find(|a| &a.exec == exec))
-        .map(|a| to_ui_item(a, icon_cache, pinned))
+        .map(|a| to_ui_item(a, path_cache, img_cache, pinned))
         .collect();
     let count = items.len() as i32;
     pinned_model.set_vec(items);
@@ -312,10 +318,10 @@ fn apply_theme(ui: &MainWindow) {
     theme.set_accent(palette.accent);
     theme.set_bg_light(palette.bg_light);
     theme.set_bg_lighter(palette.bg_lighter);
-    theme.set_red(palette.red);
-    theme.set_green(palette.green);
-    theme.set_yellow(palette.yellow);
-    theme.set_cyan(palette.cyan);
+    theme.set_danger(palette.danger);
+    theme.set_success(palette.success);
+    theme.set_warning(palette.warning);
+    theme.set_info(palette.info);
     theme.set_opacity(palette.opacity);
     theme.set_border_radius(palette.border_radius);
 }
@@ -331,7 +337,7 @@ fn main() -> Result<(), slint::PlatformError> {
     }
 
     let backend = i_slint_backend_winit::Backend::builder()
-        .with_renderer_name("renderer-software")
+        .with_renderer_name("renderer-femtovg")
         .with_window_attributes_hook(|attrs| {
             use i_slint_backend_winit::winit::dpi::LogicalSize;
             use i_slint_backend_winit::winit::platform::wayland::WindowAttributesExtWayland;
@@ -349,7 +355,8 @@ fn main() -> Result<(), slint::PlatformError> {
 
     // ── Load all apps from cache ──
     let all_apps = Rc::new(load_apps());
-    let icon_cache = Rc::new(build_icon_cache(&all_apps));
+    let path_cache = Rc::new(build_icon_path_cache(&all_apps));
+    let img_cache = Rc::new(RefCell::new(HashMap::<String, Image>::new()));
     let model = Rc::new(VecModel::<AppItem>::default());
     let pinned = Rc::new(RefCell::new(load_pinned()));
     let pinned_model = Rc::new(VecModel::<AppItem>::default());
@@ -380,13 +387,14 @@ fn main() -> Result<(), slint::PlatformError> {
     ui.set_app_count(0);
 
     // ── Load pinned apps ──
-    update_pinned_model(&ui, &all_apps, &pinned_model, &icon_cache, &pinned.borrow());
+    update_pinned_model(&ui, &all_apps, &pinned_model, &path_cache, &img_cache, &pinned.borrow());
 
     // ── Filter callback (search text or category changed) ──
     {
         let ui_weak = ui.as_weak();
         let all_apps = all_apps.clone();
-        let icon_cache = icon_cache.clone();
+        let path_cache = path_cache.clone();
+        let img_cache = img_cache.clone();
         let model = model.clone();
         let cat_model = cat_model.clone();
         let pinned = pinned.clone();
@@ -414,7 +422,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 .map(|c| c.key.to_string())
                 .unwrap_or_else(|| "all".to_string());
 
-            update_view(&ui, &all_apps, &model, &icon_cache, &cat_key, &search, &pinned.borrow());
+            update_view(&ui, &all_apps, &model, &path_cache, &img_cache, &cat_key, &search, &pinned.borrow());
         });
     }
 
@@ -454,7 +462,8 @@ fn main() -> Result<(), slint::PlatformError> {
     {
         let ui_weak = ui.as_weak();
         let all_apps = all_apps.clone();
-        let icon_cache = icon_cache.clone();
+        let path_cache = path_cache.clone();
+        let img_cache = img_cache.clone();
         let model = model.clone();
         let pinned = pinned.clone();
         let pinned_model = pinned_model.clone();
@@ -473,7 +482,7 @@ fn main() -> Result<(), slint::PlatformError> {
                 save_pinned(&p);
             }
             let p = pinned.borrow();
-            update_pinned_model(&ui, &all_apps, &pinned_model, &icon_cache, &p);
+            update_pinned_model(&ui, &all_apps, &pinned_model, &path_cache, &img_cache, &p);
             // Refresh current view to update is_pinned flags
             let search = ui.get_search_text().to_string();
             let cat_idx = ui.get_active_category() as usize;
@@ -482,7 +491,7 @@ fn main() -> Result<(), slint::PlatformError> {
                     .row_data(cat_idx)
                     .map(|c| c.key.to_string())
                     .unwrap_or_else(|| "all".to_string());
-                update_view(&ui, &all_apps, &model, &icon_cache, &cat_key, &search, &p);
+                update_view(&ui, &all_apps, &model, &path_cache, &img_cache, &cat_key, &search, &p);
             }
         });
     }
