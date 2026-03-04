@@ -18,7 +18,7 @@ src/compositors/dwm/st/st
 **/target/
 
 # ── Dev-only test scripts ──────────────────────────────────
-src/shared/notif-center/test-notifications.sh
+src/shared/apps/notif-center/test-notifications.sh
 
 # ── Generated protocol files (wayland-scanner output) ───────
 xdg-shell-protocol.c

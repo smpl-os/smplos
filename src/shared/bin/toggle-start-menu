@@ -5,7 +5,7 @@
 
 APP_NAME="start-menu"
 BIN_PATH="/usr/local/bin/$APP_NAME"
-[[ -f "$BIN_PATH" ]] || BIN_PATH="$HOME/Documents/sources/smplos/src/shared/start-menu/target/release/$APP_NAME"
+[[ -f "$BIN_PATH" ]] || BIN_PATH="$HOME/Documents/sources/smplos/src/shared/apps/start-menu/target/release/$APP_NAME"
 
 cleanup_bind() {
     hyprctl keyword unbind ", mouse:272" 2>/dev/null

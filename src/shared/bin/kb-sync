@@ -38,7 +38,7 @@ layouts="$conf_layouts"
 variants="$conf_variants"
 
 # Strip empty entries from comma-separated layout/variant strings.
-# A bug in kb-center or manual editing can leave ",ru" instead of "us,ru".
+# A bug in settings or manual editing can leave ",ru" instead of "us,ru".
 # Hyprland rejects empty layout codes: "layout: (unset),ru"
 clean_csv() {
     local input="$1" result=""

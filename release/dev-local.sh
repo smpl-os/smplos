@@ -211,12 +211,8 @@ if do_component rust; then
             log "$app: binary missing"
             stale_apps+=("$app"); continue
         fi
-        # settings lives under apps/settings, others under shared/<app>
-        if [[ "$app" == "settings" ]]; then
-            app_src="$SRC_DIR/shared/apps/settings"
-        else
-            app_src="$SRC_DIR/shared/$app"
-        fi
+        # All Rust apps live under shared/apps/
+        app_src="$SRC_DIR/shared/apps/$app"
         if [[ -d "$app_src" ]]; then
             newest_src=$(find "$app_src" -path '*/target' -prune -o \( -name '*.rs' -o -name '*.slint' -o -name 'Cargo.toml' \) -print | xargs stat -c '%Y' 2>/dev/null | sort -rn | head -1)
             bin_time=$(stat -c '%Y' "$BIN_DIR/$app" 2>/dev/null || echo 0)

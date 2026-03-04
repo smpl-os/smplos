@@ -447,7 +447,7 @@ fn write_hypridle_config(lock_secs: u32, dpms_secs: u32, suspend_secs: u32) {
         .spawn();
 }
 
-fn get_about_info() -> (String, String, String, String) {
+fn get_about_info() -> (String, String, String, String, String, String, String) {
     let version = std::fs::read_to_string("/etc/os-release")
         .ok()
         .and_then(|c| {
@@ -482,7 +482,81 @@ fn get_about_info() -> (String, String, String, String) {
         .trim()
         .to_string();
 
-    (version, kernel, uptime, hostname)
+    // CPU: parse /proc/cpuinfo for model name + core count
+    let cpu = std::fs::read_to_string("/proc/cpuinfo")
+        .ok()
+        .and_then(|c| {
+            let model = c.lines()
+                .find(|l| l.starts_with("model name"))
+                .and_then(|l| l.split(':').nth(1))
+                .map(|s| s.trim().to_string())?;
+            let cores = c.lines()
+                .filter(|l| l.starts_with("processor"))
+                .count();
+            Some(format!("{} ({} cores)", model, cores))
+        })
+        .unwrap_or_default();
+
+    // RAM: parse /proc/meminfo for MemTotal
+    let ram = std::fs::read_to_string("/proc/meminfo")
+        .ok()
+        .and_then(|c| {
+            let kb: u64 = c.lines()
+                .find(|l| l.starts_with("MemTotal:"))
+                .and_then(|l| l.split_whitespace().nth(1))
+                .and_then(|s| s.parse().ok())?;
+            let gb = kb as f64 / 1_048_576.0;
+            Some(format!("{:.1} GB", gb))
+        })
+        .unwrap_or_default();
+
+    // GPU: try nvidia-smi first (includes VRAM), then lspci + sysfs VRAM
+    let gpu = (|| -> Option<String> {
+        // NVIDIA: nvidia-smi gives name + VRAM in one shot
+        if let Ok(o) = std::process::Command::new("nvidia-smi")
+            .args(["--query-gpu=name,memory.total", "--format=csv,noheader,nounits"])
+            .output()
+        {
+            let out = String::from_utf8_lossy(&o.stdout);
+            let line = out.trim();
+            if !line.is_empty() && o.status.success() {
+                // Format: "NVIDIA GeForce RTX 4090, 24576"
+                let parts: Vec<&str> = line.splitn(2, ", ").collect();
+                if parts.len() == 2 {
+                    if let Ok(mib) = parts[1].trim().parse::<u64>() {
+                        let gb = mib as f64 / 1024.0;
+                        return Some(format!("{} ({:.0} GB)", parts[0].trim(), gb));
+                    }
+                }
+                return Some(line.to_string());
+            }
+        }
+
+        // Fallback: lspci for GPU name
+        let lspci_out = std::process::Command::new("lspci").output().ok()?;
+        let lspci = String::from_utf8_lossy(&lspci_out.stdout);
+        let gpu_name = lspci.lines()
+            .find(|l| l.contains("VGA") || l.contains("3D controller"))
+            .and_then(|l| l.split(':').last())
+            .map(|s| s.trim().to_string())?;
+
+        // AMD: try sysfs for VRAM
+        if let Ok(entries) = std::fs::read_dir("/sys/class/drm") {
+            for entry in entries.flatten() {
+                let vram_path = entry.path().join("device/mem_info_vram_total");
+                if let Ok(val) = std::fs::read_to_string(&vram_path) {
+                    if let Ok(bytes) = val.trim().parse::<u64>() {
+                        let gb = bytes as f64 / (1024.0 * 1024.0 * 1024.0);
+                        return Some(format!("{} ({:.0} GB)", gpu_name, gb));
+                    }
+                }
+            }
+        }
+
+        Some(gpu_name)
+    })().unwrap_or_default();
+
+    (version, kernel, uptime, hostname, cpu, ram, gpu)
 }
 
 // ── Main ─────────────────────────────────────────────────────────────────────
@@ -747,11 +821,14 @@ fn main() -> Result<(), slint::PlatformError> {
     // ── About tab init ───────────────────────────────────────────────────────
 
     {
-        let (version, kernel, uptime, hostname) = get_about_info();
+        let (version, kernel, uptime, hostname, cpu, ram, gpu) = get_about_info();
         ui.set_about_version(slint::SharedString::from(format!("v{}", version)));
         ui.set_about_kernel(slint::SharedString::from(kernel));
         ui.set_about_uptime(slint::SharedString::from(uptime));
         ui.set_about_hostname(slint::SharedString::from(hostname));
+        ui.set_about_cpu(slint::SharedString::from(cpu));
+        ui.set_about_ram(slint::SharedString::from(ram));
+        ui.set_about_gpu(slint::SharedString::from(gpu));
     }
 
     // ══════════════════════════════════════════════════════════════════════════

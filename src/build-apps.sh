@@ -105,8 +105,7 @@ app_is_stale() {
 if [[ "$CLEAN_BUILD" == "false" ]]; then
     filtered_apps=()
     for app in "${REQUESTED_APPS[@]}"; do
-        local rel="src/shared/$app"
-        [[ "$app" == "settings" ]] && rel="src/shared/apps/settings"
+        rel="src/shared/apps/$app"
         if app_is_stale "$app" "$rel"; then
             filtered_apps+=("$app")
         else
@@ -149,9 +148,7 @@ export RUSTFLAGS="-C link-arg=-fuse-ld=mold"
 
 # Build each requested Rust app
 for app in $APPS; do
-    app_src="$SRC_DIR/shared/$app"
-    # settings lives under apps/ subdirectory
-    [[ "$app" == "settings" ]] && app_src="$SRC_DIR/shared/apps/settings"
+    app_src="$SRC_DIR/shared/apps/$app"
     if [[ ! -f "$app_src/Cargo.toml" ]]; then
         echo "[build] $app: source not found, skipping"
         continue
@@ -242,8 +239,7 @@ fi
 # run can skip it. Only written when the working tree is clean — dirty local
 # edits stay stale until committed, forcing a rebuild after the commit.
 for app in "${REQUESTED_APPS[@]}"; do
-    local rel="src/shared/$app"
-    [[ "$app" == "settings" ]] && rel="src/shared/apps/settings"
+    rel="src/shared/apps/$app"
     if [[ -f "$BIN_OUTPUT/$app" ]] && git_tree_clean "$rel"; then
         git_tree_hash "$rel" > "$BIN_OUTPUT/$app.built-at"
     fi

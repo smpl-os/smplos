@@ -407,8 +407,8 @@ export component MainWindow inherits Window {
     property <int> highlighted-dropdown-index: 0;
     property <string> search-text: "";
     property <bool> show-help: false;
-    property <bool> show-search: false;
     property <string> global-search-text: "";
+    property <int> search-selected-index: 0;
     in property <[SearchResult]> search-results;
 
     // ── Dictation tab properties ──
@@ -455,6 +455,9 @@ export component MainWindow inherits Window {
     in property <string> about-kernel: "";
     in property <string> about-uptime: "";
     in property <string> about-hostname: "smplOS";
+    in property <string> about-cpu: "";
+    in property <string> about-ram: "";
+    in property <string> about-gpu: "";
 
     // ── Callbacks ──
     callback close();
@@ -498,13 +501,10 @@ export component MainWindow inherits Window {
 
     // ── Keyboard shortcuts ──
     focus-scope := FocusScope {
+        // Grab focus on launch so shortcuts work immediately
+        init => { self.focus(); }
         key-pressed(e) => {
             if e.text == Key.Escape {
-                if root.show-search {
-                    root.show-search = false;
-                    focus-scope.focus();
-                    return accept;
-                }
                 if root.dropdown-open {
                     root.dropdown-open = false;
                     return accept;
@@ -573,15 +573,38 @@ export component MainWindow inherits Window {
                 root.dropdown-open = false;
                 return accept;
             }
-            // Ctrl+F — toggle search
+            // Ctrl+F — focus search box
             if e.modifiers.control && (e.text == "f" || e.text == "F") {
-                root.show-search = !root.show-search;
-                root.global-search-text = "";
-                if root.show-search {
-                    global-search-input.focus();
-                } else {
-                    focus-scope.focus();
+                global-search-input.focus();
+                return accept;
+            }
+            // Search results keyboard navigation
+            if root.global-search-text != "" && root.search-results.length > 0 {
+                if e.text == Key.DownArrow {
+                    if root.search-selected-index < root.search-results.length - 1 {
+                        root.search-selected-index += 1;
+                    }
+                    return accept;
                 }
+                if e.text == Key.UpArrow {
+                    if root.search-selected-index > 0 {
+                        root.search-selected-index -= 1;
+                    }
+                    return accept;
+                }
+                if e.text == Key.Return {
+                    root.active-tab = root.search-results[root.search-selected-index].tab-index;
+                    root.global-search-text = "";
+                    root.search-selected-index = 0;
+                    root.filter-search("");
+                    return accept;
+                }
+            }
+            if root.global-search-text != "" && e.text == Key.Escape {
+                root.global-search-text = "";
+                root.search-selected-index = 0;
+                root.filter-search("");
+                focus-scope.focus();
                 return accept;
             }
             // Tab switching: 1-5
@@ -607,18 +630,24 @@ export component MainWindow inherits Window {
             height: 32px;
             spacing: 8px;
 
+            // Search input (doubles as title bar)
             Rectangle {
                 horizontal-stretch: 1;
                 background: transparent;
 
+                // "Settings" title, centered
                 Text {
                     text: "Settings";
                     color: Theme.fg;
                     font-size: 14px;
                     font-weight: 600;
                     vertical-alignment: center;
+                    horizontal-alignment: center;
+                    width: 100%;
+                    height: 100%;
                 }
 
+                // Drag area (full header, but search box sits on top to block it)
                 drag-area := TouchArea {
                     moved => {
                         root.move-window(
@@ -627,6 +656,73 @@ export component MainWindow inherits Window {
                         );
                     }
                     mouse-cursor: move;
+                }
+            }
+
+            // Inline search box (right edge of title bar)
+            Rectangle {
+                width: 160px;
+                height: 24px;
+                border-radius: 4px;
+                background: Theme.bg_light;
+
+                HorizontalLayout {
+                    spacing: 4px;
+                    padding-left: 6px;
+                    padding-right: 6px;
+
+                    VerticalLayout {
+                        alignment: center;
+                        Text {
+                            text: "\u{1F50D}";
+                            font-size: 10px;
+                            color: Theme.fg_dim;
+                        }
+                    }
+
+                    VerticalLayout {
+                        alignment: center;
+                        horizontal-stretch: 1;
+
+                        Rectangle {
+                            // Placeholder
+                            Text {
+                                visible: root.global-search-text == "";
+                                text: "Search...";
+                                font-size: 11px;
+                                color: Theme.fg_dim;
+                                vertical-alignment: center;
+                            }
+
+                            global-search-input := TextInput {
+                                font-size: 11px;
+                                color: Theme.fg;
+                                text <=> root.global-search-text;
+                                edited => {
+                                    root.search-selected-index = 0;
+                                    root.filter-search(self.text);
+                                }
+                                accepted => {
+                                    if root.search-results.length > 0 {
+                                        root.active-tab = root.search-results[root.search-selected-index].tab-index;
+                                        self.text = "";
+                                        root.global-search-text = "";
+                                        root.search-selected-index = 0;
+                                        root.filter-search("");
+                                        focus-scope.focus();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Block drag on the search box
+                TouchArea {
+                    mouse-cursor: text;
+                    clicked => {
+                        global-search-input.focus();
+                    }
                 }
             }
 
@@ -2502,6 +2598,33 @@ export component MainWindow inherits Window {
                             Text { text: "Compositor"; color: Theme.fg_dim; font-size: 12px; vertical-alignment: center; width: 80px; }
                             Text { text: "Hyprland"; color: Theme.fg; font-size: 12px; vertical-alignment: center; }
                         }
+
+                        Rectangle { height: 1px; background: Theme.bg_lighter; }
+
+                        // CPU
+                        HorizontalLayout {
+                            spacing: 8px;
+                            Text { text: "CPU"; color: Theme.fg_dim; font-size: 12px; vertical-alignment: center; width: 80px; }
+                            Text { text: root.about-cpu; color: Theme.fg; font-size: 12px; vertical-alignment: center; }
+                        }
+
+                        Rectangle { height: 1px; background: Theme.bg_lighter; }
+
+                        // RAM
+                        HorizontalLayout {
+                            spacing: 8px;
+                            Text { text: "Memory"; color: Theme.fg_dim; font-size: 12px; vertical-alignment: center; width: 80px; }
+                            Text { text: root.about-ram; color: Theme.fg; font-size: 12px; vertical-alignment: center; }
+                        }
+
+                        if root.about-gpu != "": Rectangle { height: 1px; background: Theme.bg_lighter; }
+
+                        // GPU (if detected)
+                        if root.about-gpu != "": HorizontalLayout {
+                            spacing: 8px;
+                            Text { text: "GPU"; color: Theme.fg_dim; font-size: 12px; vertical-alignment: center; width: 80px; }
+                            Text { text: root.about-gpu; color: Theme.fg; font-size: 12px; vertical-alignment: center; }
+                        }
                     }
                 }
 
@@ -2587,139 +2710,67 @@ export component MainWindow inherits Window {
         }
     }
 
-    // ── Search overlay ───────────────────────────────────────────────────────
+    // ── Inline search results dropdown ─────────────────────────────────────────
 
-    Rectangle {
-        visible: root.show-search;
-        width: 100%;
-        height: 100%;
-        background: Theme.bg.transparentize(15%);
+    if root.search-results.length > 0 && root.global-search-text != "": Rectangle {
+        x: root.width - 12px - 260px;
+        y: 44px;
+        width: 260px;
+        height: min(280px, root.search-results.length * 34px + 8px);
+        border-radius: 6px;
+        background: Theme.bg_light;
+        clip: true;
 
-        // Dismiss on click outside the box
-        TouchArea {
-            clicked => {
-                root.show-search = false;
-                focus-scope.focus();
-            }
-        }
+        // Prevent clicks from falling through
+        TouchArea {}
 
-        // Centered search box
-        VerticalLayout {
-            alignment: center;
-            HorizontalLayout {
-                alignment: center;
+        Flickable {
+            width: parent.width;
+            height: parent.height;
 
-                Rectangle {
-                    width: 400px;
-                    height: root.search-results.length > 0
-                        ? min(380px, 52px + root.search-results.length * 36px)
-                        : 52px;
-                    border-radius: 8px;
-                    background: Theme.bg_light;
-                    clip: true;
+            VerticalLayout {
+                spacing: 0px;
+                padding: 4px;
 
-                    // Block dismiss click inside the box
-                    TouchArea {}
+                for result[idx] in root.search-results: Rectangle {
+                    height: 30px;
+                    border-radius: 4px;
+                    background: idx == root.search-selected-index ? Theme.accent :
+                                sr-touch.has-hover ? Theme.bg_lighter : transparent;
 
-                    VerticalLayout {
-                        spacing: 0px;
+                    HorizontalLayout {
+                        padding-left: 10px;
+                        padding-right: 10px;
 
-                        // Search input
-                        Rectangle {
-                            height: 44px;
-                            HorizontalLayout {
-                                padding-left: 12px;
-                                padding-right: 12px;
-                                spacing: 8px;
-
-                                VerticalLayout {
-                                    alignment: center;
-                                    Text {
-                                        text: "\u{1F50D}";
-                                        font-size: 14px;
-                                        color: Theme.fg_dim;
-                                    }
-                                }
-
-                                VerticalLayout {
-                                    alignment: center;
-                                    horizontal-stretch: 1;
-                                    global-search-input := TextInput {
-                                        font-size: 13px;
-                                        color: Theme.fg;
-                                        text: root.global-search-text;
-                                        edited => {
-                                            root.global-search-text = self.text;
-                                            root.filter-search(self.text);
-                                        }
-                                        accepted => {
-                                            // Jump to first result
-                                            if root.search-results.length > 0 {
-                                                root.active-tab = root.search-results[0].tab-index;
-                                                root.show-search = false;
-                                                focus-scope.focus();
-                                            }
-                                        }
-                                    }
-                                }
+                        VerticalLayout {
+                            alignment: center;
+                            horizontal-stretch: 1;
+                            Text {
+                                text: result.label;
+                                color: idx == root.search-selected-index ? Theme.bg : Theme.fg;
+                                font-size: 12px;
+                                overflow: elide;
                             }
                         }
 
-                        // Separator
-                        if root.search-results.length > 0: Rectangle {
-                            height: 1px;
-                            background: Theme.bg_lighter;
-                        }
-
-                        // Results list
-                        if root.search-results.length > 0: Flickable {
-                            vertical-stretch: 1;
-
-                            VerticalLayout {
-                                spacing: 0px;
-                                padding: 4px;
-
-                                for result[idx] in root.search-results: Rectangle {
-                                    height: 32px;
-                                    border-radius: 4px;
-                                    background: search-result-touch.has-hover ? Theme.bg_lighter : transparent;
-
-                                    HorizontalLayout {
-                                        padding-left: 12px;
-                                        padding-right: 12px;
-
-                                        VerticalLayout {
-                                            alignment: center;
-                                            horizontal-stretch: 1;
-                                            Text {
-                                                text: result.label;
-                                                color: Theme.fg;
-                                                font-size: 12px;
-                                                overflow: elide;
-                                            }
-                                        }
-
-                                        VerticalLayout {
-                                            alignment: center;
-                                            Text {
-                                                text: result.tab-name;
-                                                color: Theme.fg_dim;
-                                                font-size: 10px;
-                                            }
-                                        }
-                                    }
-
-                                    search-result-touch := TouchArea {
-                                        clicked => {
-                                            root.active-tab = result.tab-index;
-                                            root.show-search = false;
-                                            focus-scope.focus();
-                                        }
-                                        mouse-cursor: pointer;
-                                    }
-                                }
+                        VerticalLayout {
+                            alignment: center;
+                            Text {
+                                text: result.tab-name;
+                                color: idx == root.search-selected-index ? Theme.bg : Theme.fg_dim;
+                                font-size: 10px;
                             }
                         }
+                    }
+
+                    sr-touch := TouchArea {
+                        clicked => {
+                            root.active-tab = result.tab-index;
+                            root.global-search-text = "";
+                            root.filter-search("");
+                            focus-scope.focus();
+                        }
+                        mouse-cursor: pointer;
                     }
                 }
             }
