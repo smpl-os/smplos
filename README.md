@@ -15,12 +15,22 @@
 </p>
 
 <p align="center">
-  <strong>Latest release: v0.5.0</strong>
+  <strong>Latest release: v0.6.0</strong>
 </p>
 
 ---
 
-## What's new in v0.5.0
+## What's new in v0.6.0
+
+- **Language Settings (kb-center) — Dictation tab.** kb-center now has a full Dictation tab for setting up speech-to-text via Voxtype/Whisper. Pick a language, choose a model size, and install with a single click. Supports 100+ languages, English-alongside mode, 3-tier package fallback (pacman, paru, manual PKGBUILD), and live progress tracking. The keyboard tab is unchanged.
+- **Fix post-install black screen on Hyprland 0.54+.** Hyprland migrated from wlroots to the Aquamarine backend, silently breaking `WLR_NO_HARDWARE_CURSORS` and `WLR_RENDERER_ALLOW_SOFTWARE` env vars. The VM cursor workaround now uses the native `cursor:no_hardware_cursors` config option. Fixes black screen after login in QEMU/VirtualBox.
+- **Transparent kb-center.** Added `no-frame: true` and proper alpha background to the Language Settings window, matching all other Slint apps.
+- **Dictation quick-settings pill.** EWW bar quick-settings panel shows a dictation status pill with themed mic SVG — toggle the service or jump to settings.
+- **Dictation keybinding.** <kbd>Super</kbd>+<kbd>Ctrl</kbd>+<kbd>X</kbd> toggles push-to-talk dictation globally.
+
+---
+
+## What was new in v0.5.0
 
 - **Transparent GUI apps** — All Rust/Slint apps (notif-center, kb-center, disp-center, start-menu, webapp-center) now use the software renderer, enabling proper alpha transparency and blur through Hyprland. Previously only app-center had working transparency.
 - **Reliable Hyprland session startup** — greetd now launches via the real `start-hyprland` watchdog binary, which restarts Hyprland in safe mode on crash instead of leaving a black screen.
@@ -105,7 +115,7 @@ A graphical display configuration panel. Detects connected monitors via Hyprland
 
 #### Keyboard Manager
 
-A keyboard layout and input configuration panel. Shows active layouts, lets you add/remove languages, toggle NumLock behavior, and adjust repeat rate and delay - all applied live via `hyprctl keyword`. Previously this required hand-editing `input.conf` and reloading the compositor. Now it's a click.
+A keyboard layout and input configuration panel with two tabs. The **Keyboard** tab shows active layouts, lets you add/remove languages, and includes a live key-cap preview that updates as you switch layouts. The **Dictation** tab sets up speech-to-text via Voxtype/Whisper — pick a language, choose a model size, and install with one click. Supports 100+ languages, 3-tier package fallback, and live progress. All changes are applied live via `hyprctl keyword`.
 
 <a href="images/8-keyboard.png"><img src="images/8-keyboard.png" width="720" /></a>
 

@@ -5,11 +5,7 @@
 
 die() { notify-send "smplOS Settings" "$1"; exit 1; }
 
-term() {
-  command -v terminal &>/dev/null && exec terminal -e "$@"
-  if [[ -n "$WAYLAND_DISPLAY" ]]; then st-wl -e "$@"
-  else st -e "$@"; fi
-}
+term() { exec terminal -e "$@"; }
 
 case "${1:-}" in
   appearance)
@@ -50,8 +46,14 @@ case "${1:-}" in
     ;;
 
   keyboard)
-    command -v kb-center &>/dev/null && exec kb-center
-    die "Keyboard Center not found"
+    command -v kb-center &>/dev/null && exec kb-center --tab keyboard
+    die "Language Settings not found"
+    ;;
+
+  dictation)
+    command -v kb-center &>/dev/null && exec kb-center --tab dictation
+    # Fall back to standalone script if kb-center unavailable
+    exec dictation-settings
     ;;
 
   power)
@@ -68,7 +70,7 @@ case "${1:-}" in
     ;;
 
   *)
-    echo "Usage: smplos-settings {appearance|display|keyboard|network|bluetooth|audio|power|about}" >&2
+    echo "Usage: smplos-settings {appearance|display|keyboard|network|bluetooth|audio|dictation|power|about}" >&2
     exit 1
     ;;
 esac

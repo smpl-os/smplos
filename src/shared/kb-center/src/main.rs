@@ -1,3 +1,4 @@
+mod dictation;
 mod layouts;
 mod theme;
 mod xkb_labels;
@@ -116,9 +117,9 @@ fn main() -> Result<(), slint::PlatformError> {
     let args: Vec<String> = std::env::args().collect();
 
     if args.iter().any(|a| a == "-h" || a == "--help") {
-        eprintln!("Usage: kb-center [layout] [variant]");
-        eprintln!("  e.g: kb-center ru phonetic");
-        eprintln!("       kb-center fr");
+        eprintln!("Usage: kb-center [--tab keyboard|dictation] [layout] [variant]");
+        eprintln!("  e.g: kb-center --tab dictation");
+        eprintln!("       kb-center ru phonetic");
         eprintln!("       kb-center");
         std::process::exit(0);
     }
@@ -137,8 +138,28 @@ fn main() -> Result<(), slint::PlatformError> {
         }
     };
 
-    let initial_layout = args.get(1).map(|s| s.as_str()).unwrap_or("us");
-    let initial_variant = args.get(2).map(|s| s.as_str()).unwrap_or("");
+    // Parse --tab and positional args
+    let mut initial_tab: i32 = 0; // 0 = keyboard, 1 = dictation
+    let mut positional: Vec<String> = Vec::new();
+    let mut i = 1;
+    while i < args.len() {
+        match args[i].as_str() {
+            "--tab" | "-t" => {
+                if let Some(tab) = args.get(i + 1) {
+                    match tab.as_str() {
+                        "dictation" | "d" | "1" => initial_tab = 1,
+                        _ => initial_tab = 0,
+                    }
+                    i += 1;
+                }
+            }
+            other if !other.starts_with('-') => positional.push(other.to_string()),
+            _ => {}
+        }
+        i += 1;
+    }
+    let initial_layout = positional.first().map(|s| s.as_str()).unwrap_or("us");
+    let initial_variant = positional.get(1).map(|s| s.as_str()).unwrap_or("");
 
     // Set up Slint backend first so the window appears immediately
     let backend = i_slint_backend_winit::Backend::builder()
@@ -149,7 +170,7 @@ fn main() -> Result<(), slint::PlatformError> {
             attrs
                 .with_name("kb-center", "kb-center")
                 .with_decorations(false)
-                .with_inner_size(LogicalSize::new(640.0_f64, 440.0))
+                .with_inner_size(LogicalSize::new(800.0_f64, 480.0))
         })
         .build()?;
     slint::platform::set_platform(Box::new(backend))
@@ -157,6 +178,70 @@ fn main() -> Result<(), slint::PlatformError> {
 
     let ui = MainWindow::new()?;
     apply_theme(&ui);
+
+    // Set initial tab from CLI args
+    ui.set_initial_tab(initial_tab);
+
+    // Clean up stale progress file from a previous crashed run
+    dictation::cleanup_stale_progress();
+
+    // Set initial dictation status + populate language/model lists
+    {
+        // Language list (display names)
+        let lang_names: Vec<SharedString> = dictation::LANGUAGES
+            .iter()
+            .map(|l| SharedString::from(l.name))
+            .collect();
+        ui.set_dictation_lang_list(ModelRc::from(Rc::new(VecModel::from(lang_names))));
+
+        // Model list
+        let model_entries: Vec<ModelEntry> = dictation::MODELS
+            .iter()
+            .map(|m| ModelEntry {
+                label: m.label.into(),
+                size: m.size.into(),
+                note: m.note.into(),
+                english_only: m.english_only,
+            })
+            .collect();
+        ui.set_dictation_model_list(ModelRc::from(Rc::new(VecModel::from(model_entries))));
+
+        // Defaults
+        ui.set_dictation_selected_lang_name("English (recommended)".into());
+        ui.set_dictation_selected_model_idx(0); // base.en
+        ui.set_dictation_also_english(false);
+        ui.set_dictation_show_also_english(false);
+
+        let installed = dictation::is_installed();
+        ui.set_dictation_installed(installed);
+        if installed {
+            if let Some(cfg) = dictation::read_config() {
+                // Show human-readable names in the status card
+                ui.set_dictation_language(dictation::language_display(&cfg));
+                ui.set_dictation_model(dictation::model_display(&cfg.model));
+
+                // Set dropdown selections from config
+                if let Some(idx) = dictation::find_language_idx(&cfg.primary_code) {
+                    ui.set_dictation_selected_lang_name(
+                        dictation::LANGUAGES[idx].name.into(),
+                    );
+                }
+                if let Some(idx) = dictation::find_model_idx(&cfg.model) {
+                    ui.set_dictation_selected_model_idx(idx as i32);
+                }
+                ui.set_dictation_also_english(cfg.also_english);
+                let is_en = cfg.primary_code == "en" || cfg.primary_code == "auto";
+                ui.set_dictation_show_also_english(!is_en);
+                ui.set_dictation_config_missing(false);
+            } else {
+                // Installed but config is missing or corrupt
+                ui.set_dictation_config_missing(true);
+                ui.set_dictation_language("(no config)".into());
+                ui.set_dictation_model("(no config)".into());
+            }
+            ui.set_dictation_service_running(dictation::is_service_running());
+        }
+    }
 
     // One-time cleanup of old per-app config (OS config is the source of truth).
     layouts::cleanup_legacy_config();
@@ -425,7 +510,223 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
-    // Poll for theme changes (same pattern as notif-center)
+    // ── Dictation callbacks ──
+
+    // Shared state for dictation language filtering (same pattern as keyboard layouts)
+    let dictation_filtered_indices: Rc<RefCell<Vec<usize>>> =
+        Rc::new(RefCell::new((0..dictation::LANGUAGES.len()).collect()));
+
+    // Filter dictation languages by search text
+    {
+        let ui_weak = ui.as_weak();
+        let dfi = dictation_filtered_indices.clone();
+        ui.on_filter_dictation_langs(move |query| {
+            let query_lower = query.to_lowercase();
+            let mut new_indices = Vec::new();
+            let mut filtered_names = Vec::new();
+
+            for (i, lang) in dictation::LANGUAGES.iter().enumerate() {
+                if query.is_empty() || lang.name.to_lowercase().contains(&query_lower) {
+                    new_indices.push(i);
+                    filtered_names.push(SharedString::from(lang.name));
+                }
+            }
+
+            *dfi.borrow_mut() = new_indices;
+
+            if let Some(ui) = ui_weak.upgrade() {
+                ui.set_dictation_lang_list(ModelRc::from(Rc::new(VecModel::from(
+                    filtered_names,
+                ))));
+            }
+        });
+    }
+
+    // Select a dictation language from the dropdown
+    {
+        let ui_weak = ui.as_weak();
+        let dfi = dictation_filtered_indices.clone();
+        ui.on_select_dictation_lang(move |idx| {
+            let original_idx = {
+                let fi = dfi.borrow();
+                match fi.get(idx as usize) {
+                    Some(&i) => i,
+                    None => return,
+                }
+            };
+
+            let lang = &dictation::LANGUAGES[original_idx];
+            if let Some(ui) = ui_weak.upgrade() {
+                ui.set_dictation_selected_lang_name(lang.name.into());
+
+                // Show "also English" checkbox for non-English, non-auto languages
+                let is_en_or_auto = lang.code == "en" || lang.code == "auto";
+                ui.set_dictation_show_also_english(!is_en_or_auto);
+                if is_en_or_auto {
+                    ui.set_dictation_also_english(false);
+                }
+
+                // Auto-select appropriate model:
+                // English -> base.en (index 0)
+                // Non-English -> switch away from any english-only model
+                if lang.code == "en" {
+                    ui.set_dictation_selected_model_idx(0); // base.en
+                } else {
+                    let current = ui.get_dictation_selected_model_idx() as usize;
+                    if dictation::is_model_english_only(current) {
+                        ui.set_dictation_selected_model_idx(1); // base (multilingual)
+                    }
+                }
+
+                // Reset the language list back to full after selection
+                let all_names: Vec<SharedString> = dictation::LANGUAGES
+                    .iter()
+                    .map(|l| SharedString::from(l.name))
+                    .collect();
+                ui.set_dictation_lang_list(ModelRc::from(Rc::new(VecModel::from(all_names))));
+                let mut fi = dfi.borrow_mut();
+                *fi = (0..dictation::LANGUAGES.len()).collect();
+            }
+        });
+    }
+
+    // Start dictation install (fresh install)
+    {
+        let ui_weak = ui.as_weak();
+        ui.on_start_dictation_install(move || {
+            if let Some(ui) = ui_weak.upgrade() {
+                // Guard: don't double-launch
+                if dictation::is_install_running() {
+                    return;
+                }
+
+                // Resolve selected language code from the displayed name
+                let lang_name = ui.get_dictation_selected_lang_name();
+                let lang_code = dictation::LANGUAGES.iter()
+                    .find(|l| l.name == lang_name.as_str())
+                    .map(|l| l.code)
+                    .unwrap_or("en");
+
+                let mut model_idx = ui.get_dictation_selected_model_idx() as usize;
+
+                // Validate: english-only model with non-English language
+                if lang_code != "en" && dictation::is_model_english_only(model_idx) {
+                    ui.set_dictation_selected_model_idx(1); // auto-fix to base
+                    model_idx = 1;
+                }
+
+                let model_id = dictation::MODELS.get(model_idx)
+                    .map(|m| m.id)
+                    .unwrap_or("base");
+
+                let also_english = ui.get_dictation_also_english();
+
+                // Write config before install so voxtype reads it on first run
+                if !dictation::write_config(lang_code, model_id, also_english) {
+                    ui.set_dictation_progress_text("Error: Could not write config file".into());
+                    ui.set_dictation_install_error(true);
+                    ui.set_dictation_installing(true);
+                    return;
+                }
+
+                ui.set_dictation_progress(0.0);
+                ui.set_dictation_progress_text("Starting...".into());
+                ui.set_dictation_install_error(false);
+                ui.set_dictation_installing(true);
+                if !dictation::launch_install() {
+                    // Spawn failed -- error written to progress file, timer picks it up
+                    ui.set_dictation_install_error(true);
+                }
+            }
+        });
+    }
+
+    // Reconfigure dictation (change language/model on existing install)
+    {
+        let ui_weak = ui.as_weak();
+        ui.on_start_dictation_reconfigure(move || {
+            if let Some(ui) = ui_weak.upgrade() {
+                // Guard: don't double-launch
+                if dictation::is_install_running() {
+                    return;
+                }
+
+                let lang_name = ui.get_dictation_selected_lang_name();
+                let lang_code = dictation::LANGUAGES.iter()
+                    .find(|l| l.name == lang_name.as_str())
+                    .map(|l| l.code)
+                    .unwrap_or("en");
+
+                let mut model_idx = ui.get_dictation_selected_model_idx() as usize;
+
+                // Validate: english-only model with non-English language
+                if lang_code != "en" && dictation::is_model_english_only(model_idx) {
+                    ui.set_dictation_selected_model_idx(1);
+                    model_idx = 1;
+                }
+
+                let model_id = dictation::MODELS.get(model_idx)
+                    .map(|m| m.id)
+                    .unwrap_or("base");
+
+                let also_english = ui.get_dictation_also_english();
+
+                // Write new config
+                if !dictation::write_config(lang_code, model_id, also_english) {
+                    ui.set_dictation_progress_text("Error: Could not write config file".into());
+                    ui.set_dictation_install_error(true);
+                    ui.set_dictation_installing(true);
+                    return;
+                }
+
+                // Download model + restart service
+                ui.set_dictation_progress(0.0);
+                ui.set_dictation_progress_text("Starting...".into());
+                ui.set_dictation_install_error(false);
+                ui.set_dictation_installing(true);
+                ui.set_dictation_configuring(false);
+                if !dictation::launch_model_download() {
+                    ui.set_dictation_install_error(true);
+                }
+            }
+        });
+    }
+
+    // Open dictation config in editor
+    ui.on_open_dictation_config(|| {
+        dictation::open_config();
+    });
+
+    // Cancel ongoing install/download
+    {
+        let ui_weak = ui.as_weak();
+        ui.on_cancel_dictation_install(move || {
+            if let Some(ui) = ui_weak.upgrade() {
+                ui.set_dictation_installing(false);
+                ui.set_dictation_install_error(false);
+                ui.set_dictation_progress(0.0);
+                ui.set_dictation_progress_text("Starting...".into());
+                dictation::clear_progress();
+            }
+        });
+    }
+
+    // Restart / start dictation service
+    {
+        let ui_weak = ui.as_weak();
+        ui.on_restart_dictation_service(move || {
+            dictation::restart_service();
+            // Update status after a short delay
+            let ui_weak2 = ui_weak.clone();
+            slint::Timer::single_shot(std::time::Duration::from_millis(500), move || {
+                if let Some(ui) = ui_weak2.upgrade() {
+                    ui.set_dictation_service_running(dictation::is_service_running());
+                }
+            });
+        });
+    }
+
+    // Poll for theme changes + dictation status (same pattern as notif-center)
     {
         let ui_weak = ui.as_weak();
         let timer = slint::Timer::default();
@@ -435,6 +736,78 @@ fn main() -> Result<(), slint::PlatformError> {
             move || {
                 if let Some(ui) = ui_weak.upgrade() {
                     apply_theme(&ui);
+
+                    if ui.get_dictation_installing() {
+                        // Poll progress file during install/download
+                        let (progress, text) = dictation::read_progress();
+                        ui.set_dictation_progress(progress);
+                        if !text.is_empty() {
+                            ui.set_dictation_progress_text(text.clone().into());
+                        }
+
+                        // Detect error state (script writes 0|Error: ...)
+                        if progress == 0.0 && text.starts_with("Error") {
+                            ui.set_dictation_install_error(true);
+                        }
+
+                        // Completion: progress hit 100%
+                        if progress >= 1.0 {
+                            // Brief delay so user sees "Done!" state
+                            let ui_weak2 = ui.as_weak();
+                            slint::Timer::single_shot(
+                                std::time::Duration::from_secs(2),
+                                move || {
+                                    if let Some(ui) = ui_weak2.upgrade() {
+                                        ui.set_dictation_installing(false);
+                                        dictation::clear_progress();
+
+                                        // Reload status
+                                        let installed = dictation::is_installed();
+                                        ui.set_dictation_installed(installed);
+                                        if installed {
+                                            if let Some(cfg) = dictation::read_config() {
+                                                ui.set_dictation_language(dictation::language_display(&cfg));
+                                                ui.set_dictation_model(dictation::model_display(&cfg.model));
+                                                if let Some(idx) = dictation::find_language_idx(&cfg.primary_code) {
+                                                    ui.set_dictation_selected_lang_name(
+                                                        dictation::LANGUAGES[idx].name.into(),
+                                                    );
+                                                }
+                                                if let Some(idx) = dictation::find_model_idx(&cfg.model) {
+                                                    ui.set_dictation_selected_model_idx(idx as i32);
+                                                }
+                                                ui.set_dictation_also_english(cfg.also_english);
+                                                let is_en = cfg.primary_code == "en" || cfg.primary_code == "auto";
+                                                ui.set_dictation_show_also_english(!is_en);
+                                                ui.set_dictation_config_missing(false);
+                                            } else {
+                                                ui.set_dictation_config_missing(true);
+                                                ui.set_dictation_language("(no config)".into());
+                                                ui.set_dictation_model("(no config)".into());
+                                            }
+                                            ui.set_dictation_service_running(dictation::is_service_running());
+                                        }
+                                    }
+                                },
+                            );
+                        }
+                    } else {
+                        // Normal status refresh (not during install)
+                        let installed = dictation::is_installed();
+                        ui.set_dictation_installed(installed);
+                        if installed {
+                            if let Some(cfg) = dictation::read_config() {
+                                ui.set_dictation_language(dictation::language_display(&cfg));
+                                ui.set_dictation_model(dictation::model_display(&cfg.model));
+                                ui.set_dictation_config_missing(false);
+                            } else if !dictation::config_exists() {
+                                ui.set_dictation_config_missing(true);
+                                ui.set_dictation_language("(no config)".into());
+                                ui.set_dictation_model("(no config)".into());
+                            }
+                            ui.set_dictation_service_running(dictation::is_service_running());
+                        }
+                    }
                 }
             },
         );

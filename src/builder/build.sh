@@ -1462,13 +1462,13 @@ timeout_style=menu
 
 menuentry "smplOS (%ARCH%, ${archiso_platform})" --class arch --class gnu-linux --class gnu --class os --id 'smplos' {
     set gfxpayload=keep
-    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID%
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% console=tty0 console=ttyS0,115200
     initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
 }
 
 menuentry "smplOS Safe Mode (%ARCH%, ${archiso_platform})" --class arch --class gnu-linux --class gnu --class os --id 'smplos-safe' {
     set gfxpayload=keep
-    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% nomodeset nouveau.modeset=0 mce=off console=ttyS0,115200
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% nomodeset nouveau.modeset=0 mce=off console=tty0 console=ttyS0,115200
     initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
 }
 GRUBCFG
@@ -1501,13 +1501,13 @@ timeout_style=menu
 
 menuentry "smplOS (%ARCH%, ${archiso_platform})" --class arch --class gnu-linux --class gnu --class os --id 'smplos' {
     set gfxpayload=keep
-    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}"
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" console=tty0 console=ttyS0,115200
     initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
 }
 
 menuentry "smplOS Safe Mode (%ARCH%, ${archiso_platform})" --class arch --class gnu-linux --class gnu --class os --id 'smplos-safe' {
     set gfxpayload=keep
-    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" nomodeset nouveau.modeset=0 mce=off console=ttyS0,115200
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" nomodeset nouveau.modeset=0 mce=off console=tty0 console=ttyS0,115200
     initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
 }
 LOOPBACKCFG

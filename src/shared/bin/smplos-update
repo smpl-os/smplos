@@ -3,24 +3,6 @@
 # Launched by notif-center "System Update" action or manually.
 # Opens in the user's default terminal.
 
-# Find the default terminal emulator
-# Priority: terminal (smplOS wrapper) > xdg-terminal-exec > st-wl > st > foot > xterm
-find_terminal() {
-    if command -v terminal &>/dev/null; then
-        echo "terminal"
-    elif command -v xdg-terminal-exec &>/dev/null; then
-        echo "xdg-terminal-exec"
-    elif [[ -n "$WAYLAND_DISPLAY" ]] && command -v st-wl &>/dev/null; then
-        echo "st-wl"
-    elif command -v st &>/dev/null; then
-        echo "st"
-    elif command -v foot &>/dev/null; then
-        echo "foot"
-    elif command -v xterm &>/dev/null; then
-        echo "xterm"
-    fi
-}
-
 # Parse --mode flag: 'apps' skips kernel/drivers; 'full' is a complete system update
 UPDATE_MODE="full"
 for arg in "$@"; do
@@ -31,8 +13,7 @@ for arg in "$@"; do
     esac
 done
 
-TERM_CMD=$(find_terminal)
-if [[ -z "$TERM_CMD" ]]; then
+if ! command -v terminal &>/dev/null; then
     notify-send "smplOS Update" "No terminal emulator found"
     exit 1
 fi
@@ -125,5 +106,4 @@ read -rp "Press Enter to close..."
 EOF
 chmod +x "$UPDATE_SCRIPT"
 
-# xdg-terminal-exec uses -e by default, st/foot also use -e
-exec "$TERM_CMD" -e "$UPDATE_SCRIPT"
+exec terminal -e "$UPDATE_SCRIPT"

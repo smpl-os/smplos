@@ -1,7 +1,7 @@
 /* smplOS rofi configuration */
 configuration {
     /* Terminal for apps with Terminal=true in .desktop */
-    terminal: "st-wl";
+    terminal: "terminal";
 
     /* Icon theme */
     icon-theme: "Adwaita";
