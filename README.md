@@ -26,7 +26,7 @@
 - **Fix post-install black screen on Hyprland 0.54+.** Hyprland migrated from wlroots to the Aquamarine backend, silently breaking `WLR_NO_HARDWARE_CURSORS` and `WLR_RENDERER_ALLOW_SOFTWARE` env vars. The VM cursor workaround now uses the native `cursor:no_hardware_cursors` config option. Fixes black screen after login in QEMU/VirtualBox.
 - **Transparent kb-center.** Added `no-frame: true` and proper alpha background to the Language Settings window, matching all other Slint apps.
 - **Dictation quick-settings pill.** EWW bar quick-settings panel shows a dictation status pill with themed mic SVG — toggle the service or jump to settings.
-- **Dictation keybinding.** <kbd>Super</kbd>+<kbd>Ctrl</kbd>+<kbd>X</kbd> toggles push-to-talk dictation globally.
+- **Dictation keybinding.** <kbd>Super</kbd>+<kbd>Ctrl</kbd>+<kbd>X</kbd> toggles dictation globally (matches Omarchy).
 
 ---
 
@@ -175,6 +175,7 @@ On first boot, a notification shows the essential keybindings. Here they are for
 | <kbd>Super</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd> | File manager |
 | <kbd>Super</kbd>+<kbd>Shift</kbd>+<kbd>B</kbd> | Web browser |
 | <kbd>Print</kbd> | Screenshot |
+| <kbd>Super</kbd>+<kbd>Ctrl</kbd>+<kbd>X</kbd> | Toggle dictation |
 | <kbd>Super</kbd>+<kbd>Escape</kbd> | Power menu |
 
 Press <kbd>Super</kbd>+<kbd>K</kbd> anytime to see all bindings in an overlay.

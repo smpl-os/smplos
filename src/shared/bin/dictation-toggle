@@ -4,7 +4,7 @@
 #   start  — begin recording (key-press binding)
 #   stop   — stop recording, transcribe, type result (key-release binding)
 #   toggle — press once to start, press again to stop (default)
-# Keybinding: SUPER+D (hold = start, release = stop)
+# Keybinding: SUPER+CTRL+X (toggle — matches Omarchy)
 # Run 'dictation-setup' to install Voxtype if not present.
 
 if ! command -v voxtype &>/dev/null; then

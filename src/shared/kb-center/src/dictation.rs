@@ -355,6 +355,8 @@ pub fn write_config(lang_code: &str, model_id: &str, also_english: bool) -> bool
          \n\
          [audio]\n\
          device = \"auto\"\n\
+         sample_rate = 16000\n\
+         max_duration_secs = 60\n\
          \n\
          [audio.feedback]\n\
          enabled = true\n\
@@ -438,10 +440,17 @@ pub fn launch_install() -> bool {
         "PROG=\"${XDG_RUNTIME_DIR:-/tmp}/kb-center-install-progress\"\n",
         "cleanup() { echo \"0|Error: Interrupted\" > \"$PROG\"; exit 1; }\n",
         "trap cleanup INT TERM\n",
-        "echo '5|Installing packages...' > \"$PROG\"\n",
         "echo ''\n",
         "echo '  Installing dictation packages...'\n",
+        "echo '  You may be prompted for your password once.'\n",
         "echo ''\n",
+        "# Pre-authenticate so package installs don't prompt again\n",
+        "sudo -v || { echo '0|Error: Authentication failed' > \"$PROG\"; exit 1; }\n",
+        "# Keep sudo alive in the background\n",
+        "while sudo -vn 2>/dev/null; do sleep 50; done &\n",
+        "SUDO_KEEPALIVE=$!\n",
+        "trap 'kill $SUDO_KEEPALIVE 2>/dev/null; cleanup' INT TERM\n",
+        "echo '5|Installing packages...' > \"$PROG\"\n",
         "\n",
         "# Helper: install an AUR package with fallback chain\n",
         "# paru -> yay -> manual makepkg (always available)\n",
@@ -514,6 +523,7 @@ pub fn launch_install() -> bool {
         "systemctl --user enable voxtype 2>/dev/null || true\n",
         "systemctl --user restart voxtype 2>/dev/null || true\n",
         "echo '100|Done! Dictation is ready.' > \"$PROG\"\n",
+        "kill $SUDO_KEEPALIVE 2>/dev/null\n",
         "echo ''\n",
         "echo '  Done! Dictation is ready.'\n",
         "echo '  Press SUPER+CTRL+X to start/stop speaking.'\n",

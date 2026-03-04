@@ -118,6 +118,8 @@ component TabButton inherits Rectangle {
 
 export component MainWindow inherits Window {
     title: "Language Settings";
+    width: 800px;
+    height: 480px;
     no-frame: true;
     background: Theme.bg.transparentize(1.0 - Theme.opacity);
 
@@ -387,10 +389,13 @@ export component MainWindow inherits Window {
             // KEYBOARD TAB
             // ══════════════════════════════════════════════════════════════
 
-            if root.active-tab == 0: VerticalLayout {
+            if root.active-tab == 0: Flickable {
                 horizontal-stretch: 1;
-                padding-left: 10px;
-                spacing: 6px;
+                vertical-stretch: 1;
+
+                VerticalLayout {
+                    padding-left: 10px;
+                    spacing: 6px;
 
                 // ── Add layout row: dropdown + button ──
                 HorizontalLayout {
@@ -642,17 +647,21 @@ export component MainWindow inherits Window {
                         }
                     }
                 }
+                }
             }
 
             // ══════════════════════════════════════════════════════════════
             // DICTATION TAB
             // ══════════════════════════════════════════════════════════════
 
-            if root.active-tab == 1: VerticalLayout {
+            if root.active-tab == 1: Flickable {
                 horizontal-stretch: 1;
-                padding-left: 10px;
-                padding-right: 4px;
-                spacing: 10px;
+                vertical-stretch: 1;
+
+                VerticalLayout {
+                    padding-left: 10px;
+                    padding-right: 4px;
+                    spacing: 10px;
 
                 // ── Installing (terminal in progress) ──
                 if root.dictation-installing: VerticalLayout {
@@ -1305,6 +1314,7 @@ export component MainWindow inherits Window {
                     }
 
                     Rectangle { vertical-stretch: 1; }
+                }
                 }
             }
         }

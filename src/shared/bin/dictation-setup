@@ -191,6 +191,8 @@ on_transcription = true
 
 [audio]
 device = "auto"
+sample_rate = 16000
+max_duration_secs = 60
 
 [audio.feedback]
 enabled = true
