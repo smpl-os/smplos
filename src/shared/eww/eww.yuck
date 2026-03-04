@@ -164,7 +164,7 @@
 (defwidget tray-keyboard []
   (button :class "tray-keyboard"
           :onclick "hyprctl switchxkblayout current next 2>/dev/null || true"
-          :onrightclick "kb-center ${kb-data.xkb_layout} ${kb-data.xkb_variant} &"
+          :onrightclick "settings --tab keyboard &"
           :tooltip {kb-data.layout}
           :visible {kb-data.visible == "yes"}
     (label :class "kb-code" :text {kb-data.code})))

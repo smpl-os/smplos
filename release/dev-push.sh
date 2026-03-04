@@ -24,8 +24,8 @@ for arg in "$@"; do
 done
 
 # Clean and recreate
-rm -rf "$SHARE"/{eww,bin,hypr,themes,configs,icons,st,notif-center,kb-center,disp-center,webapp-center,app-center,start-menu,applications}
-mkdir -p "$SHARE"/{eww,bin,hypr,themes,configs,icons,st,notif-center,kb-center,disp-center,webapp-center,app-center,start-menu,applications}
+rm -rf "$SHARE"/{eww,bin,hypr,themes,configs,icons,st,notif-center,settings,webapp-center,app-center,start-menu,applications}
+mkdir -p "$SHARE"/{eww,bin,hypr,themes,configs,icons,st,notif-center,settings,webapp-center,app-center,start-menu,applications}
 
 # EWW
 cp -r "$SRC_DIR/shared/eww/"* "$SHARE/eww/"
@@ -65,7 +65,7 @@ log "Themes: $(find "$SHARE/themes" -type f | wc -l) files"
 
 # ── Rust apps + st-wl (use container-built binaries from build-apps.sh) ──
 BIN_DIR="$(dirname "$SCRIPT_DIR")/.cache/app-binaries"
-RUST_APPS=(notif-center kb-center disp-center webapp-center app-center start-menu)
+RUST_APPS=(notif-center settings webapp-center app-center start-menu)
 
 # Staleness checking is handled inside build-apps.sh via git tree-object hashes.
 # It skips apps whose git tree SHA matches the stored .built-at marker and whose

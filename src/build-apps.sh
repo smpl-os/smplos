@@ -5,7 +5,7 @@ set -euo pipefail
 #
 # Usage:  ./build-apps.sh                    # build all apps (incremental)
 #         ./build-apps.sh start-menu         # build one app
-#         ./build-apps.sh disp-center st     # build specific apps + st-wl
+#         ./build-apps.sh settings st         # build specific apps + st-wl
 #         ./build-apps.sh --clean            # wipe build cache, full rebuild
 #         ./build-apps.sh --clean all        # clean + rebuild everything
 #
@@ -46,7 +46,7 @@ detect_runtime() {
 }
 
 # ── Parse arguments ──
-ALL_APPS=(start-menu notif-center kb-center disp-center app-center webapp-center)
+ALL_APPS=(start-menu notif-center settings app-center webapp-center)
 BUILD_ST=false
 CLEAN_BUILD=false
 REQUESTED_APPS=()
@@ -105,7 +105,9 @@ app_is_stale() {
 if [[ "$CLEAN_BUILD" == "false" ]]; then
     filtered_apps=()
     for app in "${REQUESTED_APPS[@]}"; do
-        if app_is_stale "$app" "src/shared/$app"; then
+        local rel="src/shared/$app"
+        [[ "$app" == "settings" ]] && rel="src/shared/apps/settings"
+        if app_is_stale "$app" "$rel"; then
             filtered_apps+=("$app")
         else
             log "$app: up to date"
@@ -148,6 +150,8 @@ export RUSTFLAGS="-C link-arg=-fuse-ld=mold"
 # Build each requested Rust app
 for app in $APPS; do
     app_src="$SRC_DIR/shared/$app"
+    # settings lives under apps/ subdirectory
+    [[ "$app" == "settings" ]] && app_src="$SRC_DIR/shared/apps/settings"
     if [[ ! -f "$app_src/Cargo.toml" ]]; then
         echo "[build] $app: source not found, skipping"
         continue
@@ -238,8 +242,10 @@ fi
 # run can skip it. Only written when the working tree is clean — dirty local
 # edits stay stale until committed, forcing a rebuild after the commit.
 for app in "${REQUESTED_APPS[@]}"; do
-    if [[ -f "$BIN_OUTPUT/$app" ]] && git_tree_clean "src/shared/$app"; then
-        git_tree_hash "src/shared/$app" > "$BIN_OUTPUT/$app.built-at"
+    local rel="src/shared/$app"
+    [[ "$app" == "settings" ]] && rel="src/shared/apps/settings"
+    if [[ -f "$BIN_OUTPUT/$app" ]] && git_tree_clean "$rel"; then
+        git_tree_hash "$rel" > "$BIN_OUTPUT/$app.built-at"
     fi
 done
 if [[ "$BUILD_ST" == "true" && -f "$BIN_OUTPUT/st-wl" ]]; then

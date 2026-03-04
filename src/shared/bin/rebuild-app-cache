@@ -121,12 +121,12 @@ emit_settings() {
 App Center;toggle-app-center;settings;app-center
 Web App Center;webapp-center;settings;webapp-center
 Appearance;smplos-settings appearance;settings;preferences-desktop-theme
-Display;smplos-settings display;settings;disp-center
-Keyboard;smplos-settings keyboard;settings;kb-center
+Display;smplos-settings display;settings;preferences-desktop-display
+Keyboard;smplos-settings keyboard;settings;preferences-desktop-keyboard
 Network;smplos-settings network;settings;preferences-system-network
 Bluetooth;smplos-settings bluetooth;settings;bluetooth
 Audio;smplos-settings audio;settings;audio-volume-high
-Dictation;smplos-settings dictation;settings;kb-center
+Dictation;smplos-settings dictation;settings;audio-input-microphone
 Power Menu;smplos-settings power;settings;system-shutdown
 About smplOS;smplos-settings about;settings;help-about
 EOF

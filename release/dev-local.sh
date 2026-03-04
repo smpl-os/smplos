@@ -202,7 +202,7 @@ fi
 # ── Rust apps (use container-built binaries -- only with 'rust' or 'all') ──
 if do_component rust; then
     BIN_DIR="$(dirname "$SCRIPT_DIR")/.cache/app-binaries"
-    RUST_APPS=(notif-center kb-center disp-center webapp-center app-center start-menu)
+    RUST_APPS=(notif-center settings webapp-center app-center start-menu)
 
     # Auto-build if any binary is missing OR source is newer than binary
     stale_apps=()
@@ -211,7 +211,12 @@ if do_component rust; then
             log "$app: binary missing"
             stale_apps+=("$app"); continue
         fi
-        app_src="$SRC_DIR/shared/$app"
+        # settings lives under apps/settings, others under shared/<app>
+        if [[ "$app" == "settings" ]]; then
+            app_src="$SRC_DIR/shared/apps/settings"
+        else
+            app_src="$SRC_DIR/shared/$app"
+        fi
         if [[ -d "$app_src" ]]; then
             newest_src=$(find "$app_src" -path '*/target' -prune -o \( -name '*.rs' -o -name '*.slint' -o -name 'Cargo.toml' \) -print | xargs stat -c '%Y' 2>/dev/null | sort -rn | head -1)
             bin_time=$(stat -c '%Y' "$BIN_DIR/$app" 2>/dev/null || echo 0)

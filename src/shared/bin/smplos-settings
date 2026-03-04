@@ -14,7 +14,7 @@ case "${1:-}" in
     ;;
 
   display)
-    command -v disp-center &>/dev/null && exec disp-center
+    command -v settings &>/dev/null && exec settings --tab display
     if [[ -n "$WAYLAND_DISPLAY" ]]; then
       command -v wdisplays &>/dev/null && exec wdisplays
       command -v nwg-displays &>/dev/null && exec nwg-displays
@@ -46,21 +46,23 @@ case "${1:-}" in
     ;;
 
   keyboard)
-    command -v kb-center &>/dev/null && exec kb-center --tab keyboard
-    die "Language Settings not found"
+    command -v settings &>/dev/null && exec settings --tab keyboard
+    die "Settings app not found"
     ;;
 
   dictation)
-    command -v kb-center &>/dev/null && exec kb-center --tab dictation
-    # Fall back to standalone script if kb-center unavailable
+    command -v settings &>/dev/null && exec settings --tab dictation
+    # Fall back to standalone script if settings unavailable
     exec dictation-settings
     ;;
 
   power)
+    command -v settings &>/dev/null && exec settings --tab power
     powermenu
     ;;
 
   about)
+    command -v settings &>/dev/null && exec settings --tab about
     local_ver=""
     if [[ -f /etc/os-release ]]; then
       local_ver=$(grep '^VERSION_ID=' /etc/os-release | head -1 | cut -d'=' -f2 | tr -d '"')

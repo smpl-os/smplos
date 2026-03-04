@@ -240,27 +240,17 @@ if [[ -f "$SHARE/notif-center/notif-center" ]]; then
     log "  done"
 fi
 
-# ── kb-center ────────────────────────────────────────────────
-if [[ -f "$SHARE/kb-center/kb-center" ]]; then
-    log "Applying kb-center binary..."
-    if [[ -d "/usr/local/bin/kb-center" ]]; then
-        rm -rf "/usr/local/bin/kb-center"
+# ── settings ─────────────────────────────────────────────────
+if [[ -f "$SHARE/settings/settings" ]]; then
+    log "Applying settings binary..."
+    run_as_user "pkill -x settings" 2>/dev/null || true
+    sleep 0.3
+    if [[ -d "/usr/local/bin/settings" ]]; then
+        rm -rf "/usr/local/bin/settings"
     fi
-    cp "$SHARE/kb-center/kb-center" "/usr/local/bin/"
-    chmod +x "/usr/local/bin/kb-center"
-    own "/usr/local/bin/kb-center"
-    log "  done"
-fi
-
-# ── disp-center ──────────────────────────────────────────────
-if [[ -f "$SHARE/disp-center/disp-center" ]]; then
-    log "Applying disp-center binary..."
-    if [[ -d "/usr/local/bin/disp-center" ]]; then
-        rm -rf "/usr/local/bin/disp-center"
-    fi
-    cp "$SHARE/disp-center/disp-center" "/usr/local/bin/"
-    chmod +x "/usr/local/bin/disp-center"
-    own "/usr/local/bin/disp-center"
+    cp "$SHARE/settings/settings" "/usr/local/bin/"
+    chmod +x "/usr/local/bin/settings"
+    own "/usr/local/bin/settings"
     log "  done"
 fi
 
