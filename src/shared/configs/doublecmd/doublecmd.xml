@@ -174,11 +174,11 @@
     <GoToRoot>False</GoToRoot>
     <ShowCurDirTitleBar>False</ShowCurDirTitleBar>
     <ActiveRight>False</ActiveRight>
-    <RunInTerminalStayOpenCmd>konsole</RunInTerminalStayOpenCmd>
+    <RunInTerminalStayOpenCmd>terminal</RunInTerminalStayOpenCmd>
     <RunInTerminalStayOpenParams>-e sh -c '{command}; echo -n Press ENTER to exit... ; read a'</RunInTerminalStayOpenParams>
-    <RunInTerminalCloseCmd>konsole</RunInTerminalCloseCmd>
+    <RunInTerminalCloseCmd>terminal</RunInTerminalCloseCmd>
     <RunInTerminalCloseParams>-e sh -c '{command}'</RunInTerminalCloseParams>
-    <JustRunTerminal>konsole</JustRunTerminal>
+    <JustRunTerminal>terminal</JustRunTerminal>
     <JustRunTermParams/>
     <OnlyOneAppInstance>False</OnlyOneAppInstance>
     <LynxLike>True</LynxLike>

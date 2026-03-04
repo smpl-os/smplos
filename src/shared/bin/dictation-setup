@@ -1,6 +1,6 @@
 #!/bin/bash
 # Install and configure Voxtype for global dictation on smplOS.
-# Voxtype runs a local Whisper AI model — no cloud, fully offline.
+# Voxtype runs a local Whisper AI model -- fully offline, no cloud.
 # After setup, press SUPER+CTRL+X to start/stop speaking.
 
 set -e
@@ -10,11 +10,12 @@ log() { echo "  $*"; }
 
 echo ""
 echo "  smplOS Dictation Setup (Voxtype)"
+echo "  Local AI speech-to-text -- fully offline, no cloud."
 echo ""
 echo "  This will install:"
-echo "    - wtype        (~50 KB, Wayland text injector)"
-echo "    - voxtype-bin  (local Whisper AI daemon)"
-echo "    - Whisper model (~150 MB, downloaded on first run)"
+echo "    - wtype       (Wayland text injector)"
+echo "    - voxtype-bin (local AI speech daemon)"
+echo "    - A Whisper model (size depends on language choice)"
 echo ""
 read -r -p "  Continue? [y/N] " ans
 [[ "${ans,,}" == "y" ]] || exit 0
@@ -29,22 +30,175 @@ else
     die "No AUR helper found. Install paru first: paru -S paru-bin"
 fi
 
-# ── Default config ────────────────────────────────────────────────────────────
-mkdir -p ~/.config/voxtype
-if [[ ! -f ~/.config/voxtype/config.toml ]]; then
-    log "Writing default config to ~/.config/voxtype/config.toml..."
-    cat > ~/.config/voxtype/config.toml << 'EOF'
-# Voxtype configuration for smplOS
-# Docs: https://github.com/dustinblackman/voxtype
+# ── Language selection ────────────────────────────────────────────────────────
+LANG_LIST="English -- fastest, recommended
+Auto-detect -- detects from 99 languages automatically
+Afrikaans (af)
+Albanian (sq)
+Amharic (am)
+Arabic (ar)
+Armenian (hy)
+Assamese (as)
+Azerbaijani (az)
+Bashkir (ba)
+Basque (eu)
+Belarusian (be)
+Bengali (bn)
+Bosnian (bs)
+Breton (br)
+Bulgarian (bg)
+Cantonese (yue)
+Catalan (ca)
+Chinese (zh)
+Croatian (hr)
+Czech (cs)
+Danish (da)
+Dutch (nl)
+Estonian (et)
+Faroese (fo)
+Finnish (fi)
+French (fr)
+Galician (gl)
+Georgian (ka)
+German (de)
+Greek (el)
+Gujarati (gu)
+Haitian Creole (ht)
+Hausa (ha)
+Hawaiian (haw)
+Hebrew (he)
+Hindi (hi)
+Hungarian (hu)
+Icelandic (is)
+Indonesian (id)
+Italian (it)
+Japanese (ja)
+Javanese (jw)
+Kannada (kn)
+Kazakh (kk)
+Khmer (km)
+Korean (ko)
+Lao (lo)
+Latin (la)
+Latvian (lv)
+Lingala (ln)
+Lithuanian (lt)
+Luxembourgish (lb)
+Macedonian (mk)
+Malagasy (mg)
+Malay (ms)
+Malayalam (ml)
+Maltese (mt)
+Maori (mi)
+Marathi (mr)
+Mongolian (mn)
+Myanmar (my)
+Nepali (ne)
+Norwegian (no)
+Nynorsk (nn)
+Occitan (oc)
+Pashto (ps)
+Persian (fa)
+Polish (pl)
+Portuguese (pt)
+Punjabi (pa)
+Romanian (ro)
+Russian (ru)
+Sanskrit (sa)
+Serbian (sr)
+Shona (sn)
+Sindhi (sd)
+Sinhala (si)
+Slovak (sk)
+Slovenian (sl)
+Somali (so)
+Spanish (es)
+Sundanese (su)
+Swahili (sw)
+Swedish (sv)
+Tagalog (tl)
+Tajik (tg)
+Tamil (ta)
+Tatar (tt)
+Telugu (te)
+Thai (th)
+Tibetan (bo)
+Turkish (tr)
+Turkmen (tk)
+Ukrainian (uk)
+Urdu (ur)
+Uzbek (uz)
+Vietnamese (vi)
+Welsh (cy)
+Yiddish (yi)
+Yoruba (yo)"
 
-[typing]
-# wtype injects text directly into the focused Wayland window
-engine = "wtype"
-EOF
-fi
+echo ""
+choice=$(echo "$LANG_LIST" | gum filter --height 15 \
+    --header "  Language (type to search, ESC to cancel)") || exit 0
+
+# Parse choice into config values
+model="base"
+lang_cfg='language = "auto"'
+
+case "$choice" in
+    "English --"*)
+        model="base.en"
+        lang_cfg='language = "en"'
+        ;;
+    "Auto-detect --"*)
+        model="base"
+        lang_cfg='language = "auto"'
+        ;;
+    *)
+        code=$(echo "$choice" | grep -oP '\([a-z]+\)' | tr -d '()')
+        [[ -z "$code" ]] && die "Could not parse language code from: $choice"
+        model="base"
+        echo ""
+        read -r -p "  Also add English for auto-switching between both? [Y/n] " ans
+        if [[ "${ans,,}" != "n" ]]; then
+            lang_cfg="language = [\"en\", \"$code\"]"
+        else
+            lang_cfg="language = \"$code\""
+        fi
+        ;;
+esac
+
+# ── Write config ──────────────────────────────────────────────────────────────
+mkdir -p ~/.config/voxtype
+log "Writing config to ~/.config/voxtype/config.toml..."
+cat > ~/.config/voxtype/config.toml << TOML
+# Voxtype configuration for smplOS
+# Docs: https://github.com/peteonrails/voxtype
+
+# Use compositor keybindings (SUPER+CTRL+X) instead of built-in hotkey
+[hotkey]
+enabled = false
+
+state_file = "auto"
+
+[whisper]
+model = "$model"
+$lang_cfg
+
+[output]
+mode = "type"
+fallback_to_clipboard = true
+append_text = " "
+
+[output.notification]
+on_transcription = true
+
+[audio]
+device = "auto"
+
+[audio.feedback]
+enabled = true
+theme = "default"
+TOML
 
 # ── Download model + systemd service ─────────────────────────────────────────
-log "Downloading Whisper AI model (~150 MB, this may take a minute)..."
+log "Downloading Whisper model ($model)..."
 voxtype setup --download --no-post-install
 
 log "Installing systemd user service..."
@@ -54,6 +208,12 @@ voxtype setup systemd
 echo ""
 echo "  Dictation is ready!"
 echo "  Press SUPER+CTRL+X to start speaking. Press again to stop and type."
+if [[ "$model" != "base.en" ]]; then
+    echo ""
+    echo "  Tip: For better multilingual accuracy, upgrade to large-v3-turbo:"
+    echo "       Edit ~/.config/voxtype/config.toml -> model = \"large-v3-turbo\""
+    echo "       Then run: voxtype setup --download"
+fi
 echo ""
 notify-send "Dictation ready" \
     "Press Super+Ctrl+X to start/stop speaking.\nVoxtype types into the focused window." \
