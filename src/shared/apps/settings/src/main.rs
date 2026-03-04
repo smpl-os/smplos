@@ -267,6 +267,14 @@ fn push_display_state_to_ui(ui: &MainWindow, state: &DisplayState) {
 
 // ── Power + About helpers ────────────────────────────────────────────────────
 
+fn is_power_profiles_available() -> bool {
+    std::process::Command::new("powerprofilesctl")
+        .arg("get")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
 fn get_power_profile() -> String {
     std::process::Command::new("powerprofilesctl")
         .arg("get")
@@ -286,6 +294,138 @@ fn set_power_profile(profile: &str) {
     let _ = std::process::Command::new("powerprofilesctl")
         .args(["set", profile])
         .output();
+}
+
+// ── Hypridle (idle timeouts) ─────────────────────────────────────────────────
+
+// Preset arrays: index → seconds (0 = disabled/never)
+const LOCK_PRESETS: &[u32] = &[60, 120, 300, 600, 900, 1800, 0];    // 1,2,5,10,15,30 min, Never
+const DPMS_PRESETS: &[u32] = &[60, 120, 300, 600, 900, 1800, 0];    // 1,2,5,10,15,30 min, Never
+const SUSPEND_PRESETS: &[u32] = &[300, 600, 900, 1800, 3600, 0];     // 5,10,15,30,60 min, Never
+
+fn hypridle_config_path() -> std::path::PathBuf {
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
+    std::path::PathBuf::from(home).join(".config/hypr/hypridle.conf")
+}
+
+/// Parsed idle timeouts from hypridle.conf: (lock_secs, dpms_secs, suspend_secs)
+fn read_hypridle_timeouts() -> (u32, u32, u32) {
+    let path = hypridle_config_path();
+    let content = match std::fs::read_to_string(&path) {
+        Ok(c) => c,
+        Err(_) => return (300, 330, 600), // defaults
+    };
+
+    let mut lock = 300u32;
+    let mut dpms = 330u32;
+    let mut suspend = 600u32;
+
+    // Simple parser: find listener blocks and identify by on-timeout command
+    let mut in_listener = false;
+    let mut cur_timeout = 0u32;
+    let mut cur_cmd = String::new();
+
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with("listener") && trimmed.contains('{') {
+            in_listener = true;
+            cur_timeout = 0;
+            cur_cmd.clear();
+        } else if in_listener && trimmed == "}" {
+            // Classify this listener by its command
+            if cur_cmd.contains("lock-session") || cur_cmd.contains("hyprlock") {
+                lock = cur_timeout;
+            } else if cur_cmd.contains("dpms off") || cur_cmd.contains("dpms 0") {
+                dpms = cur_timeout;
+            } else if cur_cmd.contains("suspend") || cur_cmd.contains("hibernate") {
+                suspend = cur_timeout;
+            }
+            in_listener = false;
+        } else if in_listener {
+            if let Some(val) = trimmed.strip_prefix("timeout") {
+                let val = val.trim().trim_start_matches('=').trim();
+                cur_timeout = val.parse().unwrap_or(0);
+            } else if let Some(val) = trimmed.strip_prefix("on-timeout") {
+                cur_cmd = val.trim().trim_start_matches('=').trim().to_string();
+            }
+        }
+    }
+
+    (lock, dpms, suspend)
+}
+
+/// Find closest preset index for a given timeout value
+fn timeout_to_index(secs: u32, presets: &[u32]) -> i32 {
+    if secs == 0 {
+        return (presets.len() - 1) as i32; // "Never" is always last
+    }
+    presets
+        .iter()
+        .enumerate()
+        .filter(|(_, &v)| v > 0) // skip the "never" entry when comparing
+        .min_by_key(|(_, &v)| (v as i64 - secs as i64).unsigned_abs())
+        .map(|(i, _)| i as i32)
+        .unwrap_or(2) // default to middle
+}
+
+/// Write a new hypridle.conf with updated timeouts and restart hypridle
+fn write_hypridle_config(lock_secs: u32, dpms_secs: u32, suspend_secs: u32) {
+    let lock_cmd = if lock_secs > 0 {
+        format!(
+            "# {:.0} min -- lock screen\nlistener {{\n    timeout = {}\n    on-timeout = loginctl lock-session\n}}\n",
+            lock_secs as f64 / 60.0, lock_secs
+        )
+    } else {
+        String::new()
+    };
+
+    let dpms_cmd = if dpms_secs > 0 {
+        format!(
+            "# {:.0} min -- screen off\nlistener {{\n    timeout = {}\n    on-timeout = systemd-detect-virt -q || hyprctl dispatch dpms off\n    on-resume = hyprctl dispatch dpms on\n}}\n",
+            dpms_secs as f64 / 60.0, dpms_secs
+        )
+    } else {
+        String::new()
+    };
+
+    let suspend_cmd = if suspend_secs > 0 {
+        format!(
+            "# {:.0} min -- suspend\nlistener {{\n    timeout = {}\n    on-timeout = systemd-detect-virt -q || systemctl suspend\n}}\n",
+            suspend_secs as f64 / 60.0, suspend_secs
+        )
+    } else {
+        String::new()
+    };
+
+    let config = format!(
+        "# smplOS Hypridle Configuration\n\
+         # Managed by Settings app -- manual edits will be overwritten\n\
+         \n\
+         general {{\n    \
+             lock_cmd = pidof hyprlock || hyprlock\n    \
+             before_sleep_cmd = loginctl lock-session\n    \
+             after_sleep_cmd = hyprctl dispatch dpms on\n\
+         }}\n\n\
+         {lock_cmd}\n\
+         {dpms_cmd}\n\
+         {suspend_cmd}"
+    );
+
+    let path = hypridle_config_path();
+    if let Err(e) = std::fs::write(&path, config) {
+        eprintln!("[settings] failed to write hypridle.conf: {}", e);
+        return;
+    }
+    debug_log!("[settings] wrote hypridle.conf: lock={}s dpms={}s suspend={}s",
+        lock_secs, dpms_secs, suspend_secs);
+
+    // Restart hypridle to pick up changes
+    let _ = std::process::Command::new("pkill").arg("hypridle").output();
+    std::thread::sleep(std::time::Duration::from_millis(200));
+    let _ = std::process::Command::new("hypridle")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn();
 }
 
 fn get_about_info() -> (String, String, String, String) {
@@ -564,14 +704,25 @@ fn main() -> Result<(), slint::PlatformError> {
     // ── Power tab init ───────────────────────────────────────────────────────
 
     {
-        let profile = get_power_profile();
-        let idx: i32 = match profile.as_str() {
-            "power-saver" => 0,
-            "balanced" => 1,
-            "performance" => 2,
-            _ => 1,
-        };
-        ui.set_power_profile_index(idx);
+        // Power profiles (may not be available)
+        let ppd_available = is_power_profiles_available();
+        ui.set_power_profiles_available(ppd_available);
+        if ppd_available {
+            let profile = get_power_profile();
+            let idx: i32 = match profile.as_str() {
+                "power-saver" => 0,
+                "balanced" => 1,
+                "performance" => 2,
+                _ => 1,
+            };
+            ui.set_power_profile_index(idx);
+        }
+
+        // Idle timeouts from hypridle.conf
+        let (lock_s, dpms_s, suspend_s) = read_hypridle_timeouts();
+        ui.set_idle_lock_index(timeout_to_index(lock_s, LOCK_PRESETS));
+        ui.set_idle_dpms_index(timeout_to_index(dpms_s, DPMS_PRESETS));
+        ui.set_idle_suspend_index(timeout_to_index(suspend_s, SUSPEND_PRESETS));
     }
 
     // ── About tab init ───────────────────────────────────────────────────────
@@ -1162,6 +1313,45 @@ fn main() -> Result<(), slint::PlatformError> {
         };
         set_power_profile(profile);
     });
+
+    // Helper: read current indices from UI, resolve to seconds, write config
+    let write_idle = |ui: &MainWindow| {
+        let lock_idx = ui.get_idle_lock_index() as usize;
+        let dpms_idx = ui.get_idle_dpms_index() as usize;
+        let susp_idx = ui.get_idle_suspend_index() as usize;
+        let lock_s = LOCK_PRESETS.get(lock_idx).copied().unwrap_or(300);
+        let dpms_s = DPMS_PRESETS.get(dpms_idx).copied().unwrap_or(330);
+        let susp_s = SUSPEND_PRESETS.get(susp_idx).copied().unwrap_or(600);
+        write_hypridle_config(lock_s, dpms_s, susp_s);
+    };
+
+    {
+        let ui_handle = ui.as_weak();
+        ui.on_set_idle_lock(move |_idx| {
+            if let Some(ui) = ui_handle.upgrade() {
+                write_idle(&ui);
+            }
+        });
+    }
+    // Bind write_idle for dpms/suspend too — need separate clones
+    let write_idle2 = write_idle;
+    {
+        let ui_handle = ui.as_weak();
+        ui.on_set_idle_dpms(move |_idx| {
+            if let Some(ui) = ui_handle.upgrade() {
+                write_idle2(&ui);
+            }
+        });
+    }
+    let write_idle3 = write_idle;
+    {
+        let ui_handle = ui.as_weak();
+        ui.on_set_idle_suspend(move |_idx| {
+            if let Some(ui) = ui_handle.upgrade() {
+                write_idle3(&ui);
+            }
+        });
+    }
 
     // ── Theme polling timer ──────────────────────────────────────────────────
 

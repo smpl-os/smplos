@@ -127,7 +127,7 @@ Network;smplos-settings network;settings;preferences-system-network
 Bluetooth;smplos-settings bluetooth;settings;bluetooth
 Audio;smplos-settings audio;settings;audio-volume-high
 Dictation;smplos-settings dictation;settings;audio-input-microphone
-Power Menu;smplos-settings power;settings;system-shutdown
+Power;smplos-settings power;settings;preferences-system-power-management
 About smplOS;smplos-settings about;settings;help-about
 EOF
 }

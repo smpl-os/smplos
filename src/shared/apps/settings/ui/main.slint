@@ -436,6 +436,10 @@ export component MainWindow inherits Window {
 
     // ── Power tab properties ──
     in-out property <int> power-profile-index: 1;
+    in-out property <int> idle-lock-index: 2;      // 0=1m 1=2m 2=5m 3=10m 4=15m 5=30m 6=Never
+    in-out property <int> idle-dpms-index: 2;       // 0=1m 1=2m 2=5m 3=10m 4=15m 5=30m 6=Never
+    in-out property <int> idle-suspend-index: 1;    // 0=5m 1=10m 2=15m 3=30m 4=60m 5=Never
+    in property <bool> power-profiles-available: true;
 
     // ── About tab properties ──
     in property <string> about-version: "dev";
@@ -476,6 +480,9 @@ export component MainWindow inherits Window {
 
     // Power
     callback set-power-profile(int);
+    callback set-idle-lock(int);
+    callback set-idle-dpms(int);
+    callback set-idle-suspend(int);
 
     // ── Keyboard shortcuts ──
     focus-scope := FocusScope {
@@ -2050,8 +2057,8 @@ export component MainWindow inherits Window {
                     font-weight: 600;
                 }
 
-                // Power profile card
-                Rectangle {
+                // ── Power Profile card ──
+                if root.power-profiles-available: Rectangle {
                     border-radius: 6px;
                     background: Theme.bg_light;
 
@@ -2208,6 +2215,172 @@ export component MainWindow inherits Window {
                                 }
                                 mouse-cursor: pointer;
                             }
+                        }
+                    }
+                }
+
+                // ── Idle & Sleep card ──
+                Rectangle {
+                    border-radius: 6px;
+                    background: Theme.bg_light;
+
+                    VerticalLayout {
+                        padding: 12px;
+                        spacing: 14px;
+
+                        Text {
+                            text: "Idle & Sleep";
+                            color: Theme.fg_dim;
+                            font-size: 11px;
+                            font-weight: 600;
+                        }
+
+                        // Lock screen timeout
+                        VerticalLayout {
+                            spacing: 6px;
+
+                            Text {
+                                text: "Lock screen after";
+                                color: Theme.fg;
+                                font-size: 12px;
+                            }
+
+                            HorizontalLayout {
+                                spacing: 4px;
+
+                                for preset[idx] in ["1 min", "2 min", "5 min", "10 min", "15 min", "30 min", "Never"]: Rectangle {
+                                    height: 28px;
+                                    min-width: 46px;
+                                    horizontal-stretch: 0;
+                                    border-radius: 4px;
+                                    background: root.idle-lock-index == idx
+                                        ? Theme.accent
+                                        : lock-chip-touch.has-hover ? Theme.bg_lighter : Theme.bg;
+
+                                    HorizontalLayout {
+                                        alignment: center;
+                                        padding-left: 8px;
+                                        padding-right: 8px;
+
+                                        Text {
+                                            text: preset;
+                                            color: root.idle-lock-index == idx ? Theme.bg : Theme.fg;
+                                            font-size: 10px;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+
+                                    lock-chip-touch := TouchArea {
+                                        clicked => {
+                                            root.idle-lock-index = idx;
+                                            root.set-idle-lock(idx);
+                                        }
+                                        mouse-cursor: pointer;
+                                    }
+                                }
+                            }
+                        }
+
+                        // Screen off timeout
+                        VerticalLayout {
+                            spacing: 6px;
+
+                            Text {
+                                text: "Turn off screen after";
+                                color: Theme.fg;
+                                font-size: 12px;
+                            }
+
+                            HorizontalLayout {
+                                spacing: 4px;
+
+                                for preset[idx] in ["1 min", "2 min", "5 min", "10 min", "15 min", "30 min", "Never"]: Rectangle {
+                                    height: 28px;
+                                    min-width: 46px;
+                                    horizontal-stretch: 0;
+                                    border-radius: 4px;
+                                    background: root.idle-dpms-index == idx
+                                        ? Theme.accent
+                                        : dpms-chip-touch.has-hover ? Theme.bg_lighter : Theme.bg;
+
+                                    HorizontalLayout {
+                                        alignment: center;
+                                        padding-left: 8px;
+                                        padding-right: 8px;
+
+                                        Text {
+                                            text: preset;
+                                            color: root.idle-dpms-index == idx ? Theme.bg : Theme.fg;
+                                            font-size: 10px;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+
+                                    dpms-chip-touch := TouchArea {
+                                        clicked => {
+                                            root.idle-dpms-index = idx;
+                                            root.set-idle-dpms(idx);
+                                        }
+                                        mouse-cursor: pointer;
+                                    }
+                                }
+                            }
+                        }
+
+                        // Suspend timeout
+                        VerticalLayout {
+                            spacing: 6px;
+
+                            Text {
+                                text: "Suspend after";
+                                color: Theme.fg;
+                                font-size: 12px;
+                            }
+
+                            HorizontalLayout {
+                                spacing: 4px;
+
+                                for preset[idx] in ["5 min", "10 min", "15 min", "30 min", "60 min", "Never"]: Rectangle {
+                                    height: 28px;
+                                    min-width: 46px;
+                                    horizontal-stretch: 0;
+                                    border-radius: 4px;
+                                    background: root.idle-suspend-index == idx
+                                        ? Theme.accent
+                                        : susp-chip-touch.has-hover ? Theme.bg_lighter : Theme.bg;
+
+                                    HorizontalLayout {
+                                        alignment: center;
+                                        padding-left: 8px;
+                                        padding-right: 8px;
+
+                                        Text {
+                                            text: preset;
+                                            color: root.idle-suspend-index == idx ? Theme.bg : Theme.fg;
+                                            font-size: 10px;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                        }
+                                    }
+
+                                    susp-chip-touch := TouchArea {
+                                        clicked => {
+                                            root.idle-suspend-index = idx;
+                                            root.set-idle-suspend(idx);
+                                        }
+                                        mouse-cursor: pointer;
+                                    }
+                                }
+                            }
+                        }
+
+                        // Info text
+                        Text {
+                            text: "Changes apply immediately and persist across reboots.";
+                            color: Theme.fg_dim;
+                            font-size: 10px;
                         }
                     }
                 }

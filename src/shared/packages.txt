@@ -36,6 +36,7 @@ realtime-privileges
 brightnessctl
 playerctl
 pamixer
+power-profiles-daemon
 
 # ── Theming / GTK ────────────────────────────────────────────
 gtk3
