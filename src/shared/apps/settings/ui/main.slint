@@ -40,6 +40,12 @@ struct MonitorInfo {
     current-mode-index: int,
 }
 
+struct SearchResult {
+    label: string,
+    tab-name: string,
+    tab-index: int,
+}
+
 // ── Theme ────────────────────────────────────────────────────────────────────
 
 export global Theme {
@@ -401,6 +407,9 @@ export component MainWindow inherits Window {
     property <int> highlighted-dropdown-index: 0;
     property <string> search-text: "";
     property <bool> show-help: false;
+    property <bool> show-search: false;
+    property <string> global-search-text: "";
+    in property <[SearchResult]> search-results;
 
     // ── Dictation tab properties ──
     in property <bool> dictation-installed: false;
@@ -484,10 +493,18 @@ export component MainWindow inherits Window {
     callback set-idle-dpms(int);
     callback set-idle-suspend(int);
 
+    // Search
+    callback filter-search(string);
+
     // ── Keyboard shortcuts ──
     focus-scope := FocusScope {
         key-pressed(e) => {
             if e.text == Key.Escape {
+                if root.show-search {
+                    root.show-search = false;
+                    focus-scope.focus();
+                    return accept;
+                }
                 if root.dropdown-open {
                     root.dropdown-open = false;
                     return accept;
@@ -507,13 +524,13 @@ export component MainWindow inherits Window {
                 root.close();
                 return accept;
             }
-            if e.modifiers.alt && (e.text == "a" || e.text == "A") && root.active-tab == 0 {
+            if e.modifiers.alt && (e.text == "a" || e.text == "A") && root.active-tab == 1 {
                 if root.available-layouts.length > 0 && root.selected-dropdown-index >= 0 {
                     root.add-layout(root.selected-dropdown-index);
                 }
                 return accept;
             }
-            if e.modifiers.alt && (e.text == "c" || e.text == "C") && root.active-tab == 0 {
+            if e.modifiers.alt && (e.text == "c" || e.text == "C") && root.active-tab == 1 {
                 root.dropdown-open = !root.dropdown-open;
                 root.search-text = "";
                 root.highlighted-dropdown-index = 0;
@@ -522,14 +539,14 @@ export component MainWindow inherits Window {
                 }
                 return accept;
             }
-            if e.modifiers.alt && (e.text == "d" || e.text == "D") && root.active-tab == 0 {
+            if e.modifiers.alt && (e.text == "d" || e.text == "D") && root.active-tab == 1 {
                 if root.active-layouts.length > 1 {
                     root.remove-layout(1);
                 }
                 return accept;
             }
             // Display tab hotkeys
-            if e.modifiers.alt && root.active-tab == 2 {
+            if e.modifiers.alt && root.active-tab == 3 {
                 if e.text == "i" {
                     root.disp-identify-monitors();
                     return accept;
@@ -554,6 +571,17 @@ export component MainWindow inherits Window {
             if e.text == "?" {
                 root.show-help = !root.show-help;
                 root.dropdown-open = false;
+                return accept;
+            }
+            // Ctrl+F — toggle search
+            if e.modifiers.control && (e.text == "f" || e.text == "F") {
+                root.show-search = !root.show-search;
+                root.global-search-text = "";
+                if root.show-search {
+                    global-search-input.focus();
+                } else {
+                    focus-scope.focus();
+                }
                 return accept;
             }
             // Tab switching: 1-5
@@ -666,8 +694,8 @@ export component MainWindow inherits Window {
                     alignment: start;
 
                     TabButton {
-                        label: "Keyboard";
-                        icon: "\u{2328}";
+                        label: "About";
+                        icon: "\u{2139}";
                         active: root.active-tab == 0;
                         clicked => {
                             root.active-tab = 0;
@@ -677,8 +705,8 @@ export component MainWindow inherits Window {
                     }
 
                     TabButton {
-                        label: "Dictation";
-                        icon: "\u{1F399}";
+                        label: "Keyboard";
+                        icon: "\u{2328}";
                         active: root.active-tab == 1;
                         clicked => {
                             root.active-tab = 1;
@@ -688,8 +716,8 @@ export component MainWindow inherits Window {
                     }
 
                     TabButton {
-                        label: "Display";
-                        icon: "\u{1F5B5}";
+                        label: "Dictation";
+                        icon: "\u{1F399}";
                         active: root.active-tab == 2;
                         clicked => {
                             root.active-tab = 2;
@@ -699,8 +727,8 @@ export component MainWindow inherits Window {
                     }
 
                     TabButton {
-                        label: "Power";
-                        icon: "\u{26A1}";
+                        label: "Display";
+                        icon: "\u{1F5B5}";
                         active: root.active-tab == 3;
                         clicked => {
                             root.active-tab = 3;
@@ -710,8 +738,8 @@ export component MainWindow inherits Window {
                     }
 
                     TabButton {
-                        label: "About";
-                        icon: "\u{2139}";
+                        label: "Power";
+                        icon: "\u{26A1}";
                         active: root.active-tab == 4;
                         clicked => {
                             root.active-tab = 4;
@@ -729,7 +757,7 @@ export component MainWindow inherits Window {
             // KEYBOARD TAB
             // ══════════════════════════════════════════════════════════════
 
-            if root.active-tab == 0: Flickable {
+            if root.active-tab == 1: Flickable {
                 horizontal-stretch: 1;
                 vertical-stretch: 1;
 
@@ -983,7 +1011,7 @@ export component MainWindow inherits Window {
             // DICTATION TAB
             // ══════════════════════════════════════════════════════════════
 
-            if root.active-tab == 1: Flickable {
+            if root.active-tab == 2: Flickable {
                 horizontal-stretch: 1;
                 vertical-stretch: 1;
 
@@ -1631,7 +1659,7 @@ export component MainWindow inherits Window {
             // DISPLAY TAB
             // ══════════════════════════════════════════════════════════════
 
-            if root.active-tab == 2: VerticalLayout {
+            if root.active-tab == 3: VerticalLayout {
                 horizontal-stretch: 1;
                 padding-left: 10px;
                 padding-right: 4px;
@@ -2041,7 +2069,7 @@ export component MainWindow inherits Window {
             // POWER TAB
             // ══════════════════════════════════════════════════════════════
 
-            if root.active-tab == 3: Flickable {
+            if root.active-tab == 4: Flickable {
                 horizontal-stretch: 1;
                 vertical-stretch: 1;
 
@@ -2393,7 +2421,7 @@ export component MainWindow inherits Window {
             // ABOUT TAB
             // ══════════════════════════════════════════════════════════════
 
-            if root.active-tab == 4: Flickable {
+            if root.active-tab == 0: Flickable {
                 horizontal-stretch: 1;
                 vertical-stretch: 1;
 
@@ -2539,7 +2567,7 @@ export component MainWindow inherits Window {
                             font-weight: 600;
                         }
                         Text {
-                            text: "1-5       Switch tabs\nAlt+C   Open layout dropdown\nAlt+A   Add selected layout\nAlt+D   Remove second layout\nAlt+I    Identify monitors\nAlt+R   Refresh monitors\nAlt+P   Set primary monitor\nEsc      Close overlay / app\n?         Toggle this Help";
+                            text: "1-5       Switch tabs\nCtrl+F  Search settings\nAlt+C   Open layout dropdown\nAlt+A   Add selected layout\nAlt+D   Remove second layout\nAlt+I    Identify monitors\nAlt+R   Refresh monitors\nAlt+P   Set primary monitor\nEsc      Close overlay / app\n?         Toggle this Help";
                             color: Theme.fg;
                             font-size: 12px;
                             wrap: word-wrap;
@@ -2559,10 +2587,149 @@ export component MainWindow inherits Window {
         }
     }
 
+    // ── Search overlay ───────────────────────────────────────────────────────
+
+    Rectangle {
+        visible: root.show-search;
+        width: 100%;
+        height: 100%;
+        background: Theme.bg.transparentize(15%);
+
+        // Dismiss on click outside the box
+        TouchArea {
+            clicked => {
+                root.show-search = false;
+                focus-scope.focus();
+            }
+        }
+
+        // Centered search box
+        VerticalLayout {
+            alignment: center;
+            HorizontalLayout {
+                alignment: center;
+
+                Rectangle {
+                    width: 400px;
+                    height: root.search-results.length > 0
+                        ? min(380px, 52px + root.search-results.length * 36px)
+                        : 52px;
+                    border-radius: 8px;
+                    background: Theme.bg_light;
+                    clip: true;
+
+                    // Block dismiss click inside the box
+                    TouchArea {}
+
+                    VerticalLayout {
+                        spacing: 0px;
+
+                        // Search input
+                        Rectangle {
+                            height: 44px;
+                            HorizontalLayout {
+                                padding-left: 12px;
+                                padding-right: 12px;
+                                spacing: 8px;
+
+                                VerticalLayout {
+                                    alignment: center;
+                                    Text {
+                                        text: "\u{1F50D}";
+                                        font-size: 14px;
+                                        color: Theme.fg_dim;
+                                    }
+                                }
+
+                                VerticalLayout {
+                                    alignment: center;
+                                    horizontal-stretch: 1;
+                                    global-search-input := TextInput {
+                                        font-size: 13px;
+                                        color: Theme.fg;
+                                        text: root.global-search-text;
+                                        edited => {
+                                            root.global-search-text = self.text;
+                                            root.filter-search(self.text);
+                                        }
+                                        accepted => {
+                                            // Jump to first result
+                                            if root.search-results.length > 0 {
+                                                root.active-tab = root.search-results[0].tab-index;
+                                                root.show-search = false;
+                                                focus-scope.focus();
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Separator
+                        if root.search-results.length > 0: Rectangle {
+                            height: 1px;
+                            background: Theme.bg_lighter;
+                        }
+
+                        // Results list
+                        if root.search-results.length > 0: Flickable {
+                            vertical-stretch: 1;
+
+                            VerticalLayout {
+                                spacing: 0px;
+                                padding: 4px;
+
+                                for result[idx] in root.search-results: Rectangle {
+                                    height: 32px;
+                                    border-radius: 4px;
+                                    background: search-result-touch.has-hover ? Theme.bg_lighter : transparent;
+
+                                    HorizontalLayout {
+                                        padding-left: 12px;
+                                        padding-right: 12px;
+
+                                        VerticalLayout {
+                                            alignment: center;
+                                            horizontal-stretch: 1;
+                                            Text {
+                                                text: result.label;
+                                                color: Theme.fg;
+                                                font-size: 12px;
+                                                overflow: elide;
+                                            }
+                                        }
+
+                                        VerticalLayout {
+                                            alignment: center;
+                                            Text {
+                                                text: result.tab-name;
+                                                color: Theme.fg_dim;
+                                                font-size: 10px;
+                                            }
+                                        }
+                                    }
+
+                                    search-result-touch := TouchArea {
+                                        clicked => {
+                                            root.active-tab = result.tab-index;
+                                            root.show-search = false;
+                                            focus-scope.focus();
+                                        }
+                                        mouse-cursor: pointer;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // ── Keyboard layout dropdown overlay ─────────────────────────────────────
 
     Rectangle {
-        visible: root.dropdown-open && !root.show-help && root.active-tab == 0;
+        visible: root.dropdown-open && !root.show-help && root.active-tab == 1;
         width: 100%;
         height: 100%;
 
@@ -2696,7 +2863,7 @@ export component MainWindow inherits Window {
     // ── Dictation language dropdown overlay ───────────────────────────────────
 
     Rectangle {
-        visible: root.dictation-lang-dropdown-open && root.active-tab == 1;
+        visible: root.dictation-lang-dropdown-open && root.active-tab == 2;
         width: 100%;
         height: 100%;
 
@@ -2827,7 +2994,7 @@ export component MainWindow inherits Window {
 
     // ── Loading spinner ──────────────────────────────────────────────────────
 
-    if root.loading && root.active-tab == 0: Rectangle {
+    if root.loading && root.active-tab == 1: Rectangle {
         width: 100%;
         height: 100%;
         background: Theme.bg.transparentize(30%);

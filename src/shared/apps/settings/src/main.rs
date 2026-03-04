@@ -67,6 +67,25 @@ fn apply_theme(ui: &MainWindow) {
     theme.set_opacity(palette.opacity);
 }
 
+// ── Fuzzy search ─────────────────────────────────────────────────────────────
+
+/// Simple fuzzy match: every character in the query must appear in order in the
+/// target string (case-insensitive). e.g. "ppr" matches "Power Profile".
+fn fuzzy_match(target: &str, query: &str) -> bool {
+    let lower = target.to_lowercase();
+    let mut target_chars = lower.chars();
+    for qc in query.chars() {
+        loop {
+            match target_chars.next() {
+                Some(tc) if tc == qc => break,
+                Some(_) => continue,
+                None => return false,
+            }
+        }
+    }
+    true
+}
+
 // ── Keyboard helpers ─────────────────────────────────────────────────────────
 
 fn to_key_model(keys: &[xkb_labels::KeyInfo]) -> slint::ModelRc<KeyData> {
@@ -489,11 +508,11 @@ fn main() -> Result<(), slint::PlatformError> {
             "--tab" => {
                 if i + 1 < args.len() {
                     initial_tab = match args[i + 1].as_str() {
-                        "keyboard" => 0,
-                        "dictation" => 1,
-                        "display" => 2,
-                        "power" => 3,
-                        "about" => 4,
+                        "about" => 0,
+                        "keyboard" => 1,
+                        "dictation" => 2,
+                        "display" => 3,
+                        "power" => 4,
                         _ => 0,
                     };
                     i += 1;
@@ -1350,6 +1369,79 @@ fn main() -> Result<(), slint::PlatformError> {
             if let Some(ui) = ui_handle.upgrade() {
                 write_idle3(&ui);
             }
+        });
+    }
+
+    // ── Search callback ──────────────────────────────────────────────────────
+
+    {
+        // Searchable items: (label, tab_name, tab_index)
+        // Tab indices: About=0, Keyboard=1, Dictation=2, Display=3, Power=4
+        let search_index: Vec<(&str, &str, i32)> = vec![
+            // About
+            ("About smplOS", "About", 0),
+            ("Version", "About", 0),
+            ("Hostname", "About", 0),
+            ("Kernel", "About", 0),
+            ("Uptime", "About", 0),
+            ("Compositor", "About", 0),
+            // Keyboard
+            ("Keyboard Layout", "Keyboard", 1),
+            ("Add Layout", "Keyboard", 1),
+            ("Remove Layout", "Keyboard", 1),
+            ("XKB Layout", "Keyboard", 1),
+            ("Input Language", "Keyboard", 1),
+            ("Keyboard Preview", "Keyboard", 1),
+            // Dictation
+            ("Dictation", "Dictation", 2),
+            ("Speech to Text", "Dictation", 2),
+            ("Whisper", "Dictation", 2),
+            ("Voxtype", "Dictation", 2),
+            ("Voice Input", "Dictation", 2),
+            ("Language Model", "Dictation", 2),
+            ("Microphone", "Dictation", 2),
+            // Display
+            ("Display", "Display", 3),
+            ("Monitor", "Display", 3),
+            ("Resolution", "Display", 3),
+            ("Scale", "Display", 3),
+            ("Primary Monitor", "Display", 3),
+            ("Screen Layout", "Display", 3),
+            ("Refresh Rate", "Display", 3),
+            // Power
+            ("Power Profile", "Power", 4),
+            ("Power Saver", "Power", 4),
+            ("Balanced", "Power", 4),
+            ("Performance", "Power", 4),
+            ("Lock Screen Timeout", "Power", 4),
+            ("Screen Off Timeout", "Power", 4),
+            ("Suspend Timeout", "Power", 4),
+            ("Sleep", "Power", 4),
+            ("Idle", "Power", 4),
+        ];
+
+        let ui_handle = ui.as_weak();
+        ui.on_filter_search(move |query| {
+            let ui = ui_handle.unwrap();
+            let q = query.to_lowercase();
+            if q.is_empty() {
+                ui.set_search_results(slint::ModelRc::default());
+                return;
+            }
+
+            let results: Vec<SearchResult> = search_index
+                .iter()
+                .filter(|(label, _, _)| fuzzy_match(label, &q))
+                .map(|(label, tab, idx)| SearchResult {
+                    label: slint::SharedString::from(*label),
+                    tab_name: slint::SharedString::from(*tab),
+                    tab_index: *idx,
+                })
+                .collect();
+
+            ui.set_search_results(slint::ModelRc::from(
+                Rc::new(slint::VecModel::from(results)),
+            ));
         });
     }
 
