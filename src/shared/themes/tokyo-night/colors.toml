@@ -1,38 +1,40 @@
-accent = "#7aa2f7"
-cursor = "#c0caf5"
-foreground = "#a9b1d6"
+# -- Backgrounds --
 background = "#1a1b26"
+bg_light = "#24283b"
+bg_lighter = "#32344a"
+surface = "#32344a"
+
+# -- Foregrounds --
+foreground = "#a9b1d6"
+fg_dim = "#acb0d0"
+fg_alt = "#787c99"
+muted = "#444b6a"
+
+# -- Interactive --
+accent = "#7aa2f7"
+accent_alt = "#ad8ee6"
+cursor = "#c0caf5"
 selection_foreground = "#c0caf5"
 selection_background = "#7aa2f7"
 
-color0 = "#32344a"
-color1 = "#f7768e"
-color2 = "#9ece6a"
-color3 = "#e0af68"
-color4 = "#7aa2f7"
-color5 = "#ad8ee6"
-color6 = "#449dab"
-color7 = "#787c99"
-color8 = "#444b6a"
-bg_light = "#24283b"
-bg_lighter = "#32344a"
-color9 = "#ff7a93"
-color10 = "#b9f27c"
-color11 = "#ff9e64"
-color12 = "#7da6ff"
-color13 = "#bb9af7"
-color14 = "#0db9d7"
-color15 = "#acb0d0"
+# -- Status --
+danger = "#f7768e"
+success = "#9ece6a"
+warning = "#e0af68"
+info = "#449dab"
 
-# Decoration (rounding, blur, opacity)
+# -- Bright Variants (terminal palette + btop gradients) --
+danger_bright = "#ff7a93"
+success_bright = "#b9f27c"
+warning_bright = "#ff9e64"
+accent_bright = "#7da6ff"
+accent_alt_bright = "#bb9af7"
+info_bright = "#0db9d7"
+
+# -- Decoration --
 rounding = "3"
 blur_size = "14"
 blur_passes = "3"
-# Compositor opacity — affects the ENTIRE window frame including text.
-# Keep this close to 1.0 so text stays sharp. The blur behind the window
-# provides the frosted glass depth effect without dimming content.
-# For true per-pixel transparency (background only, text fully opaque)
-# use the Rust/Slint apps — they handle their own ARGB alpha.
 opacity_active = "1.0"
 opacity_inactive = "1.0"
 term_opacity_active = "0.85"
@@ -41,12 +43,12 @@ popup_opacity = "0.70"
 messenger_opacity = "0.85"
 browser_opacity = "1.0"
 
-# Layout (gaps, borders)
+# -- Layout --
 gaps_in = "2"
 gaps_out = "4"
 border_size = "2"
 
-# App theme selectors (use another theme id to reuse its app presets)
+# -- App Theme Selectors --
 app_theme_nvim = "tokyo-night"
 app_theme_vscode = "tokyo-night"
 app_theme_logseq = "tokyo-night"

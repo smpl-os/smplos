@@ -111,6 +111,17 @@
     :arrow-cmd ""
     :tooltip "Do Not Disturb"))
 
+(defwidget qs-dictation []
+  (qs-pill
+    :icon ""
+    :icon-path {dictation-data.recording == "yes" ? "icons/status/dictation-on.svg" : "icons/status/dictation.svg"}
+    :label {dictation-data.recording == "yes" ? "Recording" : "Idle"}
+    :active {dictation-data.recording == "yes"}
+    :onclick "dictation-toggle"
+    :arrow-cmd "dictation-settings &"
+    :tooltip "Toggle dictation (Super+Ctrl+X)"
+    :visible {dictation-data.installed == "yes"}))
+
 ;; ============================================================================
 ;; SLIDERS
 ;; ============================================================================
@@ -168,7 +179,7 @@
     (box :class "qs-header" :orientation "h" :space-evenly false
       (label :class "qs-title" :text "System Menu" :hexpand true :halign "start")
       (button :class "qs-close" :onclick "popup-toggle --close" "x"))
-    ;; Toggle grid (3 columns x 2 rows)
+    ;; Toggle grid (3 columns, rows expand when features are available)
     (box :class "qs-toggles" :orientation "v" :space-evenly false :spacing 8
       (box :orientation "h" :space-evenly true :spacing 8
         (qs-wifi)
@@ -177,7 +188,10 @@
       (box :orientation "h" :space-evenly true :spacing 8
         (qs-airplane)
         (qs-nightlight)
-        (qs-dnd)))
+        (qs-dnd))
+      (box :orientation "h" :space-evenly true :spacing 8
+        :visible {dictation-data.installed == "yes"}
+        (qs-dictation)))
     ;; Sliders
     (box :class "qs-sliders" :orientation "v" :space-evenly false :spacing 10
       (qs-volume-slider)

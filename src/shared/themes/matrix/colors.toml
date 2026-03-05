@@ -1,30 +1,41 @@
-accent = "#00FF00"
-cursor = "#66FF66"
-foreground = "#00FF00"
+# -- Backgrounds --
 background = "#000000"
+bg_light = "#0D1A0D"
+bg_lighter = "#1A2E1A"
+surface = "#000000"
+
+# -- Foregrounds --
+foreground = "#00FF00"
+fg_dim = "#66FF66"
+fg_alt = "#00FF00"
+muted = "#339933"
+
+# -- Interactive --
+accent = "#00FF00"
+accent_alt = "#FF9900"
+cursor = "#66FF66"
 selection_foreground = "#000000"
 selection_background = "#66FF66"
 
-color0 = "#000000"
-color1 = "#FF9900"
-color2 = "#00FF00"
-color3 = "#FFCC33"
-color4 = "#22BB55"
-color5 = "#FF9900"
-color6 = "#33FFAA"
-color7 = "#00FF00"
-color8 = "#339933"
-bg_light = "#0D1A0D"
-bg_lighter = "#1A2E1A"
-color9 = "#FFCC33"
-color10 = "#66FF66"
-color11 = "#FFEE66"
-color12 = "#55FFAA"
-color13 = "#FFBB33"
-color14 = "#77FFCC"
-color15 = "#66FF66"
+# -- Status --
+danger = "#FF9900"
+success = "#00FF00"
+warning = "#FFCC33"
+info = "#33FFAA"
 
-# Decoration (rounding, blur, opacity)
+# -- Bright Variants (terminal palette + btop gradients) --
+danger_bright = "#FFCC33"
+success_bright = "#66FF66"
+warning_bright = "#FFEE66"
+accent_bright = "#55FFAA"
+accent_alt_bright = "#FFBB33"
+info_bright = "#77FFCC"
+
+# -- Terminal Palette Overrides --
+# term_4 differs from accent for this theme
+term_4 = "#22BB55"
+
+# -- Decoration --
 rounding = "0"
 blur_size = "0"
 blur_passes = "0"
@@ -36,12 +47,12 @@ popup_opacity = "0.95"
 messenger_opacity = "0.85"
 browser_opacity = "1.0"
 
-# Layout (gaps, borders)
+# -- Layout --
 gaps_in = "1"
 gaps_out = "2"
 border_size = "1"
 
-# App theme selectors (use another theme id to reuse its app presets)
+# -- App Theme Selectors --
 app_theme_nvim = "matrix"
 app_theme_vscode = "matrix"
 app_theme_logseq = "matrix"

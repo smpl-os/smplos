@@ -103,13 +103,16 @@ collect_packages      → merge shared + compositor + edition package lists
 setup_profile         → populate the mkarchiso profile directory
 download_packages     → pacstrap ~875 packages into the airootfs
 process_aur_packages  → install prebuilt .pkg.tar.zst from /build/prebuilt
+                        (auto-builds from AUR if no prebuilt found)
 download_flatpaks     → (optional) write Flathub install list
 download_appimages    → (optional) download AppImages
+cache_whisper_model   → download Whisper base.en model files (~150 MB) for offline dictation
 create_repo_database  → build a local pacman repo from the offline mirror
 setup_pacman_conf     → write pacman.conf for the ISO environment
 update_package_list   → generate profiledef package list for mkarchiso
 update_profiledef     → set ISO name, version, compression
-setup_airootfs        → copy dotfiles, configs, scripts, themes, installer
+setup_airootfs        → copy dotfiles, configs, scripts, themes, installer,
+                        bundle Whisper model + voxtype config to airootfs
 build_st              → compile st (suckless terminal) from source
 build_notif_center    → compile notif-center (Rust+Slint)
 build_kb_center       → compile kb-center (Rust+Slint)
@@ -209,6 +212,52 @@ on each build run.
 | AUR package already in `build/prebuilt/` | Skipped, container never spawned |
 | Rust source unchanged (same hash) | Cached binary from `.cache/binaries/` |
 | `--no-cache` flag | Forces fresh package downloads |
+
+---
+
+## Offline Dictation Pipeline
+
+smplOS bundles a Whisper speech-to-text model into the ISO so dictation works without
+internet. Here's the full flow from build to first use.
+
+### Build Time (`cache_whisper_model` + `setup_airootfs`)
+
+1. `cache_whisper_model()` downloads 5 files from HuggingFace (`Systran/faster-whisper-base.en`):
+   `config.json`, `model.bin`, `tokenizer.json`, `vocabulary.json`, `preprocessor_config.json`.
+   Cached in the build container at `$CACHE_DIR/models/whisper/base.en/`. Non-fatal on
+   failure — if download fails, dictation just won't be pre-cached (user can still run
+   `dictation-setup` later).
+2. `setup_airootfs()` copies the model to two places in the ISO:
+   - `/usr/share/smplos/models/whisper/base.en/` — system-wide, read by `dictation-prime`
+   - `/root/smplos/models/whisper/base.en/` — staging area, copied to installed system
+     by `install.sh`
+3. A default `config.toml` for voxtype is placed in `/etc/skel/.config/voxtype/` and
+   staged for the installer.
+4. A `voxtype.service` systemd user unit is placed in `/etc/skel/.config/systemd/user/`.
+
+### Install Time (`install.sh`)
+
+The installer calls `dictation-prime` after `rebuild-app-cache`. This primes the new
+user's HuggingFace cache from the bundled model so dictation works on first login.
+
+### First Use (`dictation-prime`)
+
+`dictation-prime` is an idempotent script that:
+1. Copies model files from `/usr/share/smplos/models/whisper/base.en/` into the
+   HuggingFace cache at `~/.cache/huggingface/hub/models--Systran--faster-whisper-base.en/snapshots/smplos-bundled/`.
+2. Sets `refs/main` → `smplos-bundled` so voxtype resolves the model.
+3. Writes `~/.config/voxtype/config.toml` if missing.
+4. Creates and enables the `voxtype.service` systemd user unit.
+5. Writes marker `~/.config/smplos/.dictation-primed` so subsequent calls are instant no-ops.
+
+Won't overwrite if user has already downloaded their own model snapshot.
+
+### AUR Package Auto-Build
+
+`process_aur_packages()` in `build.sh` has a defense-in-depth fallback: if no prebuilt
+`.pkg.tar.zst` is found for an AUR package (including `voxtype-bin`), it clones the AUR
+repo, imports required PGP keys, and runs `makepkg` inside the build container. This
+means contributors don't need to manually pre-compile AUR packages.
 
 ---
 

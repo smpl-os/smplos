@@ -425,6 +425,68 @@ download_appimages() {
 }
 
 ###############################################################################
+# Cache Whisper AI Model for Offline Dictation
+###############################################################################
+
+cache_whisper_model() {
+    log_step "Caching Whisper model for offline dictation"
+
+    local model_name="base.en"
+    local hf_repo="Systran/faster-whisper-${model_name}"
+    local model_dir="$CACHE_DIR/models/whisper/${model_name}"
+    # Files required by faster-whisper / CTranslate2 for inference
+    local model_files=(config.json model.bin tokenizer.json vocabulary.json preprocessor_config.json)
+
+    # Skip if already cached (idempotent)
+    if [[ -f "$model_dir/model.bin" ]]; then
+        local size
+        size=$(du -sh "$model_dir" | cut -f1)
+        log_info "Whisper model already cached ($size)"
+        return 0
+    fi
+
+    mkdir -p "$model_dir"
+
+    log_info "Downloading ${hf_repo} from HuggingFace..."
+    local failed=0
+    for f in "${model_files[@]}"; do
+        local url="https://huggingface.co/${hf_repo}/resolve/main/${f}"
+        local dest="$model_dir/$f"
+        if [[ -f "$dest" ]]; then
+            log_sub "$f: already cached"
+            continue
+        fi
+        log_sub "Downloading $f..."
+        if retry curl -fSL --max-time 300 -o "$dest" "$url" 2>&1; then
+            log_sub "$f: $(du -h "$dest" | cut -f1)"
+        else
+            log_warn "Failed to download $f from $url"
+            rm -f "$dest"
+            ((failed++)) || true
+        fi
+    done
+
+    if [[ $failed -gt 0 ]]; then
+        log_warn "Whisper model download had $failed failures — dictation will require online setup"
+        rm -rf "$model_dir"
+        return 0  # non-fatal: dictation is optional
+    fi
+
+    # Verify model.bin is a valid CTranslate2 model (not an HTML error page)
+    local bin_size
+    bin_size=$(stat -c%s "$model_dir/model.bin" 2>/dev/null || echo 0)
+    if [[ $bin_size -lt 10000000 ]]; then  # base.en model.bin is ~148MB
+        log_warn "model.bin is suspiciously small (${bin_size} bytes) — removing"
+        rm -rf "$model_dir"
+        return 0
+    fi
+
+    local total_size
+    total_size=$(du -sh "$model_dir" | cut -f1)
+    log_info "Whisper model cached: ${model_name} (${total_size})"
+}
+
+###############################################################################
 # Handle AUR Packages (use prebuilt or build)
 ###############################################################################
 
@@ -455,8 +517,36 @@ process_aur_packages() {
         fi
         
         if [[ $found -eq 0 ]]; then
-            log_warn "No prebuilt package found for $pkg"
-            log_warn "Run the prebuilt script first to build AUR packages"
+            # No prebuilt — try building from AUR inside the container
+            log_warn "No prebuilt for $pkg — building from AUR..."
+            local build_tmp
+            build_tmp=$(mktemp -d)
+            if sudo -u builder git clone --depth 1 \
+                    "https://aur.archlinux.org/${pkg}.git" "$build_tmp/$pkg" 2>/dev/null; then
+                # Import any PGP keys the PKGBUILD requires
+                if grep -q 'validpgpkeys' "$build_tmp/$pkg/PKGBUILD" 2>/dev/null; then
+                    grep -A 20 'validpgpkeys=' "$build_tmp/$pkg/PKGBUILD" \
+                        | grep -oP '[0-9A-F]{16,}' \
+                        | while read -r _key; do
+                            sudo -u builder gpg --keyserver keyserver.ubuntu.com \
+                                --recv-keys "$_key" 2>/dev/null || true
+                        done
+                fi
+                if (cd "$build_tmp/$pkg" && sudo -u builder makepkg -s --noconfirm 2>&1); then
+                    shopt -s nullglob
+                    for built in "$build_tmp/$pkg/"*.pkg.tar.{zst,xz}; do
+                        [[ -f "$built" && ! "$built" == *"-debug-"* ]] || continue
+                        log_info "Built from AUR: $(basename "$built")"
+                        cp "$built" "$OFFLINE_MIRROR_DIR/"
+                        found=1
+                    done
+                    shopt -u nullglob
+                fi
+            fi
+            rm -rf "$build_tmp"
+            if [[ $found -eq 0 ]]; then
+                log_warn "Failed to build $pkg from AUR — package will be missing from ISO"
+            fi
         fi
     done
     
@@ -769,6 +859,60 @@ setup_airootfs() {
         printf '%s\n' "${FLATPAK_PACKAGES[@]}" > "$airootfs/opt/flatpaks/install-online.txt"
         log_info "Flatpak install list: ${#FLATPAK_PACKAGES[@]} app(s)"
     fi
+
+    # ── Bundle Whisper AI model for offline dictation ─────────────────────────
+    local whisper_src="$CACHE_DIR/models/whisper/base.en"
+    if [[ -d "$whisper_src" && -f "$whisper_src/model.bin" ]]; then
+        log_info "Bundling Whisper base.en model into ISO"
+        local whisper_dest="$airootfs/usr/share/smplos/models/whisper/base.en"
+        mkdir -p "$whisper_dest"
+        cp "$whisper_src/"* "$whisper_dest/"
+        # Also stage for installer (post-install deploys to installed system)
+        mkdir -p "$airootfs/root/smplos/models/whisper/base.en"
+        cp "$whisper_src/"* "$airootfs/root/smplos/models/whisper/base.en/"
+        log_info "Whisper model bundled ($(du -sh "$whisper_dest" | cut -f1))"
+    else
+        log_warn "Whisper model not cached — dictation will require online setup"
+    fi
+
+    # ── Default voxtype config (dictation) ────────────────────────────────────
+    log_info "Deploying default voxtype config"
+    mkdir -p "$skel/.config/voxtype"
+    cat > "$skel/.config/voxtype/config.toml" << 'VOXCFG'
+# Voxtype configuration for smplOS
+# Local AI speech-to-text -- fully offline, no cloud.
+# Press SUPER+CTRL+X to start/stop dictation.
+
+# Use compositor keybindings instead of built-in hotkey
+[hotkey]
+enabled = false
+
+state_file = "auto"
+
+[whisper]
+model = "base.en"
+language = "en"
+
+[output]
+mode = "type"
+fallback_to_clipboard = true
+append_text = " "
+
+[output.notification]
+on_transcription = true
+
+[audio]
+device = "auto"
+sample_rate = 16000
+max_duration_secs = 60
+
+[audio.feedback]
+enabled = true
+theme = "default"
+VOXCFG
+    # Also stage for installer
+    mkdir -p "$airootfs/root/smplos/config/voxtype"
+    cp "$skel/.config/voxtype/config.toml" "$airootfs/root/smplos/config/voxtype/config.toml"
     
     # Copy offline mirror into airootfs
     # Uses --reflink=auto for CoW on supported filesystems (avoids real duplication)
@@ -1215,6 +1359,27 @@ BOOTLOGSVC
     mkdir -p "$user_wants"
     ln -sf ../smplos-app-cache.service "$user_wants/smplos-app-cache.service" 2>/dev/null || true
     ln -sf ../smplos-app-cache.path "$user_wants/smplos-app-cache.path" 2>/dev/null || true
+
+    # Voxtype dictation daemon (systemd user service)
+    # Service file lives in skel so it's available to all users.
+    # dictation-prime will set up the HF cache on first use.
+    local user_dir="$skel/.config/systemd/user"
+    cat > "$user_dir/voxtype.service" << 'VOXSVC'
+[Unit]
+Description=Voxtype local AI dictation daemon
+Documentation=https://github.com/peteonrails/voxtype
+After=graphical-session.target
+
+[Service]
+ExecStart=/usr/bin/voxtype daemon
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target
+VOXSVC
+    # Don't auto-enable — dictation-prime handles this on first use
+    # so the daemon doesn't start before the model cache is primed
 }
 
 setup_helper_scripts() {
@@ -1688,6 +1853,7 @@ main() {
     process_aur_packages
     download_flatpaks
     download_appimages
+    cache_whisper_model
     create_repo_database
     setup_pacman_conf
     update_package_list

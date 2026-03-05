@@ -22,11 +22,15 @@
 
 ## What's new in v0.6.0
 
+- **Offline dictation out of the box.** The Whisper `base.en` speech-to-text model (~150 MB) is bundled into the ISO and primed into the HuggingFace cache on first boot. Press <kbd>Super</kbd>+<kbd>Ctrl</kbd>+<kbd>X</kbd> to start dictating immediately — no internet, no downloads, no setup. Run `dictation-setup` to switch languages or model sizes later.
 - **Language Settings (kb-center) — Dictation tab.** kb-center now has a full Dictation tab for setting up speech-to-text via Voxtype/Whisper. Pick a language, choose a model size, and install with a single click. Supports 100+ languages, English-alongside mode, 3-tier package fallback (pacman, paru, manual PKGBUILD), and live progress tracking. The keyboard tab is unchanged.
 - **Fix post-install black screen on Hyprland 0.54+.** Hyprland migrated from wlroots to the Aquamarine backend, silently breaking `WLR_NO_HARDWARE_CURSORS` and `WLR_RENDERER_ALLOW_SOFTWARE` env vars. The VM cursor workaround now uses the native `cursor:no_hardware_cursors` config option. Fixes black screen after login in QEMU/VirtualBox.
 - **Transparent kb-center.** Added `no-frame: true` and proper alpha background to the Language Settings window, matching all other Slint apps.
 - **Dictation quick-settings pill.** EWW bar quick-settings panel shows a dictation status pill with themed mic SVG — toggle the service or jump to settings.
 - **Dictation keybinding.** <kbd>Super</kbd>+<kbd>Ctrl</kbd>+<kbd>X</kbd> toggles dictation globally (matches Omarchy).
+- **AUR package auto-build fallback.** The ISO builder now automatically builds any missing AUR package from source if no prebuilt `.pkg.tar.zst` is found — no manual pre-compilation required.
+- **Logseq theme fix.** Theme switching now works on fresh installs where `~/.logseq/` doesn't exist yet.
+- **Neovim live theme reload.** `theme-set` now broadcasts colorscheme changes to all running Neovim instances via `--remote-expr` over server sockets.
 
 ---
 
@@ -115,7 +119,7 @@ A graphical display configuration panel. Detects connected monitors via Hyprland
 
 #### Keyboard Manager
 
-A keyboard layout and input configuration panel with two tabs. The **Keyboard** tab shows active layouts, lets you add/remove languages, and includes a live key-cap preview that updates as you switch layouts. The **Dictation** tab sets up speech-to-text via Voxtype/Whisper — pick a language, choose a model size, and install with one click. Supports 100+ languages, 3-tier package fallback, and live progress. All changes are applied live via `hyprctl keyword`.
+A keyboard layout and input configuration panel with two tabs. The **Keyboard** tab shows active layouts, lets you add/remove languages, and includes a live key-cap preview that updates as you switch layouts. The **Dictation** tab sets up speech-to-text via Voxtype/Whisper — pick a language, choose a model size, and install with one click. English (`base.en`) works offline out of the box — the model is bundled into the ISO. Supports 100+ languages, 3-tier package fallback, and live progress. All changes are applied live via `hyprctl keyword`.
 
 <a href="images/8-keyboard.png"><img src="images/8-keyboard.png" width="720" /></a>
 
@@ -204,6 +208,8 @@ src/
 
   shared/                   Everything here works on ALL compositors
     bin/                    User-facing scripts (installed to /usr/local/bin/)
+                            Includes: dictation-prime, dictation-toggle, dictation-setup,
+                            theme-set, rebuild-app-cache, smplos-settings, bar-ctl, ...
     eww/                    EWW bar and widgets (GTK3 — works on X11 + Wayland)
     configs/
       smplos/               Cross-compositor configs (bindings.conf, messengers.conf, branding)
@@ -355,6 +361,44 @@ dunst (notification daemon)
                               |-- Maps summaries to actions (e.g. "System Update" -> smplos-update)
                               +-- Renders scrollable card list via Slint UI
 ```
+
+## Dictation (Speech-to-Text)
+
+smplOS ships with **fully offline speech-to-text** powered by [Voxtype](https://github.com/Vypxl/voxtype) and [Whisper](https://github.com/openai/whisper). The English `base.en` model (~150 MB) is bundled into the ISO — dictation works immediately on first boot with no internet connection.
+
+**Toggle dictation:** <kbd>Super</kbd>+<kbd>Ctrl</kbd>+<kbd>X</kbd>
+
+When active, a microphone icon appears in the EWW bar. Speak naturally and text is typed into the focused window via `wtype`.
+
+### How It Works
+
+```
+dictation-toggle          Toggle the voxtype systemd user service on/off
+       |
+dictation-prime           (runs once) Primes HuggingFace cache from bundled model,
+       |                  writes default config, creates+enables systemd service
+       |
+voxtype.service           Systemd user service — listens to mic, runs Whisper,
+                          types results via wtype
+```
+
+- **`dictation-prime`** — Idempotent first-run script. Copies the bundled Whisper model from `/usr/share/smplos/models/whisper/base.en/` into the HuggingFace cache at `~/.cache/huggingface/hub/`, writes a default `~/.config/voxtype/config.toml`, and creates + enables the systemd user service. Runs automatically on first toggle or during post-install. Writes a marker file so subsequent calls are instant no-ops.
+- **`dictation-toggle`** — Starts or stops the voxtype service. Calls `dictation-prime` on first use. Emits JSON status for the EWW bar listener.
+- **`dictation-setup`** — Interactive setup wizard (uses `gum`). Pick from 100+ languages, choose a model size (tiny/base/small/medium/large), and download. Detects pre-installed state and skips redundant steps.
+
+### Changing Language or Model
+
+The bundled `base.en` model covers English. To switch to another language or a larger model:
+
+```bash
+dictation-setup
+```
+
+This opens an interactive picker. Larger models (small, medium, large) give better accuracy but use more RAM and are slower to transcribe.
+
+### EWW Bar Integration
+
+The quick-settings panel in the EWW bar shows a dictation pill with a themed microphone icon. Click it to toggle the service or long-press to open settings. The bar icon reflects the current state: filled mic when active, outline when inactive.
 
 ## System Updates
 

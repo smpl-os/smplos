@@ -1,30 +1,41 @@
-accent = "#82FB9C"
-cursor = "#ddf7ff"
-foreground = "#ddf7ff"
+# -- Backgrounds --
 background = "#0B0C16"
+bg_light = "#181a2a"
+bg_lighter = "#252840"
+surface = "#0B0C16"
+
+# -- Foregrounds --
+foreground = "#ddf7ff"
+fg_dim = "#ddf7ff"
+fg_alt = "#85E1FB"
+muted = "#6a6e95"
+
+# -- Interactive --
+accent = "#82FB9C"
+accent_alt = "#86a7df"
+cursor = "#ddf7ff"
 selection_foreground = "#0B0C16"
 selection_background = "#ddf7ff"
 
-color0 = "#0B0C16"
-color1 = "#50f872"
-color2 = "#4fe88f"
-color3 = "#50f7d4"
-color4 = "#829dd4"
-color5 = "#86a7df"
-color6 = "#7cf8f7"
-color7 = "#85E1FB"
-color8 = "#6a6e95"
-bg_light = "#181a2a"
-bg_lighter = "#252840"
-color9 = "#85ff9d"
-color10 = "#9cf7c2"
-color11 = "#a4ffec"
-color12 = "#c4d2ed"
-color13 = "#cddbf4"
-color14 = "#d1fffe"
-color15 = "#ddf7ff"
+# -- Status --
+danger = "#50f872"
+success = "#4fe88f"
+warning = "#50f7d4"
+info = "#7cf8f7"
 
-# Decoration (rounding, blur, opacity)
+# -- Bright Variants (terminal palette + btop gradients) --
+danger_bright = "#85ff9d"
+success_bright = "#9cf7c2"
+warning_bright = "#a4ffec"
+accent_bright = "#c4d2ed"
+accent_alt_bright = "#cddbf4"
+info_bright = "#d1fffe"
+
+# -- Terminal Palette Overrides --
+# term_4 differs from accent for this theme
+term_4 = "#829dd4"
+
+# -- Decoration --
 rounding = "3"
 blur_size = "14"
 blur_passes = "3"
@@ -36,12 +47,12 @@ popup_opacity = "0.85"
 messenger_opacity = "0.85"
 browser_opacity = "1.0"
 
-# Layout (gaps, borders)
+# -- Layout --
 gaps_in = "2"
 gaps_out = "4"
 border_size = "2"
 
-# App theme selectors (use another theme id to reuse its app presets)
+# -- App Theme Selectors --
 app_theme_nvim = "hackerman"
 app_theme_vscode = "hackerman"
 app_theme_logseq = "hackerman"

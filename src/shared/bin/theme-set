@@ -260,6 +260,17 @@ NVM_THEME_PATH="$(resolve_theme_path "$NVM_PRESET" 2>/dev/null || true)"
 if [[ -n "${NVM_THEME_PATH:-}" && -f "$NVM_THEME_PATH/neovim.lua" ]]; then
   mkdir -p "$HOME/.config/nvim/lua/plugins"
   cp "$NVM_THEME_PATH/neovim.lua" "$HOME/.config/nvim/lua/plugins/colorscheme.lua"
+
+  # Live-reload: apply colorscheme to all running Neovim instances via server sockets
+  # Neovim 0.9+ auto-creates a socket at $XDG_RUNTIME_DIR/nvim.<pid>.<n>
+  _nvim_cs=$(sed -n 's/.*colorscheme[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$NVM_THEME_PATH/neovim.lua" | head -1)
+  if [[ -n "$_nvim_cs" ]]; then
+    _nvim_rt="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+    for _sock in "$_nvim_rt"/nvim.*; do
+      [[ -S "$_sock" ]] || continue
+      nvim --server "$_sock" --remote-expr "execute('silent! colorscheme $_nvim_cs')" &>/dev/null &
+    done
+  fi
 fi
 
 # VS Code / Codium / Cursor — set workbench.colorTheme from selected preset
@@ -296,19 +307,20 @@ if [[ -n "${VSCODE_THEME_PATH:-}" && -f "$VSCODE_THEME_PATH/vscode.json" ]]; the
   _set_vscode_theme "cursor" "$HOME/.config/Cursor/User/settings.json"
 fi
 
-# Logseq — switch theme via preferences.json (Logseq watches this file)
-# Theme plugins are pre-installed in ~/.logseq/plugins/
+# Logseq — switch theme via preferences.json + custom.css
+# custom.css provides full color theming via CSS variables (always works)
+# Plugin themes are optional — enhance theming if plugins are installed
+mkdir -p "$HOME/.logseq"
 _logseq_prefs="$HOME/.logseq/preferences.json"
-if [[ -d "$HOME/.logseq/plugins" ]]; then
-  _lp="$HOME/.logseq/plugins"
+_lp="$HOME/.logseq/plugins"
 
-  # Detect dark vs light from marker file
-  _lq_mode=dark
-  [[ -f "$CURRENT_THEME_PATH/light.mode" ]] && _lq_mode=light
+# Detect dark vs light from marker file
+_lq_mode=dark
+[[ -f "$CURRENT_THEME_PATH/light.mode" ]] && _lq_mode=light
 
-  # Map smplOS theme names to Logseq plugin themes
-  # URL must be assets:// + absolute path to the CSS file inside the plugin dir
-  _lq_name="" _lq_css="" _lq_pid=""
+# Map smplOS theme names to Logseq plugin themes (only if plugins are installed)
+_lq_name="" _lq_css="" _lq_pid=""
+if [[ -d "$_lp" ]]; then
   case "$LOGSEQ_PRESET" in
     catppuccin)       _lq_name="Catppuccin Mocha"          _lq_css="$_lp/logseq-catppuccin/ctp-mocha.css"              _lq_pid=logseq-catppuccin ;;
     catppuccin-latte) _lq_name="Catppuccin Latte"          _lq_css="$_lp/logseq-catppuccin/ctp-latte.css"              _lq_pid=logseq-catppuccin ;;
@@ -326,10 +338,11 @@ if [[ -d "$HOME/.logseq/plugins" ]]; then
     ristretto)        _lq_name="Catppuccin Macchiato"      _lq_css="$_lp/logseq-catppuccin/ctp-macchiato.css"           _lq_pid=logseq-catppuccin ;;
     ethereal)         _lq_name="Catppuccin Mocha"          _lq_css="$_lp/logseq-catppuccin/ctp-mocha.css"              _lq_pid=logseq-catppuccin ;;
   esac
+fi
 
-  if [[ -n "$_lq_pid" ]]; then
-    # Write preferences.json with plugin theme + correct dark/light mode
-    cat > "$_logseq_prefs" <<EOF
+if [[ -n "$_lq_pid" ]]; then
+  # Write preferences.json with plugin theme + correct dark/light mode
+  cat > "$_logseq_prefs" <<EOF
 {
   "theme": {
     "name": "$_lq_name",
@@ -343,9 +356,9 @@ if [[ -d "$HOME/.logseq/plugins" ]]; then
   "externals": []
 }
 EOF
-  else
-    # No plugin for this theme — just set dark/light mode, clear plugin theme
-    cat > "$_logseq_prefs" <<EOF
+else
+  # No plugin for this theme — just set dark/light mode, clear plugin theme
+  cat > "$_logseq_prefs" <<EOF
 {
   "themes": {
     "mode": "$_lq_mode"
@@ -353,12 +366,11 @@ EOF
   "externals": []
 }
 EOF
-  fi
+fi
 
-  # Also write custom.css for themes without a plugin (gruvbox, kanagawa, nord, etc.)
-  if [[ -f "$CURRENT_THEME_PATH/logseq-custom.css" ]]; then
-    cp "$CURRENT_THEME_PATH/logseq-custom.css" "$HOME/.logseq/custom.css"
-  fi
+# Deploy custom.css with full color variable overrides (works without plugins)
+if [[ -f "$CURRENT_THEME_PATH/logseq-custom.css" ]]; then
+  cp "$CURRENT_THEME_PATH/logseq-custom.css" "$HOME/.logseq/custom.css"
 fi
 
 # Chromium / Brave -- set browser toolbar color and dark/light mode

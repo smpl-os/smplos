@@ -1,0 +1,123 @@
+#!/bin/bash
+# Prime the Whisper model cache for offline dictation.
+# Copies the bundled base.en model from /usr/share/smplos/models/whisper/
+# into the HuggingFace hub cache so voxtype finds it without downloading.
+#
+# Idempotent: safe to call multiple times. Does nothing if already primed
+# or if the bundled model is not present.
+#
+# Also ensures the voxtype systemd user service is enabled and the
+# default config exists.
+
+set -euo pipefail
+
+BUNDLED_DIR="/usr/share/smplos/models/whisper/base.en"
+HF_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/huggingface/hub"
+MODEL_CACHE="$HF_CACHE/models--Systran--faster-whisper-base.en"
+SNAP_HASH="smplos-bundled"
+MARKER="$HOME/.config/smplos/.dictation-primed"
+
+log() { echo "[dictation-prime] $*" >&2; }
+
+# ── Already primed? ──────────────────────────────────────────────────────────
+if [[ -f "$MARKER" ]]; then
+    exit 0
+fi
+
+# ── Voxtype not installed? ────────────────────────────────────────────────────
+if ! command -v voxtype &>/dev/null; then
+    log "voxtype not installed, skipping"
+    exit 0
+fi
+
+# ── Prime HF cache from bundled model ────────────────────────────────────────
+if [[ -d "$BUNDLED_DIR" && -f "$BUNDLED_DIR/model.bin" ]]; then
+    # Only prime if no model is cached yet (don't overwrite user downloads)
+    if [[ ! -d "$MODEL_CACHE/snapshots" ]]; then
+        log "Priming HF cache from bundled model..."
+        mkdir -p "$MODEL_CACHE/refs" "$MODEL_CACHE/snapshots/$SNAP_HASH"
+
+        # Copy model files into the snapshot directory
+        cp "$BUNDLED_DIR/"* "$MODEL_CACHE/snapshots/$SNAP_HASH/"
+
+        # Point refs/main at our snapshot so HF hub resolves model = "base.en"
+        echo "$SNAP_HASH" > "$MODEL_CACHE/refs/main"
+
+        log "HF cache primed: $MODEL_CACHE/snapshots/$SNAP_HASH/"
+    fi
+else
+    log "No bundled model at $BUNDLED_DIR — skipping cache prime"
+fi
+
+# ── Ensure default config exists ─────────────────────────────────────────────
+if [[ ! -f "$HOME/.config/voxtype/config.toml" ]]; then
+    log "Writing default voxtype config..."
+    mkdir -p "$HOME/.config/voxtype"
+    cat > "$HOME/.config/voxtype/config.toml" << 'TOML'
+# Voxtype configuration for smplOS
+# Local AI speech-to-text -- fully offline, no cloud.
+# Press SUPER+CTRL+X to start/stop dictation.
+
+[hotkey]
+enabled = false
+
+state_file = "auto"
+
+[whisper]
+model = "base.en"
+language = "en"
+
+[output]
+mode = "type"
+fallback_to_clipboard = true
+append_text = " "
+
+[output.notification]
+on_transcription = true
+
+[audio]
+device = "auto"
+sample_rate = 16000
+max_duration_secs = 60
+
+[audio.feedback]
+enabled = true
+theme = "default"
+TOML
+fi
+
+# ── Ensure systemd service file exists ────────────────────────────────────────
+local_svc="$HOME/.config/systemd/user/voxtype.service"
+if [[ ! -f "$local_svc" ]]; then
+    log "Creating voxtype systemd user service..."
+    # Try voxtype's built-in setup first
+    if voxtype setup systemd &>/dev/null; then
+        log "Service created via voxtype setup"
+    else
+        # Fallback: write service file manually
+        mkdir -p "$(dirname "$local_svc")"
+        cat > "$local_svc" << 'SVC'
+[Unit]
+Description=Voxtype local AI dictation daemon
+After=graphical-session.target
+
+[Service]
+ExecStart=/usr/bin/voxtype daemon
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target
+SVC
+        log "Service created manually"
+    fi
+fi
+
+# ── Enable the service (don't start — dictation-toggle handles that) ─────────
+systemctl --user daemon-reload 2>/dev/null || true
+systemctl --user enable voxtype.service 2>/dev/null || true
+
+# ── Mark as primed ────────────────────────────────────────────────────────────
+mkdir -p "$(dirname "$MARKER")"
+touch "$MARKER"
+log "Dictation primed successfully"

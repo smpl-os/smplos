@@ -58,6 +58,9 @@
 ;; Keyboard layout (only visible when multiple layouts configured)
 (deflisten kb-data :initial '{"code":"","layout":"","xkb_layout":"","xkb_variant":"","visible":"no"}' `scripts/keyboard-listener.sh`)
 
+;; Dictation (only visible when voxtype is installed; shows recording state)
+(deflisten dictation-data :initial '{"installed":"no","recording":"no"}' `scripts/dictation-listener.sh`)
+
 ;; ============================================================================
 ;; WIDGETS
 ;; ============================================================================
@@ -169,6 +172,18 @@
           :visible {kb-data.visible == "yes"}
     (label :class "kb-code" :text {kb-data.code})))
 
+;; Dictation mic indicator (only visible when voxtype is installed)
+;; Pulses with accent color when recording, idle mic when not recording.
+(defwidget tray-dictation []
+  (button :class "tray-dictation ${dictation-data.recording == 'yes' ? 'recording' : ''}"
+          :onclick "dictation-toggle"
+          :onrightclick "dictation-settings &"
+          :tooltip {dictation-data.recording == "yes" ? "Recording -- click or Super+Ctrl+X to stop" :
+                    "Dictation idle -- click or Super+Ctrl+X to record"}
+          :visible {dictation-data.installed == "yes"}
+    (image :path {dictation-data.recording == "yes" ? "icons/status/dictation-on.svg" : "icons/status/dictation.svg"}
+           :image-width 14 :image-height 14)))
+
 ;; Clock + calendar toggle
 (defwidget tray-clock []
   (button :class "tray-clock"
@@ -180,6 +195,7 @@
 (defwidget tray []
   (box :class "tray" :orientation "h" :space-evenly false :spacing 2
     (tray-usb)
+    (tray-dictation)
     (tray-keyboard)
     (tray-bluetooth)
     (tray-wifi)

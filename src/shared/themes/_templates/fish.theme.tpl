@@ -3,27 +3,27 @@
 
 # Syntax highlighting
 set -g fish_color_normal {{ foreground_strip }}
-set -g fish_color_command {{ color4_strip }}
-set -g fish_color_keyword {{ color5_strip }}
-set -g fish_color_quote {{ color2_strip }}
-set -g fish_color_redirection {{ color6_strip }}
-set -g fish_color_end {{ color5_strip }}
-set -g fish_color_error {{ color1_strip }}
+set -g fish_color_command {{ accent_strip }}
+set -g fish_color_keyword {{ accent_alt_strip }}
+set -g fish_color_quote {{ success_strip }}
+set -g fish_color_redirection {{ info_strip }}
+set -g fish_color_end {{ accent_alt_strip }}
+set -g fish_color_error {{ danger_strip }}
 set -g fish_color_param {{ foreground_strip }}
-set -g fish_color_comment {{ color8_strip }}
-set -g fish_color_selection --background={{ color0_strip }}
-set -g fish_color_operator {{ color6_strip }}
-set -g fish_color_escape {{ color5_strip }}
+set -g fish_color_comment {{ muted_strip }}
+set -g fish_color_selection --background={{ surface_strip }}
+set -g fish_color_operator {{ info_strip }}
+set -g fish_color_escape {{ accent_alt_strip }}
 set -g fish_color_autosuggestion {{ autosuggestion_strip }}
-set -g fish_color_search_match {{ color4_strip }} --background={{ bg_light_strip }}
+set -g fish_color_search_match {{ accent_strip }} --background={{ bg_light_strip }}
 set -g fish_color_valid_path --underline
 
 # Pager (tab completion menu)
-set -g fish_pager_color_progress {{ color8_strip }}
+set -g fish_pager_color_progress {{ muted_strip }}
 set -g fish_pager_color_prefix {{ accent_strip }} --bold --underline
 set -g fish_pager_color_completion {{ foreground_strip }}
-set -g fish_pager_color_description {{ color8_strip }}
+set -g fish_pager_color_description {{ muted_strip }}
 set -g fish_pager_color_selected_background --background={{ bg_light_strip }}
 set -g fish_pager_color_selected_completion {{ foreground_strip }}
 set -g fish_pager_color_selected_prefix {{ accent_strip }} --bold --underline
-set -g fish_pager_color_selected_description {{ color8_strip }}
+set -g fish_pager_color_selected_description {{ muted_strip }}

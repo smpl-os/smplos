@@ -2,32 +2,57 @@
 # Install and configure Voxtype for global dictation on smplOS.
 # Voxtype runs a local Whisper AI model -- fully offline, no cloud.
 # After setup, press SUPER+CTRL+X to start/stop speaking.
+#
+# Handles both fresh installs and reconfiguration of pre-installed voxtype.
 
 set -e
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 log() { echo "  $*"; }
 
+HF_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/huggingface/hub"
+
+# Check if a specific Whisper model is already cached in the HF hub
+model_cached() {
+    local m="$1"
+    local cache_dir="$HF_CACHE/models--Systran--faster-whisper-${m}"
+    [[ -d "$cache_dir/snapshots" ]] && \
+        find "$cache_dir/snapshots" -name "model.bin" -print -quit 2>/dev/null | grep -q .
+}
+
+already_installed=false
+if command -v voxtype &>/dev/null; then
+    already_installed=true
+fi
+
 echo ""
 echo "  smplOS Dictation Setup (Voxtype)"
 echo "  Local AI speech-to-text -- fully offline, no cloud."
 echo ""
-echo "  This will install:"
-echo "    - wtype       (Wayland text injector)"
-echo "    - voxtype-bin (local AI speech daemon)"
-echo "    - A Whisper model (size depends on language choice)"
+
+if $already_installed; then
+    echo "  Voxtype is already installed."
+    echo "  This wizard lets you change language or model."
+else
+    echo "  This will install:"
+    echo "    - wtype       (Wayland text injector)"
+    echo "    - voxtype-bin (local AI speech daemon)"
+    echo "    - A Whisper model (size depends on language choice)"
+fi
 echo ""
 read -r -p "  Continue? [y/N] " ans
 [[ "${ans,,}" == "y" ]] || exit 0
 
-# ── Install packages ──────────────────────────────────────────────────────────
-log "Installing wtype and voxtype-bin..."
-if command -v paru &>/dev/null; then
-    paru -S --noconfirm --needed wtype voxtype-bin
-elif command -v yay &>/dev/null; then
-    yay -S --noconfirm --needed wtype voxtype-bin
-else
-    die "No AUR helper found. Install paru first: paru -S paru-bin"
+# ── Install packages (skip if already installed) ──────────────────────────────
+if ! $already_installed; then
+    log "Installing wtype and voxtype-bin..."
+    if command -v paru &>/dev/null; then
+        paru -S --noconfirm --needed wtype voxtype-bin
+    elif command -v yay &>/dev/null; then
+        yay -S --noconfirm --needed wtype voxtype-bin
+    else
+        die "No AUR helper found. Install paru first: paru -S paru-bin"
+    fi
 fi
 
 # ── Language selection ────────────────────────────────────────────────────────
@@ -200,11 +225,25 @@ theme = "default"
 TOML
 
 # ── Download model + systemd service ─────────────────────────────────────────
-log "Downloading Whisper model ($model)..."
-voxtype setup --download --no-post-install
+if model_cached "$model"; then
+    log "Whisper model ($model) is already cached -- skipping download."
+else
+    log "Downloading Whisper model ($model)..."
+    voxtype setup --download --no-post-install
+fi
 
-log "Installing systemd user service..."
-voxtype setup systemd
+# Ensure systemd service is set up
+if [[ ! -f "$HOME/.config/systemd/user/voxtype.service" ]]; then
+    log "Installing systemd user service..."
+    voxtype setup systemd 2>/dev/null || true
+fi
+systemctl --user daemon-reload 2>/dev/null || true
+systemctl --user enable voxtype 2>/dev/null || true
+systemctl --user restart voxtype 2>/dev/null || true
+
+# Mark as primed so dictation-toggle skips the prime step
+mkdir -p "$HOME/.config/smplos"
+touch "$HOME/.config/smplos/.dictation-primed"
 
 # ── Done ──────────────────────────────────────────────────────────────────────
 echo ""

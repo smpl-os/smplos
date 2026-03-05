@@ -3,9 +3,9 @@
     frame_color = "{{ accent }}"
 
 [urgency_low]
-    background = "{{ color0 }}"
+    background = "{{ surface }}"
     foreground = "{{ foreground }}"
-    frame_color = "{{ color8 }}"
+    frame_color = "{{ muted }}"
 
 [urgency_normal]
     background = "{{ background }}"
@@ -13,6 +13,6 @@
     frame_color = "{{ accent }}"
 
 [urgency_critical]
-    background = "{{ color1 }}"
+    background = "{{ danger }}"
     foreground = "{{ foreground }}"
-    frame_color = "{{ color1 }}"
+    frame_color = "{{ danger }}"

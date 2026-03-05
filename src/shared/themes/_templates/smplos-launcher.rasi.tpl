@@ -19,13 +19,13 @@ configuration {
 * {
     font:                        "JetBrainsMono Nerd Font 10";
     background:                  rgba({{ background_rgb }},{{ popup_opacity }});
-    background-alt:              rgba({{ color0_rgb }},{{ popup_opacity }});
+    background-alt:              rgba({{ surface_rgb }},{{ popup_opacity }});
     background-solid:            {{ background }};
     foreground:                  {{ foreground }};
-    foreground-dim:              {{ color8 }};
+    foreground-dim:              {{ muted }};
     selected:                    {{ accent }};
     active:                      {{ accent }};
-    urgent:                      {{ color1 }};
+    urgent:                      {{ danger }};
     border-rad:                  {{ rounding }}px;
     background-color:            transparent;
     text-color:                  @foreground;

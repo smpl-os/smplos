@@ -5,7 +5,7 @@
 [urgency_low]
     background = "#100F0F"
     foreground = "#100F0F"
-    frame_color = "#100F0F"
+    frame_color = "#B7B5AC"
 
 [urgency_normal]
     background = "#FFFCF0"

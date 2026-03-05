@@ -159,6 +159,7 @@ window {
 .tray-notifications,
 .tray-usb,
 .tray-keyboard,
+.tray-dictation,
 .tray-clock {
   padding: 2px 6px;
   border-radius: 4px;
@@ -172,6 +173,7 @@ window {
 .tray-notifications:hover,
 .tray-usb:hover,
 .tray-keyboard:hover,
+.tray-dictation:hover,
 .tray-clock:hover {
   background-color: $bg-light;
 }
@@ -195,6 +197,14 @@ window {
   font-size: 11px;
   font-weight: bold;
   color: $accent;
+}
+
+/* Dictation: mic icon appears when voxtype is installed.
+   When recording, the icon gets an accent background pill so it is
+   unmissable -- shape change (outlined vs filled mic SVG) + background. */
+.tray-dictation.recording {
+  background-color: $accent;
+  border-radius: 10px;
 }
 
 /* Notifications: shape conveys state (outline=empty, filled=has, slash=DND) */

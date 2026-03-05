@@ -22,7 +22,7 @@ configuration {
     background-alt:              rgba(16,15,15,0.90);
     background-solid:            #FFFCF0;
     foreground:                  #100F0F;
-    foreground-dim:              #100F0F;
+    foreground-dim:              #B7B5AC;
     selected:                    #205EA6;
     active:                      #205EA6;
     urgent:                      #D14D41;

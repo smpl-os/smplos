@@ -1,31 +1,38 @@
-accent = "#89b4fa"
-cursor = "#f5e0dc"
-foreground = "#cdd6f4"
+# -- Backgrounds --
 background = "#1e1e2e"
+bg_light = "#45475a"
+bg_lighter = "#585b70"
+surface = "#45475a"
+
+# -- Foregrounds --
+foreground = "#cdd6f4"
+fg_dim = "#cdd6f4"
+fg_alt = "#cdd6f4"
+muted = "#585b70"
+autosuggestion = "#9399b2"
+
+# -- Interactive --
+accent = "#89b4fa"
+accent_alt = "#f5c2e7"
+cursor = "#f5e0dc"
 selection_foreground = "#1e1e2e"
 selection_background = "#f5e0dc"
 
-color0 = "#45475a"
-color1 = "#f38ba8"
-color2 = "#a6e3a1"
-color3 = "#f9e2af"
-color4 = "#89b4fa"
-color5 = "#f5c2e7"
-color6 = "#94e2d5"
-color7 = "#cdd6f4"
-color8 = "#585b70"
-bg_light = "#45475a"
-bg_lighter = "#585b70"
-autosuggestion = "#9399b2"
-color9 = "#f38ba8"
-color10 = "#a6e3a1"
-color11 = "#f9e2af"
-color12 = "#89b4fa"
-color13 = "#f5c2e7"
-color14 = "#94e2d5"
-color15 = "#cdd6f4"
+# -- Status --
+danger = "#f38ba8"
+success = "#a6e3a1"
+warning = "#f9e2af"
+info = "#94e2d5"
 
-# Decoration (rounding, blur, opacity)
+# -- Bright Variants (terminal palette + btop gradients) --
+danger_bright = "#f38ba8"
+success_bright = "#a6e3a1"
+warning_bright = "#f9e2af"
+accent_bright = "#89b4fa"
+accent_alt_bright = "#f5c2e7"
+info_bright = "#94e2d5"
+
+# -- Decoration --
 rounding = "8"
 blur_size = "14"
 blur_passes = "3"
@@ -37,14 +44,14 @@ popup_opacity = "0.50"
 messenger_opacity = "0.85"
 browser_opacity = "1.0"
 
-# Layout (gaps, borders)
+# -- Layout --
 gaps_in = "6"
 gaps_out = "10"
 border_size = "4"
 border_active = "rgb(89b4fa) rgb(a6e3a1) 45deg"
 border_inactive = "rgba(585b70aa)"
 
-# App theme selectors (use another theme id to reuse its app presets)
+# -- App Theme Selectors --
 app_theme_nvim = "catppuccin"
 app_theme_vscode = "catppuccin"
 app_theme_logseq = "catppuccin"

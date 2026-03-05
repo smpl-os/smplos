@@ -10,20 +10,20 @@ set -g fish_color_redirection 3AA99F
 set -g fish_color_end CE5D97
 set -g fish_color_error D14D41
 set -g fish_color_param 100F0F
-set -g fish_color_comment 100F0F
+set -g fish_color_comment B7B5AC
 set -g fish_color_selection --background=100F0F
 set -g fish_color_operator 3AA99F
 set -g fish_color_escape CE5D97
-set -g fish_color_autosuggestion 100F0F
+set -g fish_color_autosuggestion B7B5AC
 set -g fish_color_search_match 205EA6 --background=E6E4D9
 set -g fish_color_valid_path --underline
 
 # Pager (tab completion menu)
-set -g fish_pager_color_progress 100F0F
+set -g fish_pager_color_progress B7B5AC
 set -g fish_pager_color_prefix 205EA6 --bold --underline
 set -g fish_pager_color_completion 100F0F
-set -g fish_pager_color_description 100F0F
+set -g fish_pager_color_description B7B5AC
 set -g fish_pager_color_selected_background --background=E6E4D9
 set -g fish_pager_color_selected_completion 100F0F
 set -g fish_pager_color_selected_prefix 205EA6 --bold --underline
-set -g fish_pager_color_selected_description 100F0F
+set -g fish_pager_color_selected_description B7B5AC

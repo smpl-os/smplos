@@ -7,15 +7,112 @@
 # Keybinding: SUPER+CTRL+X (toggle — matches Omarchy)
 # Run 'dictation-setup' to install Voxtype if not present.
 
+ICON_MIC="microphone-sensitivity-high-symbolic"
+ICON_OFF="microphone-sensitivity-muted-symbolic"
+
+notify() { notify-send "$1" "$2" -i "${3:-$ICON_MIC}" -u "${4:-normal}" -t "${5:-4000}"; }
+log() { echo "[dictation-toggle] $*" >&2; }
+
+# ── Not installed ─────────────────────────────────────────────────────────────
 if ! command -v voxtype &>/dev/null; then
-    notify-send "Dictation not set up" \
-        "Run 'dictation-setup' in a terminal to install Voxtype (local AI, ~150 MB)." \
-        -i microphone -u normal -t 7000
+    notify "Dictation not set up" \
+        "Open Settings > Dictation tab, or run 'dictation-setup' in a terminal." \
+        "$ICON_OFF" normal 7000
+    log "voxtype not found"
     exit 0
 fi
 
-case "${1:-toggle}" in
-    start)  voxtype record start ;;
-    stop)   voxtype record stop ;;
-    toggle) voxtype record toggle ;;
+# ── Prime model cache on first use (idempotent, fast if already done) ─────────
+if [[ ! -f "$HOME/.config/smplos/.dictation-primed" ]]; then
+    dictation-prime 2>/dev/null || true
+fi
+
+# ── Ensure service is running ─────────────────────────────────────────────────
+if ! systemctl --user is-active --quiet voxtype.service 2>/dev/null; then
+    log "voxtype.service not running, starting..."
+    systemctl --user start voxtype.service 2>/dev/null
+    # Give the daemon a moment to initialize
+    sleep 0.5
+    if ! systemctl --user is-active --quiet voxtype.service 2>/dev/null; then
+        notify "Dictation service failed to start" \
+            "Try: systemctl --user status voxtype.service" \
+            "$ICON_OFF" critical 7000
+        log "voxtype.service failed to start"
+        exit 1
+    fi
+    log "voxtype.service started"
+fi
+
+# ── Microphone check ─────────────────────────────────────────────────────────
+if command -v pactl &>/dev/null; then
+    default_src=$(pactl get-default-source 2>/dev/null)
+    if [[ -z "$default_src" ]]; then
+        notify "No microphone found" \
+            "Connect a microphone and try again." \
+            "$ICON_OFF" critical 5000
+        log "no default audio source"
+        exit 1
+    fi
+fi
+
+# ── wtype check (needed to inject text into focused window) ───────────────────
+if ! command -v wtype &>/dev/null; then
+    notify "Missing dependency: wtype" \
+        "Install it: sudo pacman -S wtype" \
+        "$ICON_OFF" critical 5000
+    log "wtype not found"
+    exit 1
+fi
+
+# ── Toggle/start/stop ────────────────────────────────────────────────────────
+action="${1:-toggle}"
+
+case "$action" in
+    start)
+        if voxtype record start 2>/dev/null; then
+            notify "Recording..." "Speak now. Press Super+Ctrl+X to stop." "$ICON_MIC" low 2000
+            log "recording started"
+        else
+            notify "Failed to start recording" \
+                "Check: systemctl --user status voxtype.service" \
+                "$ICON_OFF" critical 5000
+            log "voxtype record start failed (exit $?)"
+            exit 1
+        fi
+        ;;
+    stop)
+        if voxtype record stop 2>/dev/null; then
+            notify "Transcribing..." "Text will be typed into the focused window." "$ICON_MIC" low 2000
+            log "recording stopped, transcribing"
+        else
+            log "voxtype record stop failed (exit $?)"
+        fi
+        ;;
+    toggle)
+        # Check current state to give appropriate feedback
+        state=$(voxtype status 2>/dev/null | grep -oP '"class"\s*:\s*"\K[^"]+' || echo "unknown")
+        if [[ "$state" == "recording" ]]; then
+            if voxtype record toggle 2>/dev/null; then
+                notify "Transcribing..." "Text will be typed into the focused window." "$ICON_MIC" low 2000
+                log "recording stopped (toggle), transcribing"
+            else
+                log "voxtype record toggle (stop) failed"
+            fi
+        else
+            if voxtype record toggle 2>/dev/null; then
+                notify "Recording..." "Speak now. Press Super+Ctrl+X to stop." "$ICON_MIC" low 2000
+                log "recording started (toggle)"
+            else
+                notify "Dictation failed" \
+                    "Check: systemctl --user status voxtype.service" \
+                    "$ICON_OFF" critical 5000
+                log "voxtype record toggle (start) failed"
+                exit 1
+            fi
+        fi
+        ;;
+    *)
+        echo "Usage: dictation-toggle [start|stop|toggle]" >&2
+        exit 1
+        ;;
 esac

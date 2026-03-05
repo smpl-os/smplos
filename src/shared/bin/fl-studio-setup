@@ -8,7 +8,7 @@ DOWNLOAD_URL="https://support.image-line.com/redirect/flstudio_win_installer"
 CACHE_DIR="${HOME}/.cache/smplos/fl-studio"
 INSTALLER="${CACHE_DIR}/flstudio_installer.exe"
 DESKTOP_FILE="${HOME}/.local/share/applications/fl-studio.desktop"
-LOGFILE="/mnt/fl-studio-install.log"
+LOGFILE="/tmp/fl-studio-setup.log"
 
 log() { echo "[fl-studio-setup] $*"; }
 die() { log "ERROR: $*" >&2; exit 1; }

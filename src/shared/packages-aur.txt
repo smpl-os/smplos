@@ -17,5 +17,8 @@ brave-bin
 # Auto-snapshot before every pacman update (pacman hook for timeshift)
 timeshift-autosnap
 
+# Local AI dictation daemon (Whisper-based, fully offline speech-to-text)
+voxtype-bin
+
 # Hyprland plugins/extras (optional)
 # hyprland-plugins-git

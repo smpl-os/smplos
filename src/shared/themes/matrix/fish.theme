@@ -3,7 +3,7 @@
 
 # Syntax highlighting
 set -g fish_color_normal 00FF00
-set -g fish_color_command 22BB55
+set -g fish_color_command 00FF00
 set -g fish_color_keyword FF9900
 set -g fish_color_quote 00FF00
 set -g fish_color_redirection 33FFAA
@@ -15,7 +15,7 @@ set -g fish_color_selection --background=000000
 set -g fish_color_operator 33FFAA
 set -g fish_color_escape FF9900
 set -g fish_color_autosuggestion 339933
-set -g fish_color_search_match 22BB55 --background=0D1A0D
+set -g fish_color_search_match 00FF00 --background=0D1A0D
 set -g fish_color_valid_path --underline
 
 # Pager (tab completion menu)

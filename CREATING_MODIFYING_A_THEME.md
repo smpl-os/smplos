@@ -82,29 +82,98 @@ cp -r src/shared/themes/tokyo-night/* src/shared/themes/my-theme/
 
 ## 3) Edit `colors.toml`
 
-Set colors + decoration values + app selectors.
+Every variable describes **what the color does**, not what it looks like.
 
-Minimum important blocks:
+### Backgrounds
 
-- palette (`accent`, `background`, `foreground`, `color0..color15`)
-- decoration (`rounding`, `blur_size`, `opacity_active`, `opacity_inactive`, `term_opacity_active`, `browser_opacity`, `messenger_opacity`, `popup_opacity`)
-- layout (`gaps_in`, `gaps_out`, `border_size`)
-- app selectors (`app_theme_nvim`, `app_theme_vscode`, `app_theme_logseq`)
+| Key | Purpose |
+|-----|---------|
+| `background` | Main window/app background |
+| `bg_light` | Raised surfaces -- cards, sidebars, code blocks |
+| `bg_lighter` | Further raised surfaces -- scrollbars, tertiary panels |
+| `surface` | Containers, notification backgrounds, selection areas |
 
-Example selectors:
+### Foregrounds
+
+| Key | Purpose |
+|-----|---------|
+| `foreground` | Primary text |
+| `fg_dim` | Secondary/dimmed text (EWW widget labels, subtle UI text) |
+| `fg_alt` | Alternative foreground tone (terminal ANSI "white" slot) |
+| `muted` | Tertiary text -- comments, inactive items, dividers, chrome |
+| `autosuggestion` | Fish/shell autosuggestion text (defaults to `muted` if omitted) |
+
+### Interactive
+
+| Key | Purpose |
+|-----|---------|
+| `accent` | Primary accent -- links, active borders, highlights |
+| `accent_alt` | Secondary accent -- keywords, alternate highlights |
+| `cursor` | Terminal cursor color |
+| `selection_foreground` | Text color inside selections |
+| `selection_background` | Selection highlight background |
+
+### Status
+
+| Key | Purpose |
+|-----|---------|
+| `danger` | Errors, critical alerts, destructive actions |
+| `success` | Success indicators, confirmations |
+| `warning` | Warnings, caution states |
+| `info` | Informational indicators |
+
+### Bright Variants
+
+Used for terminal bright palette slots, btop gradient midpoints, and link hover states.
+
+| Key | Source it pairs with |
+|-----|---------------------|
+| `danger_bright` | `danger` |
+| `success_bright` | `success` |
+| `warning_bright` | `warning` |
+| `accent_bright` | `accent` |
+| `accent_alt_bright` | `accent_alt` |
+| `info_bright` | `info` |
+
+### Terminal Palette Overrides (optional)
+
+The terminal palette (ANSI slots 0-15) is **auto-derived** from semantic names:
+
+| Slot | Default source | Override key |
+|------|---------------|--------------|
+| 0 | `surface` | `term_0` |
+| 1 | `danger` | `term_1` |
+| 2 | `success` | `term_2` |
+| 3 | `warning` | `term_3` |
+| 4 | `accent` | `term_4` |
+| 5 | `accent_alt` | `term_5` |
+| 6 | `info` | `term_6` |
+| 7 | `fg_alt` | `term_7` |
+| 8 | `muted` | `term_8` |
+| 9 | `danger_bright` | `term_9` |
+| 10 | `success_bright` | `term_10` |
+| 11 | `warning_bright` | `term_11` |
+| 12 | `accent_bright` | `term_12` |
+| 13 | `accent_alt_bright` | `term_13` |
+| 14 | `info_bright` | `term_14` |
+| 15 | `fg_dim` | `term_15` |
+
+Most themes never need overrides. Use `term_N` only when a terminal slot should differ from its semantic source (e.g. hackerman's accent is green but terminal "blue" slot should still be blue-ish).
+
+### Decoration, Layout, and App Selectors
+
+These are unchanged from before:
+
+- **Decoration**: `rounding`, `blur_size`, `blur_passes`, `opacity_active`, `opacity_inactive`, `term_opacity_active`, `term_opacity_inactive`, `popup_opacity`, `messenger_opacity`, `browser_opacity`
+- **Layout**: `gaps_in`, `gaps_out`, `border_size`, `border_active` (optional), `border_inactive` (optional)
+- **App selectors**: `app_theme_nvim`, `app_theme_vscode`, `app_theme_logseq`
+
+Example:
 
 ```toml
 app_theme_nvim = "tokyo-night"
 app_theme_vscode = "tokyo-night"
 app_theme_logseq = "tokyo-night"
-```
-
-If you want mixed style:
-
-```toml
-app_theme_nvim = "gruvbox"
-app_theme_vscode = "catppuccin"
-app_theme_logseq = "rose-pine"
 ```
 
 ## 4) Generate theme files
@@ -162,9 +231,10 @@ So one theme can reuse another theme's app presets without duplicating settings.
 
 ## What each important file means
 
-- `colors.toml` → canonical theme definition
-- `hyprland.conf` → generated vars consumed by compositor config
-- `eww-colors.scss` → generated EWW token values
+- `colors.toml` -- canonical theme definition (semantic variable names)
+- `hyprland.conf` -- generated vars consumed by compositor config
+- `eww-colors.scss` -- generated EWW token values
+- `foot.ini` -- generated terminal palette (auto-derived from semantic names)
 - `neovim.lua` → app preset payload for LazyVim/Lazy.nvim colorscheme
 - `vscode.json` → app preset payload (theme name + extension/vsix)
 - `logseq-custom.css` → generated Logseq custom css layer
@@ -220,6 +290,8 @@ Each key controls a distinct window class. Values are never applied twice — no
   - `colors.toml`
   - template files in `src/shared/themes/_templates/`
 - Keep `colors.toml` complete (no missing core keys).
+- Use **semantic names** that describe what a color does, never generic indices.
+  The terminal palette is auto-derived -- you never need to think about ANSI slot numbers.
 - Prefer selector-based reuse instead of copy-pasting app presets.
 
 ---

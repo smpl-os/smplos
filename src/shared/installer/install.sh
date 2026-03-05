@@ -194,6 +194,19 @@ systemctl --user start smplos-app-cache.path 2>/dev/null || true
 echo "==> Building initial app index..."
 rebuild-app-cache || echo "    WARNING: rebuild-app-cache failed"
 
+# Prime dictation (copies bundled Whisper model into HF cache, enables service)
+if command -v dictation-prime &>/dev/null && command -v voxtype &>/dev/null; then
+  echo "==> Priming offline dictation..."
+  # The bundled model lives at /usr/share/smplos/models/whisper/base.en/
+  # on the live ISO, but post-install it's at $SMPLOS_PATH/models/whisper/base.en/.
+  # Copy to the system-wide location so dictation-prime finds it.
+  if [[ -d "$SMPLOS_PATH/models/whisper/base.en" ]]; then
+    sudo mkdir -p /usr/share/smplos/models/whisper
+    sudo cp -r "$SMPLOS_PATH/models/whisper/base.en" /usr/share/smplos/models/whisper/
+  fi
+  dictation-prime || echo "    WARNING: dictation-prime failed (exit $?)"
+fi
+
 # Apply default theme (catppuccin) to generate all config files
 echo "==> Setting default theme..."
 theme-set catppuccin || echo "    WARNING: theme-set failed (exit $?)"
@@ -366,13 +379,30 @@ EOF
     sudo grub-mkconfig -o /boot/grub/grub.cfg
   fi
 
-  # Plymouth must fully quit and release DRM *before* greetd starts Hyprland.
-  # After=greetd.service causes a race: greetd fires the initial_session
-  # immediately (Type=simple), so Hyprland tries to open the DRM device while
-  # Plymouth still holds it -> Hyprland crashes -> black screen.
-  # After=multi-user.target ensures Plymouth releases DRM first. The
-  # --retain-splash flag keeps the last Plymouth frame visible until Hyprland
-  # renders its first frame, so there is no visible flash.
+  # ── Plymouth quit ordering (CRITICAL — DO NOT CHANGE WITHOUT TESTING) ──
+  #
+  # Problem: greetd.service has After=plymouth-quit-wait.service upstream.
+  # If we mask plymouth-quit-wait.service, systemd treats it as immediately
+  # done, so greetd starts before Plymouth releases DRM. Hyprland races
+  # Plymouth for the DRM master → crash → black screen on all TTYs.
+  #
+  # Solution: Override BOTH plymouth-quit and plymouth-quit-wait to run
+  # After=multi-user.target. Use "plymouth deactivate" to explicitly release
+  # DRM before quitting. greetd's upstream After= then works correctly:
+  #   1. multi-user.target reached
+  #   2. plymouth-quit-wait starts → plymouth deactivate (releases DRM)
+  #      → plymouth quit --wait (blocks until daemon exits)
+  #   3. greetd.service starts (After=plymouth-quit-wait.service satisfied)
+  #   4. greetd runs initial_session → start-hyprland → Hyprland grabs DRM
+  #
+  # Note: brief text flash on VT1 between deactivate and Hyprland render
+  # is a known cosmetic issue. Acceptable tradeoff vs black screen.
+  #
+  # NEVER use --retain-splash — it keeps DRM fd open, blocking Hyprland.
+  # NEVER mask plymouth-quit-wait.service — it is greetd's ordering anchor.
+  # NEVER use After=greetd.service — greetd is Type=simple, races Plymouth.
+
+  # plymouth-quit.service: deactivate (release DRM) then quit, after multi-user
   sudo mkdir -p /etc/systemd/system/plymouth-quit.service.d/
   sudo tee /etc/systemd/system/plymouth-quit.service.d/wait-for-graphical.conf <<'EOF' >/dev/null
 [Unit]
@@ -380,9 +410,28 @@ After=multi-user.target
 
 [Service]
 ExecStart=
-ExecStart=/usr/bin/plymouth quit --retain-splash
+ExecStart=/bin/sh -c '/usr/bin/plymouth deactivate; /usr/bin/plymouth quit'
 EOF
-  sudo systemctl mask plymouth-quit-wait.service
+
+  # plymouth-quit-wait.service: same but with --wait so systemd blocks
+  # until Plymouth is fully gone. greetd depends on this upstream.
+  sudo mkdir -p /etc/systemd/system/plymouth-quit-wait.service.d/
+  sudo tee /etc/systemd/system/plymouth-quit-wait.service.d/wait-for-graphical.conf <<'EOF' >/dev/null
+[Unit]
+After=multi-user.target
+
+[Service]
+ExecStart=
+ExecStart=/bin/sh -c '/usr/bin/plymouth deactivate; /usr/bin/plymouth quit --wait'
+EOF
+
+  # Belt-and-suspenders: ensure greetd also explicitly waits for plymouth-quit
+  # in case a future greetd update drops its plymouth-quit-wait dependency.
+  sudo mkdir -p /etc/systemd/system/greetd.service.d/
+  sudo tee /etc/systemd/system/greetd.service.d/wait-for-plymouth.conf <<'EOF' >/dev/null
+[Unit]
+After=plymouth-quit.service plymouth-quit-wait.service
+EOF
 
   # Rebuild initramfs to include plymouth and new hooks
   sudo mkinitcpio -P

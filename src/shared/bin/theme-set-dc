@@ -48,11 +48,11 @@ fg=$(get_color foreground);          fg=${fg:-#cdd6f4}
 accent=$(get_color accent);          accent=${accent:-#89b4fa}
 bg_light=$(get_color bg_light);      bg_light=${bg_light:-#45475a}
 bg_lighter=$(get_color bg_lighter);  bg_lighter=${bg_lighter:-#585b70}
-color1=$(get_color color1);          color1=${color1:-#f38ba8}
-color2=$(get_color color2);          color2=${color2:-#a6e3a1}
-color3=$(get_color color3);          color3=${color3:-#f9e2af}
-color4=$(get_color color4);          color4=${color4:-#89b4fa}
-color8=$(get_color color8);          color8=${color8:-#585b70}
+danger=$(get_color danger);          danger=${danger:-#f38ba8}
+success=$(get_color success);        success=${success:-#a6e3a1}
+warning=$(get_color warning);        warning=${warning:-#f9e2af}
+info=$(get_color info);              info=${info:-#94e2d5}
+muted=$(get_color muted);           muted=${muted:-#585b70}
 
 # --- Pre-compute all BGR values ---
 B=$(hex_to_bgr "$bg")
@@ -61,13 +61,13 @@ A=$(hex_to_bgr "$accent")
 BT=$(hex_to_bgr "$bg")          # cursor text = bg
 BL=$(hex_to_bgr "$bg_light")
 BLR=$(hex_to_bgr "$bg_lighter")
-MK=$(hex_to_bgr "$color1")
-IMK=$(hex_to_bgr "$(darken "$color1" 30)")
-C1=$(hex_to_bgr "$color1")
-C2=$(hex_to_bgr "$color2")
-C3=$(hex_to_bgr "$color3")
-C4=$(hex_to_bgr "$color4")
-C8=$(hex_to_bgr "$color8")
+MK=$(hex_to_bgr "$danger")
+IMK=$(hex_to_bgr "$(darken "$danger" 30)")
+C1=$(hex_to_bgr "$danger")
+C2=$(hex_to_bgr "$success")
+C3=$(hex_to_bgr "$warning")
+C4=$(hex_to_bgr "$accent")
+C8=$(hex_to_bgr "$muted")
 
 # --- Kill DC before writing (it overwrites on close) ---
 dc_was_running=false

@@ -10,6 +10,9 @@ set -gx VISUAL micro
 set -gx SUDO_EDITOR micro
 set -gx BAT_THEME ansi
 
+# ── Tide Prompt ──────────────────────────────────────────────
+set -g tide_prompt_aware true
+
 # ── Key Bindings ─────────────────────────────────────────────
 # Use default (emacs) key bindings — prevents Tide vi mode indicator (D/I/R/V)
 fish_default_key_bindings

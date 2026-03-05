@@ -284,6 +284,59 @@ That function writes: `grub.cfg`, `loopback.cfg`, and all `syslinux/*.cfg` files
 | `29e37e5` | 2026-02-25 | Good | Live boot + installer working on Ventoy. 2-entry menu (smplOS + Safe Mode). All fixes: Plymouth, HiDPI auto-scale, start-menu, webapp-center, TTY font. |
 | `7b6416c` | 2026-02-25 | Good | First working Ventoy UEFI boot (uefi.grub + vanilla Arch releng grub configs) |
 
+**What broke boot last time (2026-03-04):** `plymouth quit --retain-splash` in the
+plymouth-quit and plymouth-quit-wait service drop-ins. `--retain-splash` keeps the
+DRM master fd open so the splash stays visible until the next graphical app. But
+Hyprland needs DRM master to start — it can't acquire it while Plymouth holds it →
+crash → black screen on all VTs. Confirmed by testing: text-mode Plymouth (serial
+console) releases DRM immediately and Hyprland boots fine; graphical Plymouth with
+`--retain-splash` always causes black screen. Fix: use `plymouth deactivate` (which
+explicitly releases DRM and drops to text mode) followed by `plymouth quit`. This
+is deterministic — no race. NEVER use `--retain-splash` in the quit command.
+Also: never mask `plymouth-quit-wait.service` — it is greetd's ordering anchor.
+
+**What also broke boot (2026-03-04):** `console=tty2` in GRUB_CMDLINE_LINUX_DEFAULT.
+The intent was to redirect boot messages away from VT1 so `plymouth deactivate`
+would reveal a blank screen instead of text. But Plymouth uses the kernel console
+for its password prompt — moving it to tty2 caused Plymouth to lose its graphical
+splash and drop to a raw TTY password prompt. Fix: keep `console=tty1`. The VT1
+palette blanking trick (reprogramming all 16 colors to black via `\033]PX` escape
+sequences before `plymouth deactivate`) was also tried but didn't help because the
+palette reset happens too late — Plymouth has already written text. NEVER change
+`console=` away from `tty1`.
+
+### Plymouth → Hyprland Text Flash (KNOWN ISSUE — TODO)
+
+**Status:** Cosmetic issue, not a blocker. Revisit when time permits.
+
+After `plymouth deactivate` releases DRM and before Hyprland renders its first
+frame, VT1 briefly shows boot text (login prompt, systemd messages). This flash
+lasts ~0.5-1s and is purely cosmetic — boot completes successfully.
+
+**Current working boot chain:**
+1. Plymouth shows splash (holds DRM, handles LUKS password if needed)
+2. `plymouth-quit-wait` drop-in runs: `plymouth deactivate` (releases DRM) →
+   `plymouth quit --wait` (blocks until daemon exits)
+3. greetd starts (After=plymouth-quit-wait.service) → `start-hyprland` → Hyprland
+4. Brief text flash visible between steps 2 and 3
+
+**What has been tried and failed:**
+- `--retain-splash` → keeps DRM fd open → Hyprland can't start → **black screen**
+- `console=tty2` → Plymouth loses graphical splash → **raw TTY password prompt**
+- `chvt 7` (switch to empty VT) → interferes with greetd VT allocation → **black screen**
+- `printf "\033c" > /dev/tty1` (clear VT1) → text still flashes
+- VT1 palette blanking (`\033]P0..PF` all black) → too late, text already rendered
+
+**Potential future solutions to explore:**
+- **SDDM** instead of greetd — Omarchy (basecamp/omarchy) uses SDDM with autologin
+  + `hyprland-uwsm` session. SDDM handles Plymouth→DRM handoff natively as a
+  graphical display manager. Adds Qt dependency but eliminates the flash entirely.
+- **UWSM** (Universal Wayland Session Manager) — can be used with greetd or SDDM,
+  handles session lifecycle more cleanly. Omarchy uses `hyprland-uwsm` session.
+- **Plymouth VT handoff protocol** — investigate if Plymouth supports handing its
+  DRM fd directly to the next graphical process (like `--retain-splash` was supposed
+  to do but for a non-DM greeter chain).
+
 **What broke boot last time (2026-03-01):** `After=greetd.service` in the
 `plymouth-quit.service.d` override. greetd is `Type=simple` so systemd marks
 it active immediately, but Hyprland fires instantly and races Plymouth for the
