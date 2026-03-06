@@ -13,8 +13,17 @@ move-to-other-pane='F6'
 # F7 = New Folder
 new-folder='F7'
 
+# Insert = New Folder (alternate)
+new-folder-alt='Insert'
+
+# F4 = Open with default application
+open-default='F4'
+
 # F8 = Move to Trash
 trash='F8'
+
+# Delete = Delete permanently (since Trash is on F8)
+delete-permanently='Delete'
 
 # Alt+F7 = Search
 search='<Alt>F7'
