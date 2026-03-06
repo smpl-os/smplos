@@ -2,12 +2,6 @@
 # These packages are built from the Arch User Repository
 # Custom packages (src/shared/pkgbuilds/*) are also listed here.
 
-# ── File Manager (custom build from KonTy/nemo fork) ─────────
-# Replaces stock nemo with: configurable keybindings, preview pane (Alt+F3),
-# substring search, copy-path, Tab pane-switching, memory leak fixes.
-# Built from: src/shared/pkgbuilds/nemo-smplos/PKGBUILD
-nemo-smplos
-
 # AUR helper (so users can install AUR packages after install)
 paru-bin
 
