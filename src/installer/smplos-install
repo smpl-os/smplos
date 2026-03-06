@@ -335,7 +335,7 @@ install_desktop() {
     # Install from offline repo
     arch-chroot "$MOUNT_POINT" pacman -S --noconfirm --needed \
         hyprland hypridle hyprlock hyprpaper \
-        doublecmd-qt6 \
+        nemo nemo-preview nemo-fileroller file-roller \
         eww \
         pipewire pipewire-alsa pipewire-pulse wireplumber \
         ttf-jetbrains-mono-nerd noto-fonts \

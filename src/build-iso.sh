@@ -220,6 +220,67 @@ check_prerequisites() {
 }
 
 ###############################################################################
+# Build Custom Packages from local PKGBUILDs (src/shared/pkgbuilds/*)
+###############################################################################
+
+build_custom_packages() {
+    local prebuilt_dir="$PROJECT_ROOT/build/prebuilt"
+    local pkgbuild_dir="$SCRIPT_DIR/shared/pkgbuilds"
+    mkdir -p "$prebuilt_dir"
+
+    [[ -d "$pkgbuild_dir" ]] || return 0
+
+    local need_build=()
+    for dir in "$pkgbuild_dir"/*/; do
+        [[ -f "$dir/PKGBUILD" ]] || continue
+        local pkg
+        pkg=$(basename "$dir")
+        if ls "$prebuilt_dir"/${pkg}-[0-9]*.pkg.tar.* &>/dev/null 2>&1; then
+            log_info "Found prebuilt custom package: $pkg"
+        else
+            need_build+=("$pkg")
+        fi
+    done
+
+    [[ ${#need_build[@]} -eq 0 ]] && return 0
+
+    log_step "Building custom packages: ${need_build[*]}"
+
+    for pkg in "${need_build[@]}"; do
+        log_info "Building $pkg..."
+        $CTR run --rm \
+            --network=host \
+            -v "$pkgbuild_dir/$pkg:/build/pkg:ro" \
+            -v "$prebuilt_dir:/output" \
+            archlinux:latest bash -c "
+                set -e
+                retry() {
+                    local n=0
+                    while true; do
+                        \"\$@\" && return 0
+                        ((n++))
+                        [[ \$n -ge 3 ]] && { echo \"FAILED after 3 tries: \$*\"; return 1; }
+                        echo \"RETRY \$n/3: \$*\"
+                        sleep \$((n * 5))
+                    done
+                }
+                retry pacman -Syu --noconfirm
+                retry pacman -S --noconfirm --needed base-devel git
+                useradd -m builder
+                echo 'builder ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers
+                cp -r /build/pkg /home/builder/$pkg
+                chown -R builder:builder /home/builder/$pkg
+                cd /home/builder/$pkg
+                sudo -u builder makepkg -s --noconfirm
+                cp *.pkg.tar.* /output/
+                echo \"==> $pkg done\"
+            " || die "Failed to build custom package: $pkg"
+    done
+
+    log_info "Custom packages saved to: $prebuilt_dir"
+}
+
+###############################################################################
 # Build Missing AUR Packages (with retries and proper DNS)
 ###############################################################################
 
@@ -452,6 +513,7 @@ main() {
     fi
 
     if [[ -z "$SKIP_AUR" ]]; then
+        build_custom_packages
         build_missing_aur_packages
     fi
 

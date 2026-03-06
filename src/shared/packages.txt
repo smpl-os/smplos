@@ -11,7 +11,10 @@ harfbuzz
 imlib2
 
 # ── File Manager ─────────────────────────────────────────────
-doublecmd-qt6
+# nemo-smplos (in packages-aur.txt) replaces stock nemo
+nemo-preview
+nemo-fileroller
+file-roller
 gvfs
 gvfs-mtp
 

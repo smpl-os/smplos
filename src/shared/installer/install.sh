@@ -143,6 +143,18 @@ if [[ -f "$SMPLOS_PATH/system/os-release" ]]; then
   sudo cp "$SMPLOS_PATH/system/os-release" /etc/os-release
 fi
 
+# Deploy dconf overrides (system-wide GSettings defaults, e.g. Nemo keybindings)
+if [[ -d "$SMPLOS_PATH/system/dconf" ]]; then
+  echo "==> Deploying dconf overrides..."
+  sudo mkdir -p /etc/dconf/db/local.d
+  sudo mkdir -p /etc/dconf/profile
+  sudo cp "$SMPLOS_PATH/system/dconf/"* /etc/dconf/db/local.d/
+  # dconf profile: check user db first, then system overrides
+  printf 'user-db:user\nsystem-db:local\n' | sudo tee /etc/dconf/profile/user >/dev/null
+  # Compile the database
+  sudo dconf update 2>/dev/null || true
+fi
+
 # Deploy pacman hooks
 echo "==> Installing pacman hooks..."
 sudo mkdir -p /etc/pacman.d/hooks

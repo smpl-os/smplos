@@ -1,0 +1,38 @@
+# smplOS Nemo defaults
+# Double Commander-inspired keybindings + preview pane settings
+
+[org/nemo/keybindings]
+# F5 = Copy to other pane (clears reload-alt)
+reload-alt=''
+copy-to-other-pane='F5'
+
+# F6 = Move to other pane (clears switch-pane)
+switch-pane=''
+move-to-other-pane='F6'
+
+# F7 = New Folder
+new-folder='F7'
+
+# F8 = Move to Trash
+trash='F8'
+
+# Alt+F7 = Search
+search='<Alt>F7'
+
+# Ctrl+B = Toggle Sidebar (like VS Code)
+show-sidebar='<Control>b'
+
+# Ctrl+Shift+O = Edit Bookmarks (clears open-alternate)
+open-alternate=''
+edit-bookmarks='<Control><Shift>o'
+
+# Ctrl+D = Add Bookmark
+add-bookmark='<Control>d'
+
+# Alt+F1/F2 = Bookmark/Disk picker
+bookmark-picker='<Alt>F1'
+bookmark-picker-other='<Alt>F2'
+
+[org/nemo/preferences]
+# Confirm before moving files to trash (F8 safety)
+confirm-move-to-trash=true

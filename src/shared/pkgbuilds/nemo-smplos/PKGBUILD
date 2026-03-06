@@ -1,0 +1,73 @@
+# Maintainer: smplOS <https://github.com/smplOS>
+# Based on: https://gitlab.archlinux.org/archlinux/packaging/packages/nemo/-/blob/main/PKGBUILD
+
+pkgname=nemo-smplos
+pkgver=6.6.3
+pkgrel=1
+pkgdesc='Nemo file manager with smplOS patches (configurable keybindings, preview pane, substring search)'
+arch=(x86_64)
+url='https://github.com/KonTy/nemo'
+license=('GPL-3.0-or-later AND LGPL-2.1-or-later')
+depends=(
+  at-spi2-core
+  bash
+  cairo
+  cinnamon-desktop
+  dconf
+  exempi
+  gcc-libs
+  gdk-pixbuf2
+  glib2
+  glibc
+  gtk3
+  gvfs
+  hicolor-icon-theme
+  json-glib
+  libexif
+  libx11
+  libxmlb
+  pango
+  python
+  python-cairo
+  python-gobject
+  xapp
+  # Preview pane dependencies
+  gstreamer
+  gst-plugins-base
+  gst-plugins-good
+  webp-pixbuf-loader
+)
+optdepends=(
+  'cinnamon-translations: i18n'
+  'ffmpegthumbnailer: video thumbnails'
+  'gst-plugins-bad: extra video format support in preview pane'
+  'gst-plugins-ugly: extra video format support in preview pane'
+)
+makedepends=(
+  git
+  glib2-devel
+  gobject-introspection
+  gtk-doc
+  intltool
+  libgsf
+  meson
+)
+provides=(nemo)
+conflicts=(nemo)
+replaces=(nemo)
+source=("git+https://github.com/KonTy/nemo.git#branch=release")
+sha256sums=('SKIP')
+
+build() {
+  cd nemo
+  arch-meson build \
+    --libexecdir=lib/nemo \
+    -D gtk_doc=false \
+    -D gstreamer=true
+  meson compile -C build
+}
+
+package() {
+  cd nemo
+  meson install -C build --destdir="$pkgdir"
+}

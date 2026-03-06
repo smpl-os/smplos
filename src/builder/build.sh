@@ -958,6 +958,24 @@ VOXCFG
         sed "s/@BUILD_VERSION@/${BUILD_VERSION}/g" \
             "$SRC_DIR/shared/system/os-release" > "$airootfs/root/smplos/system/os-release"
     fi
+
+    # Deploy dconf overrides (system-wide GSettings defaults, e.g. Nemo keybindings)
+    if [[ -d "$SRC_DIR/shared/system/dconf" ]]; then
+        log_info "Deploying dconf overrides"
+        mkdir -p "$airootfs/etc/dconf/db/local.d"
+        mkdir -p "$airootfs/etc/dconf/profile"
+        cp "$SRC_DIR/shared/system/dconf/"* "$airootfs/etc/dconf/db/local.d/" 2>/dev/null || true
+
+        # dconf profile: tells dconf to check user db first, then local overrides
+        cat > "$airootfs/etc/dconf/profile/user" << 'DCONF_PROFILE'
+user-db:user
+system-db:local
+DCONF_PROFILE
+
+        # Also stage for installer
+        mkdir -p "$airootfs/root/smplos/system/dconf"
+        cp "$SRC_DIR/shared/system/dconf/"* "$airootfs/root/smplos/system/dconf/" 2>/dev/null || true
+    fi
     
     # Copy EWW configs
     if [[ -d "$SRC_DIR/shared/eww" ]]; then
@@ -1064,15 +1082,6 @@ VOXCFG
         mkdir -p "$skel/.config/btop/themes" && cp "$theme_src/btop.theme" "$skel/.config/btop/themes/current.theme" 2>/dev/null || true
         # Fish shell theme colors
         mkdir -p "$skel/.config/fish" && cp "$theme_src/fish.theme" "$skel/.config/fish/theme.fish" 2>/dev/null || true
-        # Double Commander -- pre-generate colors.json with catppuccin palette
-        if [[ -f "$airootfs/usr/local/bin/theme-set-dc" ]]; then
-            log_info "Pre-generating DC colors.json for catppuccin"
-            SMPLOS_BUILD=1 \
-            CURRENT_THEME_PATH="$skel/.config/smplos/current/theme" \
-            DC_CONFIG_DIR="$skel/.config/doublecmd" \
-            SMPLOS_PATH="$smplos_skel_data" \
-              bash "$airootfs/usr/local/bin/theme-set-dc" 2>/dev/null || true
-        fi
         # Browser (Brave/Chromium) -- set toolbar color via managed policy
         local browser_bg
         browser_bg=$(grep '^background' "$theme_src/colors.toml" | sed 's/.*"\(#[0-9a-fA-F]*\)".*/\1/')

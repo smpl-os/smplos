@@ -163,7 +163,7 @@ fi
 theme-set-st 2>/dev/null &
 
 # Double Commander — regenerate colors.json from theme palette
-theme-set-dc 2>/dev/null &
+# theme-set-dc removed — DC replaced by Nemo (GTK3, live-reloads via gtk.css)
 
 # Foot terminal — reload via SIGUSR1 (if running)
 if pgrep -x foot >/dev/null; then
@@ -357,9 +357,15 @@ if [[ -n "$_lq_pid" ]]; then
 }
 EOF
 else
-  # No plugin for this theme — just set dark/light mode, clear plugin theme
+  # No plugin for this theme — use legacy "theme" key (with mode, no URL) so
+  # activateUserPreferences() calls selectTheme() -> emits "theme-selected"
+  # -> handler calls set-theme-mode!.  Without this key, Logseq defaults to
+  # "light" on Linux (stored in localStorage, not any config file).
   cat > "$_logseq_prefs" <<EOF
 {
+  "theme": {
+    "mode": "$_lq_mode"
+  },
   "themes": {
     "mode": "$_lq_mode"
   },
