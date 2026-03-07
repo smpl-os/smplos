@@ -155,6 +155,16 @@ if [[ -d "$SMPLOS_PATH/system/dconf" ]]; then
   sudo dconf update 2>/dev/null || true
 fi
 
+# Deploy udev rules (e.g. MTP device access without gphoto2 conflicts)
+if [[ -d "$SMPLOS_PATH/system/udev" ]]; then
+  echo "==> Deploying udev rules..."
+  sudo mkdir -p /etc/udev/rules.d
+  sudo cp "$SMPLOS_PATH/system/udev/"*.rules /etc/udev/rules.d/
+  # Reload udev rules
+  sudo udevadm control --reload-rules 2>/dev/null || true
+  sudo udevadm trigger --subsystem-match=usb 2>/dev/null || true
+fi
+
 # Deploy pacman hooks
 echo "==> Installing pacman hooks..."
 sudo mkdir -p /etc/pacman.d/hooks

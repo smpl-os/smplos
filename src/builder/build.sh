@@ -976,6 +976,17 @@ DCONF_PROFILE
         mkdir -p "$airootfs/root/smplos/system/dconf"
         cp "$SRC_DIR/shared/system/dconf/"* "$airootfs/root/smplos/system/dconf/" 2>/dev/null || true
     fi
+
+    # Deploy udev rules (e.g. MTP device access without gphoto2 conflicts)
+    if [[ -d "$SRC_DIR/shared/system/udev" ]]; then
+        log_info "Deploying udev rules"
+        mkdir -p "$airootfs/etc/udev/rules.d"
+        cp "$SRC_DIR/shared/system/udev/"*.rules "$airootfs/etc/udev/rules.d/" 2>/dev/null || true
+        
+        # Also stage for installer to deploy to installed system
+        mkdir -p "$airootfs/root/smplos/system/udev"
+        cp "$SRC_DIR/shared/system/udev/"*.rules "$airootfs/root/smplos/system/udev/" 2>/dev/null || true
+    fi
     
     # Copy EWW configs
     if [[ -d "$SRC_DIR/shared/eww" ]]; then
