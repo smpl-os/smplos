@@ -1,0 +1,29 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 smplOS Team
+
+//! Desktop notifications via libnotify
+
+use anyhow::Result;
+
+pub struct Notifier;
+
+impl Notifier {
+    pub fn new() -> Self {
+        Self
+    }
+
+    pub fn show_sync_started(profile_name: &str) -> Result<()> {
+        // TODO: Show notification
+        Ok(())
+    }
+
+    pub fn show_sync_progress(profile_name: &str, current: u64, total: u64) -> Result<()> {
+        // TODO: Update notification with progress
+        Ok(())
+    }
+
+    pub fn show_sync_completed(profile_name: &str, success: bool) -> Result<()> {
+        // TODO: Show completion notification
+        Ok(())
+    }
+}

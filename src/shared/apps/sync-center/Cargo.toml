@@ -1,0 +1,53 @@
+[package]
+name = "sync-center"
+version = "0.1.0"
+edition = "2021"
+authors = ["smplOS Team"]
+license = "GPL-3.0-or-later"
+description = "Automatic directory synchronization to external drives"
+
+[[bin]]
+name = "sync-center-daemon"
+path = "src/bin/daemon.rs"
+
+[[bin]]
+name = "sync-center-gui"
+path = "src/bin/gui.rs"
+
+[dependencies]
+# GUI
+gtk4 = { version = "0.7", features = ["v4_6"] }
+libadwaita = "0.6"
+
+# GLib/GIO
+glib = "0.18"
+gio = { version = "0.18", features = ["v2_70"] }
+
+# D-Bus
+zbus = { version = "3.0", features = ["tokio"] }
+zvariant = "3.0"
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+
+# Utilities
+uuid = { version = "1.0", features = ["serde", "v4"] }
+notify-rust = "4.10"
+anyhow = "1.0"
+thiserror = "1.0"
+futures = "0.3"
+
+[dev-dependencies]
+tempfile = "3.8"
+
+[profile.release]
+opt-level = 3
+lto = true
