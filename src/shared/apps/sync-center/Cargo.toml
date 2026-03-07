@@ -15,12 +15,11 @@ name = "sync-center-gui"
 path = "src/bin/gui.rs"
 
 [dependencies]
-# GUI
-gtk4 = { version = "0.9", features = ["v4_10"] }
-# Note: libadwaita versioning is complex, will be added once GTK4 is stable
-# For now using GTK4 directly
+# GUI (Slint for consistency with other smplOS apps)
+slint = { version = "1.8", default-features = false, features = ["backend-winit", "renderer-femtovg", "compat-1-2"] }
+i-slint-backend-winit = "1.8"
 
-# GLib/GIO
+# GLib/GIO (for volume monitoring)
 glib = "0.20"
 gio = { version = "0.20", features = ["v2_70"] }
 
@@ -47,6 +46,9 @@ notify-rust = "4.10"
 anyhow = "1.0"
 thiserror = "1.0"
 futures = "0.3"
+
+[build-dependencies]
+slint-build = "1.8"
 
 [dev-dependencies]
 tempfile = "3.8"

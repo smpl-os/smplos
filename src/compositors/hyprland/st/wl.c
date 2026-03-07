@@ -1706,7 +1706,7 @@ static void wlclear(int x1, int y1, int x2, int y2)
 	#else
 	uint8_t bg_alpha = term_alpha;
 	#endif
-	color = (color & bg_alpha << 24) | (color & 0x00FFFFFF);
+	color = (color & 0x00FFFFFF) | (((uint32_t)bg_alpha) << 24);
 	wld_fill_rectangle(wld.renderer, color, x1, y1, x2 - x1, y2 - y1);
 }
 
@@ -1815,9 +1815,9 @@ void wltermclear(int col1, int row1, int col2, int row2)
 	#else
 	uint8_t tc_alpha = IS_SET(MODE_FOCUSED) ? term_alpha : term_alpha_unfocused;
 	#endif // ALPHA_FOCUS_FADE_MS > 0
-	color = (color & ((uint32_t)tc_alpha << 24)) | (color & 0x00FFFFFF);
+	color = (color & 0x00FFFFFF) | (((uint32_t)tc_alpha) << 24);
 #else
-	color = (color & term_alpha << 24) | (color & 0x00FFFFFF);
+	color = (color & 0x00FFFFFF) | (((uint32_t)term_alpha) << 24);
 #endif
 	#if ANYSIZE_PATCH
 	wld_fill_rectangle(wld.renderer, color, win.hborderpx + col1 * win.cw,
@@ -1876,10 +1876,10 @@ static void wldrawCharacter(Glyph g, int x, int y)
 		} else {
 #if SELECTION_COLORS_PATCH
 			if ((g.mode & ATTR_SELECTED))
-				fg = dc.col[selectionfg];
+				fg = dc.col[selectionfg] | 0xff000000;
 			else
 #endif // SELECTION_COLORS_PATCH
-				fg = dc.col[g.fg];
+				fg = dc.col[g.fg] | 0xff000000;
 		}
 
 		if (IS_TRUECOL(g.bg)) {

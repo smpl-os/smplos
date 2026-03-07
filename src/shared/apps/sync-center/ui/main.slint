@@ -1,0 +1,370 @@
+// sync-center - Directory synchronization manager for smplOS
+
+struct SyncProfile {
+    id: string,
+    name: string,
+    enabled: bool,
+    volume_label: string,
+    source_path: string,
+    destination_path: string,
+    last_sync: string,
+    status: string, // "idle", "syncing", "error", "success"
+}
+
+struct VolumeInfo {
+    label: string,
+    mount_point: string,
+    available_gb: float,
+    total_gb: float,
+}
+
+// ── Theme (same as all other smplOS apps) ───────────────────────────────────
+
+export global Theme {
+    in-out property <color> bg: #1e1e2e;
+    in-out property <color> fg: #cdd6f4;
+    in-out property <color> fg_dim: #a6adc8;
+    in-out property <color> accent: #89b4fa;
+    in-out property <color> bg_light: #45475a;
+    in-out property <color> bg_lighter: #585b70;
+    in-out property <color> danger: #f38ba8;
+    in-out property <color> success: #a6e3a1;
+    in-out property <color> warning: #f9e2af;
+    in-out property <color> info: #94e2d5;
+    in-out property <float> opacity: 0.40;
+    in-out property <length> border_radius: 12px;
+}
+
+// ── Profile card component ───────────────────────────────────────────────────
+
+component ProfileCard inherits Rectangle {
+    in property <string> name;
+    in property <string> volume_label;
+    in property <string> source_path;
+    in property <string> destination_path;
+    in property <string> last_sync;
+    in property <string> status;
+    in property <bool> enabled;
+    callback clicked();
+    callback toggle_enabled();
+    callback sync_now();
+
+    height: 120px;
+    border-radius: Theme.border_radius;
+    background: touch.has-hover ? Theme.bg_light.transparentize(0.3) : Theme.bg_light;
+
+    touch := TouchArea {
+        clicked => { root.clicked(); }
+    }
+
+    HorizontalLayout {
+        padding: 16px;
+        spacing: 12px;
+
+        // Left: Profile info
+        VerticalLayout {
+            spacing: 6px;
+            alignment: start;
+
+            HorizontalLayout {
+                spacing: 8px;
+
+                Text {
+                    text: root.name;
+                    color: Theme.fg;
+                    font-size: 16px;
+                    font-weight: 600;
+                }
+
+                // Status indicator
+                Rectangle {
+                    width: 8px;
+                    height: 8px;
+                    border-radius: 4px;
+                    background: root.status == "syncing" ? Theme.info :
+                                root.status == "success" ? Theme.success :
+                                root.status == "error" ? Theme.danger :
+                                Theme.fg_dim;
+                }
+            }
+
+            Text {
+                text: "Volume: " + root.volume_label;
+                color: Theme.fg_dim;
+                font-size: 12px;
+            }
+
+            Text {
+                text: root.source_path + " → " + root.destination_path;
+                color: Theme.fg_dim;
+                font-size: 11px;
+                overflow: elide;
+            }
+
+            if root.last_sync != "": Text {
+                text: "Last sync: " + root.last_sync;
+                color: Theme.fg_dim;
+                font-size: 10px;
+            }
+        }
+
+        // Right: Action buttons
+        HorizontalLayout {
+            alignment: end;
+            spacing: 8px;
+
+            // Sync now button
+            Rectangle {
+                width: 80px;
+                height: 32px;
+                border-radius: 6px;
+                background: sync_touch.has-hover ? Theme.accent.darker(0.2) : Theme.accent;
+
+                sync_touch := TouchArea {
+                    clicked => { root.sync_now(); }
+                }
+
+                Text {
+                    text: "Sync";
+                    color: Theme.bg;
+                    font-size: 13px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+
+            // Enable/disable toggle
+            Rectangle {
+                width: 50px;
+                height: 32px;
+                border-radius: 16px;
+                background: root.enabled ? Theme.success.transparentize(0.7) : Theme.bg_lighter;
+
+                toggle_touch := TouchArea {
+                    clicked => { root.toggle_enabled(); }
+                }
+
+                Rectangle {
+                    width: 24px;
+                    height: 24px;
+                    x: root.enabled ? parent.width - self.width - 4px : 4px;
+                    y: (parent.height - self.height) / 2;
+                    border-radius: 12px;
+                    background: root.enabled ? Theme.success : Theme.fg_dim;
+
+                    animate x { duration: 200ms; easing: ease-in-out; }
+                }
+            }
+        }
+    }
+}
+
+// ── Add profile button ────────────────────────────────────────────────────────
+
+component AddProfileButton inherits Rectangle {
+    callback clicked();
+
+    height: 120px;
+    border-radius: Theme.border_radius;
+    background: touch.has-hover ? Theme.bg_lighter.transparentize(0.5) : transparent;
+    border-width: 2px;
+    border-color: Theme.bg_lighter;
+
+    touch := TouchArea {
+        clicked => { root.clicked(); }
+    }
+
+    VerticalLayout {
+        alignment: center;
+
+        Text {
+            text: "+";
+            color: Theme.fg_dim;
+            font-size: 32px;
+            horizontal-alignment: center;
+        }
+
+        Text {
+            text: "Add Profile";
+            color: Theme.fg_dim;
+            font-size: 14px;
+            horizontal-alignment: center;
+        }
+    }
+}
+
+// ── Main Window ───────────────────────────────────────────────────────────────
+
+export component MainWindow inherits Window {
+    title: "sync-center";
+    width: 800px;
+    height: 600px;
+    no-frame: true;
+    background: Theme.bg.transparentize(1.0 - Theme.opacity);
+
+    // Properties
+    in-out property <[SyncProfile]> profiles;
+    in-out property <[VolumeInfo]> connected_volumes;
+    in-out property <bool> daemon_running: false;
+
+    // Callbacks
+    callback add_profile();
+    callback edit_profile(int);
+    callback sync_profile(int);
+    callback toggle_profile(int);
+    callback refresh();
+
+    VerticalLayout {
+        padding: 20px;
+        spacing: 16px;
+
+        // Header
+        HorizontalLayout {
+            spacing: 12px;
+            alignment: space-between;
+
+            HorizontalLayout {
+                spacing: 12px;
+
+                // App icon/title
+                Text {
+                    text: "sync-center";
+                    color: Theme.fg;
+                    font-size: 24px;
+                    font-weight: 700;
+                }
+
+                // Daemon status indicator
+                Rectangle {
+                    width: 12px;
+                    height: 12px;
+                    border-radius: 6px;
+                    background: root.daemon_running ? Theme.success : Theme.danger;
+                    y: (parent.height - self.height) / 2 + 4px;
+                }
+            }
+
+            HorizontalLayout {
+                spacing: 8px;
+
+                // Refresh button
+                Rectangle {
+                    width: 36px;
+                    height: 36px;
+                    border-radius: 6px;
+                    background: refresh_touch.has-hover ? Theme.bg_light : transparent;
+
+                    refresh_touch := TouchArea {
+                        clicked => { root.refresh(); }
+                    }
+
+                    Text {
+                        text: "⟳";
+                        color: Theme.fg;
+                        font-size: 20px;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+
+                // Close button
+                Rectangle {
+                    width: 36px;
+                    height: 36px;
+                    border-radius: 6px;
+                    background: close_touch.has-hover ? Theme.danger : transparent;
+
+                    close_touch := TouchArea {
+                        clicked => { /* TODO: close window */ }
+                    }
+
+                    Text {
+                        text: "×";
+                        color: Theme.fg;
+                        font-size: 24px;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+
+        // Divider
+        Rectangle {
+            height: 1px;
+            background: Theme.bg_lighter;
+        }
+
+        // Connected volumes info
+        if root.connected_volumes.length > 0: HorizontalLayout {
+            spacing: 12px;
+
+            Text {
+                text: "Connected: ";
+                color: Theme.fg_dim;
+                font-size: 12px;
+                vertical-alignment: center;
+            }
+
+            for volume in root.connected_volumes: Rectangle {
+                height: 24px;
+                border-radius: 4px;
+                background: Theme.info.transparentize(0.8);
+                padding-left: 8px;
+                padding-right: 8px;
+
+                Text {
+                    text: volume.label + " (" + Math.round(volume.available_gb) + " GB free)";
+                    color: Theme.fg;
+                    font-size: 11px;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
+        // Profiles list
+        if root.profiles.length == 0: VerticalLayout {
+            alignment: center;
+
+            Text {
+                text: "No sync profiles configured";
+                color: Theme.fg_dim;
+                font-size: 16px;
+                horizontal-alignment: center;
+            }
+
+            Text {
+                text: "Click the + button below to add your first profile";
+                color: Theme.fg_dim;
+                font-size: 12px;
+                horizontal-alignment: center;
+            }
+        }
+
+        if root.profiles.length > 0: Flickable {
+            viewport-height: content.preferred-height;
+            content := VerticalLayout {
+                spacing: 12px;
+
+                for profile[idx] in root.profiles: ProfileCard {
+                    name: profile.name;
+                    volume_label: profile.volume_label;
+                    source_path: profile.source_path;
+                    destination_path: profile.destination_path;
+                    last_sync: profile.last_sync;
+                    status: profile.status;
+                    enabled: profile.enabled;
+
+                    clicked => { root.edit_profile(idx); }
+                    sync_now => { root.sync_profile(idx); }
+                    toggle_enabled => { root.toggle_profile(idx); }
+                }
+            }
+        }
+
+        // Add profile button
+        AddProfileButton {
+            clicked => { root.add_profile(); }
+        }
+    }
+}

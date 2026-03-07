@@ -1,0 +1,67 @@
+# Maintainer: smplOS <https://github.com/smplOS>
+# Downloads pre-built nemo from GitHub Actions artifacts
+# Source: https://github.com/KonTy/nemo (release branch)
+
+pkgname=nemo-smpl
+pkgver=1.0.2
+pkgrel=1
+pkgdesc='Nemo file manager with smplOS patches (configurable keybindings, preview pane, substring search, MTP support)'
+arch=(x86_64)
+url='https://github.com/KonTy/nemo'
+license=('GPL-3.0-or-later AND LGPL-2.1-or-later')
+depends=(
+  at-spi2-core
+  bash
+  cairo
+  cinnamon-desktop
+  dconf
+  exempi
+  gcc-libs
+  gdk-pixbuf2
+  glib2
+  glibc
+  gtk3
+  gvfs
+  gvfs-mtp
+  hicolor-icon-theme
+  json-glib
+  libexif
+  libx11
+  libxmlb
+  pango
+  python
+  python-cairo
+  python-gobject
+  xapp
+  # Preview pane dependencies
+  gstreamer
+  gst-plugins-base
+  gst-plugins-good
+  webp-pixbuf-loader
+)
+optdepends=(
+  'cinnamon-translations: i18n'
+  'ffmpegthumbnailer: video thumbnails'
+  'gst-plugins-bad: extra video format support in preview pane'
+  'gst-plugins-ugly: extra video format support in preview pane'
+)
+makedepends=()
+provides=(nemo)
+conflicts=(nemo)
+replaces=(nemo)
+
+# GitHub Actions artifact URL - downloads pre-built rootfs from release branch CI
+# Built by: https://github.com/KonTy/nemo/.github/workflows/build-arch.yml
+source=("https://github.com/KonTy/nemo/releases/download/v${pkgver}/smplos-nemo-${pkgver}-arch-x86_64-rootfs.tar.zst")
+sha256sums=('SKIP')
+
+build() {
+  # Pre-built artifact - no compilation needed
+  echo "Using pre-built artifact from GitHub Actions"
+}
+
+package() {
+  cd "$srcdir"
+  # Extract rootfs directly into pkgdir
+  tar -xf "smplos-nemo-${pkgver}-arch-x86_64-rootfs.tar.zst" -C "$pkgdir"
+}
