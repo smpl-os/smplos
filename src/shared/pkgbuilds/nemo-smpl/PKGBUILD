@@ -3,7 +3,7 @@
 # Source: https://github.com/KonTy/nemo (release branch)
 
 pkgname=nemo-smpl
-pkgver=1.0.2
+pkgver=1.0.5
 pkgrel=1
 pkgdesc='Nemo file manager with smplOS patches (configurable keybindings, preview pane, substring search, MTP support)'
 arch=(x86_64)
@@ -52,7 +52,7 @@ replaces=(nemo)
 
 # GitHub Actions artifact URL - downloads pre-built rootfs from release branch CI
 # Built by: https://github.com/KonTy/nemo/.github/workflows/build-arch.yml
-source=("https://github.com/KonTy/nemo/releases/download/v${pkgver}/smplos-nemo-${pkgver}-arch-x86_64-rootfs.tar.zst")
+source=("https://github.com/KonTy/nemo/releases/download/v${pkgver}/nemo-smpl-${pkgver}-arch-x86_64-rootfs.tar.zst")
 sha256sums=('SKIP')
 
 build() {
@@ -63,7 +63,7 @@ build() {
 package() {
   cd "$srcdir"
   # Extract rootfs directly into pkgdir
-  tar -xf "smplos-nemo-${pkgver}-arch-x86_64-rootfs.tar.zst" -C "$pkgdir"
+  tar -xf "nemo-smpl-${pkgver}-arch-x86_64-rootfs.tar.zst" -C "$pkgdir"
 }
 
 post_install() {
