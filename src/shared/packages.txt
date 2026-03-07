@@ -11,7 +11,7 @@ harfbuzz
 imlib2
 
 # ── File Manager ─────────────────────────────────────────────
-nemo
+nemo-smplos
 nemo-fileroller
 file-roller
 gvfs
