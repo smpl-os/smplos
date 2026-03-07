@@ -65,3 +65,9 @@ package() {
   # Extract rootfs directly into pkgdir
   tar -xf "smplos-nemo-${pkgver}-arch-x86_64-rootfs.tar.zst" -C "$pkgdir"
 }
+
+post_install() {
+  # Reload udev rules for MTP device access (bundled in package)
+  udevadm control --reload-rules 2>/dev/null || true
+  udevadm trigger --subsystem-match=usb 2>/dev/null || true
+}
