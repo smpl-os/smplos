@@ -11,7 +11,7 @@ harfbuzz
 imlib2
 
 # ── File Manager ─────────────────────────────────────────────
-nemo-smplos
+# nemo-smplos is installed via AUR/custom packages list
 nemo-fileroller
 file-roller
 gvfs
