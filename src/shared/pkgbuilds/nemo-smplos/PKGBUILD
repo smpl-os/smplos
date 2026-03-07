@@ -22,6 +22,7 @@ depends=(
   glibc
   gtk3
   gvfs
+  gvfs-mtp
   hicolor-icon-theme
   json-glib
   libexif

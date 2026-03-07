@@ -1,0 +1,4 @@
+# Prevent gphoto2 from claiming Samsung MTP devices  
+# This allows proper MTP/PTP access via GVFS without conflicts
+# File location: /etc/udev/rules.d/70-disable-gphoto-for-mtp.rules
+SUBSYSTEM=="usb", ATTR{idVendor}=="04e8", ATTR{idProduct}=="6860", ENV{ID_GPHOTO2}="", ENV{ID_GPHOTO}=""
