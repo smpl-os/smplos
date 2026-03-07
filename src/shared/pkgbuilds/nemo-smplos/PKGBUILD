@@ -1,8 +1,9 @@
 # Maintainer: smplOS <https://github.com/smplOS>
-# Based on: https://gitlab.archlinux.org/archlinux/packaging/packages/nemo/-/blob/main/PKGBUILD
+# Downloads pre-built smplos-nemo from GitHub Actions artifacts
+# Source: https://github.com/KonTy/nemo (release branch)
 
 pkgname=nemo-smplos
-pkgver=6.6.3
+pkgver=1.0.1
 pkgrel=1
 pkgdesc='Nemo file manager with smplOS patches (configurable keybindings, preview pane, substring search)'
 arch=(x86_64)
@@ -43,31 +44,23 @@ optdepends=(
   'gst-plugins-bad: extra video format support in preview pane'
   'gst-plugins-ugly: extra video format support in preview pane'
 )
-makedepends=(
-  git
-  glib2-devel
-  gobject-introspection
-  gtk-doc
-  intltool
-  libgsf
-  meson
-)
+makedepends=()
 provides=(nemo)
 conflicts=(nemo)
 replaces=(nemo)
-source=("git+https://github.com/KonTy/nemo.git#branch=release")
+
+# GitHub Actions artifact URL - downloads pre-built rootfs from release branch CI
+# Built by: https://github.com/KonTy/nemo/.github/workflows/build-arch.yml
+source=("https://github.com/KonTy/nemo/releases/download/v${pkgver}/smplos-nemo-${pkgver}-arch-x86_64-rootfs.tar.zst")
 sha256sums=('SKIP')
 
 build() {
-  cd nemo
-  arch-meson build \
-    --libexecdir=lib/nemo \
-    -D gtk_doc=false \
-    -D gstreamer=true
-  meson compile -C build
+  # Pre-built artifact - no compilation needed
+  echo "Using pre-built artifact from GitHub Actions"
 }
 
 package() {
-  cd nemo
-  meson install -C build --destdir="$pkgdir"
+  cd "$srcdir"
+  # Extract rootfs directly into pkgdir
+  tar -xf "smplos-nemo-${pkgver}-arch-x86_64-rootfs.tar.zst" -C "$pkgdir"
 }
