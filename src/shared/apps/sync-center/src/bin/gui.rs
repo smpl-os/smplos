@@ -4,41 +4,29 @@
 //! sync-center GUI - GTK4 interface for managing sync profiles
 
 use gtk4::prelude::*;
-use gtk4::{Application, ApplicationWindow};
-use adwaita::prelude::*;
-use anyhow::Result;
-use tracing::info;
+use gtk4::{Application, ApplicationWindow, Label, Box, Orientation};
 
-fn main() -> Result<()> {
-    // Initialize logging
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive(tracing_subscriber::filter::LevelFilter::INFO.into()),
-        )
-        .init();
-
-    info!("sync-center GUI starting...");
-
+fn main() {
     let app = Application::builder()
         .application_id("org.smpl.SyncCenter")
         .build();
 
     app.connect_activate(build_ui);
-
-    Ok(app.run())
+    app.run();
 }
 
 fn build_ui(app: &Application) {
-    // TODO: Build main window with profile list
-    // For now, just show a placeholder window
-
     let window = ApplicationWindow::builder()
         .application(app)
-        .title("Sync Center")
         .default_width(600)
         .default_height(400)
+        .title("sync-center")
         .build();
 
+    let vbox = Box::new(Orientation::Vertical, 5);
+    let label = Label::new(Some("sync-center - Directory Synchronization Manager"));
+    vbox.append(&label);
+
+    window.set_child(Some(&vbox));
     window.present();
 }

@@ -3,24 +3,17 @@
 
 //! sync-center daemon - Event-driven directory synchronization to external drives
 
-use std::collections::HashMap;
-use std::path::PathBuf;
-use anyhow::Result;
-use tracing::{info, warn, error};
+use sync_center::config::Config;
+use sync_center::dbus::{DaemonState, DbusService};
+use sync_center::models::{ConnectedVolume, SyncProfile};
+use sync_center::volume_monitor::VolumeMonitor;
 
-mod config;
-mod dbus;
-mod models;
-mod notification;
-mod rsync_runner;
-mod volume_monitor;
-
-use config::Config;
-use models::{SyncProfile, ConnectedVolume};
-use volume_monitor::VolumeMonitor;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+use tracing::{info, warn};
 
 #[tokio::main]
-async fn main() -> Result<()> {
+async fn main() -> sync_center::Result<()> {
     // Initialize logging
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -35,18 +28,17 @@ async fn main() -> Result<()> {
     let config = Config::load()?;
     info!("Loaded {} sync profiles", config.profiles.len());
 
-    // Initialize D-Bus
-    let dbus_handle = dbus::DbusService::start().await?;
-    info!("D-Bus service initialized");
+    info!("sync-center daemon starting...");
+
+    // Load config
+    let config = Config::load()?;
+    info!("Configuration loaded: {} profiles", config.profiles.len());
 
     // Initialize volume monitor
-    let mut volume_monitor = VolumeMonitor::new(config.clone());
+    let volume_monitor = VolumeMonitor::new(config.clone());
     info!("Volume monitor initialized");
 
-    // Start monitoring volumes
-    volume_monitor.start().await?;
-
-    info!("sync-center daemon ready");
+    info!("sync-center daemon ready - D-Bus and volume monitoring to be implemented");
 
     // Keep daemon running
     tokio::signal::ctrl_c().await?;

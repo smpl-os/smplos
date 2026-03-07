@@ -3,12 +3,11 @@
 
 //! Data models for sync-center
 
-use crate::config::{VolumeIdentifier, SyncProfile, DirectorySync};
-use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::SystemTime;
 
-pub use crate::config::{VolumeIdentifier, PostSyncAction};
+// Re-export commonly used config types (these are defined in config.rs)
+pub use crate::config::{DirectorySync, PostSyncAction, SyncProfile, VolumeIdentifier};
 
 #[derive(Debug, Clone)]
 pub struct ConnectedVolume {
@@ -37,6 +36,3 @@ pub struct SyncEvent {
     pub message: String,
     pub duration_secs: u64,
 }
-
-pub use crate::config::SyncProfile;
-pub use crate::config::DirectorySync;

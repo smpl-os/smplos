@@ -587,7 +587,149 @@ src/shared/apps/sync-center/
 
 ---
 
-## 13. Non-Goals (Out of Scope for v1.0)
+## 13. Error Handling & Corner Cases
+
+### Critical Pre-flight Checks
+
+**Before every sync:**
+
+1. **rsync Installation Check**
+   - Verify `rsync` binary exists and is executable: `which rsync`
+   - If missing: Emit SyncError signal, notify user "rsync not installed", suggest installation
+   - Action: Fail fast, do not attempt sync
+   - Notification: "rsync is not installed. Install with: sudo pacman -S rsync"
+
+2. **Source/Destination Validation**
+   - Source path must exist and be readable
+   - Destination parent directory must exist and be writable
+   - If either fails: Emit SyncError, notify user with specific path
+   - Example: "Source /home/user/Photos is not readable (permission denied)"
+
+3. **Disk Space Check**
+   - Calculate total size of source
+   - Verify destination has 110% of source size available (10% buffer)
+   - If insufficient: Emit SyncError, notify "Insufficient disk space on [drive]: need X GB, have Y GB"
+   - Do NOT proceed with sync
+
+4. **Volume Stability Check**
+   - Monitor if USB volume is still mounted after profile match
+   - If disconnected between match and rsync start: Emit SyncError, skip this sync
+   - Notification: "USB drive disconnected before sync could start"
+
+5. **Permission Validation**
+   - Test write permission on destination: `touch /dest/.sync-test-XXXX && rm`
+   - If fails: Emit SyncError with reason (permission denied, read-only FS, etc)
+
+### Merge Conflict Strategies
+
+**For bidirectional sync (Phase 2+):**
+
+#### Text Files (`.md`, `.txt`, `.rs`, `.json`, `.yaml`, `.csv`, `.sh`, etc.)
+- Use `git-style` conflict markers when both sides have different content
+- Markers format:
+  ```
+  <<<<<<< source
+  [content from source]
+  =======
+  [content from destination]
+  >>>>>>> dest
+  ```
+- File is marked with `.CONFLICT` suffix: `myfile.md.CONFLICT`
+- Original is backed up as `.md.source` and `.md.dest`
+- User must manually merge and remove `.CONFLICT` suffix
+- Notification: "Merge conflict in Photos.md on [drive]. Resolve manually and rename to remove .CONFLICT"
+- Log: Record conflicted file path, size, source vs dest modification times
+
+#### Binary Files (`.png`, `.jpg`, `.zip`, `.exe`, `.bin`, etc.)
+- **Strategy 1 (Default):** Skip binary conflicts entirely
+  - Skip writing conflicted binary, log it, continue with rest of sync
+  - Notification: "Skipped binary file MyPhoto.jpg (conflict detected). Source and destination differ."
+  - User can manually resolve later
+  
+- **Strategy 2 (Alternative - Phase 2):** Add conflict dialog
+  - Show GTK4 dialog: "Binary file conflict"
+  - Options: [Keep Source] [Keep Destination] [Skip] [Cancel All]
+  - User chooses, apply to similar future conflicts
+  - Log decision for audit trail
+
+#### Recommendation (Phase 1)
+- Text files: Use conflict markers
+- Binary files: Skip with notification, log to ~/.config/sync-center/conflicts.log
+- User reviews conflicts.log and resolves manually
+
+### Handle Missing rsync Gracefully
+
+```rust
+// In rsync_runner.rs
+match Command::new("rsync").arg("--version").output() {
+    Ok(output) if output.status.success() => {
+        // rsync is installed, proceed
+    }
+    _ => {
+        // rsync not found
+        let error = SyncError::RsyncNotInstalled(
+            "rsync not found in PATH".to_string()
+        );
+        emit_dbus_signal(SyncError(error));
+        notify_user("rsync is not installed.\n\nInstall with: sudo pacman -S rsync");
+        return Err(error);
+    }
+}
+```
+
+### Runtime Error Scenarios
+
+| Scenario | Behavior | Notification | Log Level |
+|----------|----------|--------------|-----------|
+| **Disk full during sync** | Cancel immediately, report consumed bytes | "Sync cancelled: destination disk full" | ERROR |
+| **Source file deleted mid-sync** | rsync skips it gracefully, log warning | "Some source files were deleted during sync" | WARN |
+| **Permission denied on file** | rsync skips that file, continue | "Skipped X files due to permission errors" | WARN |
+| **File locked (in use)** | rsync skips, try again next sync | "Skipped X files (currently in use)" | WARN |
+| **Symlink encountered** | Follow symlinks by default (`-L` flag) | - | INFO |
+| **Special files (socket, FIFO, device)** | Skip with warning | "Skipped special files (socket, device, etc)" | WARN |
+| **Concurrent sync to same dest** | Lock file `~/.config/sync-center/.sync.lock` | "Another sync is running for this profile" | ERROR |
+| **Config file corrupted** | Load defaults, emit warning, attempt repair | "Config corrupted, reverting to defaults" | ERROR |
+| **D-Bus unavailable** | Continue daemon, queue signals, retry when available | - | WARN |
+| **USB disconnected mid-sync** | rsync detects I/O error, abort gracefully | "USB drive disconnected during sync" | ERROR |
+| **Network share timeout (Phase 2)** | rsync timeout 60s, emit timeout error | "Network share timeout" | ERROR |
+| **Insufficient inode space** | Detected in pre-check, emit error | "Destination has insufficient inodes" | ERROR |
+| **Read-only filesystem** | Detected in pre-check | "Destination is read-only" | ERROR |
+
+### State Recovery
+
+**Daemon Startup:**
+- Check for stale `.sync.lock` files older than 24h, remove them
+- Load config, validate all paths exist (warn if missing)
+- Check for incomplete syncs from previous session
+  - Log: "Found incomplete sync: profile X (started at Y)"
+  - Option: Resume on next mount of same volume
+
+**GUI Startup:**
+- Query daemon for current sync state
+- If daemon not responding, show "Daemon not running, start with: systemctl --user start sync-center"
+- Cache last known state in `~/.config/sync-center/gui-state.json`
+
+### Logging Strategy
+
+**Log File:** `~/.local/share/sync-center/sync-center.log`
+
+**Log Format:**
+```
+[2026-03-07 14:23:15.456] [sync-center-daemon] [INFO] Mounted volume: Photos (UUID: ABC123)
+[2026-03-07 14:23:16.123] [sync-center-daemon] [INFO] Starting sync: profile "Daily Photos" → /media/usb1
+[2026-03-07 14:23:45.678] [sync-center-daemon] [WARN] Skipped 3 files due to permission errors
+[2026-03-07 14:24:02.901] [sync-center-daemon] [WARN] Merge conflict: Photos.md (conflict markers added)
+[2026-03-07 14:24:30.234] [sync-center-daemon] [INFO] Sync completed: 45 files, 1.2 GB in 44 seconds
+```
+
+**Tracing Integration (using `tracing` crate):**
+- `RUST_LOG=sync_center=debug` for debugging
+- `RUST_LOG=sync_center::rsync_runner=trace` for rsync details
+- Structured logs for easy parsing
+
+---
+
+## 14. Non-Goals (Out of Scope for v1.0)
 
 - Network sync (SMB, NFS, S3, etc.)
 - Selective file encryption
@@ -599,7 +741,7 @@ src/shared/apps/sync-center/
 
 ---
 
-## 14. References
+## 15. References
 
 - [rsync man page](https://man.archlinux.org/man/rsync.1.en)
 - [GTK4 Rust bindings](https://gtk-rs.org/gtk4-rs/)
@@ -610,7 +752,7 @@ src/shared/apps/sync-center/
 
 ---
 
-## 15. Open Questions / TBD
+## 16. Open Questions / TBD
 
 - [ ] Should we support rsync over SSH for remote drives?
 - [ ] Max profile limit or infinite?
