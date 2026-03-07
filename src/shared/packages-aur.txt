@@ -15,8 +15,8 @@ satty-bin
 # Brave browser (pre-compiled binary from AUR)
 brave-bin
 
-# smplOS custom Nemo (built from src/shared/pkgbuilds/nemo-smplos)
-nemo-smplos
+# smplOS custom Nemo (built from src/shared/pkgbuilds/nemo-smpl)
+nemo-smpl
 
 # Auto-snapshot before every pacman update (pacman hook for timeshift)
 timeshift-autosnap

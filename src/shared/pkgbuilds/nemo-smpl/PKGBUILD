@@ -1,8 +1,8 @@
 # Maintainer: smplOS <https://github.com/smplOS>
-# Downloads pre-built smplos-nemo from GitHub Actions artifacts
+# Downloads pre-built nemo from GitHub Actions artifacts
 # Source: https://github.com/KonTy/nemo (release branch)
 
-pkgname=nemo-smplos
+pkgname=nemo-smpl
 pkgver=1.0.2
 pkgrel=1
 pkgdesc='Nemo file manager with smplOS patches (configurable keybindings, preview pane, substring search, MTP support)'
