@@ -1501,6 +1501,29 @@ int xsetcolorname(int x, const char *name)
 
 	dc.col[x] = color;
 
+	/* Reload term_alpha from colors.toml whenever the background color
+	 * changes (OSC 11). theme-set-st sends OSC 11 on every theme switch,
+	 * so this is the right hook to keep transparency in sync with themes. */
+	#if ALPHA_PATCH
+	if (x == defaultbg) {
+		float new_alpha = 1.0f;
+		#if ALPHA_FOCUS_HIGHLIGHT_PATCH
+		float new_alpha_inactive = 1.0f;
+		if (load_theme_alpha(&new_alpha, &new_alpha_inactive)) {
+			alpha = new_alpha;
+			alphaUnfocused = new_alpha_inactive;
+			term_alpha = (uint8_t)(alpha * 255.0f);
+			term_alpha_unfocused = (uint8_t)(alphaUnfocused * 255.0f);
+		}
+		#else
+		if (load_theme_alpha(&new_alpha, NULL)) {
+			alpha = new_alpha;
+			term_alpha = (uint8_t)(alpha * 255.0f);
+		}
+		#endif
+	}
+	#endif /* ALPHA_PATCH */
+
 	return 0;
 }
 

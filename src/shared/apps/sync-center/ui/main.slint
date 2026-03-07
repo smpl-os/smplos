@@ -1,5 +1,7 @@
 // sync-center - Directory synchronization manager for smplOS
 
+import { LineEdit, ComboBox } from "std-widgets.slint";
+
 struct SyncProfile {
     id: string,
     name: string,
@@ -192,7 +194,228 @@ component AddProfileButton inherits Rectangle {
         }
     }
 }
+// ── Profile Dialog ───────────────────────────────────────────────────────────
 
+export component ProfileDialog inherits Dialog {
+    in-out property <string> profile_name;
+    in-out property <string> source_path;
+    in-out property <string> destination_path;
+    in-out property <string> volume_identifier_type: "label"; // "label", "uuid", "marker"
+    in-out property <string> volume_identifier_value;
+    in-out property <string> exclude_patterns;
+    
+    callback accepted();
+    callback browse_source();
+    callback browse_destination();
+    callback pick_volume();
+    
+    title: "Add Sync Profile";
+    preferred-width: 600px;
+    preferred-height: 500px;
+    
+    VerticalLayout {
+        padding: 24px;
+        spacing: 16px;
+        
+        Text {
+            text: "Create New Sync Profile";
+            font-size: 20px;
+            color: Theme.fg;
+            font-weight: 600;
+        }
+        
+        // Profile name
+        HorizontalLayout {
+            spacing: 12px;
+            Text {
+                text: "Name:";
+                color: Theme.fg;
+                vertical-alignment: center;
+                width: 120px;
+            }
+            LineEdit {
+                text <=> root.profile_name;
+                placeholder-text: "e.g., Documents Backup";
+            }
+        }
+        
+        // Source directory
+        HorizontalLayout {
+            spacing: 12px;
+            Text {
+                text: "Source:";
+                color: Theme.fg;
+                vertical-alignment: center;
+                width: 120px;
+            }
+            LineEdit {
+                text <=> root.source_path;
+                placeholder-text: "/home/user/Documents";
+                horizontal-stretch: 1;
+            }
+            Rectangle {
+                background: Theme.accent;
+                border-radius: 6px;
+                width: 80px;
+                height: 32px;
+                
+                TouchArea {
+                    clicked => { root.browse_source(); }
+                }
+                
+                Text {
+                    text: "Browse";
+                    color: Theme.bg;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+        
+        // Destination directory
+        HorizontalLayout {
+            spacing: 12px;
+            Text {
+                text: "Destination:";
+                color: Theme.fg;
+                vertical-alignment: center;
+                width: 120px;
+            }
+            LineEdit {
+                text <=> root.destination_path;
+                placeholder-text: "/Backups";
+                horizontal-stretch: 1;
+            }
+            Rectangle {
+                background: Theme.accent;
+                border-radius: 6px;
+                width: 80px;
+                height: 32px;
+                
+                TouchArea {
+                    clicked => { root.browse_destination(); }
+                }
+                
+                Text {
+                    text: "Browse";
+                    color: Theme.bg;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+        
+        // USB identification method
+        HorizontalLayout {
+            spacing: 12px;
+            Text {
+                text: "USB ID Method:";
+                color: Theme.fg;
+                vertical-alignment: center;
+                width: 120px;
+            }
+            
+            ComboBox {
+                model: ["Volume Label", "UUID", "File Marker"];
+                current-value: root.volume_identifier_type == "label" ? "Volume Label" : 
+                              root.volume_identifier_type == "uuid" ? "UUID" : "File Marker";
+            }
+        }
+        
+        // Volume identifier value
+        HorizontalLayout {
+            spacing: 12px;
+            Text {
+                text: root.volume_identifier_type == "marker" ? "Marker File:" :
+                      root.volume_identifier_type == "uuid" ? "UUID:" : "Label:";
+                color: Theme.fg;
+                vertical-alignment: center;
+                width: 120px;
+            }
+            LineEdit {
+                text <=> root.volume_identifier_value;
+                placeholder-text: root.volume_identifier_type == "marker" ? ".sync-marker" :
+                                 root.volume_identifier_type == "uuid" ? "1234-5678" : "MY_USB";
+                horizontal-stretch: 1;
+            }
+            if root.volume_identifier_type != "uuid": Rectangle {
+                background: Theme.accent;
+                border-radius: 6px;
+                width: 100px;
+                height: 32px;
+                
+                TouchArea {
+                    clicked => { root.pick_volume(); }
+                }
+                
+                Text {
+                    text: "Pick USB";
+                    color: Theme.bg;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+        
+        // Exclude patterns
+        HorizontalLayout {
+            spacing: 12px;
+            Text {
+                text: "Exclude:";
+                color: Theme.fg;
+                vertical-alignment: center;
+                width: 120px;
+            }
+            LineEdit {
+                text <=> root.exclude_patterns;
+                placeholder-text: "*.tmp,*.log,node_modules";
+            }
+        }
+        
+        // Buttons
+        HorizontalLayout {
+            spacing: 12px;
+            Rectangle { horizontal-stretch: 1; }
+            
+            Rectangle {
+                background: Theme.bg_lighter;
+                border-radius: 8px;
+                width: 100px;
+                height: 40px;
+                
+                TouchArea {
+                    clicked => { /* cancel */ }
+                }
+                
+                Text {
+                    text: "Cancel";
+                    color: Theme.fg;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+            
+            Rectangle {
+                background: Theme.success;
+                border-radius: 8px;
+                width: 100px;
+                height: 40px;
+                
+                TouchArea {
+                    clicked => { root.accepted(); }
+                }
+                
+                Text {
+                    text: "Start";
+                    color: Theme.bg;
+                    font-weight: 600;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+    }
+}
 // ── Main Window ───────────────────────────────────────────────────────────────
 
 export component MainWindow inherits Window {
