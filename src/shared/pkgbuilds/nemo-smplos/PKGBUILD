@@ -3,9 +3,9 @@
 # Source: https://github.com/KonTy/nemo (release branch)
 
 pkgname=nemo-smplos
-pkgver=1.0.1
+pkgver=1.0.2
 pkgrel=1
-pkgdesc='Nemo file manager with smplOS patches (configurable keybindings, preview pane, substring search)'
+pkgdesc='Nemo file manager with smplOS patches (configurable keybindings, preview pane, substring search, MTP support)'
 arch=(x86_64)
 url='https://github.com/KonTy/nemo'
 license=('GPL-3.0-or-later AND LGPL-2.1-or-later')
