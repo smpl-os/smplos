@@ -160,6 +160,7 @@ window {
 .tray-usb,
 .tray-keyboard,
 .tray-dictation,
+.tray-sync,
 .tray-clock {
   padding: 2px 6px;
   border-radius: 4px;
@@ -174,6 +175,7 @@ window {
 .tray-usb:hover,
 .tray-keyboard:hover,
 .tray-dictation:hover,
+.tray-sync:hover,
 .tray-clock:hover {
   background-color: $bg-light;
 }
@@ -205,6 +207,28 @@ window {
 .tray-dictation.recording {
   background-color: $accent;
   border-radius: 10px;
+}
+
+/* Sync Center: spinning arrows icon -- only visible while syncing.
+   Pulses accent background + spins icon to show in-progress activity. */
+@keyframes sync-spin {
+  from { -gtk-icon-transform: rotate(0deg); }
+  to   { -gtk-icon-transform: rotate(360deg); }
+}
+
+@keyframes sync-pulse {
+  0%   { background-color: rgba($accent, 0.10); }
+  50%  { background-color: rgba($accent, 0.30); }
+  100% { background-color: rgba($accent, 0.10); }
+}
+
+.tray-sync.syncing {
+  border-radius: 10px;
+  animation: sync-pulse 1.8s ease-in-out infinite;
+}
+
+.tray-sync.syncing image {
+  animation: sync-spin 1.4s linear infinite;
 }
 
 /* Notifications: shape conveys state (outline=empty, filled=has, slash=DND) */

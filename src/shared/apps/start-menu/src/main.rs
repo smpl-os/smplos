@@ -510,6 +510,15 @@ fn main() -> Result<(), slint::PlatformError> {
         std::process::exit(0);
     });
 
+    // ── Open Sync Center ──
+    ui.on_open_sync_center(|| {
+        let _ = std::process::Command::new("sh")
+            .arg("-c")
+            .arg("sync-center-gui")
+            .spawn();
+        std::process::exit(0);
+    });
+
     // ── Power actions ──
     ui.on_power_action(|action| {
         let cmd = match action.as_str() {

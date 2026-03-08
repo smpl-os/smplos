@@ -377,6 +377,7 @@ export component MainWindow inherits Window {
     callback close();
     callback start-drag();
     callback open-webapp-center();
+    callback open-sync-center();
     callback power-action(string);  // "lock", "restart", "shutdown"
     callback toggle-pin(string);    // exec string of app to pin/unpin
     callback launch-pinned(int);    // index in pinned-apps model
@@ -552,6 +553,10 @@ export component MainWindow inherits Window {
                         root.open-webapp-center();
                         return accept;
                     }
+                    if (event.modifiers.control && event.text == "y") {
+                        root.open-sync-center();
+                        return accept;
+                    }
                     return reject;
                 }
 
@@ -666,6 +671,10 @@ export component MainWindow inherits Window {
                             }
                             if (event.modifiers.control && event.text == "w") {
                                 root.open-webapp-center();
+                                return accept;
+                            }
+                            if (event.modifiers.control && event.text == "y") {
+                                root.open-sync-center();
                                 return accept;
                             }
                             return reject;
@@ -787,6 +796,10 @@ export component MainWindow inherits Window {
                             }
                             if (event.modifiers.control && event.text == "w") {
                                 root.open-webapp-center();
+                                return accept;
+                            }
+                            if (event.modifiers.control && event.text == "y") {
+                                root.open-sync-center();
                                 return accept;
                             }
                             return reject;
@@ -919,6 +932,12 @@ export component MainWindow inherits Window {
                         icon_image: @image-url("assets/icon-web.svg");
                         tooltip: "Web Apps";
                         clicked => { root.open-webapp-center(); }
+                    }
+
+                    ToolbarButton {
+                        icon_image: @image-url("assets/icon-sync.svg");
+                        tooltip: "Sync Center";
+                        clicked => { root.open-sync-center(); }
                     }
 
                     ToolbarButton {

@@ -59,8 +59,8 @@
 (deflisten kb-data :initial '{"code":"","layout":"","xkb_layout":"","xkb_variant":"","visible":"no"}' `scripts/keyboard-listener.sh`)
 
 ;; Dictation (only visible when voxtype is installed; shows recording state)
-(deflisten dictation-data :initial '{"installed":"no","recording":"no"}' `scripts/dictation-listener.sh`)
-
+(deflisten dictation-data :initial '{"installed":"no","recording":"no"}' `scripts/dictation-listener.sh`);; Sync Center (only visible while a sync is actively running)
+(deflisten sync-data :initial '{"active":"no"}' `scripts/sync-listener.sh`)
 ;; ============================================================================
 ;; WIDGETS
 ;; ============================================================================
@@ -184,17 +184,17 @@
     (image :path {dictation-data.recording == "yes" ? "icons/status/dictation-on.svg" : "icons/status/dictation.svg"}
            :image-width 14 :image-height 14)))
 
-;; Clock + calendar toggle
-(defwidget tray-clock []
-  (button :class "tray-clock"
-          :onclick "popup-toggle calendar-popup"
-    (label :class "time" :text time)))
-
-;; -- Tray group (icon-only indicators) --
-;; Order right-to-left: Notifications | Clock | Volume | Internet | WiFi | BT
-(defwidget tray []
-  (box :class "tray" :orientation "h" :space-evenly false :spacing 2
+;; Sync Center indicator (only visible while sync-center-daemon is actively syncing)
+;; Spins with accent background -- disappears when idle.
+(defwidget tray-sync []
+  (button :class "tray-sync ${sync-data.active == 'yes' ? 'syncing' : ''}"
+          :onclick "sync-center-gui &"
+          :tooltip "Sync in progress — click to open Sync Center"
+          :visible {sync-data.active == "yes"}
+    (image :path "icons/status/sync.svg"
+           :image-width 14 :image-height 14)))
     (tray-usb)
+    (tray-sync)
     (tray-dictation)
     (tray-keyboard)
     (tray-bluetooth)
