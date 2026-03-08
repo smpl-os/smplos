@@ -51,6 +51,10 @@ for proc in /proc/[0-9]*/; do
   pty=$(readlink "/proc/$pid/fd/0" 2>/dev/null)
   [[ "$pty" == /dev/pts/* ]] || continue
 
-  # Write OSC sequences to the pty
+  # Write OSC sequences to the pty (palette + fg/bg/cursor colors)
   printf "$osc" > "$pty" 2>/dev/null
+
+  # Signal st-wl to reload theme alpha from colors.toml immediately.
+  # SIGUSR1 is handled inside st-wl; st (X11) ignores it gracefully.
+  [[ "$comm" == "st-wl" ]] && kill -USR1 "$pid" 2>/dev/null || true
 done

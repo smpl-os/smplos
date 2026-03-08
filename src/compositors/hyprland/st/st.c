@@ -1180,6 +1180,8 @@ ttyread(void)
 	case 0:
 		exit(0);
 	case -1:
+		if (errno == EINTR)
+			return 0; /* signal interrupted read — not a real error */
 		die("couldn't read from shell: %s\n", strerror(errno));
 	default:
 		#if SYNC_PATCH
@@ -1260,8 +1262,12 @@ ttywriteraw(const char *s, size_t n)
 			 * default of 256. This seems to be a reasonable value
 			 * for a serial line. Bigger values might clog the I/O.
 			 */
-			if ((r = write(cmdfd, s, (n < lim)? n : lim)) < 0)
+			r = write(cmdfd, s, (n < lim)? n : lim);
+			if (r < 0) {
+				if (errno == EINTR)
+					continue; /* signal interrupted write — retry */
 				goto write_error;
+			}
 			if (r < n) {
 				/*
 				 * We weren't able to write out everything.

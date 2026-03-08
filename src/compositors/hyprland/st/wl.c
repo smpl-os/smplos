@@ -304,6 +304,14 @@ static int focused = 0;
 /* smplOS: per-pixel bg alpha for unfocused terminal state, loaded from
  * term_opacity_inactive in colors.toml. Mirrors term_alpha for focused. */
 static uint8_t term_alpha_unfocused = 255;
+#endif // ALPHA_FOCUS_HIGHLIGHT_PATCH
+
+/* smplOS: SIGUSR1 sets this flag; run() picks it up and reloads theme alpha
+ * from colors.toml so theme switches take effect in running terminals. */
+static volatile sig_atomic_t reload_theme_pending = 0;
+static void sighandler_reload_theme(int sig) { (void)sig; reload_theme_pending = 1; }
+
+#if ALPHA_PATCH && ALPHA_FOCUS_HIGHLIGHT_PATCH
 #if ALPHA_FOCUS_FADE_MS > 0
 /* Focus-loss alpha fade: wall-clock driven so end value is always exact. */
 static uint8_t        term_alpha_current = 255; /* interpolated alpha used while fading */
@@ -1472,6 +1480,8 @@ void xloadcols(void)
 		#endif
 	}
 	term_alpha = (uint8_t)(alpha*255.0);
+	fprintf(stderr, "[st-wl pid=%d] xloadcols: term_alpha=%u (%.3f) unfocused=%u (%.3f)\n",
+	        (int)getpid(), term_alpha, alpha, term_alpha_unfocused, alphaUnfocused);
 	#endif // ALPHA_PATCH
 	loaded = 1;
 }
@@ -1495,35 +1505,10 @@ int xsetcolorname(int x, const char *name)
 	if (!BETWEEN(x, 0, dc.collen))
 		return 1;
 
-
 	if (!wlloadcolor(x, name, &color))
 		return 1;
 
 	dc.col[x] = color;
-
-	/* Reload term_alpha from colors.toml whenever the background color
-	 * changes (OSC 11). theme-set-st sends OSC 11 on every theme switch,
-	 * so this is the right hook to keep transparency in sync with themes. */
-	#if ALPHA_PATCH
-	if (x == defaultbg) {
-		float new_alpha = 1.0f;
-		#if ALPHA_FOCUS_HIGHLIGHT_PATCH
-		float new_alpha_inactive = 1.0f;
-		if (load_theme_alpha(&new_alpha, &new_alpha_inactive)) {
-			alpha = new_alpha;
-			alphaUnfocused = new_alpha_inactive;
-			term_alpha = (uint8_t)(alpha * 255.0f);
-			term_alpha_unfocused = (uint8_t)(alphaUnfocused * 255.0f);
-		}
-		#else
-		if (load_theme_alpha(&new_alpha, NULL)) {
-			alpha = new_alpha;
-			term_alpha = (uint8_t)(alpha * 255.0f);
-		}
-		#endif
-	}
-	#endif /* ALPHA_PATCH */
-
 	return 0;
 }
 
@@ -1818,6 +1803,14 @@ xfinishdraw(void)
 #endif // SIXEL_PATCH
 
 	wld_flush(wld.renderer);
+	{
+		static int _dbg_probe_cnt = 0;
+		if (_dbg_probe_cnt++ % 120 == 0 && wld.buffer && wld.buffer->map) {
+			uint32_t _px = ((uint32_t*)wld.buffer->map)[0];
+			fprintf(stderr, "[st-wl pid=%d] SHM pixel[0]=0x%08X alpha=0x%02X term_alpha=%u\n",
+			        (int)getpid(), _px, (_px >> 24) & 0xff, term_alpha);
+		}
+	}
 	if (wl.framecb)
 		return;
 	wl_surface_attach(wl.surface, wl.buffer, 0, 0);
@@ -2592,6 +2585,16 @@ wlinit(int cols, int rows)
 {
 	struct wl_registry *registry;
 
+	/* smplOS: SIGUSR1 → reload theme alpha from colors.toml */
+	/* Use SA_RESTART so SIGUSR1 auto-restarts read()/write() instead of
+	 * interrupting them with EINTR. pselect() still returns EINTR on Linux
+	 * regardless of SA_RESTART (handled in run() with errno==EINTR check). */
+	struct sigaction sa_usr1;
+	sa_usr1.sa_handler = sighandler_reload_theme;
+	sigemptyset(&sa_usr1.sa_mask);
+	sa_usr1.sa_flags = SA_RESTART;
+	sigaction(SIGUSR1, &sa_usr1, NULL);
+
 #ifdef STWL_DEBUG
 	fprintf(stderr, "[st-wl-dbg] wlinit: connecting to Wayland display...\n");
 	fprintf(stderr, "[st-wl-dbg] wlinit: WAYLAND_DISPLAY=%s\n", getenv("WAYLAND_DISPLAY") ? getenv("WAYLAND_DISPLAY") : "(null)");
@@ -2783,6 +2786,36 @@ run(void)
 	drawtimeout.tv_sec = 0;
 
 	for (drawing=0, timeout=0;;) {
+		/* Process pending theme reload — SIGUSR1 may have interrupted read() or pselect() */
+		#if ALPHA_PATCH
+		if (reload_theme_pending) {
+			reload_theme_pending = 0;
+			float new_alpha = 1.0f;
+			#if ALPHA_FOCUS_HIGHLIGHT_PATCH
+			float new_alpha_inactive = 1.0f;
+			if (load_theme_alpha(&new_alpha, &new_alpha_inactive)) {
+				alpha = new_alpha;
+				alphaUnfocused = new_alpha_inactive;
+				term_alpha = (uint8_t)(alpha * 255.0f);
+				term_alpha_unfocused = (uint8_t)(alphaUnfocused * 255.0f);
+				term_alpha_current = IS_SET(MODE_FOCUSED) ? term_alpha : term_alpha_unfocused;
+				fprintf(stderr, "[st-wl pid=%d] SIGUSR1: reloaded term_alpha=%u (%.3f) unfocused=%u (%.3f)\n",
+				        (int)getpid(), term_alpha, alpha, term_alpha_unfocused, alphaUnfocused);
+			} else {
+				fprintf(stderr, "[st-wl pid=%d] SIGUSR1: load_theme_alpha FAILED, keeping alpha=%u\n", (int)getpid(), term_alpha);
+			}
+			#else
+			if (load_theme_alpha(&new_alpha, NULL)) {
+				alpha = new_alpha;
+				term_alpha = (uint8_t)(alpha * 255.0f);
+			}
+			#endif
+			wl.resized = true;
+			tfulldirt();
+			wlneeddraw();
+		}
+		#endif /* ALPHA_PATCH */
+
 		FD_ZERO(&rfd);
 		FD_SET(ttyfd, &rfd);
 		FD_SET(wlfd, &rfd);
@@ -2803,7 +2836,7 @@ run(void)
 
 		if (pselect(MAX(wlfd, ttyfd)+1, &rfd, NULL, NULL, &drawtimeout, NULL) < 0) {
 			if (errno == EINTR)
-				continue;
+				continue; /* signal handled at top of loop */
 			die("select failed: %s\n", strerror(errno));
 		}
 
