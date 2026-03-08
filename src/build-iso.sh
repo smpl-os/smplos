@@ -235,9 +235,21 @@ build_custom_packages() {
         [[ -f "$dir/PKGBUILD" ]] || continue
         local pkg
         pkg=$(basename "$dir")
-        if ls "$prebuilt_dir"/${pkg}-[0-9]*.pkg.tar.* &>/dev/null 2>&1; then
-            log_info "Found prebuilt custom package: $pkg"
+
+        # Read the expected version from the PKGBUILD
+        local pkgver pkgrel
+        pkgver=$(grep -E '^pkgver=' "$dir/PKGBUILD" | head -1 | cut -d= -f2 | tr -d '"'"'"' ')
+        pkgrel=$(grep -E '^pkgrel=' "$dir/PKGBUILD" | head -1 | cut -d= -f2 | tr -d '"'"'"' ')
+
+        if [[ -n "$pkgver" && -n "$pkgrel" ]] && \
+           ls "$prebuilt_dir"/${pkg}-${pkgver}-${pkgrel}-*.pkg.tar.* &>/dev/null 2>&1; then
+            log_info "Found prebuilt custom package: $pkg ($pkgver-$pkgrel)"
         else
+            # Evict any stale older version so it doesn't get injected into the ISO
+            if ls "$prebuilt_dir"/${pkg}-[0-9]*-*-*.pkg.tar.* &>/dev/null 2>&1; then
+                log_info "Evicting stale prebuilt for $pkg (want $pkgver-$pkgrel)"
+                rm -f "$prebuilt_dir"/${pkg}-[0-9]*-*-*.pkg.tar.*
+            fi
             need_build+=("$pkg")
         fi
     done
@@ -314,7 +326,7 @@ build_missing_aur_packages() {
     # Check which need building
     local need_build=()
     for pkg in "${aur_packages[@]}"; do
-        if ! ls "$prebuilt_dir"/${pkg}-[0-9]*.pkg.tar.* &>/dev/null; then
+        if ! ls "$prebuilt_dir"/${pkg}-[0-9]*-*-*.pkg.tar.* &>/dev/null; then
             need_build+=("$pkg")
         else
             log_info "Found prebuilt: $pkg"
