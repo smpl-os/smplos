@@ -10,7 +10,10 @@ struct SyncProfile {
     source_path: string,
     destination_path: string,
     last_sync: string,
-    status: string, // "idle", "syncing", "error", "success"
+    status: string,    // "idle", "syncing", "error", "success", "partial"
+    is_syncing: bool,  // true while this specific profile has an active rsync
+    error_text: string, // last error message if status == "error"
+    progress: float,   // 0.0–1.0 while syncing; -1.0 = indeterminate (scanning)
 }
 
 struct VolumeInfo {
@@ -47,11 +50,18 @@ component ProfileCard inherits Rectangle {
     in property <string> last_sync;
     in property <string> status;
     in property <bool> enabled;
+    in property <bool> is_syncing;
+    in property <string> error_text;
+    in property <float> progress;   // -1.0 = indeterminate, 0.0–1.0 = known
     callback clicked();
     callback toggle_enabled();
     callback sync_now();
+    callback delete();
 
-    height: 120px;
+    // Height adapts: +28px for progress bar, +25px for error text
+    height: root.is_syncing
+        ? (root.status == "error" && root.error_text != "" ? 172px : 148px)
+        : (root.status == "error" && root.error_text != "" ? 145px : 120px);
     border-radius: Theme.border_radius;
     background: touch.has-hover ? Theme.bg_light.transparentize(0.3) : Theme.bg_light;
 
@@ -78,15 +88,17 @@ component ProfileCard inherits Rectangle {
                     font-weight: 600;
                 }
 
-                // Status indicator
+                // Status indicator dot
                 Rectangle {
                     width: 8px;
                     height: 8px;
                     border-radius: 4px;
-                    background: root.status == "syncing" ? Theme.info :
+                    background: root.is_syncing ? Theme.info :
                                 root.status == "success" ? Theme.success :
+                                root.status == "partial" ? Theme.warning :
                                 root.status == "error" ? Theme.danger :
                                 Theme.fg_dim;
+                    animate background { duration: 400ms; }
                 }
             }
 
@@ -105,8 +117,52 @@ component ProfileCard inherits Rectangle {
 
             if root.last_sync != "": Text {
                 text: "Last sync: " + root.last_sync;
-                color: Theme.fg_dim;
+                color: root.status == "success" ? Theme.success : Theme.fg_dim;
                 font-size: 10px;
+            }
+
+            if (root.status == "error" || root.status == "partial") && root.error_text != "": Text {
+                text: (root.status == "partial" ? "⚠ Partial: " : "⚠ ") + root.error_text;
+                color: root.status == "partial" ? Theme.warning : Theme.danger;
+                font-size: 10px;
+                overflow: elide;
+            }
+
+            // Progress row — only while syncing
+            if root.is_syncing: HorizontalLayout {
+                spacing: 6px;
+
+                Text {
+                    text: root.progress >= 0.0
+                        ? (Math.round(root.progress * 100) + "%")
+                        : "Scanning…";
+                    color: Theme.info;
+                    font-size: 10px;
+                    vertical-alignment: center;
+                    min-width: 48px;
+                }
+
+                // Progress track
+                Rectangle {
+                    horizontal-stretch: 1;
+                    height: 6px;
+                    y: (parent.height - self.height) / 2;
+                    border-radius: 3px;
+                    background: Theme.bg_lighter;
+                    clip: true;
+
+                    // Fill
+                    Rectangle {
+                        y: 0;
+                        height: parent.height;
+                        width: root.progress >= 0.0
+                            ? parent.width * root.progress
+                            : parent.width * 0.35;
+                        border-radius: parent.border-radius;
+                        background: Theme.info;
+                        animate width { duration: 300ms; easing: ease-in-out; }
+                    }
+                }
             }
         }
 
@@ -115,19 +171,21 @@ component ProfileCard inherits Rectangle {
             alignment: end;
             spacing: 8px;
 
-            // Sync now button
+            // Sync / Cancel button
             Rectangle {
                 width: 80px;
                 height: 32px;
                 border-radius: 6px;
-                background: sync_touch.has-hover ? Theme.accent.darker(0.2) : Theme.accent;
+                background: root.is_syncing
+                    ? (sync_touch.has-hover ? Theme.warning.darker(0.2) : Theme.warning)
+                    : (sync_touch.has-hover ? Theme.accent.darker(0.2) : Theme.accent);
 
                 sync_touch := TouchArea {
                     clicked => { root.sync_now(); }
                 }
 
                 Text {
-                    text: "Sync";
+                    text: root.is_syncing ? "Cancel" : "Sync";
                     color: Theme.bg;
                     font-size: 13px;
                     horizontal-alignment: center;
@@ -141,8 +199,11 @@ component ProfileCard inherits Rectangle {
                 height: 32px;
                 border-radius: 16px;
                 background: root.enabled ? Theme.success.transparentize(0.7) : Theme.bg_lighter;
+                // Disable toggle while syncing (don't allow changing enabled mid-sync)
+                opacity: root.is_syncing ? 0.4 : 1.0;
 
                 toggle_touch := TouchArea {
+                    enabled: !root.is_syncing;
                     clicked => { root.toggle_enabled(); }
                 }
 
@@ -157,57 +218,75 @@ component ProfileCard inherits Rectangle {
                     animate x { duration: 200ms; easing: ease-in-out; }
                 }
             }
+
+            // Delete button — disabled while syncing
+            Rectangle {
+                width: 32px;
+                height: 32px;
+                border-radius: 6px;
+                background: (!root.is_syncing && delete_touch.has-hover) ? Theme.danger : transparent;
+                opacity: root.is_syncing ? 0.2 : (touch.has-hover || delete_touch.has-hover ? 1.0 : 0.4);
+
+                delete_touch := TouchArea {
+                    enabled: !root.is_syncing;
+                    clicked => { root.delete(); }
+                }
+
+                Text {
+                    text: "✕";
+                    color: (!root.is_syncing && delete_touch.has-hover) ? Theme.bg : Theme.fg_dim;
+                    font-size: 18px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
         }
     }
 }
 
-// ── Add profile button ────────────────────────────────────────────────────────
 
-component AddProfileButton inherits Rectangle {
-    callback clicked();
-
-    height: 120px;
-    border-radius: Theme.border_radius;
-    background: touch.has-hover ? Theme.bg_lighter.transparentize(0.5) : transparent;
-    border-width: 2px;
-    border-color: Theme.bg_lighter;
-
-    touch := TouchArea {
-        clicked => { root.clicked(); }
-    }
-
-    VerticalLayout {
-        alignment: center;
-
-        Text {
-            text: "+";
-            color: Theme.fg_dim;
-            font-size: 32px;
-            horizontal-alignment: center;
-        }
-
-        Text {
-            text: "Add Profile";
-            color: Theme.fg_dim;
-            font-size: 14px;
-            horizontal-alignment: center;
-        }
-    }
-}
 // ── Profile Dialog ───────────────────────────────────────────────────────────
 
 export component ProfileDialog inherits Dialog {
     in-out property <string> profile_name;
     in-out property <string> source_path;
     in-out property <string> destination_path;
-    in-out property <string> volume_identifier_type: "label"; // "label", "uuid", "marker"
+    in-out property <int> volume_identifier_index: 0; // 0=label, 1=uuid, 2=marker
     in-out property <string> volume_identifier_value;
     in-out property <string> exclude_patterns;
+    in-out property <[string]> volume_choices;
+    in-out property <[string]> volume_uuid_choices;
+    in-out property <int> volume_choice_index: 0;
+    in-out property <string> error_message: "";
     
     callback accepted();
+    callback canceled();
     callback browse_source();
-    callback browse_destination();
-    callback pick_volume();
+
+    function sync_identifier_from_selection() {
+        if root.volume_choice_index < 0 || root.volume_choice_index >= root.volume_choices.length {
+            return;
+        }
+
+        if root.volume_identifier_index == 0 {
+            root.volume_identifier_value = root.volume_choices[root.volume_choice_index];
+        } else if root.volume_identifier_index == 1
+            && root.volume_choice_index < root.volume_uuid_choices.length {
+            root.volume_identifier_value = root.volume_uuid_choices[root.volume_choice_index];
+        }
+    }
+
+    changed volume_choice_index => {
+        if root.volume_identifier_index != 2 {
+            root.sync_identifier_from_selection();
+        }
+    }
+
+    changed volume_identifier_index => {
+        if root.volume_identifier_index != 2 {
+            root.sync_identifier_from_selection();
+        }
+    }
     
     title: "Add Sync Profile";
     preferred-width: 600px;
@@ -272,7 +351,7 @@ export component ProfileDialog inherits Dialog {
             }
         }
         
-        // Destination directory
+        // Destination directory (relative folder on USB)
         HorizontalLayout {
             spacing: 12px;
             Text {
@@ -283,26 +362,15 @@ export component ProfileDialog inherits Dialog {
             }
             LineEdit {
                 text <=> root.destination_path;
-                placeholder-text: "/Backups";
+                placeholder-text: "books";
                 horizontal-stretch: 1;
             }
-            Rectangle {
-                background: Theme.accent;
-                border-radius: 6px;
-                width: 80px;
-                height: 32px;
-                
-                TouchArea {
-                    clicked => { root.browse_destination(); }
-                }
-                
-                Text {
-                    text: "Browse";
-                    color: Theme.bg;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                }
-            }
+        }
+
+        Text {
+            text: "Destination is a folder name on the selected USB volume (e.g., books, Backups).";
+            color: Theme.fg_dim;
+            font-size: 11px;
         }
         
         // USB identification method
@@ -317,43 +385,62 @@ export component ProfileDialog inherits Dialog {
             
             ComboBox {
                 model: ["Volume Label", "UUID", "File Marker"];
-                current-value: root.volume_identifier_type == "label" ? "Volume Label" : 
-                              root.volume_identifier_type == "uuid" ? "UUID" : "File Marker";
+                current-index <=> root.volume_identifier_index;
             }
         }
         
+        // Help text for file marker
+        if root.volume_identifier_index == 2: Text {
+            text: "💡 File Marker: Best for USB drives with multiple partitions. Create a marker file on the specific partition you want.";
+            color: Theme.info;
+            font-size: 11px;
+            wrap: word-wrap;
+        }
+        
+        // USB Volume selection
+        HorizontalLayout {
+            spacing: 12px;
+            Text {
+                text: "USB Volume:";
+                color: Theme.fg;
+                vertical-alignment: center;
+                width: 120px;
+            }
+            ComboBox {
+                model: root.volume_choices;
+                current-index <=> root.volume_choice_index;
+            }
+        }
+
+        if root.volume_choices.length == 0: Text {
+            text: "No mounted USB volumes detected. Connect a drive or mount it first.";
+            color: Theme.warning;
+            font-size: 11px;
+        }
+
+        if root.error_message != "": Text {
+            text: root.error_message;
+            color: Theme.danger;
+            font-size: 12px;
+            wrap: word-wrap;
+        }
+
         // Volume identifier value
         HorizontalLayout {
             spacing: 12px;
             Text {
-                text: root.volume_identifier_type == "marker" ? "Marker File:" :
-                      root.volume_identifier_type == "uuid" ? "UUID:" : "Label:";
+                text: root.volume_identifier_index == 2 ? "Marker File:" :
+                      root.volume_identifier_index == 1 ? "UUID:" : "Label:";
                 color: Theme.fg;
                 vertical-alignment: center;
                 width: 120px;
             }
             LineEdit {
                 text <=> root.volume_identifier_value;
-                placeholder-text: root.volume_identifier_type == "marker" ? ".sync-marker" :
-                                 root.volume_identifier_type == "uuid" ? "1234-5678" : "MY_USB";
+                placeholder-text: root.volume_identifier_index == 2 ? ".sync-marker" :
+                                 root.volume_identifier_index == 1 ? "Auto-filled from selected volume" : "Auto-filled from selected volume";
+                enabled: root.volume_identifier_index == 2;
                 horizontal-stretch: 1;
-            }
-            if root.volume_identifier_type != "uuid": Rectangle {
-                background: Theme.accent;
-                border-radius: 6px;
-                width: 100px;
-                height: 32px;
-                
-                TouchArea {
-                    clicked => { root.pick_volume(); }
-                }
-                
-                Text {
-                    text: "Pick USB";
-                    color: Theme.bg;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                }
             }
         }
         
@@ -384,7 +471,7 @@ export component ProfileDialog inherits Dialog {
                 height: 40px;
                 
                 TouchArea {
-                    clicked => { /* cancel */ }
+                    clicked => { root.canceled(); }
                 }
                 
                 Text {
@@ -406,11 +493,132 @@ export component ProfileDialog inherits Dialog {
                 }
                 
                 Text {
-                    text: "Start";
+                    text: "OK";
                     color: Theme.bg;
                     font-weight: 600;
                     horizontal-alignment: center;
                     vertical-alignment: center;
+                }
+            }
+        }
+    }
+}
+
+export component HelpDialog inherits Dialog {
+    in property <string> app_version;
+    in property <string> import_export_message: "";
+    in property <bool> import_export_success: false;
+    callback closed();
+    callback export_profiles();
+    callback import_profiles();
+
+    title: "sync-center Help";
+    preferred-width: 520px;
+    preferred-height: 360px;
+
+    VerticalLayout {
+        padding: 24px;
+        spacing: 12px;
+
+        Text {
+            text: "sync-center";
+            color: Theme.fg;
+            font-size: 22px;
+            font-weight: 700;
+        }
+
+        Text {
+            text: "Version " + root.app_version;
+            color: Theme.info;
+            font-size: 14px;
+        }
+
+        Text {
+            text: "Add profiles, start or stop syncing, and manage each profile using Disable/Delete controls.\n\nStart queues all enabled profiles serially. Stop cancels the active sync. Each profile's Sync button triggers that profile immediately; click it again to cancel.";
+            color: Theme.fg_dim;
+            wrap: word-wrap;
+            font-size: 13px;
+        }
+
+        // Export / Import section
+        HorizontalLayout {
+            spacing: 8px;
+
+            Text {
+                text: "Profiles:";
+                color: Theme.fg_dim;
+                font-size: 13px;
+                vertical-alignment: center;
+            }
+
+            Rectangle {
+                width: 110px;
+                height: 34px;
+                border-radius: 6px;
+                background: exp_touch.has-hover ? Theme.accent.darker(0.2) : Theme.accent;
+
+                exp_touch := TouchArea {
+                    clicked => { root.export_profiles(); }
+                }
+
+                Text {
+                    text: "Export";
+                    color: Theme.bg;
+                    font-size: 13px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    font-weight: 600;
+                }
+            }
+
+            Rectangle {
+                width: 110px;
+                height: 34px;
+                border-radius: 6px;
+                background: imp_touch.has-hover ? Theme.bg_lighter.darker(0.1) : Theme.bg_lighter;
+
+                imp_touch := TouchArea {
+                    clicked => { root.import_profiles(); }
+                }
+
+                Text {
+                    text: "Import";
+                    color: Theme.fg;
+                    font-size: 13px;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    font-weight: 600;
+                }
+            }
+        }
+
+        if root.import_export_message != "": Text {
+            text: root.import_export_message;
+            color: root.import_export_success ? Theme.success : Theme.danger;
+            font-size: 12px;
+            wrap: word-wrap;
+        }
+
+        Rectangle { vertical-stretch: 1; background: transparent; }
+
+        HorizontalLayout {
+            alignment: end;
+            Rectangle {
+                width: 96px;
+                height: 36px;
+                border-radius: 8px;
+                background: ok_touch.has-hover ? Theme.accent.darker(0.2) : Theme.accent;
+
+                ok_touch := TouchArea {
+                    clicked => { root.closed(); }
+                }
+
+                Text {
+                    text: "Close";
+                    color: Theme.bg;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    font-weight: 600;
                 }
             }
         }
@@ -429,84 +637,222 @@ export component MainWindow inherits Window {
     in-out property <[SyncProfile]> profiles;
     in-out property <[VolumeInfo]> connected_volumes;
     in-out property <bool> daemon_running: false;
+    in-out property <bool> any_syncing: false;   // true while at least one profile is syncing
+    in-out property <bool> show_profile_dialog: false;
+    in-out property <string> dialog_profile_name: "";
+    in-out property <string> dialog_source_path: "";
+    in-out property <string> dialog_destination_path: "";
+    in-out property <int> dialog_volume_identifier_index: 0;
+    in-out property <string> dialog_volume_identifier_value: "";
+    in-out property <string> dialog_exclude_patterns: "";
+    in-out property <[string]> dialog_volume_choices;
+    in-out property <[string]> dialog_volume_uuid_choices;
+    in-out property <int> dialog_volume_choice_index: 0;
+    in-out property <string> dialog_error_message: "";
+    in-out property <bool> show_help_dialog: false;
+    in-out property <string> app_version: "0.1.0";
+    in-out property <string> help_import_export_message: "";
+    in-out property <bool> help_import_export_success: false;
 
     // Callbacks
     callback add_profile();
     callback edit_profile(int);
     callback sync_profile(int);
     callback toggle_profile(int);
+    callback delete_profile(int);
     callback refresh();
+    callback move_window(float, float);
+    callback close();
+    callback browse_source();
+    callback save_profile() -> bool;
+    callback start_sync();
+    callback stop_sync();
+    callback export_profiles();
+    callback import_profiles();
 
     VerticalLayout {
         padding: 20px;
         spacing: 16px;
 
         // Header
-        HorizontalLayout {
-            spacing: 12px;
-            alignment: space-between;
+        Rectangle {
+            height: 40px;
+            background: transparent;
 
-            HorizontalLayout {
-                spacing: 12px;
-
-                // App icon/title
-                Text {
-                    text: "sync-center";
-                    color: Theme.fg;
-                    font-size: 24px;
-                    font-weight: 700;
+            // Drag area for window movement (left side)
+            drag_area := TouchArea {
+                x: 0;
+                y: 0;
+                width: parent.width - 360px;
+                height: parent.height;
+                moved => {
+                    root.move_window(
+                        (self.mouse-x - self.pressed-x) / 1px,
+                        (self.mouse-y - self.pressed-y) / 1px
+                    );
                 }
-
-                // Daemon status indicator
-                Rectangle {
-                    width: 12px;
-                    height: 12px;
-                    border-radius: 6px;
-                    background: root.daemon_running ? Theme.success : Theme.danger;
-                    y: (parent.height - self.height) / 2 + 4px;
-                }
+                mouse-cursor: move;
             }
 
             HorizontalLayout {
-                spacing: 8px;
+                spacing: 12px;
+                alignment: space-between;
 
-                // Refresh button
-                Rectangle {
-                    width: 36px;
-                    height: 36px;
-                    border-radius: 6px;
-                    background: refresh_touch.has-hover ? Theme.bg_light : transparent;
+                HorizontalLayout {
+                    spacing: 12px;
 
-                    refresh_touch := TouchArea {
-                        clicked => { root.refresh(); }
+                    // App icon/title
+                    Text {
+                        text: "sync-center";
+                        color: Theme.fg;
+                        font-size: 24px;
+                        font-weight: 700;
+                        vertical-alignment: center;
                     }
 
-                    Text {
-                        text: "⟳";
-                        color: Theme.fg;
-                        font-size: 20px;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
+                    // Daemon status indicator
+                    Rectangle {
+                        width: 12px;
+                        height: 12px;
+                        border-radius: 6px;
+                        background: root.daemon_running ? Theme.success : Theme.danger;
+                        y: (parent.height - self.height) / 2 + 4px;
                     }
                 }
 
-                // Close button
-                Rectangle {
-                    width: 36px;
-                    height: 36px;
-                    border-radius: 6px;
-                    background: close_touch.has-hover ? Theme.danger : transparent;
+                HorizontalLayout {
+                    spacing: 8px;
 
-                    close_touch := TouchArea {
-                        clicked => { /* TODO: close window */ }
+                    // Add button (left of Start)
+                    Rectangle {
+                        width: 64px;
+                        height: 36px;
+                        border-radius: 6px;
+                        background: add_touch.has-hover ? Theme.accent.darker(0.2) : Theme.accent;
+
+                        add_touch := TouchArea {
+                            clicked => {
+                                root.show_profile_dialog = true;
+                                root.add_profile();
+                            }
+                        }
+
+                        Text {
+                            text: "Add";
+                            color: Theme.bg;
+                            font-size: 13px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            font-weight: 600;
+                        }
                     }
 
-                    Text {
-                        text: "×";
-                        color: Theme.fg;
-                        font-size: 24px;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
+                    // Start button
+                    Rectangle {
+                        width: 64px;
+                        height: 36px;
+                        border-radius: 6px;
+                        background: root.any_syncing
+                            ? Theme.success.transparentize(0.6)
+                            : (start_touch.has-hover ? Theme.success.transparentize(0.2) : Theme.success);
+
+                        start_touch := TouchArea {
+                            enabled: !root.any_syncing;
+                            clicked => { root.start_sync(); }
+                        }
+
+                        Text {
+                            text: root.any_syncing ? "…" : "Start";
+                            color: root.any_syncing ? Theme.fg_dim : Theme.bg;
+                            font-size: 13px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            font-weight: 600;
+                        }
+                    }
+
+                    // Stop button (next to Start)
+                    Rectangle {
+                        width: 64px;
+                        height: 36px;
+                        border-radius: 6px;
+                        background: root.any_syncing
+                            ? (stop_touch.has-hover ? Theme.danger.transparentize(0.2) : Theme.danger)
+                            : Theme.danger.transparentize(0.6);
+
+                        stop_touch := TouchArea {
+                            enabled: root.any_syncing;
+                            clicked => { root.stop_sync(); }
+                        }
+
+                        Text {
+                            text: "Stop";
+                            color: root.any_syncing ? Theme.bg : Theme.fg_dim;
+                            font-size: 13px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            font-weight: 600;
+                        }
+                    }
+
+                    // Refresh button
+                    Rectangle {
+                        width: 36px;
+                        height: 36px;
+                        border-radius: 6px;
+                        background: refresh_touch.has-hover ? Theme.bg_light : transparent;
+
+                        refresh_touch := TouchArea {
+                            clicked => { root.refresh(); }
+                        }
+
+                        Text {
+                            text: "⟳";
+                            color: Theme.fg;
+                            font-size: 20px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    // Help button
+                    Rectangle {
+                        width: 36px;
+                        height: 36px;
+                        border-radius: 6px;
+                        background: help_touch.has-hover ? Theme.accent : Theme.bg_light;
+
+                        help_touch := TouchArea {
+                            clicked => { root.show_help_dialog = true; }
+                        }
+
+                        Text {
+                            text: "?";
+                            color: help_touch.has-hover ? Theme.bg : Theme.fg;
+                            font-size: 18px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+                    }
+
+                    // Close button
+                    Rectangle {
+                        width: 36px;
+                        height: 36px;
+                        border-radius: 6px;
+                        background: close_touch.has-hover ? Theme.danger : transparent;
+
+                        close_touch := TouchArea {
+                            clicked => { root.close(); }
+                        }
+
+                        Text {
+                            text: "×";
+                            color: Theme.fg;
+                            font-size: 24px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
                     }
                 }
             }
@@ -557,7 +903,7 @@ export component MainWindow inherits Window {
             }
 
             Text {
-                text: "Click the + button below to add your first profile";
+                text: "Click Add at the top to create your first profile";
                 color: Theme.fg_dim;
                 font-size: 12px;
                 horizontal-alignment: center;
@@ -577,17 +923,49 @@ export component MainWindow inherits Window {
                     last_sync: profile.last_sync;
                     status: profile.status;
                     enabled: profile.enabled;
+                    is_syncing: profile.is_syncing;
+                    error_text: profile.error_text;
+                    progress: profile.progress;
 
                     clicked => { root.edit_profile(idx); }
                     sync_now => { root.sync_profile(idx); }
                     toggle_enabled => { root.toggle_profile(idx); }
+                    delete => { root.delete_profile(idx); }
                 }
             }
         }
 
-        // Add profile button
-        AddProfileButton {
-            clicked => { root.add_profile(); }
+        
+    }
+
+    // Profile dialog (shown as popup)
+    if root.show_profile_dialog: ProfileDialog {
+        profile_name <=> root.dialog_profile_name;
+        source_path <=> root.dialog_source_path;
+        destination_path <=> root.dialog_destination_path;
+        volume_identifier_index <=> root.dialog_volume_identifier_index;
+        volume_identifier_value <=> root.dialog_volume_identifier_value;
+        exclude_patterns <=> root.dialog_exclude_patterns;
+        volume_choices <=> root.dialog_volume_choices;
+        volume_uuid_choices <=> root.dialog_volume_uuid_choices;
+        volume_choice_index <=> root.dialog_volume_choice_index;
+        error_message <=> root.dialog_error_message;
+
+        browse_source => { root.browse_source(); }
+        canceled => { root.show_profile_dialog = false; }
+        accepted => {
+            if root.save_profile() {
+                root.show_profile_dialog = false;
+            }
         }
+    }
+
+    if root.show_help_dialog: HelpDialog {
+        app_version: root.app_version;
+        import_export_message <=> root.help_import_export_message;
+        import_export_success <=> root.help_import_export_success;
+        closed => { root.show_help_dialog = false; root.help_import_export_message = ""; root.help_import_export_success = false; }
+        export_profiles => { root.export_profiles(); }
+        import_profiles => { root.import_profiles(); }
     }
 }

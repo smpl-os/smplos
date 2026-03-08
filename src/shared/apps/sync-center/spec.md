@@ -184,8 +184,16 @@ Match found in ~/.config/sync-center/profiles.json?
 
 **Drive Identifier Types:**
 - `label` - Volume display name (e.g., "BACKUP")
+  - Simple and user-friendly, but not unique
+  - Best for single-volume USB drives
 - `uuid` - Filesystem UUID
-- `marker` - Look for file at root (e.g., ".sync-backup")
+  - Unique and permanent identifier
+  - More reliable but requires finding UUID (use `lsblk -o NAME,UUID`)
+- `marker` - Look for specific file at volume root (e.g., ".sync-backup")
+  - **Best for multi-partition USB drives** where label/UUID would be ambiguous
+  - Daemon scans all mounted volumes, finds the one containing this marker file
+  - Example: USB HDD with multiple partitions → place `.backup-marker.txt` on the specific partition you want to sync to
+  - User creates this file manually: `touch /path/to/usb/.sync-backup`
 
 ---
 

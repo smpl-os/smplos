@@ -18,6 +18,7 @@ path = "src/bin/gui.rs"
 # GUI (Slint for consistency with other smplOS apps)
 slint = { version = "1.8", default-features = false, features = ["backend-winit", "renderer-femtovg", "compat-1-2"] }
 i-slint-backend-winit = "1.8"
+rfd = "0.15"
 
 # GLib/GIO (for volume monitoring)
 glib = "0.20"
@@ -46,6 +47,7 @@ notify-rust = "4.10"
 anyhow = "1.0"
 thiserror = "1.0"
 futures = "0.3"
+libc = "0.2"
 
 [build-dependencies]
 slint-build = "1.8"

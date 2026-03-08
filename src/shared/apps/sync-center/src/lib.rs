@@ -6,6 +6,7 @@ pub mod conflict;
 pub mod dbus;
 pub mod error;
 pub mod models;
+pub mod mounts;
 pub mod notification;
 pub mod rsync_runner;
 pub mod volume_monitor;
