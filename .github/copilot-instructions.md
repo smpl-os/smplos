@@ -81,6 +81,38 @@ src/compositors/dwm/        ← ONLY DWM-specific config (future)
    EWW, st, foot, btop, mako, Hyprland borders, hyprlock, neovim.
    Adding a compositor means adding one more template, not rewriting themes.
 
+### Logseq Theming (REGRESSION-PRONE — READ BEFORE TOUCHING)
+
+`theme-set` applies Logseq themes via two mechanisms:
+
+1. **`:custom-css-url` in `~/.logseq/config/config.edn`** — This is the PRIMARY mechanism for DB-based graphs (Logseq 0.10+, current). Logseq's `add-style!` function takes the `:custom-css-url` value and embeds it **directly as CSS text content** in a `data:text/css` URL injected into the DOM as `<link id="logseq-custom-theme-id">`. **It does NOT fetch it as a URL** — `file://` and `assets://` URLs passed here are embedded as literal CSS text (which does nothing). The correct approach is to embed the actual CSS content directly as the value. `theme-set` reads the CSS file, escapes it, and writes it inline into config.edn. This requires a Logseq restart to take effect (config.edn is not live-reloaded).
+
+2. **`<graph-dir>/logseq/custom.css`** — For file-based graphs (legacy format). Live-reloaded by Logseq's file watcher. `theme-set` scans for these via `find ~ -name config.edn -path "*/logseq/config.edn" -not -path "~/.logseq/*"` and writes to each. `~/.logseq/custom.css` is also written as a fallback but is never auto-watched.
+
+3. **`~/.logseq/preferences.json`** — Plugin theme metadata (`name`, `url`, `pid`). Only read at Logseq startup. Only written when a matching Logseq plugin is installed.
+
+**Critical guard — NEVER remove this:**
+```bash
+if [[ -n "$_lq_pid" && -f "$_lq_css" ]]; then
+```
+The `-f "$_lq_css"` check is mandatory. If a plugin is listed in the `case` block but not installed on the user's system, `_lq_css` points to a non-existent file. Without the guard, `preferences.json` gets a broken `assets://` URL, Logseq silently fails to load the plugin theme. This was the matrix regression: the `logseq-matrixamoled-theme` plugin was listed but not installed.
+
+**How to test Logseq theming before committing:**
+1. Run `theme-set matrix` then **fully restart Logseq** (config.edn change requires restart)
+2. Check `~/.logseq/preferences.json` — should have `"mode": "dark"` only (no `url`/`pid` if plugin not installed)
+3. Check `~/.logseq/config/config.edn` — `:custom-css-url` value should be the full CSS text (not a file path)
+4. Logseq should show green-on-black matrix colors
+5. To debug: open Logseq DevTools (Ctrl+Shift+I) → Console → run `document.getElementById('logseq-custom-theme-id')?.outerHTML` — the `href` should be a `data:text/css` URL containing your CSS rules, not a file path
+
+**`preferences.json` is NOT live-reloaded** — plugin theme changes only take full effect after Logseq restart. `config.edn` is also NOT live-reloaded — restart required after `theme-set`.
+
+**NEVER do these — each one silently breaks Logseq theming with no error:**
+- NEVER set `:custom-css-url` to a `file://` path — Logseq embeds it as literal CSS text, not a URL to fetch
+- NEVER set `:custom-css-url` to an `assets://` path — same problem, treated as literal text
+- NEVER write only to `~/.logseq/custom.css` without also updating `:custom-css-url` in config.edn — Logseq never watches that file automatically
+- NEVER skip the `-f "$_lq_css"` guard — missing plugin CSS file → broken `assets://` URL in preferences.json → silent failure
+- NEVER expect config.edn changes to live-reload — always restart Logseq after `theme-set`
+
 ### EWW Guidelines
 
 - **Single-line JSON for `deflisten`.** EWW reads stdout line-by-line. Multi-line
