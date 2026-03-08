@@ -790,7 +790,7 @@ install_prebuilt_apps() {
     fi
 
     # ── Rust apps ──
-    local rust_apps=(start-menu notif-center settings app-center webapp-center)
+    local rust_apps=(start-menu notif-center settings app-center webapp-center sync-center-daemon sync-center-gui)
     for app in "${rust_apps[@]}"; do
         if [[ -f "$bin_dir/$app" ]]; then
             install -Dm755 "$bin_dir/$app" "$airootfs/usr/local/bin/$app"
@@ -1400,6 +1400,23 @@ WantedBy=default.target
 VOXSVC
     # Don't auto-enable — dictation-prime handles this on first use
     # so the daemon doesn't start before the model cache is primed
+
+    # sync-center daemon (systemd user service — auto-enabled for all users)
+    cat > "$user_dir/sync-center-daemon.service" << 'SYNCSVC'
+[Unit]
+Description=smplOS Sync Center daemon
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/sync-center-daemon
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target
+SYNCSVC
+    ln -sf ../sync-center-daemon.service "$user_wants/sync-center-daemon.service" 2>/dev/null || true
 }
 
 setup_helper_scripts() {

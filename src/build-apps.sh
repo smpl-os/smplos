@@ -46,7 +46,7 @@ detect_runtime() {
 }
 
 # ── Parse arguments ──
-ALL_APPS=(start-menu notif-center settings app-center webapp-center)
+ALL_APPS=(start-menu notif-center settings app-center webapp-center sync-center)
 BUILD_ST=false
 CLEAN_BUILD=false
 REQUESTED_APPS=()
@@ -172,7 +172,18 @@ for app in $APPS; do
         cp "$bin_path" "$OUT_DIR/$app"
         echo "[build] $app: OK ($(du -h "$OUT_DIR/$app" | cut -f1))"
     else
-        echo "[build] $app: FAILED"
+        # Multi-binary crate: look for any binary whose name starts with $app
+        local found=0
+        for extra in "$target_dir/release/"*; do
+            [[ -x "$extra" && ! -d "$extra" ]] || continue
+            local bname; bname=$(basename "$extra")
+            [[ "$bname" == "$app"* ]] || continue
+            strip "$extra"
+            cp "$extra" "$OUT_DIR/$bname"
+            echo "[build] $bname: OK ($(du -h "$OUT_DIR/$bname" | cut -f1))"
+            found=1
+        done
+        [[ "$found" -eq 1 ]] || echo "[build] $app: FAILED"
     fi
 done
 

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Sync Center
+Comment=Automatic directory synchronization to external drives
+Exec=sync-center-gui
+Icon=sync-center
+Terminal=false
+Type=Application
+Categories=Utility;System;
+Keywords=sync;backup;rsync;drive;
+StartupNotify=true
