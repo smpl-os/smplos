@@ -14,7 +14,7 @@ set -g fish_color_comment 727169
 set -g fish_color_selection --background=090618
 set -g fish_color_operator 6a9589
 set -g fish_color_escape 957fb8
-set -g fish_color_autosuggestion 727169
+set -g fish_color_autosuggestion 938aa9
 set -g fish_color_search_match 7e9cd8 --background=2a2a37
 set -g fish_color_valid_path --underline
 

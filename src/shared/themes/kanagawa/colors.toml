@@ -9,6 +9,7 @@ foreground = "#dcd7ba"
 fg_dim = "#dcd7ba"
 fg_alt = "#c8c093"
 muted = "#727169"
+autosuggestion = "#938aa9"
 
 # -- Interactive --
 accent = "#7e9cd8"

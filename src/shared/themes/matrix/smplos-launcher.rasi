@@ -18,11 +18,11 @@ configuration {
 /*****----- Global Properties -----*****/
 * {
     font:                        "JetBrainsMono Nerd Font 10";
-    background:                  rgba(0,0,0,0.95);
-    background-alt:              rgba(0,0,0,0.95);
+    background:                  rgba(0,0,0,1.0);
+    background-alt:              rgba(0,0,0,1.0);
     background-solid:            #000000;
     foreground:                  #00FF00;
-    foreground-dim:              #339933;
+    foreground-dim:              #55BB55;
     selected:                    #00FF00;
     active:                      #00FF00;
     urgent:                      #FF9900;

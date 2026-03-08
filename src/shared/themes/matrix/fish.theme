@@ -10,20 +10,20 @@ set -g fish_color_redirection 33FFAA
 set -g fish_color_end FF9900
 set -g fish_color_error FF9900
 set -g fish_color_param 00FF00
-set -g fish_color_comment 339933
+set -g fish_color_comment 55BB55
 set -g fish_color_selection --background=000000
 set -g fish_color_operator 33FFAA
 set -g fish_color_escape FF9900
-set -g fish_color_autosuggestion 339933
+set -g fish_color_autosuggestion 4DDD4D
 set -g fish_color_search_match 00FF00 --background=0D1A0D
 set -g fish_color_valid_path --underline
 
 # Pager (tab completion menu)
-set -g fish_pager_color_progress 339933
+set -g fish_pager_color_progress 55BB55
 set -g fish_pager_color_prefix 00FF00 --bold --underline
 set -g fish_pager_color_completion 00FF00
-set -g fish_pager_color_description 339933
+set -g fish_pager_color_description 55BB55
 set -g fish_pager_color_selected_background --background=0D1A0D
 set -g fish_pager_color_selected_completion 00FF00
 set -g fish_pager_color_selected_prefix 00FF00 --bold --underline
-set -g fish_pager_color_selected_description 339933
+set -g fish_pager_color_selected_description 55BB55

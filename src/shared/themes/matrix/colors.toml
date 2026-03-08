@@ -8,7 +8,8 @@ surface = "#000000"
 foreground = "#00FF00"
 fg_dim = "#66FF66"
 fg_alt = "#00FF00"
-muted = "#339933"
+muted = "#55BB55"
+autosuggestion = "#4DDD4D"
 
 # -- Interactive --
 accent = "#00FF00"
