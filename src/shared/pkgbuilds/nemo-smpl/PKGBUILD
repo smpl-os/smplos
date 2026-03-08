@@ -3,7 +3,7 @@
 # Source: https://github.com/KonTy/nemo (release branch)
 
 pkgname=nemo-smpl
-pkgver=1.0.5
+pkgver=1.1.0
 pkgrel=1
 pkgdesc='Nemo file manager with smplOS patches (configurable keybindings, preview pane, substring search, MTP support)'
 arch=(x86_64)

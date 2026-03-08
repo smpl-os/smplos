@@ -122,6 +122,14 @@ if [[ -f "$CURRENT_THEME_PATH/btop.theme" ]]; then
   cp "$CURRENT_THEME_PATH/btop.theme" "$HOME/.config/btop/themes/current.theme"
 fi
 
+# Nemo file manager — deploy per-theme GTK3 CSS override
+# nemo-smpl watches ~/.config/smplos/nemo-theme.css via GFileMonitor
+# and reloads it live, so no nemo restart is required.
+if [[ -f "$CURRENT_THEME_PATH/nemo.css" ]]; then
+  mkdir -p "$HOME/.config/smplos"
+  cp "$CURRENT_THEME_PATH/nemo.css" "$HOME/.config/smplos/nemo-theme.css"
+fi
+
 # Link fish theme colors
 if [[ -f "$CURRENT_THEME_PATH/fish.theme" ]]; then
   mkdir -p "$HOME/.config/fish"
@@ -340,7 +348,7 @@ if [[ -d "$_lp" ]]; then
   esac
 fi
 
-if [[ -n "$_lq_pid" ]]; then
+if [[ -n "$_lq_pid" && -f "$_lq_css" ]]; then
   # Write preferences.json with plugin theme + correct dark/light mode
   cat > "$_logseq_prefs" <<EOF
 {
@@ -374,9 +382,36 @@ else
 EOF
 fi
 
-# Deploy custom.css with full color variable overrides (works without plugins)
+# Deploy Logseq theme CSS.
+# Logseq's add-style! embeds the :custom-css-url value as CSS *content* in a
+# data URL — it does NOT fetch it as a URL. So we must embed the CSS text
+# directly into config.edn's :custom-css-url field (not a file:// or assets:// URL).
+# Also write to any file-based graph dirs for live-reload via file watcher.
 if [[ -f "$CURRENT_THEME_PATH/logseq-custom.css" ]]; then
+  mkdir -p "$HOME/.logseq/config"
   cp "$CURRENT_THEME_PATH/logseq-custom.css" "$HOME/.logseq/custom.css"
+
+  # Embed CSS content directly into config.edn as the :custom-css-url value.
+  # EDN strings: escape backslashes then double-quotes; collapse to single line.
+  _css_content=$(sed 's/\\/\\\\/g; s/"/\\"/g' "$CURRENT_THEME_PATH/logseq-custom.css" \
+                 | tr '\n' ' ' | sed 's/[[:space:]]\+/ /g')
+  _lq_global_cfg="$HOME/.logseq/config/config.edn"
+
+  # Preserve the comment header, replace only the map at the bottom
+  if [[ -f "$_lq_global_cfg" ]]; then
+    # Strip old map line(s) and append new one
+    grep '^;;' "$_lq_global_cfg" > "${_lq_global_cfg}.tmp" 2>/dev/null || true
+    printf '\n{:custom-css-url "%s"}\n' "$_css_content" >> "${_lq_global_cfg}.tmp"
+    mv "${_lq_global_cfg}.tmp" "$_lq_global_cfg"
+  else
+    printf '{:custom-css-url "%s"}\n' "$_css_content" > "$_lq_global_cfg"
+  fi
+
+  # Also write to any file-based graph's logseq/custom.css (live-reloaded by file watcher)
+  while IFS= read -r _lq_config; do
+    cp "$CURRENT_THEME_PATH/logseq-custom.css" "$(dirname "$_lq_config")/custom.css"
+  done < <(find "$HOME" -maxdepth 5 -name "config.edn" -path "*/logseq/config.edn" \
+             -not -path "$HOME/.logseq/*" 2>/dev/null)
 fi
 
 # Chromium / Brave -- set browser toolbar color and dark/light mode
