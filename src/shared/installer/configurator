@@ -503,6 +503,7 @@ iso_only_packages=(
 build_packages_json() {
   local packages_file="/root/smplos/packages.txt"
   local packages_extra_file="/root/smplos/packages-extra.txt"
+  local packages_aur_file="/root/smplos/packages-aur.txt"
   local first=true
 
   # Read base packages
@@ -551,6 +552,25 @@ build_packages_json() {
         printf ',\n        "%s"' "$pkg"
       fi
     done < "$packages_extra_file"
+  fi
+
+  # Include AUR/custom packages so archinstall installs them directly
+  # (they're in the [offline] repo alongside official packages)
+  if [[ -f "$packages_aur_file" && -s "$packages_aur_file" ]]; then
+    while IFS= read -r line; do
+      [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+      line="${line%%#*}"
+      local pkg
+      pkg=$(echo "$line" | xargs)
+      [[ -z "$pkg" ]] && continue
+
+      if $first; then
+        printf '        "%s"' "$pkg"
+        first=false
+      else
+        printf ',\n        "%s"' "$pkg"
+      fi
+    done < "$packages_aur_file"
   fi
 
   echo  # trailing newline

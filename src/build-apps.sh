@@ -173,10 +173,10 @@ for app in $APPS; do
         echo "[build] $app: OK ($(du -h "$OUT_DIR/$app" | cut -f1))"
     else
         # Multi-binary crate: look for any binary whose name starts with $app
-        local found=0
+        found=0
         for extra in "$target_dir/release/"*; do
             [[ -x "$extra" && ! -d "$extra" ]] || continue
-            local bname; bname=$(basename "$extra")
+            bname=$(basename "$extra")
             [[ "$bname" == "$app"* ]] || continue
             strip "$extra"
             cp "$extra" "$OUT_DIR/$bname"

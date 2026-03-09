@@ -32,9 +32,23 @@ error_handler() {
   echo
   
   if [[ -f "$SMPLOS_INSTALL_LOG_FILE" ]]; then
-    echo "Last 20 lines of log:"
+    echo "Last 20 lines of install log:"
     tail -20 "$SMPLOS_INSTALL_LOG_FILE"
   fi
+
+  # Dump archinstall's own log if it exists (much more detailed)
+  local archinstall_log
+  archinstall_log=$(find /var/log/archinstall -name '*.log' -type f 2>/dev/null | sort | tail -1)
+  if [[ -n "$archinstall_log" && -f "$archinstall_log" ]]; then
+    echo
+    echo "=== archinstall log ($archinstall_log) ==="
+    tail -40 "$archinstall_log"
+  fi
+
+  echo
+  echo "Full logs: /var/log/smplos-install.log"
+  echo "archinstall logs: /var/log/archinstall/"
+  echo "Switch to TTY2 (Ctrl+Alt+F2) to inspect."
 }
 
 # Logging
