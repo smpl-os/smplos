@@ -7,12 +7,12 @@ use anyhow::Result;
 use crate::config::Config;
 
 pub struct VolumeMonitor {
-    config: Config,
+    _config: Config,
 }
 
 impl VolumeMonitor {
     pub fn new(config: Config) -> Self {
-        Self { config }
+        Self { _config: config }
     }
 
     pub async fn start(&mut self) -> Result<()> {

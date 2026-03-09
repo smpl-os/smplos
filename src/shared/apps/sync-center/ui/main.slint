@@ -879,14 +879,17 @@ export component MainWindow inherits Window {
                 height: 24px;
                 border-radius: 4px;
                 background: Theme.info.transparentize(0.8);
-                padding-left: 8px;
-                padding-right: 8px;
 
-                Text {
-                    text: volume.label + " (" + Math.round(volume.available_gb) + " GB free)";
-                    color: Theme.fg;
-                    font-size: 11px;
-                    vertical-alignment: center;
+                HorizontalLayout {
+                    padding-left: 8px;
+                    padding-right: 8px;
+
+                    Text {
+                        text: volume.label + " (" + Math.round(volume.available_gb) + " GB free)";
+                        color: Theme.fg;
+                        font-size: 11px;
+                        vertical-alignment: center;
+                    }
                 }
             }
         }

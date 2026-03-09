@@ -204,16 +204,6 @@ fn to_ui_profile(p: &ConfigProfile) -> SyncProfile {
     }
 }
 
-fn now_timestamp() -> String {
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0);
-    let h = (secs % 86400) / 3600;
-    let m = (secs % 3600) / 60;
-    format!("today {:02}:{:02}", h, m)
-}
-
 // ─── Status JSON → Slint model ────────────────────────────────────────────────
 
 /// Apply a daemon status snapshot to the Slint profiles model.

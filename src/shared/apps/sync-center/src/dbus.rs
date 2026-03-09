@@ -200,7 +200,7 @@ fn run_rsync_blocking(
     // (default 64 KB).  Without this, a run that emits many per-file errors
     // (e.g. permission-denied on every file) would deadlock: rsync blocks
     // writing stderr, never exits, and our wait-loop spins forever.
-    let (stderr_tx, stderr_rx) = std::sync::mpsc::channel::<String>();
+    let (stderr_tx, _stderr_rx) = std::sync::mpsc::channel::<String>();
     let stderr_pipe = child.stderr.take().expect("stderr was piped");
     std::thread::spawn(move || {
         let collected = BufReader::new(stderr_pipe)

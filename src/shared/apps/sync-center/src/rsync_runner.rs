@@ -4,7 +4,7 @@
 //! rsync execution and progress tracking with pre-flight validation
 
 use crate::error::{SyncError, Result};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::{Command, Stdio};
 use std::fs;
 

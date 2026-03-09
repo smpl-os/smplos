@@ -83,7 +83,7 @@ fn resolve_text_conflict(source: &Path, dest: &Path, profile_id: &str) -> Result
 }
 
 /// Handles a binary file conflict by skipping it
-fn skip_binary_conflict(path: &Path, _reason: &str) -> Result<()> {
+fn skip_binary_conflict(_path: &Path, _reason: &str) -> Result<()> {
     // Just log it - the file won't be touched during sync
     // Logging happens in the caller
     Ok(())
