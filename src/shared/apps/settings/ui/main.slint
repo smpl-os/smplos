@@ -495,6 +495,9 @@ export component MainWindow inherits Window {
     callback set-idle-lock(int);
     callback set-idle-dpms(int);
     callback set-idle-suspend(int);
+    callback action-power-off();
+    callback action-restart();
+    callback action-logout();
 
     // Search
     callback filter-search(string);
@@ -2505,6 +2508,124 @@ export component MainWindow inherits Window {
                             text: "Changes apply immediately and persist across reboots.";
                             color: Theme.fg_dim;
                             font-size: 10px;
+                        }
+                    }
+                }
+
+                // ── Power Actions card ──
+                Rectangle {
+                    border-radius: 6px;
+                    background: Theme.bg_light;
+
+                    VerticalLayout {
+                        padding: 12px;
+                        spacing: 8px;
+
+                        Text {
+                            text: "Power Actions";
+                            color: Theme.fg_dim;
+                            font-size: 11px;
+                            font-weight: 600;
+                        }
+
+                        HorizontalLayout {
+                            spacing: 8px;
+
+                            // Power Off
+                            Rectangle {
+                                horizontal-stretch: 1;
+                                height: 60px;
+                                border-radius: 6px;
+                                background: poweroff-touch.has-hover
+                                    ? #e04040 : Theme.bg_lighter;
+
+                                VerticalLayout {
+                                    alignment: center;
+                                    spacing: 4px;
+
+                                    Text {
+                                        text: "⏻";
+                                        color: poweroff-touch.has-hover ? white : Theme.fg;
+                                        font-size: 18px;
+                                        horizontal-alignment: center;
+                                    }
+                                    Text {
+                                        text: "Power Off";
+                                        color: poweroff-touch.has-hover ? white : Theme.fg;
+                                        font-size: 10px;
+                                        horizontal-alignment: center;
+                                    }
+                                }
+
+                                poweroff-touch := TouchArea {
+                                    clicked => { root.action-power-off(); }
+                                    mouse-cursor: pointer;
+                                }
+                            }
+
+                            // Restart
+                            Rectangle {
+                                horizontal-stretch: 1;
+                                height: 60px;
+                                border-radius: 6px;
+                                background: restart-sys-touch.has-hover
+                                    ? Theme.accent.transparentize(30%) : Theme.bg_lighter;
+
+                                VerticalLayout {
+                                    alignment: center;
+                                    spacing: 4px;
+
+                                    Text {
+                                        text: "⟳";
+                                        color: restart-sys-touch.has-hover ? Theme.bg : Theme.fg;
+                                        font-size: 18px;
+                                        horizontal-alignment: center;
+                                    }
+                                    Text {
+                                        text: "Restart";
+                                        color: restart-sys-touch.has-hover ? Theme.bg : Theme.fg;
+                                        font-size: 10px;
+                                        horizontal-alignment: center;
+                                    }
+                                }
+
+                                restart-sys-touch := TouchArea {
+                                    clicked => { root.action-restart(); }
+                                    mouse-cursor: pointer;
+                                }
+                            }
+
+                            // Log Out
+                            Rectangle {
+                                horizontal-stretch: 1;
+                                height: 60px;
+                                border-radius: 6px;
+                                background: logout-touch.has-hover
+                                    ? Theme.accent.transparentize(30%) : Theme.bg_lighter;
+
+                                VerticalLayout {
+                                    alignment: center;
+                                    spacing: 4px;
+
+                                    Text {
+                                        text: "󰍃";
+                                        color: logout-touch.has-hover ? Theme.bg : Theme.fg;
+                                        font-size: 18px;
+                                        horizontal-alignment: center;
+                                    }
+                                    Text {
+                                        text: "Log Out";
+                                        color: logout-touch.has-hover ? Theme.bg : Theme.fg;
+                                        font-size: 10px;
+                                        horizontal-alignment: center;
+                                    }
+                                }
+
+                                logout-touch := TouchArea {
+                                    clicked => { root.action-logout(); }
+                                    mouse-cursor: pointer;
+                                }
+                            }
                         }
                     }
                 }

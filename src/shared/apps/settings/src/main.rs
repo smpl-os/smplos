@@ -1410,6 +1410,24 @@ fn main() -> Result<(), slint::PlatformError> {
         set_power_profile(profile);
     });
 
+    ui.on_action_power_off(|| {
+        debug_log!("[settings] power off requested");
+        let _ = std::process::Command::new("systemctl").arg("poweroff").spawn();
+    });
+
+    ui.on_action_restart(|| {
+        debug_log!("[settings] restart requested");
+        let _ = std::process::Command::new("systemctl").arg("reboot").spawn();
+    });
+
+    ui.on_action_logout(|| {
+        debug_log!("[settings] logout requested");
+        // Try hyprctl first (Hyprland), fall back to loginctl
+        if std::process::Command::new("hyprctl").args(["dispatch", "exit"]).status().is_err() {
+            let _ = std::process::Command::new("loginctl").arg("terminate-user").arg(std::env::var("USER").unwrap_or_default()).spawn();
+        }
+    });
+
     // Helper: read current indices from UI, resolve to seconds, write config
     let write_idle = |ui: &MainWindow| {
         let lock_idx = ui.get_idle_lock_index() as usize;
@@ -1495,6 +1513,11 @@ fn main() -> Result<(), slint::PlatformError> {
             ("Suspend Timeout", "Power", 4),
             ("Sleep", "Power", 4),
             ("Idle", "Power", 4),
+            ("Power Off", "Power", 4),
+            ("Shut Down", "Power", 4),
+            ("Restart", "Power", 4),
+            ("Reboot", "Power", 4),
+            ("Log Out", "Power", 4),
         ];
 
         let ui_handle = ui.as_weak();
