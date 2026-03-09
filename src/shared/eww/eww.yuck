@@ -193,6 +193,16 @@
           :visible {sync-data.active == "yes"}
     (image :path "icons/status/sync.svg"
            :image-width 14 :image-height 14)))
+
+;; Combined tray (all indicators in a single row)
+(defwidget tray-clock []
+  (button :class "tray-clock"
+          :onclick "popup-toggle calendar-popup"
+          :tooltip date-full
+    (label :text "${time}  ${date}")))
+
+(defwidget tray []
+  (box :class "tray" :orientation "h" :space-evenly false :spacing 6
     (tray-usb)
     (tray-sync)
     (tray-dictation)
