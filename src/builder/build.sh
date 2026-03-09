@@ -591,6 +591,34 @@ create_repo_database() {
     log_step "Creating offline repository database"
     
     cd "$OFFLINE_MIRROR_DIR"
+
+    # ── Remove stock packages that AUR replacements provide ──────────────
+    # AUR packages like nemo-smpl declare provides=(nemo) conflicts=(nemo).
+    # But download_packages() also pulled in stock nemo (as a dependency of
+    # nemo-fileroller etc.).  If both are in the repo, pacstrap may install
+    # the stock version first and then fail to install the AUR replacement.
+    # Fix: for each AUR package that declares "replaces" or "conflicts",
+    # remove the conflicting stock package from the mirror.
+    for pkg in "${AUR_PACKAGES[@]}"; do
+        shopt -s nullglob
+        for pkg_file in "$OFFLINE_MIRROR_DIR"/${pkg}-[0-9]*.pkg.tar.{zst,xz}; do
+            [[ -f "$pkg_file" && ! "$pkg_file" == *"-debug-"* ]] || continue
+            local conflicts=()
+            while IFS=' = ' read -r key val; do
+                [[ "$key" == "conflict" || "$key" == "replaces" ]] && conflicts+=("${val%%[><=]*}")
+            done < <(bsdtar -xOf "$pkg_file" .PKGINFO 2>/dev/null || true)
+            for conflict in "${conflicts[@]}"; do
+                for stock_file in "$OFFLINE_MIRROR_DIR"/${conflict}-[0-9]*.pkg.tar.{zst,xz}; do
+                    [[ -f "$stock_file" ]] || continue
+                    # Don't remove the AUR package itself (it may match the conflict name pattern)
+                    [[ "$(basename "$stock_file")" == "${pkg}-"* ]] && continue
+                    log_info "Removing stock '$conflict' (replaced by AUR '$pkg'): $(basename "$stock_file")"
+                    rm -f "$stock_file"
+                done
+            done
+        done
+        shopt -u nullglob
+    done
     
     # Count packages
     local pkg_count=$(ls -1 *.pkg.tar.* 2>/dev/null | wc -l || echo 0)
