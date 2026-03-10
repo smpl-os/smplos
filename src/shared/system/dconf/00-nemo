@@ -31,6 +31,12 @@ search='<Alt>F7'
 # Ctrl+B = Toggle Sidebar (like VS Code)
 show-sidebar='<Control>b'
 
+# F3 = Quick Preview
+quick-preview='F3'
+
+# Ctrl+F3 = Toggle Split View (moved from F3)
+split-view='<Control>F3'
+
 # Ctrl+Shift+O = Edit Bookmarks (clears open-alternate)
 open-alternate=''
 edit-bookmarks='<Control><Shift>o'
