@@ -45,3 +45,9 @@ bookmark-picker-other='<Alt>F2'
 [org/nemo/preferences]
 # Confirm before moving files to trash (F8 safety)
 confirm-move-to-trash=true
+
+# Start with dual-pane view (Double Commander style)
+start-with-dual-pane=true
+
+# Show per-pane location labels in dual-pane mode
+show-dual-pane-location-labels=true

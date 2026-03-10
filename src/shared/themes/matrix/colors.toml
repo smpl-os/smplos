@@ -37,7 +37,7 @@ info_bright = "#77FFCC"
 term_4 = "#22BB55"
 
 # -- Decoration --
-rounding = "0"
+rounding = "4"
 blur_size = "0"
 blur_passes = "0"
 opacity_active = "1.0"

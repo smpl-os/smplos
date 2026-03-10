@@ -422,9 +422,10 @@ run_build() {
     mkdir -p "$cache_dir/pacman" "$cache_dir/offline-repo"
 
     # Prune old caches (keep last 3 days)
+    # Use sudo because the container creates root-owned files inside these dirs
     if [[ -d "$PROJECT_ROOT/.cache" ]]; then
         find "$PROJECT_ROOT/.cache" -maxdepth 1 -name 'build_*' -type d \
-            | sort | head -n -3 | xargs -r rm -rf
+            | sort | head -n -3 | xargs -r sudo rm -rf
     fi
 
     local prebuilt_dir="$PROJECT_ROOT/build/prebuilt"

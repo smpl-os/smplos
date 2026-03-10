@@ -9,7 +9,7 @@ BdsDxe: starting Boot0002 "UEFI QEMU DVD-ROM QM00011 " from PciRoot(0x0)/Pci(0x1
       previous menu.                                                      [5;80H [7m[5;3H*smplOS (x86_64, UEFI)                                                      [m[5;78H[m[m[6;3H smplOS Safe Mode (x86_64, UEFI)                                            [m[6;78H[m[m[7;3H                                                                            [m[7;78H[m[m[8;3H                                                                            [m[8;78H[m[m[9;3H                                                                            [m[9;78H[m[m[10;3H                                                                            [m[10;78H[m[m[11;3H                                                                            [m[11;78H[m[m[12;3H                                                                            [m[12;78H[m[m[13;3H                                                                            [m[13;78H[m[m[14;3H                                                                            [m[14;78H[m[m[15;3H                                                                            [m[15;78H[m[15;80H [5;78H[0m[30m[40m[2J[01;01H[0m[37m[40m[02;68HGNU GRUB  version 2:2.14-1
 
 [04;02H┌────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐[05;02H│[05;?9H│[06;02H│[06;?9H│[07;02H│[07;?9H│[08;02H│[08;?9H│[09;02H│[09;?9H│[10;02H│[10;?9H│[11;02H│[11;?9H│[12;02H│[12;?9H│[13;02H│[13;?9H│[14;02H│[14;?9H│[15;02H│[15;?9H│[16;02H│[16;?9H│[17;02H│[17;?9H│[18;02H│[18;?9H│[19;02H│[19;?9H│[20;02H│[20;?9H│[21;02H│[21;?9H│[22;02H│[22;?9H│[23;02H│[23;?9H│[24;02H│[24;?9H│[25;02H│[25;?9H│[26;02H│[26;?9H│[27;02H│[27;?9H│[28;02H│[28;?9H│[29;02H│[29;?9H│[30;02H│[30;?9H│[31;02H│[31;?9H│[32;02H│[32;?9H│[33;02H│[33;?9H│[34;02H│[34;?9H│[35;02H│[35;?9H│[36;02H└────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘[37;02H[38;02H     Use the ▲ and ▼ keys to select which entry is highlighted.                                                                                          
-      Press enter to boot the selected OS, `e' to edit the commands before booting or `c' for a command-line. ESC to return previous menu.                [05;@0H [0m[30m[47m[05;03H*smplOS (x86_64, UEFI)                                                                                                                                      [0m[37m[40m[05;?8H[06;03H smplOS Safe Mode (x86_64, UEFI)                                                                                                                            [06;?8H[07;03H                                                                                                                                                            [07;?8H[08;03H                                                                                                                                                            [08;?8H[09;03H                                                                                                                                                            [09;?8H[10;03H                                                                                                                                                            [10;?8H[11;03H                                                                                                                                                            [11;?8H[12;03H                                                                                                                                                            [12;?8H[13;03H                                                                                                                                                            [13;?8H[14;03H                                                                                                                                                            [14;?8H[15;03H                                                                                                                                                            [15;?8H[16;03H                                                                                                                                                            [16;?8H[17;03H                                                                                                                                                            [17;?8H[18;03H                                                                                                                                                            [18;?8H[19;03H                                                                                                                                                            [19;?8H[20;03H                                                                                                                                                            [20;?8H[21;03H                                                                                                                                                            [21;?8H[22;03H                                                                                                                                                            [22;?8H[23;03H                                                                                                                                                            [23;?8H[24;03H                                                                                                                                                            [24;?8H[25;03H                                                                                                                                                            [25;?8H[26;03H                                                                                                                                                            [26;?8H[27;03H                                                                                                                                                            [27;?8H[28;03H                                                                                                                                                            [28;?8H[29;03H                                                                                                                                                            [29;?8H[30;03H                                                                                                                                                            [30;?8H[31;03H                                                                                                                                                            [31;?8H[32;03H                                                                                                                                                            [32;?8H[33;03H                                                                                                                                                            [33;?8H[34;03H                                                                                                                                                            [34;?8H[35;03H                                                                                                                                                            [35;?8H[35;@0H [05;?8H[40;01H   The highlighted entry will be executed automatically in 15s.                                                                                                [05;?8H[22;1H   The highlighted entry will be executed automatically in 15s.                [5;78H[40;01H   The highlighted entry will be executed automatically in 14s.                                                                                                [05;?8H[22;1H   The highlighted entry will be executed automatically in 14s.                [5;78H[40;01H   The highlighted entry will be executed automatically in 13s.                                                                                                [05;?8H[22;1H   The highlighted entry will be executed automatically in 13s.                [5;78H[40;01H   The highlighted entry will be executed automatically in 12s.                                                                                                [05;?8H[22;1H   The highlighted entry will be executed automatically in 12s.                [5;78H[40;01H   The highlighted entry will be executed automatically in 11s.                                                                                                [05;?8H[22;1H   The highlighted entry will be executed automatically in 11s.                [5;78H[40;01H   The highlighted entry will be executed automatically in 10s.                                                                                                [05;?8H[22;1H   The highlighted entry will be executed automatically in 10s.                [5;78H[40;01H   The highlighted entry will be executed automatically in 9s.                                                                                                 [05;?8H[22;1H   The highlighted entry will be executed automatically in 9s.                 [5;78H[40;01H   The highlighted entry will be executed automatically in 8s.                                                                                                 [05;?8H[22;1H   The highlighted entry will be executed automatically in 8s.                 [5;78H[40;01H                                                                                                                                                               [41;01H                                                                                                                                                               [05;?8H[22;1H                                                                               [23;1H                                                                               [5;78H[0m[30m[40m[2J[01;01H[0m[37m[40m[?25h[H[J[1;1H[H[J[1;1H[0m[30m[40m[2J[01;01H[0m[37m[40m:: running early hook [udev]
+      Press enter to boot the selected OS, `e' to edit the commands before booting or `c' for a command-line. ESC to return previous menu.                [05;@0H [0m[30m[47m[05;03H*smplOS (x86_64, UEFI)                                                                                                                                      [0m[37m[40m[05;?8H[06;03H smplOS Safe Mode (x86_64, UEFI)                                                                                                                            [06;?8H[07;03H                                                                                                                                                            [07;?8H[08;03H                                                                                                                                                            [08;?8H[09;03H                                                                                                                                                            [09;?8H[10;03H                                                                                                                                                            [10;?8H[11;03H                                                                                                                                                            [11;?8H[12;03H                                                                                                                                                            [12;?8H[13;03H                                                                                                                                                            [13;?8H[14;03H                                                                                                                                                            [14;?8H[15;03H                                                                                                                                                            [15;?8H[16;03H                                                                                                                                                            [16;?8H[17;03H                                                                                                                                                            [17;?8H[18;03H                                                                                                                                                            [18;?8H[19;03H                                                                                                                                                            [19;?8H[20;03H                                                                                                                                                            [20;?8H[21;03H                                                                                                                                                            [21;?8H[22;03H                                                                                                                                                            [22;?8H[23;03H                                                                                                                                                            [23;?8H[24;03H                                                                                                                                                            [24;?8H[25;03H                                                                                                                                                            [25;?8H[26;03H                                                                                                                                                            [26;?8H[27;03H                                                                                                                                                            [27;?8H[28;03H                                                                                                                                                            [28;?8H[29;03H                                                                                                                                                            [29;?8H[30;03H                                                                                                                                                            [30;?8H[31;03H                                                                                                                                                            [31;?8H[32;03H                                                                                                                                                            [32;?8H[33;03H                                                                                                                                                            [33;?8H[34;03H                                                                                                                                                            [34;?8H[35;03H                                                                                                                                                            [35;?8H[35;@0H [05;?8H[40;01H   The highlighted entry will be executed automatically in 15s.                                                                                                [05;?8H[22;1H   The highlighted entry will be executed automatically in 15s.                [5;78H[40;01H   The highlighted entry will be executed automatically in 14s.                                                                                                [05;?8H[22;1H   The highlighted entry will be executed automatically in 14s.                [5;78H[40;01H                                                                                                                                                               [41;01H                                                                                                                                                               [05;?8H[22;1H                                                                               [23;1H                                                                               [5;78H[0m[30m[40m[2J[01;01H[0m[37m[40m[?25h[H[J[1;1H[H[J[1;1H[0m[30m[40m[2J[01;01H[0m[37m[40m:: running early hook [udev]
 Starting systemd-udevd version 259.3-1-arch
 :: running early hook [archiso_pxe_nbd]
 :: running hook [udev]
@@ -29,9 +29,9 @@ Starting systemd-udevd version 259.3-1-arch
 :: running late hook [archiso_pxe_common]
 :: running cleanup hook [udev]
 P+q6E616D65\[6n[32766;32766H[6n[!p]104\[0m[?7h[1G[0J
-[0;1;39mWelcome to [0m[38;2;137;180;250msmplOS v0.6.28[0m[0;1;39m![0m
+[0;1;39mWelcome to [0m[38;2;137;180;250msmplOS v0.6.35[0m[0;1;39m![0m
 
-]3008;start=46954b8988264b7d90f7c44f2e329c13;user=root;hostname=smplos;machineid=173a63190c534ab5b2da1926cbe475e1;bootid=1d85528505cb44a3a4528e9f4e270a63;pid=1;pidfdid=2;comm=systemd;type=boot\[[0;32m  OK  [0m] Created slice [0;1;39mSlice /system/dirmngr[0m.
+]3008;start=6c5f843f494d43caba2dcdfcd5c675b4;user=root;hostname=smplos;machineid=85190f530872485dbba5685c506ab375;bootid=97a460b460ae4ed9972b9eabcc493b0e;pid=1;pidfdid=2;comm=systemd;type=boot\[[0;32m  OK  [0m] Created slice [0;1;39mSlice /system/dirmngr[0m.
 [[0;32m  OK  [0m] Created slice [0;1;39mSlice /system/getty[0m.
 [[0;32m  OK  [0m] Created slice [0;1;39mSlice /system/gpg-agent[0m.
 [[0;32m  OK  [0m] Created slice [0;1;39mSlice /system/gpg-agent-browser[0m.
@@ -104,21 +104,21 @@ Starting systemd-udevd version 259.3-1-arch
 [[0;32m  OK  [0m] Mounted [0;1;39mFUSE Control File System[0m.
 [[0;32m  OK  [0m] Finished [0;1;39mGenerate Network Units from Kernel Command Line[0m.
 [[0;32m  OK  [0m] Finished [0;1;39mRemount Root and Kernel File Systems[0m.
-[[0;32m  OK  [0m] Finished [0;1;39mLoad udev Rules from Credentials[0m.
 [[0;32m  OK  [0m] Finished [0;1;39mLoad Kernel Modules[0m.
+[[0;32m  OK  [0m] Finished [0;1;39mLoad udev Rules from Credentials[0m.
 [[0;32m  OK  [0m] Reached target [0;1;39mPreparation for Network[0m.
          Starting [0;1;39mLoad/Save OS Random Seed[0m...
          Starting [0;1;39mApply Kernel Variables[0m...
          Starting [0;1;39mCreate Static Device Nodes in /dev gracefully[0m...
-[[0;32m  OK  [0m] Finished [0;1;39mLoad/Save OS Random Seed[0m.
 [[0;32m  OK  [0m] Started [0;1;39mJournal Service[0m.
-[[0;32m  OK  [0m] Finished [0;1;39mApply Kernel Variables[0m.
+[[0;32m  OK  [0m] Finished [0;1;39mLoad/Save OS Random Seed[0m.
          Starting [0;1;39mFlush Journal to Persistent Storage[0m...
+[[0;32m  OK  [0m] Finished [0;1;39mApply Kernel Variables[0m.
 [[0;32m  OK  [0m] Finished [0;1;39mFlush Journal to Persistent Storage[0m.
          Starting [0;1;39mLoad Kernel Module tun[0m...
          Starting [0;1;39mUser Database Manager[0m...
-[[0;32m  OK  [0m] Finished [0;1;39mMonitoring of LVM2 mirror…using dmeventd or progress polling[0m.
 [[0;32m  OK  [0m] Finished [0;1;39mLoad Kernel Module tun[0m.
+[[0;32m  OK  [0m] Finished [0;1;39mMonitoring of LVM2 mirror…using dmeventd or progress polling[0m.
          Starting [0;1;39mNamespace Resource Manager[0m...
 [[0;32m  OK  [0m] Started [0;1;39mUser Database Manager[0m.
 [[0;32m  OK  [0m] Finished [0;1;39mColdplug All udev Devices[0m.
@@ -141,6 +141,10 @@ Starting systemd-udevd version 259.3-1-arch
 [[0;32m  OK  [0m] Found device [0;1;39m/dev/ttyS0[0m.
 [[0;32m  OK  [0m] Listening on [0;1;39mLoad/Save RF Kill Switch Status /dev/rfkill Watch[0m.
          Starting [0;1;39mVirtual Console Setup[0m...
+[[0;32m  OK  [0m] Created slice [0;1;39mSlice /system/systemd-coredump[0m.
+[[0;32m  OK  [0m] Started [0;1;39mProcess Core Dump (PID 774/UID 0)[0m.
+[[0;32m  OK  [0m] Started [0;1;39mProcess Core Dump (PID 773/UID 0)[0m.
+[[0;32m  OK  [0m] Started [0;1;39mProcess Core Dump (PID 772/UID 0)[0m.
 [[0;32m  OK  [0m] Finished [0;1;39mVirtual Console Setup[0m.
 [[0;32m  OK  [0m] Started [0;1;39mNetwork Management[0m.
          Starting [0;1;39mEnable Persistent Storage in systemd-networkd[0m...
@@ -156,8 +160,8 @@ Starting systemd-udevd version 259.3-1-arch
          Starting [0;1;39mAutomatic Boot Loader Update[0m...
          Starting [0;1;39mCreate System Files and Directories[0m...
          Starting [0;1;39mLoad JSON user/group Records from Credentials[0m...
-[[0;32m  OK  [0m] Finished [0;1;39mAutomatic Boot Loader Update[0m.
          Mounting [0;1;39mArbitrary Executable File Formats File System[0m...
+[[0;32m  OK  [0m] Finished [0;1;39mAutomatic Boot Loader Update[0m.
 [[0;32m  OK  [0m] Finished [0;1;39mLoad JSON user/group Records from Credentials[0m.
 [[0;32m  OK  [0m] Mounted [0;1;39mArbitrary Executable File Formats File System[0m.
 [[0;32m  OK  [0m] Finished [0;1;39mSet Up Additional Binary Formats[0m.
@@ -168,9 +172,9 @@ Starting systemd-udevd version 259.3-1-arch
 [!p]104\[0m[?7h[1G[0J[6n[32766;32766H[6n         Starting [0;1;39mRecord System Boot/Shutdown in UTMP[0m...
 [[0;32m  OK  [0m] Finished [0;1;39mRecord System Boot/Shutdown in UTMP[0m.
 [[0;32m  OK  [0m] Finished [0;1;39mRebuild Journal Catalog[0m.
-[!p]104\[0m[?7h[1G[0J[6n[32766;32766H[6n[[0;32m  OK  [0m] Finished [0;1;39mWait Until Kernel Time Synchronized[0m.
+[[0;32m  OK  [0m] Finished [0;1;39mWait Until Kernel Time Synchronized[0m.
 [[0;32m  OK  [0m] Reached target [0;1;39mSystem Time Synchronized[0m.
-]3008;start=ca3290913214451ca5b122304911ca2a;user=root;hostname=smplos;machineid=173a63190c534ab5b2da1926cbe475e1;bootid=1d85528505cb44a3a4528e9f4e270a63;pid=804;pidfdid=805;comm=(systemd-firstboot);servicename=systemd-firstboot.service;invocationid=4301b07c0ec84b72a161da7530a35dad;type=service\[[0;32m  OK  [0m] Finished [0;1;39mInitial Setup[0m.
+[!p]104\[0m[?7h[1G[0J[6n[32766;32766H[6n]3008;start=acaff162e07c42bfa73593c4257d1641;user=root;hostname=smplos;machineid=85190f530872485dbba5685c506ab375;bootid=97a460b460ae4ed9972b9eabcc493b0e;pid=825;pidfdid=826;comm=(systemd-firstboot);servicename=systemd-firstboot.service;invocationid=c52bd2a770b040539342618a589879b1;type=service\[[0;32m  OK  [0m] Finished [0;1;39mInitial Setup[0m.
 [[0;32m  OK  [0m] Reached target [0;1;39mFirst Boot Complete[0m.
          Starting [0;1;39mSave Transient machine-id to Disk[0m...
 [[0;32m  OK  [0m] Finished [0;1;39mSave Transient machine-id to Disk[0m.
@@ -218,36 +222,38 @@ Starting systemd-udevd version 259.3-1-arch
          Starting [0;1;39mModem Manager[0m...
 [[0;32m  OK  [0m] Started [0;1;39mGnuPG cryptographic agent …rase cache for /etc/pacman.d/gnupg[0m.
 [[0;32m  OK  [0m] Started [0;1;39mHostname Service[0m.
-[[0;32m  OK  [0m] Finished [0;1;39mSSH Key Generation[0m.
 [[0;32m  OK  [0m] Started [0;1;39mNetwork Manager[0m.
+[[0;32m  OK  [0m] Started [0;1;39mModem Manager[0m.
 [[0;32m  OK  [0m] Started [0;1;39mWireless service[0m.
 [[0;32m  OK  [0m] Reached target [0;1;39mNetwork[0m.
-         Starting [0;1;39mOpenSSH Daemon[0m...
          Starting [0;1;39mPermit User Sessions[0m...
-[[0;32m  OK  [0m] Started [0;1;39mModem Manager[0m.
 [[0;32m  OK  [0m] Finished [0;1;39mPermit User Sessions[0m.
 [[0;32m  OK  [0m] Started [0;1;39mGetty on tty1[0m.
 [[0;32m  OK  [0m] Started [0;1;39mSerial Getty on ttyS0[0m.
 [[0;32m  OK  [0m] Reached target [0;1;39mLogin Prompts[0m.
+[[0;32m  OK  [0m] Finished [0;1;39mSSH Key Generation[0m.
+         Starting [0;1;39mOpenSSH Daemon[0m...
 [[0;32m  OK  [0m] Started [0;1;39mOpenSSH Daemon[0m.
 [[0;32m  OK  [0m] Reached target [0;1;39mSSH Access Available[0m.
 [[0;32m  OK  [0m] Finished [0;1;39mInitializes Pacman keyring[0m.
 [[0;32m  OK  [0m] Reached target [0;1;39mMulti-User System[0m.
 [[0;32m  OK  [0m] Reached target [0;1;39mGraphical Interface[0m.
-[!p]104\[0m[?7h[1G[0J[6n[32766;32766H[6n[!p]104\[0m[?7h[1G[0J[6n[32766;32766H[6n]3008;start=ec7246da493a4136822e43222a117f74;user=root;hostname=smplos;machineid=173a63190c534ab5b2da1926cbe475e1;bootid=1d85528505cb44a3a4528e9f4e270a63;pid=956;pidfdid=957;comm=(agetty);servicename=serial-getty@ttyS0.service;invocationid=8cca3a40a3e94430bc1571777ea21da6;type=service\P+q6E616D65\
-smplOS v0.6.28 6.19.6-arch1-1 (ttyS0)
+[!p]104\[0m[?7h[1G[0J[6n[32766;32766H[6n[!p]104\[0m[?7h[1G[0J[6n[32766;32766H[6n]3008;start=127a8f63dbfd4005ab47150c9278fd6e;user=root;hostname=smplos;machineid=85190f530872485dbba5685c506ab375;bootid=97a460b460ae4ed9972b9eabcc493b0e;pid=975;pidfdid=976;comm=(agetty);servicename=serial-getty@ttyS0.service;invocationid=95082822f0774111a1716f7dcbb2bd5b;type=service\P+q6E616D65\
+smplOS v0.6.35 6.19.6-arch1-1 (ttyS0)
 
 Try contacting this VM's SSH server via 'ssh vsock%4294967295' from host.
 
 smplos login:          Stopping [0;1;39mSession 1 of User root[0m...
 [[0;32m  OK  [0m] Removed slice [0;1;39mSlice /system/modprobe[0m.
+[[0;32m  OK  [0m] Removed slice [0;1;39mSlice /system/systemd-coredump[0m.
 [[0;32m  OK  [0m] Stopped target [0;1;39mGraphical Interface[0m.
 [[0;32m  OK  [0m] Stopped target [0;1;39mMulti-User System[0m.
 [[0;32m  OK  [0m] Stopped target [0;1;39mLogin Prompts[0m.
 [[0;32m  OK  [0m] Stopped target [0;1;39mVirtual Machines and Containers[0m.
 [[0;32m  OK  [0m] Stopped target [0;1;39mHost and Network Name Lookups[0m.
 [[0;32m  OK  [0m] Stopped target [0;1;39mRemote Encrypted Volumes[0m.
-[[0;32m  OK  [0m] Stoppe         Stopping [0;1;39mOpenSSH Daemon[0m...
+[[0;32m  OK  [0m] Stopped target [0;1;39mRemote Integrity Protected Volumes[0m.
+[[0;32m  OK         Stopping [0;1;39mOpenSSH Daemon[0m...
 [[0;32m  OK  [0m] Stopped [0;1;39mSave Transient machine-id to Disk[0m.
 [[0;32m  OK  [0m] Stopped target [0;1;39mFirst Boot Complete[0m.
          Stopping [0;1;39mVirtual Machine and Container Registration Service[0m...
@@ -255,11 +261,11 @@ smplos login:          Stopping [0;1;39mSession 1 of User root[0m...
          Stopping [0;1;39mLoad/Save OS Random Seed[0m...
 [[0;32m  OK  [0m] Stopped [0;1;39mWait Until Kernel Time Synchronized[0m.
 [[0;32m  OK  [0m] Stopped [0;1;39mLoad udev Rules from Credentials[0m.
-[[0;32m  OK  [0m] Stopped [0;1;39mOpenSSH Daemon[0m.
 [[0;32m  OK  [0m] Stopped [0;1;39mGetty on tty1[0m.
 [[0;32m  OK  [0m] Stopped [0;1;39mModem Manager[0m.
 [[0;32m  OK  [0m] Stopped [0;1;39mSerial Getty on ttyS0[0m.
-[!p]104\[0m[?7h[1G[0J[6n[32766;32766H[6n]3008;end=ec7246da493a4136822e4[[0;32m  OK  [0m] Stopped [0;1;39mVirtual Machine and Container Registration Service[0m.
+[!p]104\[0m[?7h[1G[0J[6n[32766;32766H[6n]3008;end=127a8f63dbfd4005ab47150c9278fd6e\[[0;32m  OK  [0m] Stopped [0;1;39mOpenSSH Daemon[0m.
+[[0;32m  OK  [0m] Stopped [0;1;39mVirtual Machine and Container Registration Service[0m.
 [[0;32m  OK  [0m] Stopped [0;1;39mLoad/Save OS Random Seed[0m.
 [[0;32m  OK  [0m] Stopped [0;1;39mSession 1 of User root[0m.
 [[0;32m  OK  [0m] Removed slice [0;1;39mSlice /system/getty[0m.
@@ -278,18 +284,18 @@ smplos login:          Stopping [0;1;39mSession 1 of User root[0m...
          Stopping [0;1;39mHome Area Activation[0m...
          Stopping [0;1;39mNetwork Management[0m...
 [[0;32m  OK  [0m] Stopped [0;1;39mLoad JSON user/group Records from Credentials[0m.
-[[0;32m  OK  [0m] Stopped [0;1;39mUser Manager for UID 0[0m.
-         Stopping [0;1;39mUser Runtime Directory /run/user/0[0m...
-[[0;32m  OK  [0m] Stopped [0;1;39mUser Runtime Directory /run/user/0[0m.
-[[0;32m  OK  [0m] Removed slice [0;1;39mUser Slice of UID 0[0m.
-         Stopping [0;1;39mUser Login Management[0m...
-[[0;32m  OK  [0m] Stopped [0;1;39mNetwork Management[0m.
-[[0;32m  OK  [0m] Stopped [0;1;39mUser Login Management[0m.
+[[0;32m  OK  [0m] Stopped [0;1;39mUser Manager for UID 0[0m.
+[[0;32m  OK  [0m] Stopped [0;1;39mNetwork Management[0m.
 [[0;32m  OK  [0m] Stopped [0;1;39mHome Area Activation[0m.
          Stopping [0;1;39mHome Area Manager[0m...
-[[0;32m  OK  [0m] Stopped [0;1;39mHome Area Manager[0m.
-[[0;32m  OK  [0m] Started [0;1;39mShow Plymouth Reboot Screen[0m.
+         Stopping [0;1;39mUser Runtime Directory /run/user/0[0m...
 [[0;32m  OK  [0m] Stopped [0;1;39mNetwork Manager[0m.
+[[0;32m  OK  [0m] Stopped [0;1;39mUser Runtime Directory /run/user/0[0m.
+[[0;32m  OK  [0m] Stopped [0;1;39mHome Area Manager[0m.
+[[0;32m  OK  [0m] Removed slice [0;1;39mUser Slice of UID 0[0m.
+         Stopping [0;1;39mUser Login Management[0m...
+[[0;32m  OK  [0m] Started [0;1;39mShow Plymouth Reboot Screen[0m.
+[[0;32m  OK  [0m] Stopped [0;1;39mUser Login Management[0m.
 [[0;32m  OK  [0m] Unmounted [0;1;39m/run/user/0[0m.
 [[0;32m  OK  [0m] Stopped [0;1;39mWireless service[0m.
 [[0;32m  OK  [0m] Stopped target [0;1;39mBasic System[0m.
@@ -332,7 +338,7 @@ smplos login:          Stopping [0;1;39mSession 1 of User root[0m...
 [[0;32m  OK  [0m] Stopped target [0;1;39mSystem Initialization[0m.
 [[0;32m  OK  [0m] Stopped target [0;1;39mLocal Encrypted Volumes[0m.
 [[0;32m  OK  [0m] Stopped [0;1;39mDispatch Password Requests to Console Directory Watch[0m.
-[[0;32m  OK  [0m][!p]104\[0m[?7h[1G[0J[6n[32766;32766H[6n]3008;end=ca3290913214451ca5b122304911ca2a\[[0;32m  OK  [0m] Closed [0;1;39mConsole Output Muting Service Socket[0m.
+[[0;32m  OK  [0m][!p]104\[0m[?7h[1G[0J[6n[32766;32766H[6n]3008;end=acaff162e07c42bfa73593c4257d1641\[[0;32m  OK  [0m] Closed [0;1;39mConsole Output Muting Service Socket[0m.
          Stopping [0;1;39mNamespace Resource Manager[0m...
          Stopping [0;1;39mNetwork Name Resolution[0m...
          Stopping [0;1;39mNetwork Time Synchronization[0m...
@@ -345,7 +351,13 @@ smplos login:          Stopping [0;1;39mSession 1 of User root[0m...
 [[0;32m  OK  [0m] Unset automount [0;1;39mArbitrary Executab…ormats File System Automount Point[0m.
 [[0;32m  OK  [0m] Stopped [0;1;39mNamespace Resource Manager[0m.
 [[0;32m  OK  [0m] Stopped [0;1;39mNetwork Time Synchronization[0m.
+[[0;32m  OK  [0m] Stopped [0;1;39mNetwork Name Resolution[0m.
 [[0;32m  OK  [0m] Closed [0;1;39mNamespace Resource Manager Socket[0m.
+[[0;32m  OK  [0m] Closed [0;1;39mResolve Monitor Varlink Socket[0m.
+[[0;32m  OK  [0m] Closed [0;1;39mResolve Service Varlink Socket[0m.
+[[0;32m  OK  [0m] Stopped [0;1;39mApply Kernel Variables[0m.
+[[0;32m  OK  [0m] Closed [0;1;39mProcess Core Dump Socket[0m.
+[[0;32m  OK  [0m] Stopped [0;1;39mLoad Kernel Modules[0m.
 [[0;32m  OK  [0m] Stopped [0;1;39mRecord System Boot/Shutdown in UTMP[0m.
 [[0;32m  OK  [0m] Stopped [0;1;39mCreate System Files and Directories[0m.
 [[0;32m  OK  [0m] Stopped target [0;1;39mLocal File Systems[0m.
@@ -354,15 +366,9 @@ smplos login:          Stopping [0;1;39mSession 1 of User root[0m...
          Unmounting [0;1;39m/mnt/var/cache/smplos/mirror/offline[0m...
          Unmounting [0;1;39mTemporary Directory /tmp[0m...
 [[0;32m  OK  [0m] Unmounted [0;1;39mTemporary /etc/pacman.d/gnupg directory[0m.
+[[0;32m  OK  [0m] Unmounted [0;1;39m/mnt/var/cache/smplos/mirror/offline[0m.
 [[0;32m  OK  [0m] Unmounted [0;1;39mTemporary Directory /tmp[0m.
 [[0;32m  OK  [0m] Stopped target [0;1;39mSwaps[0m.
-[[0;32m  OK  [0m] Stopped [0;1;39mNetwork Name Resolution[0m.
-[[0;32m  OK  [0m] Unmounted [0;1;39m/mnt/var/cache/smplos/mirror/offline[0m.
-[[0;32m  OK  [0m] Closed [0;1;39mResolve Monitor Varlink Socket[0m.
-[[0;32m  OK  [0m] Closed [0;1;39mResolve Service Varlink Socket[0m.
-[[0;32m  OK  [0m] Stopped [0;1;39mApply Kernel Variables[0m.
-[[0;32m  OK  [0m] Closed [0;1;39mProcess Core Dump Socket[0m.
-[[0;32m  OK  [0m] Stopped [0;1;39mLoad Kernel Modules[0m.
 [[0;32m  OK  [0m] Unmounted [0;1;39m/mnt/boot[0m.
          Unmounting [0;1;39m/mnt[0m...
 [[0;32m  OK  [0m] Unmounted [0;1;39m/mnt[0m.
@@ -380,9 +386,9 @@ smplos login:          Stopping [0;1;39mSession 1 of User root[0m...
          Starting [0;1;39mTell Plymouth To Jump To initramfs[0m...
 [[0;32m  OK  [0m] Finished [0;1;39mSystem Reboot[0m.
 [[0;32m  OK  [0m] Reached target [0;1;39mSystem Reboot[0m.
-]3008;end=46954b8988264b7d90f7c44f2e329c13\[0;31mwatchdog: watchdog0: watchdog did not stop![0m
-[  213.018269] watchdog: watchdog0: watchdog did not stop!
-[6n[32766;32766H[6n[!p]104\[0m[?7h[1G[0J[  213.610483] watchdog: watchdog0: watchdog did not stop!
-[  213.660691] reboot: Restarting system
+]3008;end=6c5f843f494d43caba2dcdfcd5c675b4\[0;31mwatchdog: watchdog0: watchdog did not stop![0m
+[  165.626629] watchdog: watchdog0: watchdog did not stop!
+[6n[32766;32766H[6n[!p]104\[0m[?7h[1G[0J[  166.219084] watchdog: watchdog0: watchdog did not stop!
+[  166.291884] reboot: Restarting system
 [2J[01;01H[=3h[2J[01;01H[2J[01;01H[8;042;160t0[2J[01;01H[2J[01;01H[8;056;240t0[2J[01;01HBdsDxe: loading Boot0003 "UEFI Misc Device" from PciRoot(0x0)/Pci(0x3,0x0)
 BdsDxe: starting Boot0003 "UEFI Misc Device" from PciRoot(0x0)/Pci(0x3,0x0)
