@@ -1,12 +1,12 @@
 # Maintainer: smplOS <https://github.com/smplOS>
-# Auto-fetches the latest release from GitHub — no manual version bumps needed.
+# Always pulls the latest release from GitHub — no version pinning.
 # Source: https://github.com/KonTy/nemo (release branch)
 
 _gh_owner=KonTy
 _gh_repo=nemo
 
 pkgname=nemo-smpl
-pkgver=1.4.2
+pkgver=0
 pkgrel=1
 pkgdesc='Nemo file manager with smplOS patches (configurable keybindings, preview pane, substring search, MTP support)'
 arch=(x86_64)
@@ -54,48 +54,48 @@ provides=(nemo)
 conflicts=(nemo)
 replaces=(nemo)
 
-# Placeholder — overwritten by _resolve_latest_version() in prepare()
-source=("https://github.com/${_gh_owner}/${_gh_repo}/releases/download/v${pkgver}/nemo-smpl-${pkgver}-arch-x86_64-rootfs.tar.zst")
-sha256sums=('SKIP')
-
-# Query GitHub API for the latest release tag and update pkgver + source URL.
-# Called automatically by makepkg before build().
-_resolve_latest_version() {
-  local api_url="https://api.github.com/repos/${_gh_owner}/${_gh_repo}/releases/latest"
-  local latest
-  latest=$(curl -fsSL "$api_url" | grep -oP '"tag_name"\s*:\s*"\Kv?[^"]+' | sed 's/^v//')
-
-  if [[ -z "$latest" ]]; then
-    echo "WARNING: Could not query GitHub API — using pkgver=$pkgver"
-    return
-  fi
-
-  if [[ "$latest" != "$pkgver" ]]; then
-    echo "==> Auto-detected latest nemo-smpl release: $latest (PKGBUILD had $pkgver)"
-    pkgver="$latest"
-    source=("https://github.com/${_gh_owner}/${_gh_repo}/releases/download/v${pkgver}/nemo-smpl-${pkgver}-arch-x86_64-rootfs.tar.zst")
-  fi
-}
+# No pinned source — prepare() downloads the latest release dynamically
+source=()
+sha256sums=()
 
 prepare() {
-  _resolve_latest_version
-  # Re-download if pkgver changed (makepkg caches by filename)
-  local artifact="nemo-smpl-${pkgver}-arch-x86_64-rootfs.tar.zst"
+  # Query GitHub API for the latest release tag
+  local api_url="https://api.github.com/repos/${_gh_owner}/${_gh_repo}/releases/latest"
+  local latest
+  latest=$(curl -fsSL "$api_url" \
+           | grep -oP '"tag_name"\s*:\s*"\Kv?[^"]+' \
+           | sed 's/^v//')
+
+  if [[ -z "$latest" ]]; then
+    echo "ERROR: Could not determine latest nemo-smpl version from GitHub" >&2
+    return 1
+  fi
+
+  # Persist version for pkgver() and package()
+  echo "$latest" > "$srcdir/.pkgver"
+
+  local artifact="nemo-smpl-${latest}-arch-x86_64-rootfs.tar.zst"
   if [[ ! -f "$srcdir/$artifact" ]]; then
     echo "==> Downloading $artifact ..."
     curl -fSL -o "$srcdir/$artifact" \
-      "https://github.com/${_gh_owner}/${_gh_repo}/releases/download/v${pkgver}/$artifact"
+      "https://github.com/${_gh_owner}/${_gh_repo}/releases/download/v${latest}/$artifact"
   fi
 }
 
+pkgver() {
+  # Called by makepkg after prepare() — returns the real version
+  cat "$srcdir/.pkgver"
+}
+
 build() {
-  # Pre-built artifact — no compilation needed
-  echo "Using pre-built nemo-smpl $pkgver from GitHub Releases"
+  echo "Using pre-built nemo-smpl $(cat "$srcdir/.pkgver") from GitHub Releases"
 }
 
 package() {
   cd "$srcdir"
-  tar -xf "nemo-smpl-${pkgver}-arch-x86_64-rootfs.tar.zst" -C "$pkgdir"
+  local ver
+  ver=$(cat .pkgver)
+  tar -xf "nemo-smpl-${ver}-arch-x86_64-rootfs.tar.zst" -C "$pkgdir"
 }
 
 post_install() {
