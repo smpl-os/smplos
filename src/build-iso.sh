@@ -241,6 +241,21 @@ build_custom_packages() {
         pkgver=$(grep -E '^pkgver=' "$dir/PKGBUILD" | head -1 | cut -d= -f2 | tr -d '"'"'"' ')
         pkgrel=$(grep -E '^pkgrel=' "$dir/PKGBUILD" | head -1 | cut -d= -f2 | tr -d '"'"'"' ')
 
+        # If the PKGBUILD defines _gh_owner/_gh_repo, query GitHub for the
+        # latest release so we always build the newest version automatically.
+        local gh_owner gh_repo
+        gh_owner=$(grep -E '^_gh_owner=' "$dir/PKGBUILD" | head -1 | cut -d= -f2 | tr -d '"'"'"' ')
+        gh_repo=$(grep -E '^_gh_repo=' "$dir/PKGBUILD" | head -1 | cut -d= -f2 | tr -d '"'"'"' ')
+        if [[ -n "$gh_owner" && -n "$gh_repo" ]]; then
+            local latest
+            latest=$(curl -fsSL "https://api.github.com/repos/${gh_owner}/${gh_repo}/releases/latest" \
+                     2>/dev/null | grep -oP '"tag_name"\s*:\s*"\Kv?[^"]+' | sed 's/^v//' || true)
+            if [[ -n "$latest" && "$latest" != "$pkgver" ]]; then
+                log_info "GitHub has $pkg $latest (PKGBUILD says $pkgver) — will rebuild"
+                pkgver="$latest"
+            fi
+        fi
+
         if [[ -n "$pkgver" && -n "$pkgrel" ]] && \
            ls "$prebuilt_dir"/${pkg}-${pkgver}-${pkgrel}-*.pkg.tar.* &>/dev/null 2>&1; then
             log_info "Found prebuilt custom package: $pkg ($pkgver-$pkgrel)"
