@@ -168,15 +168,8 @@ Every edition installs offline, in under 2 minutes, from the same ISO.
 
 **smplOS v0.6.0 — Base edition** (browser, terminal, file manager, full native app suite — under 800 MB RAM at idle)
 
-<p>
-  <a href="https://archive.org/download/smplos_260313-0458/smplos_260313-0458.iso">
-    <img src="https://img.shields.io/badge/⬇_ISO_IMAGE-download-0567ff?style=for-the-badge" alt="ISO IMAGE download">
-  </a>
-  &nbsp;
-  <a href="https://archive.org/download/smplos_260313-0458/smplos_260313-0458_archive.torrent">
-    <img src="https://img.shields.io/badge/⬇_TORRENT-download-00b4d8?style=for-the-badge" alt="TORRENT download">
-  </a>
-</p>
+[![ISO IMAGE download](https://img.shields.io/badge/ISO%20IMAGE-download-0567ff?style=for-the-badge&logo=linux&logoColor=white)](https://archive.org/download/smplos_260313-0458/smplos_260313-0458.iso)
+[![TORRENT download](https://img.shields.io/badge/TORRENT-download-00b4d8?style=for-the-badge&logo=transmission&logoColor=white)](https://archive.org/download/smplos_260313-0458/smplos_260313-0458_archive.torrent)
 
 > Archive page: [archive.org/details/smplos_260313-0458](https://archive.org/details/smplos_260313-0458)
 
