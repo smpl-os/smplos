@@ -16,6 +16,8 @@
 
 <p align="center">
   <strong>Latest release: v0.6.0</strong>
+  &nbsp;&bull;&nbsp;
+  <a href="https://archive.org/download/smplos_260313-0458/smplos_260313-0458.iso"><strong>⬇ Download Base ISO</strong></a>
 </p>
 
 ---
@@ -159,6 +161,18 @@ Build with any combination:
 ```
 
 Every edition installs offline, in under 2 minutes, from the same ISO.
+
+---
+
+## Download
+
+| Edition | Link | Description |
+|---------|------|-------------|
+| **Base** | [smplos_260313-0458.iso](https://archive.org/download/smplos_260313-0458/smplos_260313-0458.iso) | Browser, terminal, file manager, full native app suite. Under 800 MB RAM at idle. |
+| Other editions | Build from source | See [Building](#building) — add `-p`, `-d`, `-c`, `-m`, `-a` flags. |
+
+> **Torrent:** [smplos_260313-0458_archive.torrent](https://archive.org/download/smplos_260313-0458/smplos_260313-0458_archive.torrent)  
+> **Archive page:** [archive.org/details/smplos_260313-0458](https://archive.org/details/smplos_260313-0458)
 
 ---
 
