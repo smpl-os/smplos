@@ -36,12 +36,12 @@ options
 release/*.qcow2
 release/*.iso
 release/*.fd
+release/*.log
 release/OVMF_VARS.fd
 release/vmshare/
 
 # ── Build outputs (written outside src/ to keep source tree clean) ────────
-build/prebuilt/
-build/target/
+build/
 *.iso
 
 # ── Caches ──────────────────────────────────────────────────
