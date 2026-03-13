@@ -168,10 +168,10 @@ Every edition installs offline, in under 2 minutes, from the same ISO.
 
 **smplOS v0.6.0 — Base edition** (browser, terminal, file manager, full native app suite — under 800 MB RAM at idle)
 
-[![ISO IMAGE download](https://img.shields.io/badge/⬇%20ISO%20IMAGE-v0.6.0-0567ff?style=for-the-badge)](https://archive.org/download/smplos_260313-0458/smplos_260313-0458.iso)
-[![TORRENT download](https://img.shields.io/badge/⬇%20TORRENT-v0.6.0-00b4d8?style=for-the-badge)](https://archive.org/download/smplos_260313-0458/smplos_260313-0458_archive.torrent)
+[![ISO IMAGE download](https://img.shields.io/badge/ISO%20IMAGE-download-0567ff?style=for-the-badge)](https://archive.org/details/smplos_260313-0458)
+[![TORRENT download](https://img.shields.io/badge/TORRENT-download-00b4d8?style=for-the-badge)](https://archive.org/download/smplos_260313-0458/smplos_260313-0458_archive.torrent)
 
-> Archive page: [archive.org/details/smplos_260313-0458](https://archive.org/details/smplos_260313-0458)
+> Both buttons open the archive.org page — click **ISO IMAGE download** or **TORRENT download** there to get the file.
 
 Other editions (Productivity, Development, Creators, AI, etc.) must be built from source — see [Building](#building).
 
