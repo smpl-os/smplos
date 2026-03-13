@@ -25,20 +25,34 @@
 }
 
 /* =====================================================================
- * Header bar / toolbar
+ * Toolbar
  * ===================================================================== */
 
-headerbar,
-.header-bar {
+toolbar.primary-toolbar {
     background-color: #475258;
     color: #d3c6aa;
     border-bottom: 1px solid #475258;
     box-shadow: none;
 }
 
-headerbar button:checked,
-headerbar button.active,
-headerbar button.suggested-action {
+toolbar.primary-toolbar button,
+toolbar.primary-toolbar button.flat {
+    color: #d3c6aa;
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+}
+
+toolbar.primary-toolbar button:hover,
+toolbar.primary-toolbar button.flat:hover {
+    background-color: alpha(#d3c6aa, 0.1);
+    color: #d3c6aa;
+}
+
+toolbar.primary-toolbar button:checked,
+toolbar.primary-toolbar button:active,
+toolbar.primary-toolbar button.active,
+toolbar.primary-toolbar button.suggested-action {
     background-color: #7fbbb3;
     color: #2d353b;
 }
@@ -46,6 +60,18 @@ headerbar button.suggested-action {
 /* =====================================================================
  * Path bar
  * ===================================================================== */
+
+.path-bar button {
+    color: #475258;
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+}
+
+.path-bar button:hover {
+    background-color: alpha(#475258, 0.1);
+    color: #475258;
+}
 
 .path-bar button:checked,
 .path-bar button:active {
@@ -150,6 +176,164 @@ searchbar,
 searchbar entry {
     background-color: #475258;
     color: #d3c6aa;
+}
+
+/* =====================================================================
+ * Popup menus (e.g. bookmark picker)
+ * ===================================================================== */
+
+menu {
+    background-color: #374145;
+    color: #d3c6aa;
+    border: 1px solid #475258;
+}
+
+menuitem {
+    color: #d3c6aa;
+}
+
+menuitem:hover {
+    background-color: #7fbbb3;
+    color: #2d353b;
+}
+
+/* =====================================================================
+ * Dialogs and secondary windows (preferences, properties, about)
+ * ===================================================================== */
+
+dialog,
+messagedialog,
+window.background {
+    background-color: #2d353b;
+    color: #475258;
+}
+
+dialog .dialog-vbox,
+messagedialog .dialog-vbox {
+    background-color: #2d353b;
+    color: #475258;
+}
+
+dialog headerbar,
+messagedialog headerbar {
+    background-color: #475258;
+    color: #475258;
+}
+
+/* General button styling for all windows */
+button {
+    color: #475258;
+}
+
+button:hover {
+    background-color: #7fbbb3;
+    color: #7fbbb3;
+}
+
+dialog button,
+messagedialog button {
+    background-color: #475258;
+    color: #475258;
+    border: 1px solid #475258;
+}
+
+dialog button:hover,
+messagedialog button:hover {
+    background-color: #7fbbb3;
+    color: #7fbbb3;
+}
+
+dialog button.suggested-action,
+messagedialog button.suggested-action {
+    background-color: #7fbbb3;
+    color: #7fbbb3;
+}
+
+/* Notebook tabs (preferences, properties) */
+notebook header {
+    background-color: #475258;
+    color: #475258;
+}
+
+notebook header tab {
+    color: #475258;
+}
+
+notebook header tab:checked {
+    background-color: #2d353b;
+    color: #7fbbb3;
+}
+
+notebook > stack {
+    background-color: #2d353b;
+    color: #475258;
+}
+
+/* Stack switcher (properties dialog tabs) */
+stackswitcher button {
+    color: #475258;
+}
+
+stackswitcher button:checked {
+    color: #7fbbb3;
+}
+
+/* Text views (about license, etc.) */
+textview,
+textview text {
+    background-color: #2d353b;
+    color: #475258;
+}
+
+/* Entry fields */
+entry {
+    background-color: #374145;
+    color: #475258;
+    border: 1px solid #475258;
+}
+
+/* Labels */
+label {
+    color: #475258;
+}
+
+/* Check / radio buttons */
+checkbutton label,
+radiobutton label {
+    color: #475258;
+}
+
+/* Combo boxes */
+combobox button {
+    background-color: #374145;
+    color: #475258;
+    border: 1px solid #475258;
+}
+
+/* Tree / list views in preferences */
+treeview {
+    background-color: #2d353b;
+    color: #475258;
+}
+
+treeview:selected {
+    background-color: #7fbbb3;
+    color: #7fbbb3;
+}
+
+/* Frames and separators */
+frame > border {
+    border-color: #475258;
+}
+
+separator {
+    background-color: #475258;
+}
+
+/* Links in about dialog */
+*:link,
+*:visited {
+    color: #7fbbb3;
 }
 
 /* =====================================================================

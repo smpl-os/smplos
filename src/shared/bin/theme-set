@@ -414,6 +414,116 @@ if [[ -f "$CURRENT_THEME_PATH/logseq-custom.css" ]]; then
              -not -path "$HOME/.logseq/*" 2>/dev/null)
 fi
 
+# SiYuan — deploy smplOS theme CSS into the "smplos" theme directory
+# Live-reload requires three things to work together:
+#   1. theme.json must have a NEW version on every switch (browser cache-busting)
+#   2. /api/setting/setTheme (or legacy /api/setting/setAppearance) must be
+#      called so the kernel updates themeLight/themeDark in memory, calls
+#      InitAppearance() to read the new themeVer, then broadcasts "setAppearance"
+#      over WebSocket — all open windows call loadAssets() which rewrites the
+#      <link> href with the new ?v=<themeVer> parameter, forcing fresh CSS.
+#   3. Both themeLight AND themeDark must be set to "smplos"; the correct
+#      light/dark mode is passed as the "mode" field (0=light, 1=dark).
+if [[ -f "$CURRENT_THEME_PATH/siyuan-theme.css" ]]; then
+  # Locate the SiYuan workspace (default ~/SiYuan, overridable via workspace.json)
+  _SIYUAN_WS="$HOME/SiYuan"
+  if [[ -f "$HOME/.config/siyuan/workspace.json" ]]; then
+    _sy_ws=$(sed -n 's/.*"\(\/[^"]*\)".*/\1/p' "$HOME/.config/siyuan/workspace.json" | head -1)
+    [[ -n "$_sy_ws" && -d "$_sy_ws" ]] && _SIYUAN_WS="$_sy_ws"
+  fi
+
+  _SIYUAN_THEME_DIR="$_SIYUAN_WS/conf/appearance/themes/smplos"
+  mkdir -p "$_SIYUAN_THEME_DIR"
+
+  _sy_mode=1
+  [[ -f "$CURRENT_THEME_PATH/light.mode" ]] && _sy_mode=0
+
+  # Always write theme.json with a fresh timestamp-based version.
+  # SiYuan's InitAppearance() reads this version and embeds it as ?v=<themeVer>
+  # in the CSS URL — a new version forces the browser to bypass its cache.
+  _ts=$(date +%s)
+  cat > "$_SIYUAN_THEME_DIR/theme.json" << EOJSON
+{
+  "name": "smplos",
+  "author": "smplOS",
+  "url": "",
+  "version": "1.0.0-${_ts}",
+  "minAppVersion": "2.0.0",
+  "displayName": {"default": "smplOS", "en_US": "smplOS"},
+  "description": {"default": "Dynamic theme controlled by smplOS theme switcher"},
+  "readme": {"default": ""},
+  "modes": ["light", "dark"]
+}
+EOJSON
+
+  # Deploy the pre-baked CSS
+  cp "$CURRENT_THEME_PATH/siyuan-theme.css" "$_SIYUAN_THEME_DIR/theme.css"
+
+  # Detect SiYuan port: 6806 = release build, 6807 = dev build
+  _sy_port=""
+  for _p in 6806 6807; do
+    if curl -s --max-time 1 "http://127.0.0.1:$_p/api/system/version" &>/dev/null; then
+      _sy_port="$_p"
+      break
+    fi
+  done
+
+  if [[ -n "$_sy_port" ]]; then
+    # SiYuan is running — activate the smplos theme and broadcast to all windows.
+    # Try /api/setting/setTheme first (available since SiYuan PR #XXXX); fall back
+    # to the heavier getConf → patch → setAppearance dance for older builds.
+    _sy_set_result=$(curl -s -o /tmp/_sy_set.json -w "%{http_code}" --max-time 2 \
+      "http://127.0.0.1:$_sy_port/api/setting/setTheme" \
+      -H "Content-Type: application/json" \
+      -d "{\"theme\":\"smplos\",\"mode\":$_sy_mode}" 2>/dev/null)
+    _sy_ok=false
+    if [[ "$_sy_set_result" == "200" ]]; then
+      _sy_code=$(python3 -c "import json,sys; print(json.load(open('/tmp/_sy_set.json'))['code'])" 2>/dev/null || echo "-1")
+      [[ "$_sy_code" == "0" ]] && _sy_ok=true
+    fi
+
+    if [[ "$_sy_ok" != "true" ]]; then
+      # Older SiYuan — fall back to setAppearance (requires jq to build the full blob)
+      if command -v jq &>/dev/null; then
+        _sy_appearance=$(curl -s --max-time 2 "http://127.0.0.1:$_sy_port/api/system/getConf" \
+            -H "Content-Type: application/json" -d '{}' \
+            | jq ".data.conf.appearance
+                  | .themeLight = \"smplos\"
+                  | .themeDark  = \"smplos\"
+                  | .mode       = $_sy_mode" 2>/dev/null)
+        if [[ -n "$_sy_appearance" && "$_sy_appearance" != "null" ]]; then
+          curl -s --max-time 2 "http://127.0.0.1:$_sy_port/api/setting/setAppearance" \
+            -H "Content-Type: application/json" \
+            -d "$_sy_appearance" &>/dev/null || true
+        fi
+      else
+        # jq not available — mode-only switch (no CSS cache-bust, last resort)
+        curl -s --max-time 2 "http://127.0.0.1:$_sy_port/api/system/setAppearanceMode" \
+          -H "Content-Type: application/json" \
+          -d "{\"mode\":$_sy_mode}" &>/dev/null || true
+      fi
+    fi
+  else
+    # SiYuan not running — patch conf.json on disk so the next startup picks up
+    # the correct theme and mode without manual intervention.
+    _sy_conf_json="$_SIYUAN_WS/conf/conf.json"
+    if [[ -f "$_sy_conf_json" ]]; then
+      if command -v jq &>/dev/null; then
+        _tmp=$(jq --argjson mode "$_sy_mode" \
+          '.appearance.themeLight = "smplos"
+           | .appearance.themeDark = "smplos"
+           | .appearance.mode = $mode' \
+          "$_sy_conf_json") && echo "$_tmp" > "$_sy_conf_json"
+      else
+        sed -i \
+          -e 's/"themeLight"[[:space:]]*:[[:space:]]*"[^"]*"/"themeLight": "smplos"/' \
+          -e 's/"themeDark"[[:space:]]*:[[:space:]]*"[^"]*"/"themeDark": "smplos"/' \
+          "$_sy_conf_json"
+      fi
+    fi
+  fi
+fi
+
 # Chromium / Brave -- set browser toolbar color and dark/light mode
 # Derives color from colors.toml background (no separate chromium.theme file needed)
 BROWSER_BG=$(grep '^background' "$CURRENT_THEME_PATH/colors.toml" 2>/dev/null | head -1 | sed 's/.*"\(#[^"]*\)".*/\1/')

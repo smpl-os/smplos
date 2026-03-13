@@ -25,20 +25,34 @@
 }
 
 /* =====================================================================
- * Header bar / toolbar
+ * Toolbar
  * ===================================================================== */
 
-headerbar,
-.header-bar {
+toolbar.primary-toolbar {
     background-color: {{ bg_lighter }};
     color: {{ foreground }};
     border-bottom: 1px solid {{ bg_lighter }};
     box-shadow: none;
 }
 
-headerbar button:checked,
-headerbar button.active,
-headerbar button.suggested-action {
+toolbar.primary-toolbar button,
+toolbar.primary-toolbar button.flat {
+    color: {{ foreground }};
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+}
+
+toolbar.primary-toolbar button:hover,
+toolbar.primary-toolbar button.flat:hover {
+    background-color: alpha({{ foreground }}, 0.1);
+    color: {{ foreground }};
+}
+
+toolbar.primary-toolbar button:checked,
+toolbar.primary-toolbar button:active,
+toolbar.primary-toolbar button.active,
+toolbar.primary-toolbar button.suggested-action {
     background-color: {{ accent }};
     color: {{ selection_foreground }};
 }
@@ -46,6 +60,18 @@ headerbar button.suggested-action {
 /* =====================================================================
  * Path bar
  * ===================================================================== */
+
+.path-bar button {
+    color: {{ bg_lighter }};
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+}
+
+.path-bar button:hover {
+    background-color: alpha({{ bg_lighter }}, 0.1);
+    color: {{ bg_lighter }};
+}
 
 .path-bar button:checked,
 .path-bar button:active {
@@ -150,6 +176,164 @@ searchbar,
 searchbar entry {
     background-color: {{ bg_lighter }};
     color: {{ foreground }};
+}
+
+/* =====================================================================
+ * Popup menus (e.g. bookmark picker)
+ * ===================================================================== */
+
+menu {
+    background-color: {{ bg_light }};
+    color: {{ foreground }};
+    border: 1px solid {{ bg_lighter }};
+}
+
+menuitem {
+    color: {{ foreground }};
+}
+
+menuitem:hover {
+    background-color: {{ accent }};
+    color: {{ selection_foreground }};
+}
+
+/* =====================================================================
+ * Dialogs and secondary windows (preferences, properties, about)
+ * ===================================================================== */
+
+dialog,
+messagedialog,
+window.background {
+    background-color: {{ background }};
+    color: {{ bg_lighter }};
+}
+
+dialog .dialog-vbox,
+messagedialog .dialog-vbox {
+    background-color: {{ background }};
+    color: {{ bg_lighter }};
+}
+
+dialog headerbar,
+messagedialog headerbar {
+    background-color: {{ bg_lighter }};
+    color: {{ bg_lighter }};
+}
+
+/* General button styling for all windows */
+button {
+    color: {{ bg_lighter }};
+}
+
+button:hover {
+    background-color: {{ accent }};
+    color: {{ accent }};
+}
+
+dialog button,
+messagedialog button {
+    background-color: {{ bg_lighter }};
+    color: {{ bg_lighter }};
+    border: 1px solid {{ bg_lighter }};
+}
+
+dialog button:hover,
+messagedialog button:hover {
+    background-color: {{ accent }};
+    color: {{ accent }};
+}
+
+dialog button.suggested-action,
+messagedialog button.suggested-action {
+    background-color: {{ accent }};
+    color: {{ accent }};
+}
+
+/* Notebook tabs (preferences, properties) */
+notebook header {
+    background-color: {{ bg_lighter }};
+    color: {{ bg_lighter }};
+}
+
+notebook header tab {
+    color: {{ bg_lighter }};
+}
+
+notebook header tab:checked {
+    background-color: {{ background }};
+    color: {{ accent }};
+}
+
+notebook > stack {
+    background-color: {{ background }};
+    color: {{ bg_lighter }};
+}
+
+/* Stack switcher (properties dialog tabs) */
+stackswitcher button {
+    color: {{ bg_lighter }};
+}
+
+stackswitcher button:checked {
+    color: {{ accent }};
+}
+
+/* Text views (about license, etc.) */
+textview,
+textview text {
+    background-color: {{ background }};
+    color: {{ bg_lighter }};
+}
+
+/* Entry fields */
+entry {
+    background-color: {{ bg_light }};
+    color: {{ bg_lighter }};
+    border: 1px solid {{ bg_lighter }};
+}
+
+/* Labels */
+label {
+    color: {{ bg_lighter }};
+}
+
+/* Check / radio buttons */
+checkbutton label,
+radiobutton label {
+    color: {{ bg_lighter }};
+}
+
+/* Combo boxes */
+combobox button {
+    background-color: {{ bg_light }};
+    color: {{ bg_lighter }};
+    border: 1px solid {{ bg_lighter }};
+}
+
+/* Tree / list views in preferences */
+treeview {
+    background-color: {{ background }};
+    color: {{ bg_lighter }};
+}
+
+treeview:selected {
+    background-color: {{ accent }};
+    color: {{ accent }};
+}
+
+/* Frames and separators */
+frame > border {
+    border-color: {{ bg_lighter }};
+}
+
+separator {
+    background-color: {{ bg_lighter }};
+}
+
+/* Links in about dialog */
+*:link,
+*:visited {
+    color: {{ accent }};
 }
 
 /* =====================================================================

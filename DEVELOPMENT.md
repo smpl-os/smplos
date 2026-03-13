@@ -106,7 +106,8 @@ process_aur_packages  → install prebuilt .pkg.tar.zst from /build/prebuilt
                         (auto-builds from AUR if no prebuilt found)
 download_flatpaks     → (optional) write Flathub install list
 download_appimages    → (optional) download AppImages
-cache_whisper_model   → download Whisper base.en model files (~150 MB) for offline dictation
+cache_whisper_models  → download Whisper models (base.en + base multilingual, ~300 MB total)
+                        for offline dictation; persisted in build/dictation/
 create_repo_database  → build a local pacman repo from the offline mirror
 setup_pacman_conf     → write pacman.conf for the ISO environment
 update_package_list   → generate profiledef package list for mkarchiso
@@ -217,36 +218,41 @@ on each build run.
 
 ## Offline Dictation Pipeline
 
-smplOS bundles a Whisper speech-to-text model into the ISO so dictation works without
-internet. Here's the full flow from build to first use.
+smplOS bundles Whisper speech-to-text models into the ISO so dictation works without
+internet in any language. Here's the full flow from build to first use.
 
-### Build Time (`cache_whisper_model` + `setup_airootfs`)
+### Build Time (`cache_whisper_models` + `setup_airootfs`)
 
-1. `cache_whisper_model()` downloads 5 files from HuggingFace (`Systran/faster-whisper-base.en`):
-   `config.json`, `model.bin`, `tokenizer.json`, `vocabulary.json`, `preprocessor_config.json`.
-   Cached in the build container at `$CACHE_DIR/models/whisper/base.en/`. Non-fatal on
-   failure — if download fails, dictation just won't be pre-cached (user can still run
-   `dictation-setup` later).
-2. `setup_airootfs()` copies the model to two places in the ISO:
-   - `/usr/share/smplos/models/whisper/base.en/` — system-wide, read by `dictation-prime`
-   - `/root/smplos/models/whisper/base.en/` — staging area, copied to installed system
+1. `cache_whisper_models()` downloads two models from HuggingFace:
+   - **`base.en`** (English-optimized, ~148 MB) from `Systran/faster-whisper-base.en`
+   - **`base`** (multilingual, 99 languages incl. Chinese, Japanese, etc., ~148 MB) from `Systran/faster-whisper-base`
+   
+   Each model consists of 4 files: `config.json`, `model.bin`, `tokenizer.json`, `vocabulary.txt`.
+   The build container's `$CACHE_DIR/models/whisper/` is volume-mounted to `build/dictation/`
+   on the host — so models persist across builds and can be pre-populated manually
+   (place files in `build/dictation/base.en/` or `build/dictation/base/`). Non-fatal on
+   failure — if download fails, dictation just won't be pre-cached.
+2. `setup_airootfs()` copies all cached models to two places in the ISO:
+   - `/usr/share/smplos/models/whisper/<model>/` — system-wide, read by `dictation-prime`
+   - `/root/smplos/models/whisper/<model>/` — staging area, copied to installed system
      by `install.sh`
 3. A default `config.toml` for voxtype is placed in `/etc/skel/.config/voxtype/` and
-   staged for the installer.
+   staged for the installer. Defaults to `model = "base"` with `language = "auto"` for
+   multilingual support.
 4. A `voxtype.service` systemd user unit is placed in `/etc/skel/.config/systemd/user/`.
 
 ### Install Time (`install.sh`)
 
 The installer calls `dictation-prime` after `rebuild-app-cache`. This primes the new
-user's HuggingFace cache from the bundled model so dictation works on first login.
+user's HuggingFace cache from all bundled models so dictation works on first login.
 
 ### First Use (`dictation-prime`)
 
 `dictation-prime` is an idempotent script that:
-1. Copies model files from `/usr/share/smplos/models/whisper/base.en/` into the
-   HuggingFace cache at `~/.cache/huggingface/hub/models--Systran--faster-whisper-base.en/snapshots/smplos-bundled/`.
-2. Sets `refs/main` → `smplos-bundled` so voxtype resolves the model.
-3. Writes `~/.config/voxtype/config.toml` if missing.
+1. Iterates over all models in `/usr/share/smplos/models/whisper/` and copies each into
+   the HuggingFace cache at `~/.cache/huggingface/hub/models--Systran--faster-whisper-<model>/snapshots/smplos-bundled/`.
+2. Sets `refs/main` → `smplos-bundled` for each model so voxtype resolves them.
+3. Writes `~/.config/voxtype/config.toml` if missing (defaults to multilingual `base` model).
 4. Creates and enables the `voxtype.service` systemd user unit.
 5. Writes marker `~/.config/smplos/.dictation-primed` so subsequent calls are instant no-ops.
 

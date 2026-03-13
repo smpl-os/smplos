@@ -425,29 +425,47 @@ download_appimages() {
 }
 
 ###############################################################################
-# Cache Whisper AI Model for Offline Dictation
+# Cache Whisper AI Models for Offline Dictation
 ###############################################################################
 
-cache_whisper_model() {
-    log_step "Caching Whisper model for offline dictation"
+# Download a single whisper model variant.
+# Usage: _cache_one_whisper_model <model_name>
+# Models are cached in $CACHE_DIR/models/whisper/<model_name>/
+# which is volume-mounted to build/dictation/ on the host.
+_cache_one_whisper_model() {
+    local model_name="$1"
 
-    local model_name="base.en"
-    local hf_repo="Systran/faster-whisper-${model_name}"
+    # Resolve the HuggingFace repo and file list per model.
+    # Systran repos (base.en, base, small, medium) use vocabulary.txt.
+    # deepdml large-v3-turbo uses vocabulary.json + preprocessor_config.json.
+    local hf_repo model_files
+    case "$model_name" in
+        large-v3-turbo)
+            hf_repo="deepdml/faster-whisper-large-v3-turbo-ct2"
+            model_files=(config.json model.bin tokenizer.json vocabulary.json preprocessor_config.json)
+            ;;
+        *)
+            hf_repo="Systran/faster-whisper-${model_name}"
+            model_files=(config.json model.bin tokenizer.json vocabulary.txt)
+            ;;
+    esac
+
     local model_dir="$CACHE_DIR/models/whisper/${model_name}"
-    # Files required by faster-whisper / CTranslate2 for inference
-    local model_files=(config.json model.bin tokenizer.json vocabulary.json preprocessor_config.json)
 
-    # Skip if already cached (idempotent)
+    # Skip if already cached (idempotent) — this covers both manually-placed
+    # files in build/dictation/<model>/ and previously-downloaded models that
+    # persisted via the volume mount.
     if [[ -f "$model_dir/model.bin" ]]; then
         local size
         size=$(du -sh "$model_dir" | cut -f1)
-        log_info "Whisper model already cached ($size)"
+        log_info "  ${model_name}: already cached ($size)"
         return 0
     fi
 
     mkdir -p "$model_dir"
 
-    log_info "Downloading ${hf_repo} from HuggingFace..."
+    log_info "  ${model_name}: downloading from ${hf_repo}..."
+    log_info "    Tip: place model files in build/dictation/${model_name}/ to skip download"
     local failed=0
     for f in "${model_files[@]}"; do
         local url="https://huggingface.co/${hf_repo}/resolve/main/${f}"
@@ -467,23 +485,46 @@ cache_whisper_model() {
     done
 
     if [[ $failed -gt 0 ]]; then
-        log_warn "Whisper model download had $failed failures — dictation will require online setup"
+        log_warn "  ${model_name}: download had $failed failures — skipping"
         rm -rf "$model_dir"
-        return 0  # non-fatal: dictation is optional
+        return 1
     fi
 
     # Verify model.bin is a valid CTranslate2 model (not an HTML error page)
     local bin_size
     bin_size=$(stat -c%s "$model_dir/model.bin" 2>/dev/null || echo 0)
     if [[ $bin_size -lt 10000000 ]]; then  # base.en model.bin is ~148MB
-        log_warn "model.bin is suspiciously small (${bin_size} bytes) — removing"
+        log_warn "  ${model_name}: model.bin is suspiciously small (${bin_size} bytes) — removing"
         rm -rf "$model_dir"
-        return 0
+        return 1
     fi
 
     local total_size
     total_size=$(du -sh "$model_dir" | cut -f1)
-    log_info "Whisper model cached: ${model_name} (${total_size})"
+    log_info "  ${model_name}: cached (${total_size})"
+}
+
+cache_whisper_models() {
+    log_step "Caching Whisper models for offline dictation"
+    log_info "Cache dir: build/dictation/ (volume-mounted, persistent)"
+
+    # Models to bundle in the ISO.  base.en = English-optimized (fastest),
+    # base = multilingual (99 languages including Chinese, Japanese, etc.).
+    # Both are ~148 MB — minimal overhead for full language coverage.
+    local models=(base.en base)
+    local ok=0
+
+    for m in "${models[@]}"; do
+        if _cache_one_whisper_model "$m"; then
+            ((ok++)) || true
+        fi
+    done
+
+    if [[ $ok -eq 0 ]]; then
+        log_warn "No Whisper models cached — dictation will require online setup"
+    else
+        log_info "Whisper: ${ok}/${#models[@]} models cached"
+    fi
 }
 
 ###############################################################################
@@ -888,19 +929,28 @@ setup_airootfs() {
         log_info "Flatpak install list: ${#FLATPAK_PACKAGES[@]} app(s)"
     fi
 
-    # ── Bundle Whisper AI model for offline dictation ─────────────────────────
-    local whisper_src="$CACHE_DIR/models/whisper/base.en"
-    if [[ -d "$whisper_src" && -f "$whisper_src/model.bin" ]]; then
-        log_info "Bundling Whisper base.en model into ISO"
-        local whisper_dest="$airootfs/usr/share/smplos/models/whisper/base.en"
-        mkdir -p "$whisper_dest"
-        cp "$whisper_src/"* "$whisper_dest/"
-        # Also stage for installer (post-install deploys to installed system)
-        mkdir -p "$airootfs/root/smplos/models/whisper/base.en"
-        cp "$whisper_src/"* "$airootfs/root/smplos/models/whisper/base.en/"
-        log_info "Whisper model bundled ($(du -sh "$whisper_dest" | cut -f1))"
-    else
-        log_warn "Whisper model not cached — dictation will require online setup"
+    # ── Bundle Whisper AI models for offline dictation ──────────────────────────
+    local whisper_cache="$CACHE_DIR/models/whisper"
+    local bundled_any=false
+    if [[ -d "$whisper_cache" ]]; then
+        for model_dir in "$whisper_cache"/*/; do
+            local mname
+            mname=$(basename "$model_dir")
+            if [[ -f "$model_dir/model.bin" ]]; then
+                log_info "Bundling Whisper ${mname} model into ISO"
+                local whisper_dest="$airootfs/usr/share/smplos/models/whisper/${mname}"
+                mkdir -p "$whisper_dest"
+                cp "$model_dir/"* "$whisper_dest/"
+                # Also stage for installer (post-install deploys to installed system)
+                mkdir -p "$airootfs/root/smplos/models/whisper/${mname}"
+                cp "$model_dir/"* "$airootfs/root/smplos/models/whisper/${mname}/"
+                log_info "  ${mname}: $(du -sh "$whisper_dest" | cut -f1)"
+                bundled_any=true
+            fi
+        done
+    fi
+    if ! $bundled_any; then
+        log_warn "No Whisper models cached — dictation will require online setup"
     fi
 
     # ── Default voxtype config (dictation) ────────────────────────────────────
@@ -918,8 +968,8 @@ enabled = false
 state_file = "auto"
 
 [whisper]
-model = "base.en"
-language = "en"
+model = "base"
+language = "auto"
 
 [output]
 mode = "type"
@@ -1918,7 +1968,7 @@ main() {
     process_aur_packages
     download_flatpaks
     download_appimages
-    cache_whisper_model
+    cache_whisper_models
     create_repo_database
     setup_pacman_conf
     update_package_list

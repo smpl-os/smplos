@@ -445,6 +445,11 @@ run_build() {
 
     local prebuilt_dir="$PROJECT_ROOT/build/prebuilt"
 
+    # Persistent whisper model cache — survives across builds and can be
+    # pre-populated manually (place model files in build/dictation/base.en/).
+    local dictation_dir="$PROJECT_ROOT/build/dictation"
+    mkdir -p "$dictation_dir"
+
     # ── Build all apps first (single source of truth) ──
     # build-apps.sh builds Rust apps + st-wl in a container,
     # outputs to .cache/app-binaries/. Same script used by dev-push.sh.
@@ -462,6 +467,7 @@ run_build() {
         -v "$cache_dir/offline-repo:/var/cache/smplos/mirror/offline"
         -v "$cache_dir/pacman:/var/cache/smplos/pacman-cache"
         -v "$app_bin_dir:/build/app-binaries:ro"
+        -v "$dictation_dir:/var/cache/smplos/models/whisper"
         -e "COMPOSITOR=$COMPOSITOR"
         -e "HOST_UID=$(id -u)"
         -e "HOST_GID=$(id -g)"

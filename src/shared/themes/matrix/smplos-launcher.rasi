@@ -26,7 +26,7 @@ configuration {
     selected:                    #00FF00;
     active:                      #00FF00;
     urgent:                      #FF9900;
-    border-rad:                  0px;
+    border-rad:                  4px;
     background-color:            transparent;
     text-color:                  @foreground;
 

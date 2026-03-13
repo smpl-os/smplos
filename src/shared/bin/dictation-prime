@@ -1,19 +1,19 @@
 #!/bin/bash
 # Prime the Whisper model cache for offline dictation.
-# Copies the bundled base.en model from /usr/share/smplos/models/whisper/
-# into the HuggingFace hub cache so voxtype finds it without downloading.
+# Copies bundled models from /usr/share/smplos/models/whisper/
+# into the HuggingFace hub cache so voxtype finds them without downloading.
 #
+# Supports multiple models (e.g. base.en for English, base for multilingual).
 # Idempotent: safe to call multiple times. Does nothing if already primed
-# or if the bundled model is not present.
+# or if no bundled models are present.
 #
 # Also ensures the voxtype systemd user service is enabled and the
 # default config exists.
 
 set -euo pipefail
 
-BUNDLED_DIR="/usr/share/smplos/models/whisper/base.en"
+BUNDLED_BASE="/usr/share/smplos/models/whisper"
 HF_CACHE="${XDG_CACHE_HOME:-$HOME/.cache}/huggingface/hub"
-MODEL_CACHE="$HF_CACHE/models--Systran--faster-whisper-base.en"
 SNAP_HASH="smplos-bundled"
 MARKER="$HOME/.config/smplos/.dictation-primed"
 
@@ -30,23 +30,49 @@ if ! command -v voxtype &>/dev/null; then
     exit 0
 fi
 
-# ── Prime HF cache from bundled model ────────────────────────────────────────
-if [[ -d "$BUNDLED_DIR" && -f "$BUNDLED_DIR/model.bin" ]]; then
-    # Only prime if no model is cached yet (don't overwrite user downloads)
-    if [[ ! -d "$MODEL_CACHE/snapshots" ]]; then
-        log "Priming HF cache from bundled model..."
-        mkdir -p "$MODEL_CACHE/refs" "$MODEL_CACHE/snapshots/$SNAP_HASH"
+# ── Prime HF cache from all bundled models ────────────────────────────────────
+_prime_model() {
+    local model_name="$1"
+    local bundled_dir="$BUNDLED_BASE/$model_name"
 
-        # Copy model files into the snapshot directory
-        cp "$BUNDLED_DIR/"* "$MODEL_CACHE/snapshots/$SNAP_HASH/"
+    # Map model name to HF repo name for the cache directory
+    local hf_repo_name
+    case "$model_name" in
+        large-v3-turbo) hf_repo_name="models--deepdml--faster-whisper-large-v3-turbo-ct2" ;;
+        *)              hf_repo_name="models--Systran--faster-whisper-${model_name}" ;;
+    esac
+    local model_cache="$HF_CACHE/$hf_repo_name"
 
-        # Point refs/main at our snapshot so HF hub resolves model = "base.en"
-        echo "$SNAP_HASH" > "$MODEL_CACHE/refs/main"
-
-        log "HF cache primed: $MODEL_CACHE/snapshots/$SNAP_HASH/"
+    if [[ ! -d "$bundled_dir" || ! -f "$bundled_dir/model.bin" ]]; then
+        return 1
     fi
-else
-    log "No bundled model at $BUNDLED_DIR — skipping cache prime"
+
+    # Only prime if no model is cached yet (don't overwrite user downloads)
+    if [[ -d "$model_cache/snapshots" ]]; then
+        log "${model_name}: already in HF cache, skipping"
+        return 0
+    fi
+
+    log "${model_name}: priming HF cache from bundled model..."
+    mkdir -p "$model_cache/refs" "$model_cache/snapshots/$SNAP_HASH"
+    cp "$bundled_dir/"* "$model_cache/snapshots/$SNAP_HASH/"
+    echo "$SNAP_HASH" > "$model_cache/refs/main"
+    log "${model_name}: done"
+}
+
+primed_any=false
+if [[ -d "$BUNDLED_BASE" ]]; then
+    for model_dir in "$BUNDLED_BASE"/*/; do
+        [[ -d "$model_dir" ]] || continue
+        model_name=$(basename "$model_dir")
+        if _prime_model "$model_name"; then
+            primed_any=true
+        fi
+    done
+fi
+
+if ! $primed_any; then
+    log "No bundled models found at $BUNDLED_BASE — skipping cache prime"
 fi
 
 # ── Ensure default config exists ─────────────────────────────────────────────
@@ -64,8 +90,8 @@ enabled = false
 state_file = "auto"
 
 [whisper]
-model = "base.en"
-language = "en"
+model = "base"
+language = "auto"
 
 [output]
 mode = "type"

@@ -1,0 +1,129 @@
+/* smplOS SiYuan theme — auto-generated, do not edit manually */
+/* Overrides SiYuan's default daylight/midnight variables with smplOS palette */
+
+:root {
+    /* ── Primary / accent colors ────────────────────────────────────── */
+    --b3-theme-primary: #56949f;
+    --b3-theme-primary-light: rgba(86,148,159, 0.54);
+    --b3-theme-primary-lighter: rgba(86,148,159, 0.38);
+    --b3-theme-primary-lightest: rgba(86,148,159, 0.12);
+    --b3-theme-secondary: #907aa9;
+
+    /* ── Backgrounds / surfaces ─────────────────────────────────────── */
+    --b3-theme-background: #faf4ed;
+    --b3-theme-background-light: #f2e9e1;
+    --b3-theme-surface: #f2e9e1;
+    --b3-theme-surface-light: rgba(242,233,225, 0.86);
+    --b3-theme-surface-lighter: #e4dcd4;
+
+    /* ── Semantic status colors ─────────────────────────────────────── */
+    --b3-theme-error: #b4637a;
+    --b3-theme-success: #286983;
+
+    /* ── Text on coloured backgrounds ──────────────────────────────── */
+    --b3-theme-on-primary: #fff;
+    --b3-theme-on-secondary: #fff;
+    --b3-theme-on-background: #575279;
+    --b3-theme-on-surface: #575279;
+    --b3-theme-on-surface-light: #575279;
+    --b3-theme-on-error: #fff;
+
+    /* ── Toolbar ────────────────────────────────────────────────────── */
+    --b3-toolbar-background: #f2e9e1;
+    --b3-toolbar-blur-background: #f2e9e1;
+    --b3-toolbar-color: #575279;
+    --b3-toolbar-hover: #f2e9e1;
+
+    /* ── Borders ────────────────────────────────────────────────────── */
+    --b3-border-color: #e4dcd4;
+
+    /* ── Scrollbar ──────────────────────────────────────────────────── */
+    --b3-scroll-color: rgba(152,147,165, 0.4);
+
+    /* ── List hover ─────────────────────────────────────────────────── */
+    --b3-list-hover: rgba(86,148,159, 0.08);
+    --b3-list-icon-hover: rgba(87,82,121, 0.1);
+
+    /* ── Menu ───────────────────────────────────────────────────────── */
+    --b3-menu-background: #f2e9e1;
+
+    /* ── Tooltips ───────────────────────────────────────────────────── */
+    --b3-tooltips-background: #faf4ed;
+    --b3-tooltips-color: #575279;
+    --b3-tooltips-second-color: #575279;
+    --b3-tooltips-shadow: 0 2px 8px rgba(250,244,237, 0.3);
+
+    /* ── Empty / placeholder text ──────────────────────────────────── */
+    --b3-empty-color: #575279;
+
+    /* ── Mask / overlay ────────────────────────────────────────────── */
+    --b3-mask-background: rgba(250,244,237, 0.5);
+
+    /* ── Cards (flashcards, spaced-rep) ─────────────────────────────── */
+    --b3-card-error-color: #b4637a;
+    --b3-card-error-background: rgba(180,99,122, 0.15);
+    --b3-card-warning-color: #ea9d34;
+    --b3-card-warning-background: rgba(234,157,52, 0.15);
+    --b3-card-info-color: #d7827e;
+    --b3-card-info-background: rgba(215,130,126, 0.15);
+    --b3-card-success-color: #286983;
+    --b3-card-success-background: rgba(40,105,131, 0.15);
+
+    /* ── Shadows ────────────────────────────────────────────────────── */
+    --b3-point-shadow: 0 0 1px 0 rgba(250,244,237, 0.2),
+                       0 0 2px 0 rgba(250,244,237, 0.3);
+    --b3-dialog-shadow: 0 8px 24px rgba(250,244,237, 0.4);
+
+    /* ── Highlight / find-in-page ───────────────────────────────────── */
+    --b3-highlight-background: rgba(234,157,52, 0.40);
+    --b3-highlight-current-background: rgba(234,157,52, 0.65);
+    --b3-highlight-color: #575279;
+
+    /* ── Select dropdown ───────────────────────────────────────────── */
+    --b3-select-background:
+        url("data:image/svg+xml;utf8,<svg fill='#575279' height='24' viewBox='0 0 24 24' width='24' xmlns='http://www.w3.org/2000/svg'><path d='M7 10l5 5 5-5z'/><path d='M0 0h24v24H0z' fill='none'/></svg>")
+        no-repeat right 2px center #faf4ed;
+
+    /* ── Switch toggle ─────────────────────────────────────────────── */
+    --b3-switch-background: #e4dcd4;
+    --b3-switch-border: #575279;
+    --b3-switch-hover: rgba(87,82,121, 0.06);
+    --b3-switch-checked: #fff;
+    --b3-switch-checked-background: #56949f;
+    --b3-switch-checked-hover: rgba(86,148,159, 0.18);
+    --b3-switch-checked-hover2: rgba(86,148,159, 0.06);
+
+    /* ── Protyle editor — code blocks ──────────────────────────────── */
+    --b3-protyle-code-background: #f2e9e1;
+
+    /* ── Protyle editor — inline element colors ────────────────────── */
+    --b3-protyle-inline-strong-color: inherit;
+    --b3-protyle-inline-em-color: inherit;
+    --b3-protyle-inline-u-color: inherit;
+    --b3-protyle-inline-s-color: inherit;
+    --b3-protyle-inline-link-color: #56949f;
+    --b3-protyle-inline-mark-background: rgba(234,157,52, 0.40);
+    --b3-protyle-inline-mark-color: #575279;
+    --b3-protyle-inline-tag-color: #575279;
+    --b3-protyle-inline-blockref-color: #907aa9;
+    --b3-protyle-inline-fileref-color: #286983;
+
+    /* ── Callout blocks ────────────────────────────────────────────── */
+    --b3-callout-note: #56949f;
+    --b3-callout-tip: #286983;
+    --b3-callout-caution: #b4637a;
+    --b3-callout-important: #907aa9;
+    --b3-callout-warning: #ea9d34;
+
+    /* ── Table ──────────────────────────────────────────────────────── */
+    --b3-table-even-background: rgba(87,82,121, 0.03);
+
+    /* ── Database / attribute view ─────────────────────────────────── */
+    --b3-av-gallery-shadow: rgba(250,244,237, 0.06) 0 2px 4px 0,
+                            #e4dcd4 0 0 0 1px;
+
+    /* ── Embed / blockquote / parent ───────────────────────────────── */
+    --b3-embed-background: transparent;
+    --b3-bq-background: transparent;
+    --b3-parent-background: #faf4ed;
+}

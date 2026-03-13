@@ -216,15 +216,15 @@ systemctl --user start smplos-app-cache.path 2>/dev/null || true
 echo "==> Building initial app index..."
 rebuild-app-cache || echo "    WARNING: rebuild-app-cache failed"
 
-# Prime dictation (copies bundled Whisper model into HF cache, enables service)
+# Prime dictation (copies bundled Whisper models into HF cache, enables service)
 if command -v dictation-prime &>/dev/null && command -v voxtype &>/dev/null; then
   echo "==> Priming offline dictation..."
-  # The bundled model lives at /usr/share/smplos/models/whisper/base.en/
-  # on the live ISO, but post-install it's at $SMPLOS_PATH/models/whisper/base.en/.
-  # Copy to the system-wide location so dictation-prime finds it.
-  if [[ -d "$SMPLOS_PATH/models/whisper/base.en" ]]; then
+  # Bundled models live at /usr/share/smplos/models/whisper/<model>/
+  # on the live ISO, but post-install they're at $SMPLOS_PATH/models/whisper/<model>/.
+  # Copy to the system-wide location so dictation-prime finds them.
+  if [[ -d "$SMPLOS_PATH/models/whisper" ]]; then
     sudo mkdir -p /usr/share/smplos/models/whisper
-    sudo cp -r "$SMPLOS_PATH/models/whisper/base.en" /usr/share/smplos/models/whisper/
+    sudo cp -r "$SMPLOS_PATH/models/whisper/"* /usr/share/smplos/models/whisper/
   fi
   dictation-prime || echo "    WARNING: dictation-prime failed (exit $?)"
 fi
