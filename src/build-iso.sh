@@ -435,42 +435,69 @@ download_prebuilt_apps() {
     local app_bin_dir="$PROJECT_ROOT/.cache/app-binaries"
     mkdir -p "$app_bin_dir"
 
-    local smpl_apps_url="https://github.com/smpl-os/smpl-apps/releases/latest/download/smpl-apps-x86_64.tar.gz"
-    local st_url="https://github.com/smpl-os/st-smpl/releases/latest"
-
     log_step "Downloading pre-built app binaries from GitHub"
 
     # ── smpl-apps bundle ─────────────────────────────────────────────────────
-    log_info "Downloading smpl-apps from $smpl_apps_url"
-    if curl -fSL --connect-timeout 30 --retry 3 "$smpl_apps_url" \
+    # Query the GitHub API for the latest release, then find the tarball asset
+    # by pattern (the filename includes the version, e.g. smpl-apps-0.1.1-x86_64.tar.gz).
+    log_info "Resolving latest smpl-apps release..."
+    local release_json
+    release_json=$(curl -fsSL --connect-timeout 30 \
+        "https://api.github.com/repos/smpl-os/smpl-apps/releases/latest") \
+        || die "Failed to fetch smpl-apps release info. Use --build-apps to compile locally."
+
+    local apps_tag
+    apps_tag=$(echo "$release_json" | grep -oP '"tag_name"\s*:\s*"\K[^"]+')
+    log_info "Latest smpl-apps release: $apps_tag"
+
+    local tarball_url
+    tarball_url=$(echo "$release_json" \
+        | grep -oP '"browser_download_url"\s*:\s*"\K[^"]*smpl-apps-[^"]*x86_64\.tar\.gz')
+    if [[ -z "$tarball_url" ]]; then
+        die "Could not find smpl-apps tarball in release $apps_tag. Use --build-apps to compile locally."
+    fi
+
+    log_info "Downloading $tarball_url"
+    if curl -fSL --connect-timeout 30 --retry 3 "$tarball_url" \
         | tar -xz -C "$app_bin_dir"; then
-        log_info "smpl-apps extracted to $app_bin_dir"
+        log_info "smpl-apps ${apps_tag} extracted to $app_bin_dir"
     else
         die "Failed to download smpl-apps binaries. Use --build-apps to compile locally."
     fi
 
     # ── st-smpl binary ───────────────────────────────────────────────────────
-    # Resolve the latest release tag first so we can build the exact asset URL.
+    # st-smpl may not have a release yet (it's a separate repo). Treat as
+    # optional -- the builder will warn if st-wl is missing but won't fail.
     log_info "Resolving latest st-smpl release..."
-    local st_tag
-    st_tag=$(curl -fsSL --connect-timeout 30 \
-        "https://api.github.com/repos/smpl-os/st-smpl/releases/latest" \
-        | grep -oP '"tag_name"\s*:\s*"\K[^"]+' || true)
+    local st_json
+    st_json=$(curl -fsSL --connect-timeout 30 \
+        "https://api.github.com/repos/smpl-os/st-smpl/releases/latest" 2>/dev/null) || true
 
-    if [[ -z "$st_tag" ]]; then
-        die "Failed to resolve st-smpl release tag. Use --build-apps to compile locally."
-    fi
+    if [[ -n "$st_json" ]]; then
+        local st_tag
+        st_tag=$(echo "$st_json" | grep -oP '"tag_name"\s*:\s*"\K[^"]+' || true)
 
-    # Asset is named e.g. st-smpl-1.0.0-x86_64 (strip leading v from tag)
-    local st_version="${st_tag#v}"
-    local st_asset_url="https://github.com/smpl-os/st-smpl/releases/download/${st_tag}/st-smpl-${st_version}-x86_64"
-    log_info "Downloading st-smpl $st_tag"
-    if curl -fSL --connect-timeout 30 --retry 3 \
-        "$st_asset_url" -o "$app_bin_dir/st-wl"; then
-        chmod +x "$app_bin_dir/st-wl"
-        log_info "st-wl downloaded to $app_bin_dir/st-wl"
+        if [[ -n "$st_tag" ]]; then
+            local st_asset_url
+            st_asset_url=$(echo "$st_json" \
+                | grep -oP '"browser_download_url"\s*:\s*"\K[^"]*st[^"]*x86_64[^"]*' \
+                | head -1 || true)
+
+            if [[ -n "$st_asset_url" ]]; then
+                log_info "Downloading st-smpl $st_tag"
+                if curl -fSL --connect-timeout 30 --retry 3 \
+                    "$st_asset_url" -o "$app_bin_dir/st-wl"; then
+                    chmod +x "$app_bin_dir/st-wl"
+                    log_info "st-wl downloaded"
+                else
+                    log_warn "Failed to download st-smpl binary -- will use fallback if available"
+                fi
+            else
+                log_warn "No st-smpl binary asset found in release $st_tag"
+            fi
+        fi
     else
-        die "Failed to download st-smpl binary. Use --build-apps to compile locally."
+        log_warn "No st-smpl release found -- skipping (terminal will use system fallback)"
     fi
 
     # Make all binaries executable
