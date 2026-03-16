@@ -43,6 +43,8 @@ power-profiles-daemon
 # ── Theming / GTK ────────────────────────────────────────────
 gtk3
 gtk4
+gtk4-layer-shell    # Wayland layer-shell for GTK4 apps (hyprshell)
+libadwaita          # GTK4 UI library (hyprshell)
 qt5ct
 kvantum
 kvantum-qt5

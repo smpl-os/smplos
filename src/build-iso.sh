@@ -58,14 +58,17 @@ Options:
     --skip-flatpak          Skip Flatpak packages
     --skip-appimage         Skip AppImages
     --clean-apps            Wipe app build cache before compiling (full rebuild)
+    --download-apps         Download app binaries from GitHub releases (default)
+    --build-apps            Compile app binaries locally via build-apps.sh
     -h, --help              Show this help
 
 Examples:
-    ./build-iso.sh                        # Base build (no editions)
+    ./build-iso.sh                        # Base build (downloads apps from GitHub)
     ./build-iso.sh -p                     # Productivity edition
     ./build-iso.sh --all                  # All editions
     ./build-iso.sh --all --skip-aur       # All editions, skip AUR
     ./build-iso.sh --release              # Max compression for release
+    ./build-iso.sh --build-apps           # Compile apps locally instead of downloading
 EOF
 }
 
@@ -82,6 +85,7 @@ SKIP_AUR=""
 SKIP_FLATPAK=""
 SKIP_APPIMAGE=""
 CLEAN_APPS=""
+DOWNLOAD_APPS="1"   # Default: download pre-built binaries from GitHub releases
 
 parse_args() {
     while [[ $# -gt 0 ]]; do
@@ -100,6 +104,8 @@ parse_args() {
             --skip-flatpak)     SKIP_FLATPAK="1"; shift ;;
             --skip-appimage)    SKIP_APPIMAGE="1"; shift ;;
             --clean-apps)       CLEAN_APPS="1"; shift ;;
+            --download-apps)    DOWNLOAD_APPS="1"; shift ;;
+            --build-apps)       DOWNLOAD_APPS=""; shift ;;
             -h|--help)          show_help; exit 0 ;;
             *) die "Unknown option: $1 (see --help)" ;;
         esac
@@ -417,6 +423,64 @@ build_missing_aur_packages() {
 }
 
 ###############################################################################
+# Download Pre-built App Binaries from GitHub Releases
+###############################################################################
+
+# Fetches all smplOS app binaries from the smpl-os/smpl-apps and
+# smpl-os/st-smpl GitHub releases into .cache/app-binaries/.
+# This replaces the local build-apps.sh compilation step.
+#
+# Use --build-apps to compile locally instead (e.g. when testing unreleased changes).
+download_prebuilt_apps() {
+    local app_bin_dir="$PROJECT_ROOT/.cache/app-binaries"
+    mkdir -p "$app_bin_dir"
+
+    local smpl_apps_url="https://github.com/smpl-os/smpl-apps/releases/latest/download/smpl-apps-x86_64.tar.gz"
+    local st_url="https://github.com/smpl-os/st-smpl/releases/latest"
+
+    log_step "Downloading pre-built app binaries from GitHub"
+
+    # ── smpl-apps bundle ─────────────────────────────────────────────────────
+    log_info "Downloading smpl-apps from $smpl_apps_url"
+    if curl -fSL --connect-timeout 30 --retry 3 "$smpl_apps_url" \
+        | tar -xz -C "$app_bin_dir"; then
+        log_info "smpl-apps extracted to $app_bin_dir"
+    else
+        die "Failed to download smpl-apps binaries. Use --build-apps to compile locally."
+    fi
+
+    # ── st-smpl binary ───────────────────────────────────────────────────────
+    # Resolve the latest release tag first so we can build the exact asset URL.
+    log_info "Resolving latest st-smpl release..."
+    local st_tag
+    st_tag=$(curl -fsSL --connect-timeout 30 \
+        "https://api.github.com/repos/smpl-os/st-smpl/releases/latest" \
+        | grep -oP '"tag_name"\s*:\s*"\K[^"]+' || true)
+
+    if [[ -z "$st_tag" ]]; then
+        die "Failed to resolve st-smpl release tag. Use --build-apps to compile locally."
+    fi
+
+    # Asset is named e.g. st-smpl-1.0.0-x86_64 (strip leading v from tag)
+    local st_version="${st_tag#v}"
+    local st_asset_url="https://github.com/smpl-os/st-smpl/releases/download/${st_tag}/st-smpl-${st_version}-x86_64"
+    log_info "Downloading st-smpl $st_tag"
+    if curl -fSL --connect-timeout 30 --retry 3 \
+        "$st_asset_url" -o "$app_bin_dir/st-wl"; then
+        chmod +x "$app_bin_dir/st-wl"
+        log_info "st-wl downloaded to $app_bin_dir/st-wl"
+    else
+        die "Failed to download st-smpl binary. Use --build-apps to compile locally."
+    fi
+
+    # Make all binaries executable
+    chmod +x "$app_bin_dir"/* 2>/dev/null || true
+
+    log_info "App binaries ready in $app_bin_dir:"
+    ls -lh "$app_bin_dir"
+}
+
+###############################################################################
 # Container Build
 ###############################################################################
 
@@ -450,14 +514,18 @@ run_build() {
     local dictation_dir="$PROJECT_ROOT/build/dictation"
     mkdir -p "$dictation_dir"
 
-    # ── Build all apps first (single source of truth) ──
-    # build-apps.sh builds Rust apps + st-wl in a container,
-    # outputs to .cache/app-binaries/. Same script used by dev-push.sh.
+    # ── Get app binaries ─────────────────────────────────────────────────────
+    # Default: download pre-built releases from GitHub (fast, no Rust toolchain needed).
+    # Pass --build-apps to compile locally via build-apps.sh instead.
     local app_bin_dir="$PROJECT_ROOT/.cache/app-binaries"
-    log_info "Building apps via build-apps.sh..."
-    build_apps_args=(all)
-    [[ -n "$CLEAN_APPS" ]] && build_apps_args=(--clean all)
-    "$SCRIPT_DIR/build-apps.sh" "${build_apps_args[@]}"
+    if [[ -n "$DOWNLOAD_APPS" ]]; then
+        download_prebuilt_apps
+    else
+        log_info "Building apps locally via build-apps.sh..."
+        local build_apps_args=(all)
+        [[ -n "$CLEAN_APPS" ]] && build_apps_args=(--clean all)
+        "$SCRIPT_DIR/build-apps.sh" "${build_apps_args[@]}"
+    fi
 
     local run_args=(
         --rm --privileged

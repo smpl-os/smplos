@@ -1,0 +1,305 @@
+#!/bin/bash
+# smplOS OS Update
+# Downloads and deploys smplOS system file updates (scripts, configs, EWW, themes).
+# Preserves user-customized configs via checksum tracking — if you haven't
+# modified a file since it was installed, it gets updated; if you have, it's kept.
+#
+# Usage: smplos-os-update [options]
+#   --check              Only report whether an update is available; don't apply
+#   --local FILE         Apply a local tarball (dev/testing, skips download)
+#   --dry-run            Show what would change without writing any files
+#   --force              Apply even if already on the latest version
+#   --quiet              Suppress per-file output (used when called from smplos-update)
+
+set -euo pipefail
+
+SMPLOS_DATA="${SMPLOS_DATA:-$HOME/.local/share/smplos}"
+VERSION_FILE="$SMPLOS_DATA/VERSION"
+CHECKSUMS_FILE="$SMPLOS_DATA/.stock-checksums"
+RELEASE_CONF="/etc/smplos-release.conf"
+
+# Default — override in /etc/smplos-release.conf
+SMPLOS_GITHUB_REPO=""
+[[ -f "$RELEASE_CONF" ]] && source "$RELEASE_CONF"
+
+# ── Argument parsing ──────────────────────────────────────────────────────────
+CHECK_ONLY=0; DRY_RUN=0; FORCE=0; QUIET=0; LOCAL_TARBALL=""
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --check)    CHECK_ONLY=1 ;;
+        --dry-run)  DRY_RUN=1 ;;
+        --force)    FORCE=1 ;;
+        --quiet)    QUIET=1 ;;
+        --local)    LOCAL_TARBALL="${2:-}"; shift ;;
+        -h|--help)
+            echo "Usage: smplos-os-update [--check | --local FILE | --dry-run | --force | --quiet]"
+            exit 0 ;;
+        *) echo "Unknown option: $1" >&2; exit 1 ;;
+    esac
+    shift
+done
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+log()    { [[ $QUIET -eq 0 ]] && echo "  $*" || true; }
+ok()     { [[ $QUIET -eq 0 ]] && echo "  ✓ $*" || true; }
+skip()   { [[ $QUIET -eq 0 ]] && echo "  ~ $*" || true; }
+warn()   { echo "  ⚠ $*" >&2; }
+header() { [[ $QUIET -eq 0 ]] && echo "$*" || true; }
+die()    { echo "ERROR: $*" >&2; exit 1; }
+
+version_gt() {
+    [[ "$(printf '%s\n' "$1" "$2" | sort -V | tail -1)" == "$1" && "$1" != "$2" ]]
+}
+
+current_version() {
+    [[ -f "$VERSION_FILE" ]] && tr -d '[:space:]' < "$VERSION_FILE" || echo "0.0.0"
+}
+
+stored_sum() {
+    local path="$1"
+    [[ -f "$CHECKSUMS_FILE" ]] || { echo ""; return; }
+    grep -F "  $path" "$CHECKSUMS_FILE" 2>/dev/null | awk '{print $1}' | head -1 || echo ""
+}
+
+# ── Version fetch ─────────────────────────────────────────────────────────────
+fetch_latest_version() {
+    if [[ -z "$SMPLOS_GITHUB_REPO" ]]; then
+        warn "OS update source not configured."
+        warn "Set SMPLOS_GITHUB_REPO=owner/repo in $RELEASE_CONF to enable."
+        return 1
+    fi
+    local api="https://api.github.com/repos/$SMPLOS_GITHUB_REPO/releases/latest"
+    curl -sf --max-time 10 "$api" 2>/dev/null \
+        | grep '"tag_name"' \
+        | sed 's/.*"tag_name"[[:space:]]*:[[:space:]]*"v\?\([^"]*\)".*/\1/' \
+        | head -1
+}
+
+# ── Download ──────────────────────────────────────────────────────────────────
+download_tarball() {
+    local version="$1" dest="$2"
+    local url="https://github.com/$SMPLOS_GITHUB_REPO/releases/download/v${version}/smplos-update-${version}.tar.gz"
+    log "Downloading smplOS v$version..."
+    curl -fSL --max-time 300 --progress-bar -o "$dest" "$url" \
+        || die "Download failed: $url"
+}
+
+# ── Deploy a single file ──────────────────────────────────────────────────────
+# Returns 0=deployed, 1=skipped-user-modified, 2=skipped-generated
+deploy_file() {
+    local src="$1" dest="$2" policy="$3"
+
+    case "$policy" in
+        skip)
+            return 2
+            ;;
+        always)
+            if [[ $DRY_RUN -eq 0 ]]; then
+                if [[ "$dest" == /usr/local/bin/* ]]; then
+                    sudo install -m755 "$src" "$dest" 2>/dev/null || {
+                        warn "Cannot update $(basename "$dest") (sudo required)"
+                        return 1
+                    }
+                else
+                    mkdir -p "$(dirname "$dest")"
+                    install -m644 "$src" "$dest" 2>/dev/null || install -m755 "$src" "$dest"
+                fi
+            fi
+            ok "$(basename "$dest")"
+            return 0
+            ;;
+        smart)
+            if [[ ! -f "$dest" ]]; then
+                # New file — always deploy
+                if [[ $DRY_RUN -eq 0 ]]; then
+                    mkdir -p "$(dirname "$dest")"
+                    install -m644 "$src" "$dest" 2>/dev/null || install -m755 "$src" "$dest"
+                fi
+                ok "$(basename "$dest")  [new]"
+                return 0
+            fi
+            local current stored
+            current=$(sha256sum "$dest" | awk '{print $1}')
+            stored=$(stored_sum "$dest")
+            if [[ -z "$stored" || "$current" == "$stored" ]]; then
+                # Never tracked, or matches stock — safe to update
+                if [[ $DRY_RUN -eq 0 ]]; then
+                    mkdir -p "$(dirname "$dest")"
+                    install -m644 "$src" "$dest" 2>/dev/null || install -m755 "$src" "$dest"
+                fi
+                ok "$(basename "$dest")"
+                return 0
+            else
+                skip "$(basename "$dest")  [customized, preserved]"
+                return 1
+            fi
+            ;;
+    esac
+}
+
+# ── Apply update tarball ──────────────────────────────────────────────────────
+apply_tarball() {
+    local tarball="$1" new_version="$2"
+
+    local tmpdir
+    tmpdir=$(mktemp -d /tmp/smplos-update.XXXXXX)
+    trap 'rm -rf "$tmpdir"' RETURN
+
+    tar -xzf "$tarball" -C "$tmpdir/" 2>/dev/null || die "Failed to extract tarball"
+
+    # Tarball root: smplos-update-X.Y.Z/ or bare
+    local root
+    root=$(find "$tmpdir" -maxdepth 1 -name "smplos-update-*" -type d | head -1)
+    [[ -n "$root" ]] || root="$tmpdir"
+
+    local manifest="$root/manifest.txt"
+    [[ -f "$manifest" ]] || die "Update tarball is missing manifest.txt"
+
+    # Version sanity check
+    local tarball_ver
+    tarball_ver=$(cat "$root/VERSION" 2>/dev/null | tr -d '[:space:]' || echo "")
+    if [[ -n "$new_version" && -n "$tarball_ver" && "$tarball_ver" != "$new_version" ]]; then
+        warn "Version mismatch: expected $new_version, tarball says $tarball_ver"
+    fi
+
+    # Load existing checksums
+    declare -A old_sums
+    if [[ -f "$CHECKSUMS_FILE" ]]; then
+        while IFS='  ' read -r s p; do
+            [[ -n "$s" && -n "$p" ]] && old_sums["$p"]="$s"
+        done < "$CHECKSUMS_FILE"
+    fi
+
+    declare -A new_sums
+    local n_updated=0 n_new=0 n_skipped=0
+
+    header ""
+    header "── Deploying files ──"
+
+    while IFS=' ' read -r policy rel_path; do
+        # Skip blank lines and comments
+        [[ -z "$policy" || "${policy:0:1}" == "#" ]] && continue
+
+        local src="$root/$rel_path"
+        [[ -f "$src" ]] || { warn "Missing in tarball: $rel_path"; continue; }
+
+        # Resolve destination
+        local dest
+        case "$rel_path" in
+            bin/*)    dest="/usr/local/bin/${rel_path#bin/}" ;;
+            config/*) dest="$HOME/.config/${rel_path#config/}" ;;
+            themes/*) dest="$SMPLOS_DATA/themes/${rel_path#themes/}" ;;
+            *)        continue ;;  # unknown prefix — skip
+        esac
+
+        local result
+        deploy_file "$src" "$dest" "$policy"; result=$?
+
+        case $result in
+            0)  # deployed
+                if [[ -f "$dest" ]]; then
+                    new_sums["$dest"]="$(sha256sum "$dest" | awk '{print $1}')"
+                fi
+                # Distinguish new vs updated by whether old checksum existed
+                if [[ -z "${old_sums[$dest]:-}" && "$policy" == "smart" ]]; then
+                    ((n_new++)) || true
+                else
+                    ((n_updated++)) || true
+                fi
+                ;;
+            1)  # skipped — user-modified; preserve existing checksum entry
+                [[ -n "${old_sums[$dest]:-}" ]] && new_sums["$dest"]="${old_sums[$dest]}"
+                ((n_skipped++)) || true
+                ;;
+            2)  # skipped — generated file; no checksum entry needed
+                ;;
+        esac
+    done < "$manifest"
+
+    # Persist updated checksums
+    if [[ $DRY_RUN -eq 0 ]]; then
+        {
+            for path in "${!new_sums[@]}"; do
+                echo "${new_sums[$path]}  $path"
+            done
+        } | sort > "$CHECKSUMS_FILE"
+
+        [[ -n "$new_version" ]] && echo "$new_version" > "$VERSION_FILE"
+    fi
+
+    header ""
+    header "── Summary ──"
+    [[ $n_updated -gt 0 ]] && header "  Updated:   $n_updated files"
+    [[ $n_new     -gt 0 ]] && header "  New:       $n_new files"
+    [[ $n_skipped -gt 0 ]] && header "  Preserved: $n_skipped customized files"
+    [[ $DRY_RUN   -eq 1 ]] && header "  (dry-run — no files were changed)"
+}
+
+# ── Post-deploy hooks ─────────────────────────────────────────────────────────
+post_deploy() {
+    local current_theme
+    current_theme=$(theme-current 2>/dev/null || echo "catppuccin")
+    log "Reapplying theme ($current_theme)..."
+    theme-set "$current_theme" 2>/dev/null || warn "theme-set failed"
+
+    if hyprctl version &>/dev/null 2>&1; then
+        log "Reloading Hyprland config..."
+        hyprctl reload 2>/dev/null || true
+    fi
+}
+
+# ── Main ──────────────────────────────────────────────────────────────────────
+main() {
+    header "── smplOS System Files ──"
+
+    local tarball="" new_version=""
+
+    if [[ -n "$LOCAL_TARBALL" ]]; then
+        # Dev/testing mode — use a local tarball
+        [[ -f "$LOCAL_TARBALL" ]] || die "File not found: $LOCAL_TARBALL"
+        tarball="$LOCAL_TARBALL"
+        new_version=$(tar -xzOf "$tarball" "*/VERSION" 2>/dev/null | tr -d '[:space:]' || echo "")
+        log "Applying local tarball${new_version:+ v$new_version}..."
+    else
+        # Online mode
+        local current latest
+        current=$(current_version)
+        log "Installed: v$current"
+
+        if ! latest=$(fetch_latest_version 2>&1); then
+            # fetch_latest_version already printed a warning
+            return 0
+        fi
+        [[ -n "$latest" ]] || { warn "Could not parse latest version from GitHub"; return 0; }
+
+        if [[ $FORCE -eq 0 ]] && ! version_gt "$latest" "$current"; then
+            ok "Up to date (v$current)"
+            return 0
+        fi
+
+        if [[ $CHECK_ONLY -eq 1 ]]; then
+            echo "  Update available: v$current → v$latest"
+            return 0
+        fi
+
+        log "Update: v$current → v$latest"
+        new_version="$latest"
+        local tmp_tarball
+        tmp_tarball=$(mktemp /tmp/smplos-update.XXXXXX.tar.gz)
+        trap 'rm -f "$tmp_tarball"' EXIT
+        download_tarball "$new_version" "$tmp_tarball"
+        tarball="$tmp_tarball"
+    fi
+
+    apply_tarball "$tarball" "$new_version"
+
+    if [[ $DRY_RUN -eq 0 ]]; then
+        header ""
+        header "── Post-deploy ──"
+        post_deploy
+        header ""
+        ok "smplOS system files updated${new_version:+ to v$new_version}"
+    fi
+}
+
+main

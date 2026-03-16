@@ -229,6 +229,22 @@ if command -v dictation-prime &>/dev/null && command -v voxtype &>/dev/null; the
   dictation-prime || echo "    WARNING: dictation-prime failed (exit $?)"
 fi
 
+# Record stock checksums for smplos-os-update
+# These let the OS updater detect which files the user has since modified.
+# Files matching recorded checksums = unmodified = safe to update.
+# Files that differ = user customized = preserved.
+echo "==> Recording initial stock file checksums..."
+SMPLOS_CHECKSUMS="$SMPLOS_PATH/.stock-checksums"
+: > "$SMPLOS_CHECKSUMS"
+if [[ -d "$SMPLOS_PATH/config" ]]; then
+  find "$SMPLOS_PATH/config" -type f | while IFS= read -r stock_file; do
+    rel="${stock_file#$SMPLOS_PATH/config/}"
+    deployed="$HOME/.config/$rel"
+    [[ -f "$deployed" ]] && sha256sum "$deployed"
+  done >> "$SMPLOS_CHECKSUMS"
+fi
+echo "    $(wc -l < "$SMPLOS_CHECKSUMS") file checksums recorded"
+
 # Apply default theme (catppuccin) to generate all config files
 echo "==> Setting default theme..."
 theme-set catppuccin || echo "    WARNING: theme-set failed (exit $?)"

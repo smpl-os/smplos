@@ -45,6 +45,15 @@ else
 fi
 echo
 
+# 0. smplOS system files (scripts, configs, EWW widgets, themes)
+#    Only in full mode — these aren't "app" updates.
+if [[ "$UPDATE_MODE" == "full" ]]; then
+    if command -v smplos-os-update &>/dev/null; then
+        smplos-os-update 2>&1 || echo "    WARNING: OS file update failed (exit $?)"
+    fi
+    echo
+fi
+
 # 1. Official repos + AUR
 if [[ "$UPDATE_MODE" == "apps" ]]; then
     echo "── Pacman (apps only) ──"
