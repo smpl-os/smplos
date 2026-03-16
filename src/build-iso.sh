@@ -423,88 +423,174 @@ build_missing_aur_packages() {
 }
 
 ###############################################################################
-# Download Pre-built App Binaries from GitHub Releases
+# Download Pre-built App Binaries from GitHub Releases (with local cache)
 ###############################################################################
 
-# Fetches all smplOS app binaries from the smpl-os/smpl-apps and
-# smpl-os/st-smpl GitHub releases into .cache/app-binaries/.
-# This replaces the local build-apps.sh compilation step.
+# Resolution order for each app repo (smpl-apps, st-smpl):
 #
-# Use --build-apps to compile locally instead (e.g. when testing unreleased changes).
+#   1. Query GitHub API for the latest release tag.
+#   2. If GitHub is reachable and the remote version is NEWER than the local
+#      cache, download and update the cache.
+#   3. If GitHub is unreachable or the cached version is already up-to-date,
+#      use the cached binaries.
+#   4. If nothing is cached either, fall back to build/prebuilt-apps/ where
+#      the user can manually drop pre-built binaries (offline / air-gapped).
+#
+# Cache layout:
+#   build/prebuilt-apps/           ← manual / user-provided fallback (checked into git or
+#                                    populated by hand before offline builds)
+#   .cache/app-binaries/           ← auto-managed download cache (gitignored)
+#   .cache/app-binaries/.smpl-apps-version   ← e.g. "v0.1.1"
+#   .cache/app-binaries/.st-smpl-version     ← e.g. "v1.0.0"
+
+# Compare two semver tags (with optional leading 'v'). Returns 0 if $1 > $2.
+_version_gt() {
+    local a="${1#v}" b="${2#v}"
+    [[ "$a" == "$b" ]] && return 1
+    # Sort and check if a comes second (= greater)
+    local highest
+    highest=$(printf '%s\n%s\n' "$a" "$b" | sort -V | tail -1)
+    [[ "$highest" == "$a" ]]
+}
+
+# Try to fetch JSON from GitHub API. Sets _gh_json and returns 0 on success.
+_gh_api() {
+    local url="$1"
+    _gh_json=""
+    _gh_json=$(curl -fsSL --connect-timeout 15 --max-time 30 "$url" 2>/dev/null) || return 1
+    [[ -n "$_gh_json" ]]
+}
+
 download_prebuilt_apps() {
-    local app_bin_dir="$PROJECT_ROOT/.cache/app-binaries"
-    mkdir -p "$app_bin_dir"
+    local cache_dir="$PROJECT_ROOT/.cache/app-binaries"
+    local fallback_dir="$PROJECT_ROOT/build/prebuilt-apps"
+    mkdir -p "$cache_dir"
 
-    log_step "Downloading pre-built app binaries from GitHub"
+    log_step "Resolving pre-built app binaries"
 
-    # ── smpl-apps bundle ─────────────────────────────────────────────────────
-    # Query the GitHub API for the latest release, then find the tarball asset
-    # by pattern (the filename includes the version, e.g. smpl-apps-0.1.1-x86_64.tar.gz).
-    log_info "Resolving latest smpl-apps release..."
-    local release_json
-    release_json=$(curl -fsSL --connect-timeout 30 \
-        "https://api.github.com/repos/smpl-os/smpl-apps/releases/latest") \
-        || die "Failed to fetch smpl-apps release info. Use --build-apps to compile locally."
+    # ── smpl-apps ────────────────────────────────────────────────────────────
+    local cached_apps_ver="" remote_apps_ver="" need_apps_download=false
+    local apps_ver_file="$cache_dir/.smpl-apps-version"
 
-    local apps_tag
-    apps_tag=$(echo "$release_json" | grep -oP '"tag_name"\s*:\s*"\K[^"]+')
-    log_info "Latest smpl-apps release: $apps_tag"
+    # Read cached version
+    [[ -f "$apps_ver_file" ]] && cached_apps_ver=$(cat "$apps_ver_file")
 
-    local tarball_url
-    tarball_url=$(echo "$release_json" \
-        | grep -oP '"browser_download_url"\s*:\s*"\K[^"]*smpl-apps-[^"]*x86_64\.tar\.gz')
-    if [[ -z "$tarball_url" ]]; then
-        die "Could not find smpl-apps tarball in release $apps_tag. Use --build-apps to compile locally."
-    fi
+    # Query GitHub
+    if _gh_api "https://api.github.com/repos/smpl-os/smpl-apps/releases/latest"; then
+        remote_apps_ver=$(echo "$_gh_json" | grep -oP '"tag_name"\s*:\s*"\K[^"]+' || true)
 
-    log_info "Downloading $tarball_url"
-    if curl -fSL --connect-timeout 30 --retry 3 "$tarball_url" \
-        | tar -xz -C "$app_bin_dir"; then
-        log_info "smpl-apps ${apps_tag} extracted to $app_bin_dir"
-    else
-        die "Failed to download smpl-apps binaries. Use --build-apps to compile locally."
-    fi
-
-    # ── st-smpl binary ───────────────────────────────────────────────────────
-    # st-smpl may not have a release yet (it's a separate repo). Treat as
-    # optional -- the builder will warn if st-wl is missing but won't fail.
-    log_info "Resolving latest st-smpl release..."
-    local st_json
-    st_json=$(curl -fsSL --connect-timeout 30 \
-        "https://api.github.com/repos/smpl-os/st-smpl/releases/latest" 2>/dev/null) || true
-
-    if [[ -n "$st_json" ]]; then
-        local st_tag
-        st_tag=$(echo "$st_json" | grep -oP '"tag_name"\s*:\s*"\K[^"]+' || true)
-
-        if [[ -n "$st_tag" ]]; then
-            local st_asset_url
-            st_asset_url=$(echo "$st_json" \
-                | grep -oP '"browser_download_url"\s*:\s*"\K[^"]*st[^"]*x86_64[^"]*' \
-                | head -1 || true)
-
-            if [[ -n "$st_asset_url" ]]; then
-                log_info "Downloading st-smpl $st_tag"
-                if curl -fSL --connect-timeout 30 --retry 3 \
-                    "$st_asset_url" -o "$app_bin_dir/st-wl"; then
-                    chmod +x "$app_bin_dir/st-wl"
-                    log_info "st-wl downloaded"
-                else
-                    log_warn "Failed to download st-smpl binary -- will use fallback if available"
-                fi
+        if [[ -n "$remote_apps_ver" ]]; then
+            if [[ -z "$cached_apps_ver" ]]; then
+                log_info "smpl-apps: no local cache, will download $remote_apps_ver"
+                need_apps_download=true
+            elif _version_gt "$remote_apps_ver" "$cached_apps_ver"; then
+                log_info "smpl-apps: newer release $remote_apps_ver (cached: $cached_apps_ver)"
+                need_apps_download=true
             else
-                log_warn "No st-smpl binary asset found in release $st_tag"
+                log_info "smpl-apps: cache is up-to-date ($cached_apps_ver)"
+            fi
+        else
+            log_warn "smpl-apps: could not parse remote tag"
+        fi
+    else
+        log_warn "smpl-apps: GitHub unreachable, using cached/fallback binaries"
+    fi
+
+    if $need_apps_download; then
+        local tarball_url
+        tarball_url=$(echo "$_gh_json" \
+            | grep -oP '"browser_download_url"\s*:\s*"\K[^"]*smpl-apps-[^"]*x86_64\.tar\.gz')
+        if [[ -n "$tarball_url" ]]; then
+            log_info "Downloading $tarball_url"
+            if curl -fSL --connect-timeout 30 --retry 3 "$tarball_url" \
+                | tar -xz -C "$cache_dir"; then
+                echo "$remote_apps_ver" > "$apps_ver_file"
+                log_info "smpl-apps $remote_apps_ver cached"
+            else
+                log_warn "smpl-apps: download failed, falling back to cache"
+            fi
+        else
+            log_warn "smpl-apps: no tarball asset in release $remote_apps_ver"
+        fi
+    fi
+
+    # Verify we have the apps (either from download or cache)
+    local have_apps=false
+    if [[ -f "$cache_dir/start-menu" ]]; then
+        have_apps=true
+    fi
+
+    # Fallback: check user-provided directory
+    if ! $have_apps && [[ -d "$fallback_dir" ]] && ls "$fallback_dir"/start-menu &>/dev/null 2>&1; then
+        log_info "smpl-apps: using manually-provided binaries from build/prebuilt-apps/"
+        cp -a "$fallback_dir"/start-menu "$fallback_dir"/notif-center \
+              "$fallback_dir"/settings "$fallback_dir"/app-center \
+              "$fallback_dir"/webapp-center "$fallback_dir"/sync-center-daemon \
+              "$fallback_dir"/sync-center-gui "$cache_dir/" 2>/dev/null || true
+        have_apps=true
+    fi
+
+    if ! $have_apps; then
+        die "No smpl-apps binaries available (GitHub unreachable + no cache + no fallback).
+Place binaries in build/prebuilt-apps/ or use --build-apps to compile locally."
+    fi
+
+    # ── st-smpl (optional) ───────────────────────────────────────────────────
+    local cached_st_ver="" remote_st_ver="" need_st_download=false
+    local st_ver_file="$cache_dir/.st-smpl-version"
+
+    [[ -f "$st_ver_file" ]] && cached_st_ver=$(cat "$st_ver_file")
+
+    if _gh_api "https://api.github.com/repos/smpl-os/st-smpl/releases/latest"; then
+        remote_st_ver=$(echo "$_gh_json" | grep -oP '"tag_name"\s*:\s*"\K[^"]+' || true)
+
+        if [[ -n "$remote_st_ver" ]]; then
+            if [[ -z "$cached_st_ver" ]]; then
+                need_st_download=true
+            elif _version_gt "$remote_st_ver" "$cached_st_ver"; then
+                log_info "st-smpl: newer release $remote_st_ver (cached: $cached_st_ver)"
+                need_st_download=true
+            else
+                log_info "st-smpl: cache is up-to-date ($cached_st_ver)"
             fi
         fi
     else
-        log_warn "No st-smpl release found -- skipping (terminal will use system fallback)"
+        log_warn "st-smpl: GitHub unreachable"
+    fi
+
+    if $need_st_download; then
+        local st_asset_url
+        st_asset_url=$(echo "$_gh_json" \
+            | grep -oP '"browser_download_url"\s*:\s*"\K[^"]*st[^"]*x86_64[^"]*' \
+            | head -1 || true)
+        if [[ -n "$st_asset_url" ]]; then
+            log_info "Downloading st-smpl $remote_st_ver"
+            if curl -fSL --connect-timeout 30 --retry 3 \
+                "$st_asset_url" -o "$cache_dir/st-wl"; then
+                chmod +x "$cache_dir/st-wl"
+                echo "$remote_st_ver" > "$st_ver_file"
+                log_info "st-smpl $remote_st_ver cached"
+            else
+                log_warn "st-smpl: download failed"
+            fi
+        fi
+    fi
+
+    # Fallback: user-provided st-wl
+    if [[ ! -f "$cache_dir/st-wl" ]] && [[ -f "$fallback_dir/st-wl" ]]; then
+        log_info "st-smpl: using manually-provided binary from build/prebuilt-apps/"
+        cp -a "$fallback_dir/st-wl" "$cache_dir/st-wl"
+    fi
+
+    if [[ ! -f "$cache_dir/st-wl" ]]; then
+        log_warn "st-smpl: no binary available (will use system terminal fallback)"
     fi
 
     # Make all binaries executable
-    chmod +x "$app_bin_dir"/* 2>/dev/null || true
+    chmod +x "$cache_dir"/* 2>/dev/null || true
 
-    log_info "App binaries ready in $app_bin_dir:"
-    ls -lh "$app_bin_dir"
+    log_info "App binaries ready in $cache_dir:"
+    ls -lh "$cache_dir"
 }
 
 ###############################################################################
