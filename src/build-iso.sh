@@ -426,7 +426,7 @@ build_missing_aur_packages() {
 # Download Pre-built App Binaries from GitHub Releases (with local cache)
 ###############################################################################
 
-# Resolution order for each app repo (smpl-apps, st-smpl):
+# Resolution order for each app repo (smpl-apps, st-smpl, nemo):
 #
 #   1. Query GitHub API for the latest release tag.
 #   2. If GitHub is reachable and the remote version is NEWER than the local
@@ -439,9 +439,11 @@ build_missing_aur_packages() {
 # Cache layout:
 #   build/prebuilt-apps/           ← manual / user-provided fallback (checked into git or
 #                                    populated by hand before offline builds)
+#   build/prebuilt/                ← pacman packages (nemo-smpl .pkg.tar.zst)
 #   .cache/app-binaries/           ← auto-managed download cache (gitignored)
 #   .cache/app-binaries/.smpl-apps-version   ← e.g. "v0.1.1"
 #   .cache/app-binaries/.st-smpl-version     ← e.g. "v1.0.0"
+#   .cache/app-binaries/.nemo-smpl-version   ← e.g. "v1.4.2"
 
 # Compare two semver tags (with optional leading 'v'). Returns 0 if $1 > $2.
 _version_gt() {
@@ -584,6 +586,69 @@ Place binaries in build/prebuilt-apps/ or use --build-apps to compile locally."
 
     if [[ ! -f "$cache_dir/st-wl" ]]; then
         log_warn "st-smpl: no binary available (will use system terminal fallback)"
+    fi
+
+    # ── nemo-smpl pacman package ──────────────────────────────────────────
+    # nemo-smpl is a pacman package (.pkg.tar.zst), not a standalone binary.
+    # It goes into build/prebuilt/ alongside other AUR/custom packages so
+    # build_custom_packages() can skip the container build when it exists.
+    local prebuilt_dir="$PROJECT_ROOT/build/prebuilt"
+    mkdir -p "$prebuilt_dir"
+    local cached_nemo_ver="" remote_nemo_ver="" need_nemo_download=false
+    local nemo_ver_file="$cache_dir/.nemo-smpl-version"
+
+    [[ -f "$nemo_ver_file" ]] && cached_nemo_ver=$(cat "$nemo_ver_file")
+
+    if _gh_api "https://api.github.com/repos/smpl-os/nemo/releases/latest"; then
+        remote_nemo_ver=$(echo "$_gh_json" | grep -oP '"tag_name"\s*:\s*"\K[^"]+' || true)
+
+        if [[ -n "$remote_nemo_ver" ]]; then
+            if [[ -z "$cached_nemo_ver" ]]; then
+                log_info "nemo-smpl: no local cache, will download $remote_nemo_ver"
+                need_nemo_download=true
+            elif _version_gt "$remote_nemo_ver" "$cached_nemo_ver"; then
+                log_info "nemo-smpl: newer release $remote_nemo_ver (cached: $cached_nemo_ver)"
+                need_nemo_download=true
+            else
+                log_info "nemo-smpl: cache is up-to-date ($cached_nemo_ver)"
+            fi
+        fi
+    else
+        log_warn "nemo-smpl: GitHub unreachable"
+    fi
+
+    if $need_nemo_download; then
+        local nemo_pkg_url
+        nemo_pkg_url=$(echo "$_gh_json" \
+            | grep -oP '"browser_download_url"\s*:\s*"\K[^"]*nemo-smpl-[^"]*x86_64\.pkg\.tar\.zst' \
+            | head -1 || true)
+        if [[ -n "$nemo_pkg_url" ]]; then
+            # Evict old versions before downloading
+            rm -f "$prebuilt_dir"/nemo-smpl-[0-9]*-*-*.pkg.tar.*
+            local nemo_pkg_name
+            nemo_pkg_name=$(basename "$nemo_pkg_url")
+            log_info "Downloading $nemo_pkg_url"
+            if curl -fSL --connect-timeout 30 --retry 3 \
+                "$nemo_pkg_url" -o "$prebuilt_dir/$nemo_pkg_name"; then
+                echo "$remote_nemo_ver" > "$nemo_ver_file"
+                log_info "nemo-smpl $remote_nemo_ver cached in $prebuilt_dir"
+            else
+                log_warn "nemo-smpl: download failed, falling back to existing prebuilt"
+            fi
+        else
+            log_warn "nemo-smpl: no .pkg.tar.zst asset in release $remote_nemo_ver (rootfs only)"
+            log_info "nemo-smpl: will be built from PKGBUILD by build_custom_packages()"
+        fi
+    fi
+
+    # Fallback: user-provided nemo-smpl package
+    if ! ls "$prebuilt_dir"/nemo-smpl-[0-9]*-*-*.pkg.tar.* &>/dev/null 2>&1; then
+        if ls "$fallback_dir"/nemo-smpl-*.pkg.tar.* &>/dev/null 2>&1; then
+            log_info "nemo-smpl: using manually-provided package from build/prebuilt-apps/"
+            cp -a "$fallback_dir"/nemo-smpl-*.pkg.tar.* "$prebuilt_dir/"
+        else
+            log_info "nemo-smpl: no prebuilt package — build_custom_packages() will build it"
+        fi
     fi
 
     # Make all binaries executable
