@@ -1,9 +1,9 @@
 # Maintainer: smplOS <https://github.com/smplOS>
 # Always pulls the latest release from GitHub — no version pinning.
-# Source: https://github.com/smpl-os/nemo (release branch)
+# Source: https://github.com/smpl-os/nemo-smpl (release branch)
 
 _gh_owner=smpl-os
-_gh_repo=nemo
+_gh_repo=nemo-smpl
 
 pkgname=nemo-smpl
 pkgver=0

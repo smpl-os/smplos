@@ -599,7 +599,7 @@ Place binaries in build/prebuilt-apps/ or use --build-apps to compile locally."
 
     [[ -f "$nemo_ver_file" ]] && cached_nemo_ver=$(cat "$nemo_ver_file")
 
-    if _gh_api "https://api.github.com/repos/smpl-os/nemo/releases/latest"; then
+    if _gh_api "https://api.github.com/repos/smpl-os/nemo-smpl/releases/latest"; then
         remote_nemo_ver=$(echo "$_gh_json" | grep -oP '"tag_name"\s*:\s*"\K[^"]+' || true)
 
         if [[ -n "$remote_nemo_ver" ]]; then
