@@ -1,0 +1,83 @@
+#!/bin/bash
+# smplos-refresh-config — Copy a default config to ~/.config/ with backup
+#
+# Copies the named config from the smplOS config source to the user's
+# ~/.config/ directory. If the file already exists, a timestamped backup
+# is saved. If the new file is identical to the existing one, no backup
+# is created.
+#
+# Usage: smplos-refresh-config <relative/path>
+#
+# Examples:
+#   smplos-refresh-config hypr/hyprlock.conf
+#   smplos-refresh-config eww/eww.yuck
+#   smplos-refresh-config foot/foot.ini
+
+set -euo pipefail
+
+SMPLOS_PATH="${SMPLOS_PATH:-$HOME/.local/share/smplos}"
+
+config_file="${1:-}"
+
+if [[ -z "$config_file" ]]; then
+    cat <<USAGE
+Usage: smplos-refresh-config <config_file>
+
+Must provide a file path relative to .config/ to be refreshed.
+To copy the default hyprlock.conf to ~/.config/hypr/hyprlock.conf:
+
+    smplos-refresh-config hypr/hyprlock.conf
+USAGE
+    exit 1
+fi
+
+# Resolve source — check multiple possible locations
+# (repo structure: src/shared/configs, src/shared/eww, src/compositors/*)
+# (deployed structure: config/, configs/)
+default_config_file=""
+for candidate in \
+    "$SMPLOS_PATH/repo/src/shared/configs/$config_file" \
+    "$SMPLOS_PATH/repo/src/shared/configs/smplos/$config_file" \
+    "$SMPLOS_PATH/repo/src/compositors/hyprland/$config_file" \
+    "$SMPLOS_PATH/config/$config_file" \
+    "$SMPLOS_PATH/configs/$config_file" \
+    "$SMPLOS_PATH/configs/smplos/$config_file"; do
+    if [[ -f "$candidate" ]]; then
+        default_config_file="$candidate"
+        break
+    fi
+done
+
+if [[ -z "$default_config_file" ]]; then
+    echo "Error: Default config not found for: $config_file" >&2
+    echo "Searched in: $SMPLOS_PATH/repo/src/shared/configs/, compositors/, $SMPLOS_PATH/config/" >&2
+    exit 1
+fi
+
+user_config_file="$HOME/.config/$config_file"
+backup_config_file="$user_config_file.bak.$(date +%s)"
+
+if [[ -f "$user_config_file" ]]; then
+    # Compare before backing up — skip if identical
+    if cmp -s "$user_config_file" "$default_config_file"; then
+        echo "  $config_file: already matches default, no change"
+        exit 0
+    fi
+
+    # Create backup
+    mkdir -p "$(dirname "$backup_config_file")"
+    cp -f "$user_config_file" "$backup_config_file"
+
+    # Replace with default
+    cp -f "$default_config_file" "$user_config_file"
+
+    echo -e "  \e[33mReplaced $config_file with smplOS default.\e[0m"
+    echo "  Backup saved as: $(basename "$backup_config_file")"
+    echo "  Changes:"
+    diff --color=auto "$user_config_file" "$backup_config_file" 2>/dev/null || true
+else
+    # New file — just copy
+    mkdir -p "$(dirname "$user_config_file")"
+    cp -f "$default_config_file" "$user_config_file"
+    echo "  $config_file: installed (new)"
+fi

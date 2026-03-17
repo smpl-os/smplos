@@ -1,0 +1,227 @@
+#!/bin/bash
+# smplos-update-apps — Update smplOS custom apps from GitHub releases
+#
+# Downloads the latest versions of forked/custom apps:
+#   - smpl-apps (start-menu, notif-center, settings, app-center, webapp-center, etc.)
+#   - st-smpl (st-wl terminal)
+#   - nemo-smpl (file manager)
+#
+# Each app is only downloaded if a newer version exists on GitHub.
+# Version state is tracked in ~/.local/state/smplos/app-versions/
+#
+# Usage: smplos-update-apps [--check | --quiet]
+
+set -euo pipefail
+
+STATE_DIR="$HOME/.local/state/smplos/app-versions"
+mkdir -p "$STATE_DIR"
+
+CHECK_ONLY=0; QUIET=0
+for arg in "$@"; do
+    case "$arg" in
+        --check) CHECK_ONLY=1 ;;
+        --quiet) QUIET=1 ;;
+        -h|--help)
+            echo "Usage: smplos-update-apps [--check | --quiet]"
+            exit 0 ;;
+    esac
+done
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+log()  { [[ $QUIET -eq 0 ]] && echo "  $*" || true; }
+ok()   { [[ $QUIET -eq 0 ]] && echo "  \u2713 $*" || true; }
+warn() { echo "  \u26a0 $*" >&2; }
+
+_version_gt() {
+    local a="${1#v}" b="${2#v}"
+    [[ "$a" == "$b" ]] && return 1
+    local highest
+    highest=$(printf '%s\n%s\n' "$a" "$b" | sort -V | tail -1)
+    [[ "$highest" == "$a" ]]
+}
+
+_gh_api() {
+    local url="$1"
+    _gh_json=""
+    _gh_json=$(curl -fsSL --connect-timeout 15 --max-time 30 "$url" 2>/dev/null) || return 1
+    [[ -n "$_gh_json" ]]
+}
+
+_cached_ver() {
+    local name="$1"
+    [[ -f "$STATE_DIR/$name" ]] && cat "$STATE_DIR/$name" || echo ""
+}
+
+n_updated=0
+
+# ── smpl-apps ─────────────────────────────────────────────────────────────────
+update_smpl_apps() {
+    local cached_ver remote_ver
+    cached_ver=$(_cached_ver smpl-apps)
+
+    if ! _gh_api "https://api.github.com/repos/smpl-os/smpl-apps/releases/latest"; then
+        warn "smpl-apps: GitHub unreachable"
+        return
+    fi
+
+    remote_ver=$(echo "$_gh_json" | grep -oP '"tag_name"\s*:\s*"\K[^"]+' || true)
+    [[ -z "$remote_ver" ]] && { warn "smpl-apps: could not parse version"; return; }
+
+    if [[ -n "$cached_ver" ]] && ! _version_gt "$remote_ver" "$cached_ver"; then
+        ok "smpl-apps: up to date ($cached_ver)"
+        return
+    fi
+
+    if [[ $CHECK_ONLY -eq 1 ]]; then
+        log "smpl-apps: update available ${cached_ver:-none} -> $remote_ver"
+        return
+    fi
+
+    local tarball_url
+    tarball_url=$(echo "$_gh_json" \
+        | grep -oP '"browser_download_url"\s*:\s*"\K[^"]*smpl-apps-[^"]*x86_64\.tar\.gz' \
+        | head -1 || true)
+
+    if [[ -z "$tarball_url" ]]; then
+        warn "smpl-apps: no tarball asset in release $remote_ver"
+        return
+    fi
+
+    log "smpl-apps: updating ${cached_ver:-none} -> $remote_ver"
+
+    local tmpdir
+    tmpdir=$(mktemp -d /tmp/smplos-apps.XXXXXX)
+    trap "rm -rf '$tmpdir'" RETURN
+
+    if ! curl -fSL --connect-timeout 30 --retry 3 --progress-bar \
+            "$tarball_url" | tar -xz -C "$tmpdir"; then
+        warn "smpl-apps: download failed"
+        return
+    fi
+
+    # Install each binary to /usr/local/bin/
+    local apps=(start-menu notif-center settings app-center webapp-center sync-center-daemon sync-center-gui)
+    for app in "${apps[@]}"; do
+        local src="$tmpdir/$app"
+        [[ -f "$src" ]] || continue
+        sudo install -m755 "$src" "/usr/local/bin/$app"
+    done
+
+    echo "$remote_ver" > "$STATE_DIR/smpl-apps"
+    ok "smpl-apps: updated to $remote_ver"
+    ((n_updated++)) || true
+}
+
+# ── st-smpl ───────────────────────────────────────────────────────────────────
+update_st_smpl() {
+    local cached_ver remote_ver
+    cached_ver=$(_cached_ver st-smpl)
+
+    if ! _gh_api "https://api.github.com/repos/smpl-os/st-smpl/releases/latest"; then
+        warn "st-smpl: GitHub unreachable"
+        return
+    fi
+
+    remote_ver=$(echo "$_gh_json" | grep -oP '"tag_name"\s*:\s*"\K[^"]+' || true)
+    [[ -z "$remote_ver" ]] && { warn "st-smpl: could not parse version"; return; }
+
+    if [[ -n "$cached_ver" ]] && ! _version_gt "$remote_ver" "$cached_ver"; then
+        ok "st-smpl: up to date ($cached_ver)"
+        return
+    fi
+
+    if [[ $CHECK_ONLY -eq 1 ]]; then
+        log "st-smpl: update available ${cached_ver:-none} -> $remote_ver"
+        return
+    fi
+
+    local asset_url
+    asset_url=$(echo "$_gh_json" \
+        | grep -oP '"browser_download_url"\s*:\s*"\K[^"]*st[^"]*x86_64[^"]*' \
+        | head -1 || true)
+
+    if [[ -z "$asset_url" ]]; then
+        warn "st-smpl: no binary asset in release $remote_ver"
+        return
+    fi
+
+    log "st-smpl: updating ${cached_ver:-none} -> $remote_ver"
+
+    local tmpfile
+    tmpfile=$(mktemp /tmp/st-wl.XXXXXX)
+    trap "rm -f '$tmpfile'" RETURN
+
+    if curl -fSL --connect-timeout 30 --retry 3 --progress-bar \
+            "$asset_url" -o "$tmpfile"; then
+        sudo install -m755 "$tmpfile" "/usr/local/bin/st-wl"
+        echo "$remote_ver" > "$STATE_DIR/st-smpl"
+        ok "st-smpl: updated to $remote_ver"
+        ((n_updated++)) || true
+    else
+        warn "st-smpl: download failed"
+    fi
+}
+
+# ── nemo-smpl ─────────────────────────────────────────────────────────────────
+update_nemo_smpl() {
+    local cached_ver remote_ver
+    cached_ver=$(_cached_ver nemo-smpl)
+
+    if ! _gh_api "https://api.github.com/repos/smpl-os/nemo-smpl/releases/latest"; then
+        warn "nemo-smpl: GitHub unreachable"
+        return
+    fi
+
+    remote_ver=$(echo "$_gh_json" | grep -oP '"tag_name"\s*:\s*"\K[^"]+' || true)
+    [[ -z "$remote_ver" ]] && { warn "nemo-smpl: could not parse version"; return; }
+
+    if [[ -n "$cached_ver" ]] && ! _version_gt "$remote_ver" "$cached_ver"; then
+        ok "nemo-smpl: up to date ($cached_ver)"
+        return
+    fi
+
+    if [[ $CHECK_ONLY -eq 1 ]]; then
+        log "nemo-smpl: update available ${cached_ver:-none} -> $remote_ver"
+        return
+    fi
+
+    local pkg_url
+    pkg_url=$(echo "$_gh_json" \
+        | grep -oP '"browser_download_url"\s*:\s*"\K[^"]*nemo-smpl-[^"]*x86_64\.pkg\.tar\.zst' \
+        | head -1 || true)
+
+    if [[ -z "$pkg_url" ]]; then
+        warn "nemo-smpl: no .pkg.tar.zst in release $remote_ver"
+        return
+    fi
+
+    log "nemo-smpl: updating ${cached_ver:-none} -> $remote_ver"
+
+    local tmpfile
+    tmpfile=$(mktemp /tmp/nemo-smpl.XXXXXX.pkg.tar.zst)
+    trap "rm -f '$tmpfile'" RETURN
+
+    if curl -fSL --connect-timeout 30 --retry 3 --progress-bar \
+            "$pkg_url" -o "$tmpfile"; then
+        if sudo pacman -U --noconfirm "$tmpfile"; then
+            echo "$remote_ver" > "$STATE_DIR/nemo-smpl"
+            ok "nemo-smpl: updated to $remote_ver"
+            ((n_updated++)) || true
+        else
+            warn "nemo-smpl: pacman -U failed"
+        fi
+    else
+        warn "nemo-smpl: download failed"
+    fi
+}
+
+# ── Main ──────────────────────────────────────────────────────────────────────
+[[ $QUIET -eq 0 ]] && echo "── smplOS App Updates ──"
+
+update_smpl_apps
+update_st_smpl
+update_nemo_smpl
+
+if [[ $CHECK_ONLY -eq 0 && $n_updated -gt 0 ]]; then
+    ok "$n_updated app(s) updated"
+fi

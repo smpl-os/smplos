@@ -229,22 +229,6 @@ if command -v dictation-prime &>/dev/null && command -v voxtype &>/dev/null; the
   dictation-prime || echo "    WARNING: dictation-prime failed (exit $?)"
 fi
 
-# Record stock checksums for smplos-os-update
-# These let the OS updater detect which files the user has since modified.
-# Files matching recorded checksums = unmodified = safe to update.
-# Files that differ = user customized = preserved.
-echo "==> Recording initial stock file checksums..."
-SMPLOS_CHECKSUMS="$SMPLOS_PATH/.stock-checksums"
-: > "$SMPLOS_CHECKSUMS"
-if [[ -d "$SMPLOS_PATH/config" ]]; then
-  find "$SMPLOS_PATH/config" -type f | while IFS= read -r stock_file; do
-    rel="${stock_file#$SMPLOS_PATH/config/}"
-    deployed="$HOME/.config/$rel"
-    [[ -f "$deployed" ]] && sha256sum "$deployed"
-  done >> "$SMPLOS_CHECKSUMS"
-fi
-echo "    $(wc -l < "$SMPLOS_CHECKSUMS") file checksums recorded"
-
 # Apply default theme (catppuccin) to generate all config files
 echo "==> Setting default theme..."
 theme-set catppuccin || echo "    WARNING: theme-set failed (exit $?)"
@@ -480,6 +464,7 @@ echo "==> Restoring standard pacman configuration..."
 sudo tee /etc/pacman.conf > /dev/null << 'PACMANEOF'
 [options]
 HoldPkg     = pacman glibc brave-bin
+IgnorePkg   = hyprland eww
 Architecture = auto
 ParallelDownloads = 5
 SigLevel    = Required DatabaseOptional
@@ -566,6 +551,22 @@ if [[ "$(cat /sys/devices/virtual/dmi/id/sys_vendor 2>/dev/null)" == "Microsoft 
     echo "    No internet -- skipping Surface kernel install (linux-lts still works)"
     echo "    Run after connecting: sudo pacman -Sy linux-surface linux-surface-headers iptsd linux-firmware-marvell"
   fi
+fi
+
+# Set up smplOS repo clone for future updates (git-based update system)
+# After install, smplos-os-update will `git pull` this to get new scripts,
+# configs, themes, and migrations.
+echo "==> Setting up smplOS update repo..."
+SMPLOS_REPO_URL="https://github.com/smpl-os/smplos.git"
+if command -v git &>/dev/null; then
+  if git clone --depth=1 "$SMPLOS_REPO_URL" "$SMPLOS_PATH/repo" 2>/dev/null; then
+    echo "    Update repo ready at $SMPLOS_PATH/repo"
+  else
+    echo "    WARNING: Could not clone update repo (no internet?)"
+    echo "    Updates will clone on first run of smplos-os-update"
+  fi
+else
+  echo "    WARNING: git not available, skipping repo clone"
 fi
 
 # Clean up offline mirror cache

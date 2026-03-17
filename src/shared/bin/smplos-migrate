@@ -1,0 +1,115 @@
+#!/bin/bash
+# smplos-migrate — Run pending system migrations
+#
+# Migrations are timestamped shell scripts in $SMPLOS_PATH/migrations/.
+# Each runs exactly once. State is tracked in ~/.local/state/smplos/migrations/
+# (an empty file per completed migration).
+#
+# Usage: smplos-migrate [--list | --pending | --dry-run]
+
+set -euo pipefail
+
+SMPLOS_PATH="${SMPLOS_PATH:-$HOME/.local/share/smplos}"
+MIGRATIONS_DIR="$SMPLOS_PATH/repo/migrations"
+STATE_DIR="$HOME/.local/state/smplos/migrations"
+SKIPPED_DIR="$STATE_DIR/skipped"
+
+mkdir -p "$STATE_DIR" "$SKIPPED_DIR"
+
+# ── Argument parsing ──────────────────────────────────────────────────────────
+MODE="run"
+for arg in "$@"; do
+    case "$arg" in
+        --list)    MODE="list" ;;
+        --pending) MODE="pending" ;;
+        --dry-run) MODE="dry-run" ;;
+        -h|--help)
+            echo "Usage: smplos-migrate [--list | --pending | --dry-run]"
+            echo "  --list     Show all migrations and their status"
+            echo "  --pending  Show only pending migrations"
+            echo "  --dry-run  Show what would run without executing"
+            exit 0 ;;
+        *) echo "Unknown option: $arg" >&2; exit 1 ;;
+    esac
+done
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+migration_status() {
+    local filename="$1"
+    if [[ -f "$STATE_DIR/$filename" ]]; then
+        echo "done"
+    elif [[ -f "$SKIPPED_DIR/$filename" ]]; then
+        echo "skipped"
+    else
+        echo "pending"
+    fi
+}
+
+# ── List / Pending ────────────────────────────────────────────────────────────
+if [[ "$MODE" == "list" || "$MODE" == "pending" ]]; then
+    if [[ ! -d "$MIGRATIONS_DIR" ]] || ! compgen -G "$MIGRATIONS_DIR/*.sh" &>/dev/null; then
+        echo "No migrations found."
+        exit 0
+    fi
+    for file in "$MIGRATIONS_DIR"/*.sh; do
+        filename=$(basename "$file")
+        status=$(migration_status "$filename")
+        if [[ "$MODE" == "pending" && "$status" != "pending" ]]; then
+            continue
+        fi
+        printf "  %-8s %s\n" "[$status]" "${filename%.sh}"
+    done
+    exit 0
+fi
+
+# ── Run migrations ────────────────────────────────────────────────────────────
+if [[ ! -d "$MIGRATIONS_DIR" ]] || ! compgen -G "$MIGRATIONS_DIR/*.sh" &>/dev/null; then
+    exit 0
+fi
+
+n_run=0 n_skip=0 n_fail=0
+
+for file in "$MIGRATIONS_DIR"/*.sh; do
+    filename=$(basename "$file")
+
+    # Already done or skipped
+    [[ -f "$STATE_DIR/$filename" || -f "$SKIPPED_DIR/$filename" ]] && continue
+
+    if [[ "$MODE" == "dry-run" ]]; then
+        echo "  [would run] ${filename%.sh}"
+        ((n_run++)) || true
+        continue
+    fi
+
+    echo ""
+    echo -e "\e[32m── Migration ${filename%.sh} ──\e[0m"
+
+    if bash "$file"; then
+        touch "$STATE_DIR/$filename"
+        ((n_run++)) || true
+    else
+        echo -e "\e[31m  Migration ${filename%.sh} failed.\e[0m"
+        # In interactive mode, ask to skip. In non-interactive, fail.
+        if [[ -t 0 ]]; then
+            read -rp "  Skip and continue? [y/N] " answer
+            if [[ "$answer" =~ ^[Yy] ]]; then
+                touch "$SKIPPED_DIR/$filename"
+                ((n_skip++)) || true
+            else
+                echo "  Aborting migrations."
+                exit 1
+            fi
+        else
+            ((n_fail++)) || true
+            echo "  Non-interactive: marking as failed."
+            exit 1
+        fi
+    fi
+done
+
+if [[ "$MODE" == "dry-run" ]]; then
+    [[ $n_run -eq 0 ]] && echo "  No pending migrations."
+else
+    [[ $n_run -gt 0 ]] && echo -e "\n  Ran $n_run migration(s)."
+    [[ $n_skip -gt 0 ]] && echo "  Skipped $n_skip migration(s)."
+fi
