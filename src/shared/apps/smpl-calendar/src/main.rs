@@ -177,8 +177,8 @@ fn build_day_cells(
     (0..42)
         .map(|i| {
             let day_num = i - first_col + 1;
-            let row = (i / 7) as i32;
-            let col = (i % 7) as i32;
+            let row = i / 7;
+            let col = i % 7;
 
             if day_num < 1 {
                 // Padding from previous month
@@ -637,7 +637,7 @@ fn main() -> Result<(), slint::PlatformError> {
             if editing_id < 0 {
                 // Create
                 let new_ev = NewEvent {
-                    title:          title,
+                    title,
                     description:    ui.get_form_desc().to_string(),
                     start,
                     end,

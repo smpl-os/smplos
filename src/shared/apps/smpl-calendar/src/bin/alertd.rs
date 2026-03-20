@@ -234,7 +234,7 @@ fn main() {
         check_alerts(&conn);
 
         // Purge old sent_alerts every ~10 minutes (20 ticks * 30s)
-        if tick % 20 == 0 {
+        if tick.is_multiple_of(20) {
             purge_old(&conn);
         }
 
