@@ -189,13 +189,34 @@ The `-f "$_lq_css"` check is mandatory. If a plugin is listed in the `case` bloc
 
 ### Transparent Rust Apps (Slint + Winit) — NEVER REGRESS THIS
 
-All smplOS GUI apps (`start-menu`, `notif-center`, `kb-center`, `disp-center`,
-`app-center`, `webapp-center`) share one architecture for transparency + blur.
-**Deviating from any of these points silently breaks the look.**
+All smplOS GUI apps (`start-menu`, `notif-center`, `settings`, `app-center`,
+`webapp-center`, `sync-center`, `smpl-calendar`) share one architecture for
+transparency + blur. **Deviating from any of these points silently breaks the
+look with NO error message.**
+
+⚠️ **STOP — Read this if you are editing ANY `Cargo.toml` in `src/shared/apps/`:**
+
+The Slint feature flag in every app's `Cargo.toml` MUST be `renderer-software`.
+**NEVER change it to `renderer-femtovg`, `renderer-skia`, or any other renderer.**
+GPU renderers composite to an opaque surface — alpha is destroyed — all apps
+lose transparency. This has already caused a regression (commit `d718783`,
+March 1 2026) where an AI silently flipped all 6 apps to `renderer-femtovg`
+during an unrelated bulk edit. `build-apps.sh` now has a hard check that
+fails the build if any Cargo.toml contains `renderer-femtovg`.
+
+```toml
+# ✅ CORRECT — in every src/shared/apps/*/Cargo.toml:
+slint = { version = "1.8", default-features = false, features = ["backend-winit", "renderer-software", "compat-1-2"] }
+
+# ❌ WRONG — NEVER use these (destroys transparency with no error):
+# renderer-femtovg, renderer-skia, or omitting the renderer feature entirely
+```
+
+**Runtime init code** (in `main.rs` or `smpl-common`):
 
 ```rust
 let backend = i_slint_backend_winit::Backend::builder()
-    .with_renderer_name("software")          // MUST be "software" — see below
+    .with_renderer_name("software")          // MUST match Cargo.toml feature
     .with_window_attributes_hook(|attrs| {
         use i_slint_backend_winit::winit::platform::wayland::WindowAttributesExtWayland;
         use i_slint_backend_winit::winit::dpi::LogicalSize;
@@ -211,9 +232,10 @@ slint::platform::set_platform(Box::new(backend))
 
 **Rules — each one has caused a regression:**
 
-- **`renderer-software` is mandatory.** `femtovg`, `skia`, and other GPU renderers
-  composite to an opaque surface before passing pixels to the compositor — alpha is
-  destroyed. The software renderer outputs raw RGBA pixels that Hyprland can blur through.
+- **`renderer-software` in BOTH Cargo.toml AND runtime code.** The Cargo.toml
+  feature flag controls what gets compiled in. The runtime `.with_renderer_name()`
+  selects it. If the feature isn't compiled in, Slint silently falls back to
+  whatever IS compiled in (femtovg) — no error, just opaque windows.
 - **`with_decorations(false)` is mandatory.** CSD adds an opaque frame, destroying the
   borderless transparent look.
 - **`with_name(app_id, instance)` is mandatory.** Without it the Wayland `app_id` is
@@ -225,6 +247,12 @@ slint::platform::set_platform(Box::new(backend))
   in a `.slint` file — always pull from the palette so themes control opacity.
 - **Hyprland rules** in `windows.conf` target `initialClass` matching the `app_id`:
   `windowrulev2 = float, initialClass:start-menu`.
+
+**NEVER do these — each one silently kills transparency with no error:**
+- NEVER put `renderer-femtovg` or `renderer-skia` in any `src/shared/apps/*/Cargo.toml`
+- NEVER remove the `renderer-software` feature from a Cargo.toml
+- NEVER set `with_decorations(true)` or omit the decorations call
+- NEVER hardcode an opaque `#rrggbb` background in `.slint` files (use theme alpha)
 
 ### Packages
 

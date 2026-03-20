@@ -127,6 +127,19 @@ if [[ ${#REQUESTED_APPS[@]} -eq 0 && "$BUILD_ST" == "false" ]]; then
     exit 0
 fi
 
+# ── Guardrail: renderer-software is MANDATORY for transparency ──
+# GPU renderers (femtovg, skia) composite to an opaque surface, destroying
+# alpha. This check catches accidental Cargo.toml edits before they ship.
+for app in "${REQUESTED_APPS[@]}"; do
+    toml="$PROJECT_ROOT/src/shared/apps/$app/Cargo.toml"
+    [[ -f "$toml" ]] || continue
+    if grep -q 'renderer-femtovg\|renderer-skia' "$toml"; then
+        die "$app/Cargo.toml uses a GPU renderer — transparency will break!
+  The Slint feature MUST be 'renderer-software', not 'renderer-femtovg' or 'renderer-skia'.
+  See .github/copilot-instructions.md § 'Transparent Rust Apps' for why."
+    fi
+done
+
 # Build script that runs inside the container
 INNER_SCRIPT=$(cat << 'INNER'
 #!/bin/bash
