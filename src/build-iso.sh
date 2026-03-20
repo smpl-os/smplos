@@ -528,7 +528,9 @@ download_prebuilt_apps() {
         cp -a "$fallback_dir"/start-menu "$fallback_dir"/notif-center \
               "$fallback_dir"/settings "$fallback_dir"/app-center \
               "$fallback_dir"/webapp-center "$fallback_dir"/sync-center-daemon \
-              "$fallback_dir"/sync-center-gui "$cache_dir/" 2>/dev/null || true
+              "$fallback_dir"/sync-center-gui \
+              "$fallback_dir"/smpl-calendar "$fallback_dir"/smpl-calendar-alertd \
+              "$cache_dir/" 2>/dev/null || true
         have_apps=true
     fi
 

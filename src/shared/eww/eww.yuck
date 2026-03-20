@@ -197,7 +197,7 @@
 ;; Combined tray (all indicators in a single row)
 (defwidget tray-clock []
   (button :class "tray-clock"
-          :onclick "popup-toggle calendar-popup"
+          :onclick "toggle-calendar"
           :tooltip date-full
     (label :text "${time}  ${date}")))
 

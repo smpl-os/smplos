@@ -46,7 +46,7 @@ detect_runtime() {
 }
 
 # ── Parse arguments ──
-ALL_APPS=(start-menu notif-center settings app-center webapp-center sync-center)
+ALL_APPS=(start-menu notif-center settings app-center webapp-center sync-center smpl-calendar)
 BUILD_ST=false
 CLEAN_BUILD=false
 REQUESTED_APPS=()

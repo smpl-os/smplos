@@ -859,7 +859,7 @@ install_prebuilt_apps() {
     fi
 
     # ── Rust apps ──
-    local rust_apps=(start-menu notif-center settings app-center webapp-center sync-center-daemon sync-center-gui)
+    local rust_apps=(start-menu notif-center settings app-center webapp-center sync-center-daemon sync-center-gui smpl-calendar smpl-calendar-alertd)
     for app in "${rust_apps[@]}"; do
         if [[ -f "$bin_dir/$app" ]]; then
             install -Dm755 "$bin_dir/$app" "$airootfs/usr/local/bin/$app"

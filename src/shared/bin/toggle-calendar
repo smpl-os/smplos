@@ -1,0 +1,16 @@
+#!/bin/bash
+# Toggle smplOS Calendar app
+# Launches or kills the smpl-calendar binary.
+
+APP_NAME="smpl-calendar"
+BIN_PATH="/usr/local/bin/$APP_NAME"
+[[ -f "$BIN_PATH" ]] || BIN_PATH="$HOME/Documents/sources/smpl-apps/calendar/target/release/$APP_NAME"
+[[ -f "$BIN_PATH" ]] || BIN_PATH="$HOME/Documents/sources/smpl-apps/calendar/target/debug/$APP_NAME"
+[[ -f "$BIN_PATH" ]] || BIN_PATH="$HOME/Documents/sources/smplos/src/shared/apps/smpl-calendar/target/release/$APP_NAME"
+
+if pkill -x "$APP_NAME" 2>/dev/null; then
+    : # closed
+else
+    "$BIN_PATH" &
+    disown
+fi
