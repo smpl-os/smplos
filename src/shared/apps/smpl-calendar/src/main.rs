@@ -788,5 +788,21 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
+    // ── Periodic theme refresh ──
+    {
+        let ui_weak = ui.as_weak();
+        let timer = slint::Timer::default();
+        timer.start(
+            slint::TimerMode::Repeated,
+            std::time::Duration::from_secs(2),
+            move || {
+                if let Some(ui) = ui_weak.upgrade() {
+                    apply_theme(&ui);
+                }
+            },
+        );
+        std::mem::forget(timer);
+    }
+
     ui.run()
 }

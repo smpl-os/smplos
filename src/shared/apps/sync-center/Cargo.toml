@@ -16,7 +16,7 @@ path = "src/bin/gui.rs"
 
 [dependencies]
 # GUI (Slint for consistency with other smplOS apps)
-slint = { version = "1.8", default-features = false, features = ["backend-winit", "renderer-femtovg", "compat-1-2"] }
+slint = { version = "1.8", default-features = false, features = ["backend-winit", "renderer-software", "compat-1-2"] }
 i-slint-backend-winit = "1.8"
 rfd = "0.15"
 

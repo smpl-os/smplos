@@ -5,7 +5,7 @@ edition = "2021"
 description = "smplOS unified Settings app"
 
 [dependencies]
-slint = { version = "1.8", default-features = false, features = ["backend-winit", "renderer-femtovg", "compat-1-2"] }
+slint = { version = "1.8", default-features = false, features = ["backend-winit", "renderer-software", "compat-1-2"] }
 i-slint-backend-winit = "1.8"
 xkbcommon = "0.9"
 serde = { version = "1", features = ["derive"] }
