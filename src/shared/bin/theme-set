@@ -520,6 +520,21 @@ EOJSON
           -e 's/"themeDark"[[:space:]]*:[[:space:]]*"[^"]*"/"themeDark": "smplos"/' \
           "$_sy_conf_json"
       fi
+    else
+      # conf.json doesn't exist yet (SiYuan never launched). Pre-create a
+      # minimal one so the first launch picks up the smplOS theme. SiYuan's
+      # InitConf() merges this into its defaults — only appearance fields needed.
+      mkdir -p "$(dirname "$_sy_conf_json")"
+      cat > "$_sy_conf_json" << EOJSON
+{
+  "appearance": {
+    "mode": $_sy_mode,
+    "modeOS": false,
+    "themeLight": "smplos",
+    "themeDark": "smplos"
+  }
+}
+EOJSON
     fi
   fi
 fi
