@@ -38,6 +38,7 @@ default_config_file=""
 for candidate in \
     "$SMPLOS_PATH/repo/src/shared/configs/$config_file" \
     "$SMPLOS_PATH/repo/src/shared/configs/smplos/$config_file" \
+    "$SMPLOS_PATH/repo/src/shared/$config_file" \
     "$SMPLOS_PATH/repo/src/compositors/hyprland/$config_file" \
     "$SMPLOS_PATH/config/$config_file" \
     "$SMPLOS_PATH/configs/$config_file" \

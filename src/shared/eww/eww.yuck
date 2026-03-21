@@ -68,7 +68,7 @@
 ;; Logo/Menu button (themed SVG -- colors baked by theme-set)
 (defwidget logo []
   (button :class "logo"
-          :onclick "sleep 0.05 && toggle-start-menu &"
+          :onclick "toggle-start-menu"
     (image :path "icons/status/start.svg"
            :image-width 18 :image-height 18)))
 
@@ -117,7 +117,7 @@
 (defwidget tray-volume []
   (eventbox :onscroll "volume-ctl {} 5"
     (button :class "tray-volume"
-            :onclick "sleep 0.05 && popup-toggle quick-settings &"
+            :onclick "popup-toggle quick-settings"
             :onrightclick "pavucontrol &"
             :tooltip "Volume: ${volume-data.level}%"
       (label :class "icon" :text {volume-data.icon}))))
@@ -125,7 +125,7 @@
 ;; Network status icon (SVG, colors baked by theme-set -- no :fill-svg needed)
 (defwidget tray-internet []
   (button :class "tray-internet"
-          :onclick "sleep 0.05 && popup-toggle quick-settings &"
+          :onclick "popup-toggle quick-settings"
           :tooltip {net-data.vpn == "on" ? "VPN active" :
                     net-data.wired == "yes" ? "Wired connected" :
                     net-data.online == "yes" ? "Online" : "Disconnected"}
@@ -135,14 +135,14 @@
 ;; WiFi (signal bars icon, crossed out if off)
 (defwidget tray-wifi []
   (button :class "tray-wifi"
-          :onclick "sleep 0.05 && popup-toggle quick-settings &"
+          :onclick "popup-toggle quick-settings"
           :tooltip {net-data.ssid ?: (net-data.wifi_on == "yes" ? "Not connected" : "WiFi off")}
     (label :class "icon" :text {net-data.wifi_icon})))
 
 ;; Bluetooth (icon, crossed out if off)
 (defwidget tray-bluetooth []
   (button :class "tray-bluetooth"
-          :onclick "sleep 0.05 && popup-toggle quick-settings &"
+          :onclick "popup-toggle quick-settings"
           :tooltip {bt-data.connected == "yes" ? bt-data.device :
                     bt-data.powered == "on" ? "Bluetooth on" : "Bluetooth off"}
     (label :class "icon" :text {bt-data.icon})))
@@ -150,7 +150,7 @@
 ;; Notifications bell (empty=none, filled=has notifications)
 (defwidget tray-notifications []
   (button :class "tray-notifications ${notif-data.count != '0' ? 'has-notifs' : ''}"
-          :onclick "sleep 0.05 && toggle-notif-center &"
+          :onclick "toggle-notif-center"
           :onrightclick "dunstctl history-clear"
           :tooltip {notif-data.count != "0" ? "${notif-data.count} notifications" : "No notifications"}
     (label :class "icon" :text {notif-data.icon})))
@@ -158,7 +158,7 @@
 ;; USB drive indicator (only visible when a USB device is present)
 (defwidget tray-usb []
   (button :class "tray-usb ${usb-data.mounted != '0' ? 'has-mounted' : ''}"
-          :onclick "sleep 0.05 && popup-toggle usb-popup &"
+          :onclick "popup-toggle usb-popup"
           :tooltip {usb-data.mounted != "0" ? "${usb-data.mounted} mounted" : "${usb-data.count} device(s)"}
           :visible {usb-data.present == "yes"}
     (label :class "icon" :text {usb-data.icon})))
@@ -188,7 +188,7 @@
 ;; Spins with accent background -- disappears when idle.
 (defwidget tray-sync []
   (button :class "tray-sync ${sync-data.active == 'yes' ? 'syncing' : ''}"
-          :onclick "sleep 0.05 && sync-center-gui &"
+          :onclick "sync-center-gui"
           :tooltip "Sync in progress — click to open Sync Center"
           :visible {sync-data.active == "yes"}
     (image :path "icons/status/sync.svg"
@@ -197,7 +197,7 @@
 ;; Combined tray (all indicators in a single row)
 (defwidget tray-clock []
   (button :class "tray-clock"
-          :onclick "sleep 0.05 && toggle-calendar &"
+          :onclick "toggle-calendar"
           :tooltip date-full
     (label :text time)))
 
