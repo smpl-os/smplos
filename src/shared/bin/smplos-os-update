@@ -141,6 +141,65 @@ sync_scripts() {
     fi
 }
 
+# ── Sync config files to ~/.config/ ───────────────────────────────────────────
+sync_configs() {
+    header ""
+    header "── Syncing configs ──"
+
+    local n_updated=0
+
+    # EWW configs (eww.yuck, eww.scss, scripts/)
+    local eww_src="$SMPLOS_REPO/src/shared/eww"
+    local eww_dst="$HOME/.config/eww"
+    if [[ -d "$eww_src" ]]; then
+        mkdir -p "$eww_dst"
+        # Sync core EWW files (but not theme-colors.scss — that's managed by theme-set)
+        for f in eww.yuck eww.scss; do
+            if [[ -f "$eww_src/$f" ]] && ! cmp -s "$eww_src/$f" "$eww_dst/$f" 2>/dev/null; then
+                cp "$eww_src/$f" "$eww_dst/$f"
+                ((n_updated++)) || true
+            fi
+        done
+        # Sync scripts directory
+        if [[ -d "$eww_src/scripts" ]]; then
+            mkdir -p "$eww_dst/scripts"
+            for script in "$eww_src/scripts/"*; do
+                [[ -f "$script" ]] || continue
+                local name
+                name=$(basename "$script")
+                if ! cmp -s "$script" "$eww_dst/scripts/$name" 2>/dev/null; then
+                    cp "$script" "$eww_dst/scripts/$name"
+                    chmod +x "$eww_dst/scripts/$name"
+                    ((n_updated++)) || true
+                fi
+            done
+        fi
+    fi
+
+    # Shared configs (hyprshell, smplos, etc.) — only add new files, don't overwrite user edits
+    local configs_src="$SMPLOS_REPO/src/shared/configs"
+    if [[ -d "$configs_src" ]]; then
+        # Walk each config directory
+        while IFS= read -r -d '' src_file; do
+            local rel_path="${src_file#$configs_src/}"
+            # Skip smplos/ subdir — those are Hyprland-specific configs managed separately
+            [[ "$rel_path" == smplos/* ]] && continue
+            local dst_file="$HOME/.config/$rel_path"
+            if [[ ! -f "$dst_file" ]]; then
+                mkdir -p "$(dirname "$dst_file")"
+                cp "$src_file" "$dst_file"
+                ((n_updated++)) || true
+            fi
+        done < <(find "$configs_src" -type f -print0)
+    fi
+
+    if [[ $n_updated -gt 0 ]]; then
+        ok "$n_updated config file(s) updated"
+    else
+        ok "All configs are current"
+    fi
+}
+
 # ── Run migrations ────────────────────────────────────────────────────────────
 run_migrations() {
     if command -v smplos-migrate &>/dev/null; then
@@ -208,6 +267,7 @@ fi
 
 if [[ $SCRIPTS_ONLY -eq 0 ]]; then
     sync_scripts
+    sync_configs
     run_migrations
 
     if [[ $had_updates -eq 1 ]]; then

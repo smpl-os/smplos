@@ -99,16 +99,44 @@ update_smpl_apps() {
         return
     fi
 
-    # Install each binary to /usr/local/bin/
-    local apps=(start-menu notif-center settings app-center webapp-center sync-center-daemon sync-center-gui)
+    # Install each binary to /usr/local/bin/ and restart running ones
+    local apps=(start-menu notif-center settings app-center webapp-center sync-center-daemon sync-center-gui smpl-calendar smpl-calendar-alertd)
+    local restarted=()
     for app in "${apps[@]}"; do
         local src="$tmpdir/$app"
         [[ -f "$src" ]] || continue
+
+        # Check if this app is currently running
+        local was_running=0
+        if pgrep -x "$app" &>/dev/null; then
+            was_running=1
+            # Kill gracefully so the new binary can take over
+            pkill -x "$app" 2>/dev/null
+            sleep 0.3
+            # Force-kill if still alive
+            pkill -9 -x "$app" 2>/dev/null || true
+        fi
+
         sudo install -m755 "$src" "/usr/local/bin/$app"
+
+        # Restart GUI apps that were running (not daemons — those restart via systemd/autostart)
+        if [[ $was_running -eq 1 ]]; then
+            case "$app" in
+                sync-center-daemon|smpl-calendar-alertd)
+                    # Daemon — let systemd or autostart handle restart
+                    ;;
+                *)
+                    nohup "/usr/local/bin/$app" &>/dev/null &
+                    disown
+                    restarted+=("$app")
+                    ;;
+            esac
+        fi
     done
 
     echo "$remote_ver" > "$STATE_DIR/smpl-apps"
     ok "smpl-apps: updated to $remote_ver"
+    [[ ${#restarted[@]} -gt 0 ]] && log "Restarted: ${restarted[*]}"
     ((n_updated++)) || true
 }
 
