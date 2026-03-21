@@ -199,7 +199,7 @@
   (button :class "tray-clock"
           :onclick "toggle-calendar"
           :tooltip date-full
-    (label :text "${time}  ${date}")))
+    (label :text time)))
 
 (defwidget tray []
   (box :class "tray" :orientation "h" :space-evenly false :spacing 6
