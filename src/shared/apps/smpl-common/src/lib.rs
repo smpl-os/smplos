@@ -1,10 +1,13 @@
 //! smpl-common — shared initialisation code for all smplOS Slint/Winit apps.
 //!
 //! Every smplOS GUI app needs:
-//!   1. Software renderer (not femtovg/skia — GPU renderers destroy alpha)
+//!   1. FemtoVG renderer (OpenGL/EGL with ARGB visuals — supports transparency)
 //!   2. `with_decorations(false)` — no CSD frame
 //!   3. `with_name(app_id, app_id)` — sets Wayland app_id for windowrulev2
 //!   4. A fixed logical size so Hyprland can float + size it via windowrule
+//!
+//! NEVER use renderer-software — it uses softbuffer which hardcodes
+//! wl_shm::Format::Xrgb8888 on Wayland, making alpha completely ignored.
 //!
 //! Without ALL of these, either the blur breaks, the window gets decorated,
 //! or Hyprland can't target it with windowrulev2. See copilot-instructions.md.
@@ -31,10 +34,10 @@ use slint::PlatformError;
 /// ```
 pub fn init(app_id: &'static str, width: f64, height: f64) -> Result<(), PlatformError> {
     let backend = i_slint_backend_winit::Backend::builder()
-        // Software renderer: outputs raw RGBA pixels — Hyprland can blur them.
-        // GPU renderers (femtovg, skia) composite to an opaque surface first,
-        // destroying the alpha channel and breaking transparency + blur.
-        .with_renderer_name("software")
+        // FemtoVG renderer: uses OpenGL/EGL with ARGB visuals on Wayland,
+        // so the compositor sees real alpha and can blur through it.
+        // NEVER use "software" — softbuffer hardcodes XRGB on Wayland (no alpha).
+        .with_renderer_name("femtovg")
         .with_window_attributes_hook(move |attrs| {
             attrs
                 // Sets Wayland app_id so `windowrulev2 = float, initialClass:start-menu`

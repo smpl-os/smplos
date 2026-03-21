@@ -224,7 +224,7 @@ src/shared/apps/
 ```
 
 **smpl-common** is the single source of truth for backend init. Every app
-calls `smpl_common::init(app_id, w, h)` which sets the software renderer,
+calls `smpl_common::init(app_id, w, h)` which sets the FemtoVG renderer,
 disables decorations, and configures the Wayland app_id. **NO app should
 inline this init code or have its own Backend::builder() calls.**
 
@@ -232,9 +232,9 @@ inline this init code or have its own Backend::builder() calls.**
 
 **RULE 1: NEVER create standalone Cargo.toml files for individual apps.**
 Apps use `workspace = true` for all shared dependencies. The workspace
-`Cargo.toml` declares `renderer-software` once; individual apps inherit it.
+`Cargo.toml` declares `renderer-femtovg` once; individual apps inherit it.
 Standalone Cargo.toml files (with their own slint dependency) caused the
-March 2026 transparency regression — divergent copies got `renderer-femtovg`
+March 2026 transparency regression — divergent copies got `renderer-software`
 and nobody noticed for weeks.
 
 **RULE 2: Changes go in smpl-apps FIRST, then sync to smplos.**
@@ -250,23 +250,24 @@ overwritten on the next sync. If you see a bug in an app, fix it in smpl-apps.
 **RULE 3: build-apps.sh builds the WORKSPACE, not individual apps.**
 `build-apps.sh` runs `cargo build --release --workspace` inside a container.
 This compiles smpl-common once and links it into every app identically.
-The build has guardrails that fail if `renderer-femtovg` or `renderer-skia`
+The build has guardrails that fail if `renderer-software` or `renderer-skia`
 appears in the workspace Cargo.toml, or if smpl-common is missing
-`.with_renderer_name("software")`.
+`.with_renderer_name("femtovg")`.
 
 ```toml
 # ✅ CORRECT — in workspace Cargo.toml (ONE place, inherited by all apps):
-slint = { version = "1.8", default-features = false, features = ["backend-winit", "renderer-software", "compat-1-2"] }
+slint = { version = "1.8", default-features = false, features = ["backend-winit", "renderer-femtovg", "compat-1-2"] }
 
 # ❌ WRONG — NEVER use these (destroys transparency with no error):
-# renderer-femtovg, renderer-skia, or omitting the renderer feature entirely
+# renderer-software (softbuffer hardcodes XRGB on Wayland — alpha ignored)
+# renderer-skia, or omitting the renderer feature entirely
 ```
 
 **smpl-common init code** (in `smpl-common/src/lib.rs`):
 
 ```rust
 let backend = i_slint_backend_winit::Backend::builder()
-    .with_renderer_name("software")          // MUST match Cargo.toml feature
+    .with_renderer_name("femtovg")           // MUST match Cargo.toml feature
     .with_window_attributes_hook(|attrs| {
         use i_slint_backend_winit::winit::platform::wayland::WindowAttributesExtWayland;
         use i_slint_backend_winit::winit::dpi::LogicalSize;
@@ -282,10 +283,12 @@ slint::platform::set_platform(Box::new(backend))
 
 **Rules — each one has caused a regression:**
 
-- **`renderer-software` in BOTH Cargo.toml AND runtime code.** The Cargo.toml
+- **`renderer-femtovg` in BOTH Cargo.toml AND runtime code.** The Cargo.toml
   feature flag controls what gets compiled in. The runtime `.with_renderer_name()`
-  selects it. If the feature isn't compiled in, Slint silently falls back to
-  whatever IS compiled in (femtovg) — no error, just opaque windows.
+  selects it. FemtoVG uses OpenGL/EGL with ARGB visuals on Wayland, so the
+  compositor sees real alpha. NEVER use `renderer-software` — softbuffer
+  hardcodes `wl_shm::Format::Xrgb8888` on Wayland, making alpha completely
+  ignored regardless of what the app writes.
 - **`with_decorations(false)` is mandatory.** CSD adds an opaque frame, destroying the
   borderless transparent look.
 - **`with_name(app_id, instance)` is mandatory.** Without it the Wayland `app_id` is
@@ -299,8 +302,8 @@ slint::platform::set_platform(Box::new(backend))
   `windowrulev2 = float, initialClass:start-menu`.
 
 **NEVER do these — each one silently kills transparency with no error:**
-- NEVER put `renderer-femtovg` or `renderer-skia` in the workspace Cargo.toml
-- NEVER remove the `renderer-software` feature from a Cargo.toml
+- NEVER put `renderer-software` or `renderer-skia` in the workspace Cargo.toml
+- NEVER remove the `renderer-femtovg` feature from a Cargo.toml
 - NEVER set `with_decorations(true)` or omit the decorations call
 - NEVER hardcode an opaque `#rrggbb` background on a `.slint` Window (use theme alpha)
 - NEVER create standalone per-app Cargo.toml files with their own slint dependency

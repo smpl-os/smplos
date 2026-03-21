@@ -133,20 +133,22 @@ if [[ "$BUILD_RUST_APPS" == "false" && "$BUILD_ST" == "false" ]]; then
     exit 0
 fi
 
-# ── Guardrail: renderer-software is MANDATORY for transparency ──
-# GPU renderers (femtovg, skia) composite to an opaque surface, destroying
-# alpha. This check catches accidental Cargo.toml edits before they ship.
+# ── Guardrail: renderer-femtovg is MANDATORY for transparency ──
+# The software renderer uses softbuffer which hardcodes wl_shm::Format::Xrgb8888
+# on Wayland — alpha is completely ignored. FemtoVG uses OpenGL/EGL with ARGB
+# visuals, so the compositor sees real alpha. Never use renderer-software or skia.
 # Check workspace Cargo.toml (single source of truth for all apps).
 _ws_toml="$PROJECT_ROOT/src/shared/apps/Cargo.toml"
-if [[ -f "$_ws_toml" ]] && grep -q 'renderer-femtovg\|renderer-skia' "$_ws_toml"; then
-    die "Workspace Cargo.toml uses a GPU renderer — transparency will break!
-  The Slint feature MUST be 'renderer-software', not 'renderer-femtovg' or 'renderer-skia'.
+if [[ -f "$_ws_toml" ]] && grep -q 'renderer-software\|renderer-skia' "$_ws_toml"; then
+    die "Workspace Cargo.toml uses wrong renderer — transparency will break!
+  The Slint feature MUST be 'renderer-femtovg', not 'renderer-software' or 'renderer-skia'.
+  renderer-software uses softbuffer which hardcodes XRGB on Wayland (no alpha).
   See .github/copilot-instructions.md § 'Transparent Rust Apps' for why."
 fi
-# Also check smpl-common init code — the software renderer string must match.
+# Also check smpl-common init code — the femtovg renderer string must match.
 _common_lib="$PROJECT_ROOT/src/shared/apps/smpl-common/src/lib.rs"
-if [[ -f "$_common_lib" ]] && ! grep -q 'with_renderer_name("software")' "$_common_lib"; then
-    die "smpl-common/src/lib.rs is missing .with_renderer_name(\"software\")!
+if [[ -f "$_common_lib" ]] && ! grep -q 'with_renderer_name("femtovg")' "$_common_lib"; then
+    die "smpl-common/src/lib.rs is missing .with_renderer_name(\"femtovg\")!
   This is required for transparency. Someone removed or changed it."
 fi
 
