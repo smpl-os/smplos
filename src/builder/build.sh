@@ -28,7 +28,9 @@ SKIP_FLATPAK="${SKIP_FLATPAK:-}"
 SKIP_APPIMAGE="${SKIP_APPIMAGE:-}"
 RELEASE="${RELEASE:-}"
 NO_CACHE="${NO_CACHE:-}"
-BUILD_VERSION="${BUILD_VERSION:-0.1.0}"
+
+# Read version from src/VERSION (single source of truth); env override still works
+BUILD_VERSION="${BUILD_VERSION:-$(tr -d '[:space:]' < "$SRC_DIR/VERSION" 2>/dev/null || echo "0.1.0")}"
 
 # ISO metadata
 ISO_NAME="smplos"
