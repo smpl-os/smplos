@@ -22,7 +22,7 @@ repository = "https://github.com/smpl-os/smpl-apps"
 # Bump here to update all apps at once.
 [workspace.dependencies]
 # UI
-slint                 = { version = "1.8", default-features = false, features = ["backend-winit", "renderer-femtovg", "compat-1-2"] }
+slint                 = { version = "1.8", default-features = false, features = ["backend-winit", "renderer-femtovg, "compat-1-2"] }
 i-slint-backend-winit = "1.8"
 slint-build           = "1.8"
 smpl-common           = { path = "smpl-common" }
