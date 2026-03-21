@@ -537,7 +537,7 @@ fn get_about_info() -> (String, String, String, String, String, String, String) 
         let lspci = String::from_utf8_lossy(&lspci_out.stdout);
         let gpu_name = lspci.lines()
             .find(|l| l.contains("VGA") || l.contains("3D controller"))
-            .and_then(|l| l.split(':').last())
+            .and_then(|l| l.split(':').next_back())
             .map(|s| s.trim().to_string())?;
 
         // AMD: try sysfs for VRAM
@@ -609,20 +609,7 @@ fn main() -> Result<(), slint::PlatformError> {
         i += 1;
     }
 
-    // Set up winit backend
-    let backend = i_slint_backend_winit::Backend::builder()
-        .with_renderer_name("software")
-        .with_window_attributes_hook(|attrs| {
-            use i_slint_backend_winit::winit::dpi::LogicalSize;
-            use i_slint_backend_winit::winit::platform::wayland::WindowAttributesExtWayland;
-            attrs
-                .with_name("settings", "settings")
-                .with_decorations(false)
-                .with_inner_size(LogicalSize::new(900.0_f64, 560.0))
-        })
-        .build()?;
-    slint::platform::set_platform(Box::new(backend))
-        .map_err(|e| slint::PlatformError::Other(e.to_string()))?;
+    smpl_common::init("settings", 900.0, 560.0)?;
 
     let ui = MainWindow::new()?;
     apply_theme(&ui);

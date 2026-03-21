@@ -1,22 +1,18 @@
 [package]
-name = "settings"
-version = "0.1.0"
-edition = "2021"
-description = "smplOS unified Settings app"
+name              = "settings"
+version.workspace = true
+edition.workspace = true
+description       = "smplOS unified Settings app"
 
 [dependencies]
-slint = { version = "1.8", default-features = false, features = ["backend-winit", "renderer-software", "compat-1-2"] }
-i-slint-backend-winit = "1.8"
-xkbcommon = "0.9"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-libc = "0.2"
-dirs = "6"
+slint                 = { workspace = true }
+i-slint-backend-winit = { workspace = true }
+smpl-common           = { workspace = true }
+xkbcommon             = { workspace = true }
+serde                 = { workspace = true }
+serde_json            = { workspace = true }
+libc                  = { workspace = true }
+dirs                  = { workspace = true }
 
 [build-dependencies]
-slint-build = "1.8"
-
-[profile.release]
-lto = true
-codegen-units = 1
-strip = true
+slint-build = { workspace = true }

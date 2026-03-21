@@ -1,16 +1,12 @@
 [package]
-name = "start-menu"
-version = "0.1.18"
-edition = "2021"
+name              = "start-menu"
+version.workspace = true
+edition.workspace = true
 
 [dependencies]
-slint = { version = "1.8", default-features = false, features = ["backend-winit", "renderer-software", "compat-1-2"] }
-i-slint-backend-winit = "1.8"
+slint                 = { workspace = true }
+i-slint-backend-winit = { workspace = true }
+smpl-common           = { workspace = true }
 
 [build-dependencies]
-slint-build = "1.8"
-
-[profile.release]
-lto = true
-codegen-units = 1
-strip = true
+slint-build = { workspace = true }

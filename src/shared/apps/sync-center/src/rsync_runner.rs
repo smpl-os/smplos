@@ -80,7 +80,7 @@ impl RsyncRunner {
         if disk_space.available < required_space {
             return Err(SyncError::InsufficientDiskSpace {
                 drive: dest_parent.display().to_string(),
-                required: (required_space + 1024 * 1024 * 1024 - 1) / (1024 * 1024 * 1024), // Round up to GB
+                required: required_space.div_ceil(1024 * 1024 * 1024),
                 available: disk_space.available / (1024 * 1024 * 1024),
             });
         }
@@ -105,7 +105,7 @@ impl RsyncRunner {
             Ok(())
         }
 
-        walk_dir(path, &mut total).map_err(|e| SyncError::Io(e))?;
+        walk_dir(path, &mut total).map_err(SyncError::Io)?;
         Ok(total)
     }
 

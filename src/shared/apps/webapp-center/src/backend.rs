@@ -41,7 +41,7 @@ pub fn scan_webapps() -> Vec<WebApp> {
 
     for entry in entries.flatten() {
         let path = entry.path();
-        if path.extension().map_or(true, |e| e != "desktop") {
+        if path.extension().is_none_or(|e| e != "desktop") {
             continue;
         }
         let Ok(content) = std::fs::read_to_string(&path) else {
@@ -107,7 +107,7 @@ fn parse_exec_flag(exec: &str, flag: &str) -> Option<String> {
 
     if after.starts_with('"') {
         // Quoted value
-        let inner = &after[1..];
+        let inner = after.strip_prefix('"').unwrap_or(after);
         let end = inner.find('"')?;
         Some(inner[..end].to_string())
     } else {
@@ -122,9 +122,8 @@ fn extract_url(exec: &str) -> Option<String> {
     // The URL is the last argument on the exec line
     // It may be quoted: "https://..."
     let trimmed = exec.trim();
-    if trimmed.ends_with('"') {
+    if let Some(inner) = trimmed.strip_suffix('"') {
         // Find matching opening quote
-        let inner = &trimmed[..trimmed.len() - 1];
         if let Some(start) = inner.rfind('"') {
             return Some(inner[start + 1..].to_string());
         }

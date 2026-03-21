@@ -410,22 +410,11 @@ fn start_signal_listener(window_weak: slint::Weak<MainWindow>) {
 // ─── main ─────────────────────────────────────────────────────────────────────
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let backend = i_slint_backend_winit::Backend::builder()
-        .with_renderer_name("femtovg")
-        .with_window_attributes_hook(|attrs| {
-            use i_slint_backend_winit::winit::dpi::LogicalSize;
-            use i_slint_backend_winit::winit::platform::wayland::WindowAttributesExtWayland;
-            attrs
-                .with_name("sync-center", "sync-center")
-                .with_decorations(false)
-                .with_inner_size(LogicalSize::new(800.0_f64, 600.0))
-        })
-        .build()?;
-    slint::platform::set_platform(Box::new(backend))
-        .map_err(|e| slint::PlatformError::Other(e.to_string()))?;
+    smpl_common::init("sync-center", 800.0, 600.0)
+        .map_err(|e| Box::new(e) as Box<dyn std::error::Error>)?;
 
     let main_window = MainWindow::new()?;
-    main_window.set_app_version(env!("SYNC_CENTER_VERSION").into());
+    main_window.set_app_version(env!("CARGO_PKG_VERSION").into());
 
     // Ensure daemon is running. If we just spawned it, poll the D-Bus name
     // every 100 ms (up to 3 s) instead of using a fixed sleep: on fast

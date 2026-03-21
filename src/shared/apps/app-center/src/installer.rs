@@ -95,7 +95,7 @@ fn spawn_process(cmd: &str, args: &[&str]) -> Result<StreamingProcess, String> {
     if let Some(out) = stdout {
         let tx = tx.clone();
         std::thread::spawn(move || {
-            for line in BufReader::new(out).lines().flatten() {
+            for line in BufReader::new(out).lines().map_while(Result::ok) {
                 let _ = tx.send(strip_ansi(&line));
             }
         });
@@ -104,7 +104,7 @@ fn spawn_process(cmd: &str, args: &[&str]) -> Result<StreamingProcess, String> {
     if let Some(err) = stderr {
         let tx = tx.clone();
         std::thread::spawn(move || {
-            for line in BufReader::new(err).lines().flatten() {
+            for line in BufReader::new(err).lines().map_while(Result::ok) {
                 let _ = tx.send(strip_ansi(&line));
             }
         });

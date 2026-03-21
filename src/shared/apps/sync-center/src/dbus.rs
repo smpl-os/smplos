@@ -189,7 +189,7 @@ fn run_rsync_blocking(
     let (prog_tx, prog_rx) = std::sync::mpsc::channel::<f64>();
     let stdout = child.stdout.take().expect("stdout was piped");
     std::thread::spawn(move || {
-        for line in BufReader::new(stdout).lines().flatten() {
+        for line in BufReader::new(stdout).lines().map_while(Result::ok) {
             if let Some(pct) = parse_progress_pct(&line) {
                 let _ = prog_tx.send(pct);
             }
@@ -205,7 +205,7 @@ fn run_rsync_blocking(
     std::thread::spawn(move || {
         let collected = BufReader::new(stderr_pipe)
             .lines()
-            .filter_map(|l| l.ok())
+            .map_while(Result::ok)
             .collect::<Vec<_>>()
             .join("; ");
         let _ = stderr_tx.send(collected);
@@ -238,7 +238,7 @@ fn run_rsync_blocking(
                             .map(|s| {
                                 BufReader::new(s)
                                     .lines()
-                                    .filter_map(|l| l.ok())
+                                    .map_while(Result::ok)
                                     .collect::<Vec<_>>()
                                     .join("; ")
                             })

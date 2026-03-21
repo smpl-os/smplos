@@ -1,10 +1,10 @@
 [package]
-name = "sync-center"
-version = "0.1.0"
-edition = "2021"
-authors = ["smplOS Team"]
-license = "GPL-3.0-or-later"
-description = "Automatic directory synchronization to external drives"
+name               = "sync-center"
+version.workspace  = true
+edition.workspace  = true
+authors.workspace  = true
+license.workspace  = true
+description        = "Automatic directory synchronization to external drives"
 
 [[bin]]
 name = "sync-center-daemon"
@@ -15,46 +15,30 @@ name = "sync-center-gui"
 path = "src/bin/gui.rs"
 
 [dependencies]
-# GUI (Slint for consistency with other smplOS apps)
-slint = { version = "1.8", default-features = false, features = ["backend-winit", "renderer-software", "compat-1-2"] }
-i-slint-backend-winit = "1.8"
-rfd = "0.15"
-
-# GLib/GIO (for volume monitoring)
-glib = "0.20"
-gio = { version = "0.20", features = ["v2_70"] }
-
-# D-Bus
-zbus = { version = "3.0", features = ["tokio"] }
-zvariant = "3.0"
-
-# Async runtime
-tokio = { version = "1", features = ["full"] }
-
-# Serialization
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-
-# Logging
-tracing = "0.1"
-tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
-
-# System utilities
-nix = { version = "0.27", features = ["fs"] }
-dirs = "5.0"
-uuid = { version = "1.0", features = ["serde", "v4"] }
-notify-rust = "4.10"
-anyhow = "1.0"
-thiserror = "1.0"
-futures = "0.3"
-libc = "0.2"
+slint                 = { workspace = true }
+i-slint-backend-winit = { workspace = true }
+smpl-common           = { workspace = true }
+rfd                   = { workspace = true }
+glib                  = { workspace = true }
+gio                   = { workspace = true }
+zbus                  = { workspace = true }
+zvariant              = { workspace = true }
+tokio                 = { workspace = true }
+serde                 = { workspace = true }
+serde_json            = { workspace = true }
+tracing               = { workspace = true }
+tracing-subscriber    = { workspace = true }
+nix                   = { workspace = true }
+dirs                  = { workspace = true }
+uuid                  = { workspace = true }
+notify-rust           = { workspace = true }
+anyhow                = { workspace = true }
+thiserror             = { workspace = true }
+futures               = { workspace = true }
+libc                  = { workspace = true }
 
 [build-dependencies]
-slint-build = "1.8"
+slint-build = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3.8"
-
-[profile.release]
-opt-level = 3
-lto = true

@@ -343,7 +343,7 @@ export component MainWindow inherits Window {
     title: "smplOS";
     width: 520px;
     height: 580px;
-    background: transparent;
+    background: Theme.bg.transparentize(1.0 - Theme.opacity);
     no-frame: true;
 
     // Properties
@@ -448,7 +448,7 @@ export component MainWindow inherits Window {
     Rectangle {
         width: root.width;
         height: root.height;
-        background: Theme.bg.transparentize(1.0 - Theme.opacity);
+        background: transparent;
         border-radius: Theme.border_radius;
         border-width: 1px;
         border-color: Theme.bg_lighter.transparentize(0.5);
@@ -538,7 +538,19 @@ export component MainWindow inherits Window {
                         return accept;
                     }
                     if (event.text == Key.DownArrow) {
-                        root.focus-cat();
+                        if (root.is-searching && root.app-count > 0) {
+                            if (root.selected-app < root.app-count - 1) {
+                                root.selected-app += 1;
+                            }
+                        } else {
+                            root.focus-cat();
+                        }
+                        return accept;
+                    }
+                    if (event.text == Key.UpArrow && root.is-searching) {
+                        if (root.selected-app > 0) {
+                            root.selected-app -= 1;
+                        }
                         return accept;
                     }
                     if (event.modifiers.control && event.text == "p") {
@@ -576,7 +588,7 @@ export component MainWindow inherits Window {
                         edited => { root.focus-zone = 0; root.filter-changed(); }
                         accepted => {
                             if root.app-count > 0 {
-                                root.launch-app(0);
+                                root.launch-app(root.selected-app >= 0 ? root.selected-app : 0);
                             }
                         }
                     }
@@ -865,7 +877,7 @@ export component MainWindow inherits Window {
                                     source: app.source;
                                     show_badge: true;
                                     is_pinned: app.is_pinned;
-                                    highlighted: root.focus-zone == 2 && root.selected-app == i;
+                                    highlighted: (root.focus-zone == 2 || root.is-searching) && root.selected-app == i;
 
                                     clicked => { root.launch-app(i); }
                                     right-clicked => {

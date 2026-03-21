@@ -266,6 +266,7 @@ fn to_ui_item(app: &AppEntry, path_cache: &HashMap<String, String>, img_cache: &
 
 // ── Update the visible app list ──
 
+#[allow(clippy::too_many_arguments)]
 fn update_view(
     ui: &MainWindow,
     all_apps: &[AppEntry],
@@ -336,19 +337,7 @@ fn main() -> Result<(), slint::PlatformError> {
         }
     }
 
-    let backend = i_slint_backend_winit::Backend::builder()
-        .with_renderer_name("software")
-        .with_window_attributes_hook(|attrs| {
-            use i_slint_backend_winit::winit::dpi::LogicalSize;
-            use i_slint_backend_winit::winit::platform::wayland::WindowAttributesExtWayland;
-            attrs
-                .with_name("start-menu", "start-menu")
-                .with_decorations(false)
-                .with_inner_size(LogicalSize::new(520.0_f64, 580.0))
-        })
-        .build()?;
-    slint::platform::set_platform(Box::new(backend))
-        .map_err(|e| slint::PlatformError::Other(e.to_string()))?;
+    smpl_common::init("start-menu", 520.0, 580.0)?;
 
     let ui = MainWindow::new()?;
     apply_theme(&ui);

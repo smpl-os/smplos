@@ -357,21 +357,10 @@ fn main() -> Result<(), slint::PlatformError> {
 
     // Start in details mode if --details flag given
     let start_details = std::env::args().any(|a| a == "--details");
-
-    // Inline backend init (no smpl-common dependency in standalone build)
-    let backend = i_slint_backend_winit::Backend::builder()
-        .with_renderer_name("software")
-        .with_window_attributes_hook(|attrs| {
-            use i_slint_backend_winit::winit::dpi::LogicalSize;
-            use i_slint_backend_winit::winit::platform::wayland::WindowAttributesExtWayland;
-            attrs
-                .with_name("smpl-calendar", "smpl-calendar")
-                .with_decorations(false)
-                .with_inner_size(LogicalSize::new(230.0_f64, 500.0))
-        })
-        .build()?;
-    slint::platform::set_platform(Box::new(backend))
-        .map_err(|e| slint::PlatformError::Other(e.to_string()))?;
+    // Create UI first to read sizes from the Slint global, then init backend.
+    // smpl_common::init must be called before MainWindow::new(), so we use
+    // the Slint defaults as initial hint and set_size immediately after.
+    smpl_common::init("smpl-calendar", 230.0, 500.0)?;
 
     // Start the reminder daemon (stays alive for the session)
     ensure_alertd();

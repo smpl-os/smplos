@@ -37,6 +37,16 @@ src/shared/          ← Everything here works on ALL compositors
   eww/               ← EWW bar, launcher, theme picker, keybind help (GTK3, works on X11 + Wayland)
   configs/smplos/    ← Cross-compositor configs (bindings.conf = single source of truth)
   themes/            ← 14 themes with templates for all apps
+  apps/              ← Cargo workspace (synced from smpl-apps repo)
+    Cargo.toml       ← workspace root (shared deps, renderer-software)
+    smpl-common/     ← shared init library for all apps
+    start-menu/      ← app crates (use workspace deps via smpl-common)
+    notif-center/
+    settings/
+    app-center/
+    webapp-center/
+    sync-center/
+    calendar/
   installer/         ← OS installer
 
 src/compositors/hyprland/   ← ONLY Hyprland-specific config
@@ -194,25 +204,65 @@ All smplOS GUI apps (`start-menu`, `notif-center`, `settings`, `app-center`,
 transparency + blur. **Deviating from any of these points silently breaks the
 look with NO error message.**
 
-⚠️ **STOP — Read this if you are editing ANY `Cargo.toml` in `src/shared/apps/`:**
+#### Source of Truth: smpl-apps Workspace
 
-The Slint feature flag in every app's `Cargo.toml` MUST be `renderer-software`.
-**NEVER change it to `renderer-femtovg`, `renderer-skia`, or any other renderer.**
-GPU renderers composite to an opaque surface — alpha is destroyed — all apps
-lose transparency. This has already caused a regression (commit `d718783`,
-March 1 2026) where an AI silently flipped all 6 apps to `renderer-femtovg`
-during an unrelated bulk edit. `build-apps.sh` now has a hard check that
-fails the build if any Cargo.toml contains `renderer-femtovg`.
+`src/shared/apps/` is a **full Cargo workspace** — a direct copy of the
+[smpl-apps](https://github.com/smpl-os/smpl-apps) repo. It contains:
+
+```
+src/shared/apps/
+  Cargo.toml          ← workspace root (version, shared deps)
+  Cargo.lock
+  smpl-common/        ← shared init library (transparency + Wayland setup)
+  start-menu/
+  notif-center/
+  settings/
+  app-center/
+  webapp-center/
+  sync-center/
+  calendar/           ← builds smpl-calendar + smpl-calendar-alertd
+```
+
+**smpl-common** is the single source of truth for backend init. Every app
+calls `smpl_common::init(app_id, w, h)` which sets the software renderer,
+disables decorations, and configures the Wayland app_id. **NO app should
+inline this init code or have its own Backend::builder() calls.**
+
+⚠️ **STOP — Read this if you are editing ANY file in `src/shared/apps/`:**
+
+**RULE 1: NEVER create standalone Cargo.toml files for individual apps.**
+Apps use `workspace = true` for all shared dependencies. The workspace
+`Cargo.toml` declares `renderer-software` once; individual apps inherit it.
+Standalone Cargo.toml files (with their own slint dependency) caused the
+March 2026 transparency regression — divergent copies got `renderer-femtovg`
+and nobody noticed for weeks.
+
+**RULE 2: Changes go in smpl-apps FIRST, then sync to smplos.**
+The smpl-apps repo is the development workspace. After changes are made and
+tested there, sync to smplos with:
+```bash
+rsync -a --delete --exclude='target/' --exclude='.git/' \
+  /path/to/smpl-apps/ smplos/src/shared/apps/
+```
+NEVER edit files inside `smplos/src/shared/apps/` directly — they will be
+overwritten on the next sync. If you see a bug in an app, fix it in smpl-apps.
+
+**RULE 3: build-apps.sh builds the WORKSPACE, not individual apps.**
+`build-apps.sh` runs `cargo build --release --workspace` inside a container.
+This compiles smpl-common once and links it into every app identically.
+The build has guardrails that fail if `renderer-femtovg` or `renderer-skia`
+appears in the workspace Cargo.toml, or if smpl-common is missing
+`.with_renderer_name("software")`.
 
 ```toml
-# ✅ CORRECT — in every src/shared/apps/*/Cargo.toml:
+# ✅ CORRECT — in workspace Cargo.toml (ONE place, inherited by all apps):
 slint = { version = "1.8", default-features = false, features = ["backend-winit", "renderer-software", "compat-1-2"] }
 
 # ❌ WRONG — NEVER use these (destroys transparency with no error):
 # renderer-femtovg, renderer-skia, or omitting the renderer feature entirely
 ```
 
-**Runtime init code** (in `main.rs` or `smpl-common`):
+**smpl-common init code** (in `smpl-common/src/lib.rs`):
 
 ```rust
 let backend = i_slint_backend_winit::Backend::builder()
@@ -241,18 +291,21 @@ slint::platform::set_platform(Box::new(backend))
 - **`with_name(app_id, instance)` is mandatory.** Without it the Wayland `app_id` is
   empty/generic and `windowrulev2` in `windows.conf` can't target the window for
   float/opacity/blur rules. Convention: both args match the binary name.
-- **Background alpha comes from the theme palette.** The `bg` color in `theme-colors.scss`
-  carries an alpha component (e.g. `rgba(20,20,20,0.85)`). `apply_theme()` reads it and
-  sets it on the Slint `Theme` struct. Never hardcode a fully-opaque `#rrggbb` background
-  in a `.slint` file — always pull from the palette so themes control opacity.
+- **Background alpha comes from the theme palette.** Each `.slint` Window uses
+  `background: Theme.bg.transparentize(1.0 - Theme.opacity)`. The `opacity`
+  value is read from `$theme-popup-opacity` in `theme-colors.scss` at runtime.
+  Never hardcode a fully-opaque `#rrggbb` background on a Window.
 - **Hyprland rules** in `windows.conf` target `initialClass` matching the `app_id`:
   `windowrulev2 = float, initialClass:start-menu`.
 
 **NEVER do these — each one silently kills transparency with no error:**
-- NEVER put `renderer-femtovg` or `renderer-skia` in any `src/shared/apps/*/Cargo.toml`
+- NEVER put `renderer-femtovg` or `renderer-skia` in the workspace Cargo.toml
 - NEVER remove the `renderer-software` feature from a Cargo.toml
 - NEVER set `with_decorations(true)` or omit the decorations call
-- NEVER hardcode an opaque `#rrggbb` background in `.slint` files (use theme alpha)
+- NEVER hardcode an opaque `#rrggbb` background on a `.slint` Window (use theme alpha)
+- NEVER create standalone per-app Cargo.toml files with their own slint dependency
+- NEVER edit files in `smplos/src/shared/apps/` directly — edit smpl-apps, then sync
+- NEVER inline Backend::builder() in individual apps — use `smpl_common::init()`
 
 ### Packages
 

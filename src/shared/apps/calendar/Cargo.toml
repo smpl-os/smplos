@@ -1,0 +1,28 @@
+[package]
+name              = "smpl-calendar"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+slint                 = { workspace = true }
+i-slint-backend-winit = { workspace = true }
+smpl-common           = { workspace = true }
+serde                 = { workspace = true }
+serde_json            = { workspace = true }
+chrono                = { workspace = true }
+dirs                  = { workspace = true }
+anyhow                = { workspace = true }
+# Bundled SQLite: zero external dependency, no libsqlite3 required on target system.
+# Embedded directly in the binary — ideal for the offline-first smplOS.
+rusqlite              = { version = "0.32", features = ["bundled"] }
+
+[[bin]]
+name = "smpl-calendar"
+path = "src/main.rs"
+
+[[bin]]
+name = "smpl-calendar-alertd"
+path = "src/bin/alertd.rs"
+
+[build-dependencies]
+slint-build = { workspace = true }

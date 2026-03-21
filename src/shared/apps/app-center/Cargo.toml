@@ -1,19 +1,15 @@
 [package]
-name = "app-center"
-version = "0.1.1"
-edition = "2021"
+name              = "app-center"
+version.workspace = true
+edition.workspace = true
 
 [dependencies]
-slint = { version = "1.8", default-features = false, features = ["backend-winit", "renderer-software", "compat-1-2"] }
-i-slint-backend-winit = "1.8"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-ureq = { version = "2", features = ["json"] }
+slint                 = { workspace = true }
+i-slint-backend-winit = { workspace = true }
+smpl-common           = { workspace = true }
+serde                 = { workspace = true }
+serde_json            = { workspace = true }
+ureq                  = { workspace = true }
 
 [build-dependencies]
-slint-build = "1.8"
-
-[profile.release]
-lto = true
-codegen-units = 1
-strip = true
+slint-build = { workspace = true }

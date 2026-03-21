@@ -3,11 +3,16 @@ set -euo pipefail
 #
 # build-apps.sh -- Build all Rust apps + st-wl in a Podman container
 #
-# Usage:  ./build-apps.sh                    # build all apps (incremental)
-#         ./build-apps.sh start-menu         # build one app
-#         ./build-apps.sh settings st         # build specific apps + st-wl
-#         ./build-apps.sh --clean            # wipe build cache, full rebuild
-#         ./build-apps.sh --clean all        # clean + rebuild everything
+# Usage:  ./build-apps.sh                    # build all Rust apps (incremental)
+#         ./build-apps.sh st                  # build st-wl terminal only
+#         ./build-apps.sh all                 # build Rust apps + st-wl
+#         ./build-apps.sh --clean             # wipe build cache, full rebuild
+#         ./build-apps.sh --clean all         # clean + rebuild everything
+#
+# All Rust apps are built as a single Cargo workspace (shared/apps/). This
+# ensures smpl-common (transparency + Wayland init) is compiled identically
+# for every app. Individual app builds are NOT supported — the workspace is
+# the single source of truth.
 #
 # Outputs binaries to: .cache/app-binaries/
 # Build cache persists at .cache/build-cache/ so cargo and make do incremental
@@ -46,24 +51,17 @@ detect_runtime() {
 }
 
 # ── Parse arguments ──
-ALL_APPS=(start-menu notif-center settings app-center webapp-center sync-center smpl-calendar)
 BUILD_ST=false
 CLEAN_BUILD=false
-REQUESTED_APPS=()
 
 for arg in "$@"; do
     case "$arg" in
         --clean) CLEAN_BUILD=true ;;
         st|st-wl) BUILD_ST=true ;;
-        all) REQUESTED_APPS=("${ALL_APPS[@]}"); BUILD_ST=true ;;
-        *) REQUESTED_APPS+=("$arg") ;;
+        all) BUILD_ST=true ;;
+        *) ;; # Individual app args ignored — workspace builds everything
     esac
 done
-
-# Default: build all Rust apps (no-arg, or --clean with no specific apps)
-if [[ ${#REQUESTED_APPS[@]} -eq 0 && "$BUILD_ST" == "false" ]]; then
-    REQUESTED_APPS=("${ALL_APPS[@]}")
-fi
 
 # ── Main ──
 detect_runtime
@@ -88,41 +86,49 @@ git_tree_hash() {
 git_tree_clean() {
     git -C "$PROJECT_ROOT" diff --quiet HEAD -- "$1" 2>/dev/null
 }
-# Exit 0 if the app binary is missing or stale; exit 1 if up to date.
-app_is_stale() {
-    local app="$1" rel_dir="$2"
-    [[ -f "$BIN_OUTPUT/$app" ]] || return 0
-    local current stored
-    current=$(git_tree_hash "$rel_dir"); [[ -z "$current" ]] && return 0
-    stored=$(cat "$BIN_OUTPUT/$app.built-at" 2>/dev/null) || return 0
-    [[ "$current" == "$stored" ]] || return 0
-    git_tree_clean "$rel_dir" || return 0
-    return 1
-}
 
-# Skip up-to-date apps before entering the container (skips pacman + container overhead).
-# In clean builds we skip this and let cargo/make decide what to recompile internally.
+# All Rust apps are built as a single workspace — check the entire workspace
+# directory for changes, not individual app subdirs.
+APPS_REL="src/shared/apps"
+BUILD_RUST_APPS=true
+
+# Skip up-to-date builds (skips pacman + container overhead).
+# In clean builds we skip this and let cargo decide what to recompile.
 if [[ "$CLEAN_BUILD" == "false" ]]; then
-    filtered_apps=()
-    for app in "${REQUESTED_APPS[@]}"; do
-        rel="src/shared/apps/$app"
-        if app_is_stale "$app" "$rel"; then
-            filtered_apps+=("$app")
-        else
-            log "$app: up to date"
+    # Check if any Rust app binary is missing
+    any_missing=false
+    for bin in start-menu notif-center settings app-center webapp-center \
+               sync-center-gui sync-center-daemon smpl-calendar smpl-calendar-alertd; do
+        if [[ ! -f "$BIN_OUTPUT/$bin" ]]; then
+            any_missing=true
+            break
         fi
     done
-    REQUESTED_APPS=("${filtered_apps[@]}")
+
+    if [[ "$any_missing" == "false" ]]; then
+        # All binaries exist — check if workspace source changed
+        current_hash=$(git_tree_hash "$APPS_REL")
+        stored_hash=$(cat "$BIN_OUTPUT/workspace.built-at" 2>/dev/null || echo "")
+        if [[ -n "$current_hash" && "$current_hash" == "$stored_hash" ]] \
+           && git_tree_clean "$APPS_REL"; then
+            log "Rust apps: up to date"
+            BUILD_RUST_APPS=false
+        fi
+    fi
 
     if [[ "$BUILD_ST" == "true" ]]; then
-        if ! app_is_stale "st-wl" "src/compositors/hyprland/st"; then
+        st_current=$(git_tree_hash "src/compositors/hyprland/st")
+        st_stored=$(cat "$BIN_OUTPUT/st-wl.built-at" 2>/dev/null || echo "")
+        if [[ -f "$BIN_OUTPUT/st-wl" && -n "$st_current" \
+              && "$st_current" == "$st_stored" ]] \
+           && git_tree_clean "src/compositors/hyprland/st"; then
             log "st-wl: up to date"
             BUILD_ST=false
         fi
     fi
 fi
 
-if [[ ${#REQUESTED_APPS[@]} -eq 0 && "$BUILD_ST" == "false" ]]; then
+if [[ "$BUILD_RUST_APPS" == "false" && "$BUILD_ST" == "false" ]]; then
     log "All apps up to date — nothing to build"
     exit 0
 fi
@@ -130,15 +136,19 @@ fi
 # ── Guardrail: renderer-software is MANDATORY for transparency ──
 # GPU renderers (femtovg, skia) composite to an opaque surface, destroying
 # alpha. This check catches accidental Cargo.toml edits before they ship.
-for app in "${REQUESTED_APPS[@]}"; do
-    toml="$PROJECT_ROOT/src/shared/apps/$app/Cargo.toml"
-    [[ -f "$toml" ]] || continue
-    if grep -q 'renderer-femtovg\|renderer-skia' "$toml"; then
-        die "$app/Cargo.toml uses a GPU renderer — transparency will break!
+# Check workspace Cargo.toml (single source of truth for all apps).
+_ws_toml="$PROJECT_ROOT/src/shared/apps/Cargo.toml"
+if [[ -f "$_ws_toml" ]] && grep -q 'renderer-femtovg\|renderer-skia' "$_ws_toml"; then
+    die "Workspace Cargo.toml uses a GPU renderer — transparency will break!
   The Slint feature MUST be 'renderer-software', not 'renderer-femtovg' or 'renderer-skia'.
   See .github/copilot-instructions.md § 'Transparent Rust Apps' for why."
-    fi
-done
+fi
+# Also check smpl-common init code — the software renderer string must match.
+_common_lib="$PROJECT_ROOT/src/shared/apps/smpl-common/src/lib.rs"
+if [[ -f "$_common_lib" ]] && ! grep -q 'with_renderer_name("software")' "$_common_lib"; then
+    die "smpl-common/src/lib.rs is missing .with_renderer_name(\"software\")!
+  This is required for transparency. Someone removed or changed it."
+fi
 
 # Build script that runs inside the container
 INNER_SCRIPT=$(cat << 'INNER'
@@ -151,7 +161,7 @@ CACHE_DIR="/build/cache"
 
 # Install all build deps in one shot
 pacman -Sy --noconfirm --needed \
-    base-devel rust cargo cmake pkgconf \
+    base-devel rust cargo cmake pkgconf rsync \
     fontconfig freetype2 harfbuzz imlib2 \
     libxkbcommon wayland wayland-protocols pixman \
     libglvnd mesa openssl mold 2>/dev/null
@@ -159,46 +169,45 @@ pacman -Sy --noconfirm --needed \
 # Use mold linker -- significantly faster than GNU ld for Rust link step
 export RUSTFLAGS="-C link-arg=-fuse-ld=mold"
 
-# Build each requested Rust app
-for app in $APPS; do
-    app_src="$SRC_DIR/shared/apps/$app"
-    if [[ ! -f "$app_src/Cargo.toml" ]]; then
-        echo "[build] $app: source not found, skipping"
-        continue
-    fi
+# ── Workspace build ──────────────────────────────────────────────────────────
+# All smplOS Rust apps live in a single Cargo workspace under shared/apps/.
+# Building the whole workspace at once lets Cargo share the dependency graph
+# and ensures smpl-common (shared init code for transparency + Wayland setup)
+# is compiled once and linked into every app identically.
+#
+# Binary names to collect after build:
+#   start-menu, notif-center, settings, app-center, webapp-center,
+#   sync-center-gui, sync-center-daemon,
+#   smpl-calendar, smpl-calendar-alertd
 
-    echo "[build] Building $app..."
-    target_dir="$CACHE_DIR/cargo/$app"
-    src_copy="$CACHE_DIR/src/$app"
-    mkdir -p "$target_dir" "$src_copy"
+if [[ "$BUILD_RUST_APPS" == "true" ]]; then
+    WS_SRC="$SRC_DIR/shared/apps"
+    WS_COPY="$CACHE_DIR/src/workspace"
+    WS_TARGET="$CACHE_DIR/cargo/workspace"
+    mkdir -p "$WS_COPY" "$WS_TARGET"
 
-    # Copy source to writable location (so cargo can update Cargo.lock)
-    # target/ stays in persistent cache via CARGO_TARGET_DIR for incremental builds
-    cp -r "$app_src/." "$src_copy/"
+    # Sync workspace source to writable location
+    rsync -a --delete "$WS_SRC/" "$WS_COPY/"
 
-    CARGO_TARGET_DIR="$target_dir" cargo build --release \
-        --manifest-path "$src_copy/Cargo.toml"
+    echo "[build] Building Rust workspace..."
+    CARGO_TARGET_DIR="$WS_TARGET" cargo build --release \
+        --manifest-path "$WS_COPY/Cargo.toml" \
+        --workspace
 
-    bin_path="$target_dir/release/$app"
-    if [[ -x "$bin_path" ]]; then
-        strip "$bin_path"
-        cp "$bin_path" "$OUT_DIR/$app"
-        echo "[build] $app: OK ($(du -h "$OUT_DIR/$app" | cut -f1))"
-    else
-        # Multi-binary crate: look for any binary whose name starts with $app
-        found=0
-        for extra in "$target_dir/release/"*; do
-            [[ -x "$extra" && ! -d "$extra" ]] || continue
-            bname=$(basename "$extra")
-            [[ "$bname" == "$app"* ]] || continue
-            strip "$extra"
-            cp "$extra" "$OUT_DIR/$bname"
-            echo "[build] $bname: OK ($(du -h "$OUT_DIR/$bname" | cut -f1))"
-            found=1
-        done
-        [[ "$found" -eq 1 ]] || echo "[build] $app: FAILED"
-    fi
-done
+    # Collect all expected binaries
+    ALL_BINS="start-menu notif-center settings app-center webapp-center sync-center-gui sync-center-daemon smpl-calendar smpl-calendar-alertd"
+
+    for bin in $ALL_BINS; do
+        bin_path="$WS_TARGET/release/$bin"
+        if [[ -x "$bin_path" ]]; then
+            strip "$bin_path"
+            cp "$bin_path" "$OUT_DIR/$bin"
+            echo "[build] $bin: OK ($(du -h "$OUT_DIR/$bin" | cut -f1))"
+        else
+            echo "[build] WARNING: $bin not found in release/"
+        fi
+    done
+fi
 
 # Build st-wl if requested
 if [[ "$BUILD_ST" == "true" ]]; then
@@ -239,11 +248,11 @@ run_args+=(-v "$BIN_OUTPUT:/build/out")
 run_args+=(-v "$BUILD_CACHE:/build/cache")
 run_args+=(-v "$BUILD_CACHE/pacman-pkg:/var/cache/pacman/pkg")
 
-run_args+=(-e "APPS=${REQUESTED_APPS[*]:-}")
+run_args+=(-e "BUILD_RUST_APPS=$BUILD_RUST_APPS")
 run_args+=(-e "BUILD_ST=$BUILD_ST")
 run_args+=(-e "CLEAN_BUILD=$CLEAN_BUILD")
 
-log "Building: ${REQUESTED_APPS[*]:-}${BUILD_ST:+ st-wl}${CLEAN_BUILD:+ (clean)}"
+log "Building:${BUILD_RUST_APPS:+ Rust workspace}${BUILD_ST:+ st-wl}${CLEAN_BUILD:+ (clean)}"
 log "Container: archlinux:latest via ${CTR}"
 log "Cache:     $BUILD_CACHE/"
 log "Output:    $BIN_OUTPUT/"
@@ -259,15 +268,12 @@ if [[ $rc -ne 0 ]]; then
     die "Container build failed (exit $rc)"
 fi
 
-# Save the git tree-object SHA for each successfully built app so the next
-# run can skip it. Only written when the working tree is clean — dirty local
-# edits stay stale until committed, forcing a rebuild after the commit.
-for app in "${REQUESTED_APPS[@]}"; do
-    rel="src/shared/apps/$app"
-    if [[ -f "$BIN_OUTPUT/$app" ]] && git_tree_clean "$rel"; then
-        git_tree_hash "$rel" > "$BIN_OUTPUT/$app.built-at"
-    fi
-done
+# Save the git tree-object SHA for the workspace so the next run can skip it.
+# Only written when the working tree is clean — dirty local edits stay stale
+# until committed, forcing a rebuild after the commit.
+if [[ "$BUILD_RUST_APPS" == "true" ]] && git_tree_clean "$APPS_REL"; then
+    git_tree_hash "$APPS_REL" > "$BIN_OUTPUT/workspace.built-at"
+fi
 if [[ "$BUILD_ST" == "true" && -f "$BIN_OUTPUT/st-wl" ]]; then
     if git_tree_clean "src/compositors/hyprland/st"; then
         git_tree_hash "src/compositors/hyprland/st" > "$BIN_OUTPUT/st-wl.built-at"

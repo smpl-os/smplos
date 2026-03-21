@@ -1,0 +1,8 @@
+[package]
+name              = "smpl-common"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+i-slint-backend-winit = { workspace = true }
+slint                 = { workspace = true }

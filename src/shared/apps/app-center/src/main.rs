@@ -105,19 +105,7 @@ fn main() -> Result<(), slint::PlatformError> {
         }
     }
 
-    let backend = i_slint_backend_winit::Backend::builder()
-        .with_renderer_name("software")
-        .with_window_attributes_hook(|attrs| {
-            use i_slint_backend_winit::winit::dpi::LogicalSize;
-            use i_slint_backend_winit::winit::platform::wayland::WindowAttributesExtWayland;
-            attrs
-                .with_name("app-center", "app-center")
-                .with_decorations(false)
-                .with_inner_size(LogicalSize::new(560.0_f64, 620.0))
-        })
-        .build()?;
-    slint::platform::set_platform(Box::new(backend))
-        .map_err(|e| slint::PlatformError::Other(e.to_string()))?;
+    smpl_common::init("app-center", 560.0, 620.0)?;
 
     let ui = MainWindow::new()?;
     apply_theme(&ui);

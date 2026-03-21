@@ -131,9 +131,11 @@ fn resolve_row(
         .collect()
 }
 
+type KeyRows = (String, Vec<KeyInfo>, Vec<KeyInfo>, Vec<KeyInfo>, Vec<KeyInfo>, Vec<KeyInfo>);
+
 /// Resolve key labels for the given XKB layout and variant.
 /// Returns (layout_name, row0, row1, row2, row3, row4).
-pub fn resolve(layout: &str, variant: &str) -> (String, Vec<KeyInfo>, Vec<KeyInfo>, Vec<KeyInfo>, Vec<KeyInfo>, Vec<KeyInfo>) {
+pub fn resolve(layout: &str, variant: &str) -> KeyRows {
     let ctx = xkb::Context::new(xkb::CONTEXT_NO_FLAGS);
     let keymap = xkb::Keymap::new_from_names(
         &ctx, "", "", layout, variant, None,
