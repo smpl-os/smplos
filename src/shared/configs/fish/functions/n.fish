@@ -1,7 +1,8 @@
-function n --description 'Open nvim (current dir if no args)'
+function n --description 'Open editor (current dir if no args)'
+    set -l ed (command -v $EDITOR; or echo micro)
     if test (count $argv) -eq 0
-        nvim .
+        $ed .
     else
-        nvim $argv
+        $ed $argv
     end
 end

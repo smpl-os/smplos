@@ -1,5 +1,4 @@
 # smplOS Development Edition -- extra official-repo packages
-neovim
 lazygit
 
 # ── Virtualization ───────────────────────────────────────────
