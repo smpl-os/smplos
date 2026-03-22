@@ -47,7 +47,14 @@ KERNEL_IGNORE="linux,linux-lts,linux-zen,linux-hardened,linux-headers,linux-lts-
 # Pinned packages — held back by IgnorePkg in pacman.conf so migrations run first.
 # These are updated explicitly in step 3 after smplos-os-update has run migrations.
 PINNED_PKGS="hyprland eww"
-
+# ── Pre-authenticate sudo once ────────────────────────────────────────────────
+# This asks for the password once and keeps the credential cached for the entire
+# update session. The background loop refreshes the timestamp every 50 seconds
+# so it never expires mid-update (default sudo timeout is 5 minutes).
+sudo -v || { echo "ERROR: sudo authentication failed"; read -rp "Press Enter to close..."; exit 1; }
+( while kill -0 $$ 2>/dev/null; do sudo -n -v; sleep 50; done ) &
+SUDO_KEEPALIVE_PID=$!
+trap 'kill $SUDO_KEEPALIVE_PID 2>/dev/null' EXIT
 if [[ "$UPDATE_MODE" == "apps" ]]; then
     echo "══════════════════════════════════════"
     echo "  smplOS App Update"
