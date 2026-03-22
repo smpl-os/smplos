@@ -151,6 +151,23 @@ if [[ -f "$_common_lib" ]] && ! grep -q 'with_renderer_name("femtovg")' "$_commo
     die "smpl-common/src/lib.rs is missing .with_renderer_name(\"femtovg\")!
   This is required for transparency. Someone removed or changed it."
 fi
+# Validate Cargo.toml is syntactically valid TOML before spending minutes on
+# container setup + pacman. Python 3.11+ (always on Arch) has tomllib builtin.
+if [[ -f "$_ws_toml" ]] && command -v python3 &>/dev/null; then
+    if ! python3 -c "
+import sys
+try:
+    import tomllib
+except ImportError:
+    sys.exit(0)  # old python, skip check
+with open(sys.argv[1], 'rb') as f:
+    tomllib.load(f)
+" "$_ws_toml" 2>/dev/null; then
+        die "Workspace Cargo.toml has invalid TOML syntax!
+  Common cause: missing or mismatched quotes in the features array.
+  Fix the syntax in: src/shared/apps/Cargo.toml"
+    fi
+fi
 
 # Build script that runs inside the container
 INNER_SCRIPT=$(cat << 'INNER'

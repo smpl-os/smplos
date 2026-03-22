@@ -9,9 +9,6 @@
 //! NEVER use renderer-software — it uses softbuffer which hardcodes
 //! wl_shm::Format::Xrgb8888 on Wayland, making alpha completely ignored.
 //!
-//! NEVER use renderer-software — it uses softbuffer which hardcodes
-//! wl_shm::Format::Xrgb8888 on Wayland, making alpha completely ignored.
-//!
 //! Without ALL of these, either the blur breaks, the window gets decorated,
 //! or Hyprland can't target it with windowrulev2. See copilot-instructions.md.
 
@@ -34,10 +31,10 @@ use slint::PlatformError;
 /// smpl_common::init("start-menu", 420.0, 680.0).expect("backend init failed");
 /// let ui = MainWindow::new().unwrap();
 /// ui.run().unwrap();
-/// ```FemtoVG renderer: uses OpenGL/EGL with ARGB visuals on Wayland,
-        // so the compositor sees real alpha and can blur through it.
-        // NEVER use "software" — softbuffer hardcodes XRGB on Wayland (no alpha).
-        .with_renderer_name("femtovgnGL/EGL with ARGB visuals on Wayland,
+/// ```
+pub fn init(app_id: &'static str, width: f64, height: f64) -> Result<(), PlatformError> {
+    let backend = i_slint_backend_winit::Backend::builder()
+        // FemtoVG renderer: uses OpenGL/EGL with ARGB visuals on Wayland,
         // so the compositor sees real alpha and can blur through it.
         // NEVER use "software" — softbuffer hardcodes XRGB on Wayland (no alpha).
         .with_renderer_name("femtovg")
