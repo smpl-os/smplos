@@ -15,14 +15,38 @@
 </p>
 
 <p align="center">
-  <strong>Latest release: v0.6.0</strong>
+  <strong>Latest release: v0.6.52</strong>
   &nbsp;&bull;&nbsp;
   <a href="https://archive.org/download/smplos_260313-0458/smplos_260313-0458.iso"><strong>⬇ Download Base ISO</strong></a>
 </p>
 
 ---
 
-## What's new in v0.6.0
+## What's new in v0.6.52
+
+- **Over-the-air updates.** smplOS can now update itself. The OS repo is cloned to each machine and a `git pull` brings in new scripts, configs, themes, and migrations — no re-imaging required. Run `smplos-update` for a full update (OS configs + system packages + forked apps), or let the App Center trigger it. Scripts, themes, and bindings are synced automatically; breaking changes are handled by one-shot migrations that run exactly once per user. See [UPDATING.md](UPDATING.md) for the full architecture.
+- **Migration system.** Timestamped migration scripts in `migrations/` handle breaking changes from upstream packages and smplOS config changes. `smplos-migrate` runs pending migrations in order, tracks state in `~/.local/state/smplos/migrations/`, and never runs the same migration twice. Current migrations: update system bootstrap, EWW button grab fix, Hyprshell default config, and micro default editor.
+- **Modular updates.** The update system has separate stages you can run independently:
+  - `smplos-os-update` — pull latest repo, sync scripts/configs, run migrations, bump OS version
+  - `smplos-update-apps` — download latest smpl-apps, st-smpl, and nemo-smpl binaries from GitHub releases (with smart caching + offline fallback)
+  - `smplos-update` — orchestrates everything: OS update → app update → pacman/AUR/Flatpak
+  - `smplos-refresh-config` — selectively restore a default config file (e.g. `smplos-refresh-config hypr/hyprlock.conf`)
+- **Calendar app.** New `smpl-calendar` app with popup calendar + `smpl-calendar-alertd` daemon for desktop notifications on upcoming events. Integrates with the EWW bar clock — click the time to open it. Supports local ICS files, live theme refresh, and positioned at the bottom-right corner matching the notification center.
+- **Settings: Keybindings tab.** The Settings app now has a full Keybindings tab — browse, search, and edit all system keybindings. Features 1-click capture (press the key combo you want) with auto-save back to `bindings.conf`. Keybinding logic extracted to `smpl-common` for reuse across apps.
+- **Webapp Center: hotkey support.** Webapp Center now supports a Super+key hotkey column — assign a global shortcut to any web app.
+- **App Center: auto-close after update.** The App Center window now closes automatically after launching a system update, so you're not left with a stale window behind the terminal.
+- **GitHub release downloads.** Forked app binaries (smpl-apps, st-smpl, nemo-smpl) are now downloaded from GitHub releases instead of being compiled locally. Smart caching compares the latest release tag to a local version file — only downloads when there's a new release. Falls back to cached binaries when offline.
+- **Hyprshell alt-tab.** Alt-Tab window switching via Hyprshell, with a default config deployed by migration.
+- **BambuStudio for Creators edition.** The Creators edition now includes BambuStudio for 3D printer management.
+- **micro as default editor.** Replaced neovim with micro as the default text editor in the Dev edition. More approachable for new users; neovim is still installable. Existing installs get a migration.
+- **Compact bar clock.** EWW bar clock now shows time only, with the full date in a tooltip — saves horizontal space.
+- **EWW pointer grab fix.** Fixed the GTK pointer grab bug on system tray buttons that caused the bar to become unresponsive. Replaced all sleep-based workarounds with a proper root-window pointer grab fix.
+- **SiYuan theme pre-configuration.** SiYuan notes app now launches with the smplOS theme on first run.
+- **Single sudo prompt.** The update system now asks for your password once at the start, not repeatedly during each phase.
+
+---
+
+## What was new in v0.6.0
 
 - **Offline dictation out of the box.** The Whisper `base.en` speech-to-text model (~150 MB) is bundled into the ISO and primed into the HuggingFace cache on first boot. Press <kbd>Super</kbd>+<kbd>Ctrl</kbd>+<kbd>X</kbd> to start dictating immediately — no internet, no downloads, no setup. Run `dictation-setup` to switch languages or model sizes later.
 - **Language Settings (kb-center) — Dictation tab.** kb-center now has a full Dictation tab for setting up speech-to-text via Voxtype/Whisper. Pick a language, choose a model size, and install with a single click. Supports 100+ languages, English-alongside mode, 3-tier package fallback (pacman, paru, manual PKGBUILD), and live progress tracking. The keyboard tab is unchanged.
@@ -166,7 +190,7 @@ Every edition installs offline, in under 2 minutes, from the same ISO.
 
 ## Download
 
-**smplOS v0.6.0 — Base edition** (browser, terminal, file manager, full native app suite — under 800 MB RAM at idle)
+**smplOS v0.6.52 — Base edition** (browser, terminal, file manager, full native app suite, OTA updates — under 800 MB RAM at idle)
 
 [![ISO IMAGE download](https://img.shields.io/badge/ISO%20IMAGE-download-0567ff?style=for-the-badge)](https://archive.org/details/smplos_260313-0458)
 [![TORRENT download](https://img.shields.io/badge/TORRENT-download-00b4d8?style=for-the-badge)](https://archive.org/download/smplos_260313-0458/smplos_260313-0458_archive.torrent)
@@ -417,20 +441,45 @@ The quick-settings panel in the EWW bar shows a dictation pill with a themed mic
 
 ## System Updates
 
-smplOS includes a built-in update system. On first boot, a persistent "System Update" notification appears. Double-click it in the notification center to run a full update, or run it manually:
+smplOS has a **git-based over-the-air update system**. The OS repo is cloned to `~/.local/share/smplos/repo/` on each machine. When you update, it pulls the latest changes and applies them — no re-imaging required.
+
+Run a full update from the terminal, or double-click the "System Update" notification in the notification center:
 
 ```bash
 smplos-update
 ```
 
-The update script opens in your terminal and runs through:
+A full update runs through these stages:
 
-1. **Pacman** - official repo packages (`pacman -Syu --noconfirm`)
-2. **AUR** - if paru is installed, AUR packages (`paru -Sua --noconfirm`)
-3. **Flatpak** - if Flatpak apps are installed (`flatpak update -y --noninteractive`)
-4. **AppImages** - reminds you to check for updates manually
+1. **OS update** (`smplos-os-update`) — `git pull` latest repo, sync scripts from `src/shared/bin/` to `/usr/local/bin/`, run pending migrations, bump `/etc/os-release`
+2. **App update** (`smplos-update-apps`) — download latest smpl-apps, st-smpl, and nemo-smpl binaries from GitHub releases (skips if already up-to-date)
+3. **Theme refresh** — reapply the current theme + reload Hyprland
+4. **Pacman** — official repo packages (`pacman -Syu`), with Hyprland/EWW held back until after migrations
+5. **AUR** — if paru is installed (`paru -Sua`)
+6. **Flatpak** — if Flatpak apps are installed (`flatpak update -y`)
 
-Terminal auto-detection makes sure it works regardless of which terminal is installed: `xdg-terminal-exec` -> `st-wl` (Wayland) -> `st` (X11) -> `foot` -> `xterm`.
+### What can be updated
+
+| Component | How it's updated | Automatic? |
+|-----------|-----------------|------------|
+| Scripts (`/usr/local/bin/`) | Synced from repo on every update | ✅ |
+| Themes | Reapplied automatically | ✅ |
+| OS version | Bumped from `src/VERSION` | ✅ |
+| Forked apps (start-menu, st, nemo, etc.) | Downloaded from GitHub releases | ✅ |
+| System packages (pacman/AUR/Flatpak) | Standard package manager updates | ✅ |
+| Breaking config changes | One-shot migrations in `migrations/` | ✅ |
+| Non-breaking config changes | User runs `smplos-refresh-config <file>` | Manual |
+
+### Migrations
+
+Breaking changes (upstream Hyprland renames, config format changes, etc.) are handled by **migration scripts** in `migrations/`. Each migration runs exactly once per user, is idempotent, and never deletes user data. Check status with:
+
+```bash
+smplos-migrate --list       # show all migrations and their status
+smplos-migrate --pending    # show only pending migrations
+```
+
+For contributors: see [UPDATING.md](UPDATING.md) for how to write and ship updates.
 
 ## Building
 
