@@ -1,0 +1,4 @@
+# smplOS Creators Edition -- extra AUR packages
+
+# ── 3D Printing ──────────────────────────────────────────────
+bambustudio-bin
