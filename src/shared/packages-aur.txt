@@ -19,7 +19,9 @@ brave-bin
 nemo-smpl
 
 # Auto-snapshot before every pacman update (pacman hook for timeshift)
-timeshift-autosnap
+# Built from src/shared/pkgbuilds/timeshift-autosnap (git source, avoids
+# Codeberg tarball endpoint which returns intermittent HTTP 500 errors)
+# timeshift-autosnap
 
 # Local AI dictation daemon (Whisper-based, fully offline speech-to-text)
 voxtype-bin

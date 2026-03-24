@@ -87,7 +87,7 @@
   (button :class {active-workspace == ws ? "ws-dot active" :
                   arraylength(jq(workspaces, "map(select(. == ${ws}))")) > 0 ? "ws-dot occupied" :
                   "ws-dot"}
-          :onclick "hyprctl dispatch workspace ${ws} 2>/dev/null || true"
+          :onclick "workspace-group ${ws} 2>/dev/null || true"
     (label :text {active-workspace == ws ? "●" : "${ws}"})))
 
 ;; Window title

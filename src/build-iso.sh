@@ -150,7 +150,7 @@ install_runtime() {
     log_step "Installing Podman"
 
     case "$distro" in
-        arch|endeavouros|manjaro|garuda|cachyos)
+        arch|endeavouros|manjaro|garuda|cachyos|smplos)
             sudo pacman -S --noconfirm --needed podman
             ;;
         ubuntu|debian|pop|linuxmint|zorin)
@@ -187,6 +187,34 @@ detect_distro() {
     fi
 }
 
+# Returns the distro ID to use for package manager detection.
+# Falls back to ID_LIKE when the exact ID is not recognised.
+resolve_distro() {
+    local id="$1"
+    case "$id" in
+        arch|endeavouros|manjaro|garuda|cachyos|smplos|\
+        ubuntu|debian|pop|linuxmint|zorin|\
+        fedora|nobara|\
+        opensuse*|sles|\
+        void)
+            echo "$id"
+            return
+            ;;
+    esac
+    # Unknown ID – try ID_LIKE
+    if [[ -f /etc/os-release ]]; then
+        local like
+        like=$(. /etc/os-release; echo "${ID_LIKE:-}")
+        # ID_LIKE can be a space-separated list; take the first token
+        like=${like%% *}
+        if [[ -n "$like" ]]; then
+            echo "$like"
+            return
+        fi
+    fi
+    echo "$id"
+}
+
 check_prerequisites() {
     log_step "Checking prerequisites"
     local distro
@@ -198,7 +226,7 @@ check_prerequisites() {
         log_warn "No container runtime found (podman or docker)"
         read -rp "Install Podman automatically? [Y/n] " answer
         if [[ "${answer,,}" != "n" ]]; then
-            install_runtime "$distro"
+            install_runtime "$(resolve_distro "$distro")"
             detect_runtime || die "Podman installation failed"
         else
             die "A container runtime is required. Install podman: https://podman.io/docs/installation"
@@ -394,10 +422,15 @@ build_missing_aur_packages() {
             useradd -m builder
             echo 'builder ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers
             cd /home/builder
+            failed_pkgs=()
             while IFS= read -r pkg; do
                 [[ -z \"\$pkg\" ]] && continue
                 echo \"==> Building \$pkg...\"
-                retry sudo -u builder git clone \"https://aur.archlinux.org/\$pkg.git\"
+                if ! retry sudo -u builder git clone \"https://aur.archlinux.org/\$pkg.git\"; then
+                    echo \"WARN: \$pkg -- git clone failed (skipping)\"
+                    failed_pkgs+=(\"\$pkg\")
+                    continue
+                fi
                 cd \"\$pkg\"
                 # Import any PGP keys required by the package
                 if grep -q 'validpgpkeys' PKGBUILD; then
@@ -410,12 +443,20 @@ build_missing_aur_packages() {
                                 || echo \"WARN: could not import key \$key\"
                         done
                 fi
-                sudo -u builder makepkg -s --noconfirm
-                cp *.pkg.tar.* /output/
+                if sudo -u builder makepkg -s --noconfirm; then
+                    cp *.pkg.tar.* /output/
+                    echo \"==> \$pkg done\"
+                else
+                    echo \"WARN: \$pkg -- makepkg failed (skipping)\"
+                    failed_pkgs+=(\"\$pkg\")
+                fi
                 cd ..
-                echo \"==> \$pkg done\"
             done < /tmp/packages.txt
-            echo '==> All AUR packages built!'
+            if [ \${#failed_pkgs[@]} -gt 0 ]; then
+                echo \"==> WARNING: Some AUR packages failed: \${failed_pkgs[*]}\"
+                echo \"==> ISO will be built without them.\"
+            fi
+            echo '==> All AUR packages done!'
         " || die "AUR package build failed"
 
     rm -f "$pkg_list_file"

@@ -1,0 +1,91 @@
+#!/bin/bash
+# workspace-group — switch ALL monitors to a workspace group simultaneously.
+#
+# This gives Windows-style virtual desktops: pressing Super+2 moves every
+# monitor to "group 2" at once, rather than changing only the focused monitor.
+#
+# Layout (monitors sorted by X descending, rightmost = primary):
+#   right/primary  (index 0) → workspace N
+#   left/secondary (index 1) → workspace N + 10
+#   third          (index 2) → workspace N + 20   (etc.)
+#
+# Usage:
+#   workspace-group N      absolute group (1-10)
+#   workspace-group +N     relative forward
+#   workspace-group -N     relative backward
+#
+# Groups wrap around: group 11 → 1, group 0 → 10.
+
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# Read monitors sorted rightmost-first (rightmost = primary, index 0)
+# ---------------------------------------------------------------------------
+readarray -t monitors < <(
+    hyprctl monitors -j 2>/dev/null \
+        | jq -r 'sort_by(.x) | reverse | .[].name'
+)
+n=${#monitors[@]}
+[[ $n -eq 0 ]] && exit 1
+
+arg="${1:-1}"
+
+# ---------------------------------------------------------------------------
+# Single-monitor fast path — just use plain Hyprland workspace dispatch
+# ---------------------------------------------------------------------------
+if [[ $n -eq 1 ]]; then
+    case "$arg" in
+        +*) hyprctl dispatch workspace "e+${arg:1}" ;;
+        -*) hyprctl dispatch workspace "e-${arg:1}" ;;
+        *)  hyprctl dispatch workspace "$arg" ;;
+    esac
+    exit 0
+fi
+
+# ---------------------------------------------------------------------------
+# Determine current group from primary monitor's active workspace
+# ---------------------------------------------------------------------------
+primary_ws=$(
+    hyprctl monitors -j 2>/dev/null \
+        | jq -r 'sort_by(.x) | reverse | .[0].activeWorkspace.id'
+)
+current_group=$(( (primary_ws - 1) % 10 + 1 ))
+
+# ---------------------------------------------------------------------------
+# Parse target group
+# ---------------------------------------------------------------------------
+case "$arg" in
+    +*) target=$(( current_group + ${arg:1} )) ;;
+    -*) target=$(( current_group - ${arg:1} )) ;;
+    *)  target="$arg" ;;
+esac
+
+# Wrap to 1-10
+while [[ $target -lt 1 ]];  do target=$(( target + 10 )); done
+while [[ $target -gt 10 ]]; do target=$(( target - 10 )); done
+
+# ---------------------------------------------------------------------------
+# Remember which monitor is focused so we can restore focus afterwards
+# (the batch will leave focus on the last monitor we touch)
+# ---------------------------------------------------------------------------
+focused_mon=$(
+    hyprctl monitors -j 2>/dev/null \
+        | jq -r '.[] | select(.focused == true) | .name'
+)
+
+# ---------------------------------------------------------------------------
+# Build and send a single batch command.
+# focusmonitor + workspace are chained sequentially inside Hyprland so each
+# workspace dispatch lands on the correct monitor.
+# ---------------------------------------------------------------------------
+batch=""
+for i in "${!monitors[@]}"; do
+    ws=$(( target + i * 10 ))
+    [[ -n "$batch" ]] && batch+="; "
+    batch+="dispatch focusmonitor ${monitors[$i]}; dispatch workspace $ws"
+done
+
+hyprctl --batch "$batch"
+
+# Restore original focus
+hyprctl dispatch focusmonitor "$focused_mon" &>/dev/null || true

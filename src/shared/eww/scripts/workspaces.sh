@@ -1,9 +1,14 @@
 #!/bin/bash
 # EWW workspaces listener (Hyprland)
+# Emits the sorted list of occupied workspace GROUP numbers (1-10).
+# Secondary-monitor workspaces (11-20) are normalized to their group (1-10)
+# and deduplicated, so the bar always shows a single set of group dots.
 
 emit() {
   if command -v hyprctl &>/dev/null && command -v jq &>/dev/null; then
-    hyprctl workspaces -j 2>/dev/null | jq -c '[.[].id] | sort' || echo '[]'
+    hyprctl workspaces -j 2>/dev/null \
+      | jq -c '[.[].id | ((. - 1) % 10) + 1] | unique | sort' \
+      || echo '[]'
   else
     echo '[]'
   fi

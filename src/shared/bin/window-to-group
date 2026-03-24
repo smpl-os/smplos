@@ -1,0 +1,57 @@
+#!/bin/bash
+# window-to-group — move focused window to workspace group N,
+# keeping it on the same monitor (stays left on left, stays right on right).
+#
+# With the grouped-workspace layout (workspace-group), each monitor gets
+# its own slot inside every group:
+#   right/primary  (index 0) → workspace N
+#   left/secondary (index 1) → workspace N + 10
+#
+# So Super+Shift+3 on the right monitor sends the window to workspace 3,
+# while Super+Shift+3 on the left monitor sends it to workspace 13.
+# Either way the window ends up in "group 3" on the monitor it started on.
+#
+# Usage:
+#   window-to-group [--silent] N     (N = 1-10)
+
+set -euo pipefail
+
+silent=false
+if [[ "${1:-}" == "--silent" ]]; then
+    silent=true
+    shift
+fi
+group="${1:-1}"
+
+# ---------------------------------------------------------------------------
+# Read monitors sorted rightmost-first (rightmost = primary, index 0)
+# ---------------------------------------------------------------------------
+readarray -t monitors < <(
+    hyprctl monitors -j 2>/dev/null \
+        | jq -r 'sort_by(.x) | reverse | .[].name'
+)
+n=${#monitors[@]}
+
+# Find current monitor's index in the sorted list
+current_mon=$(
+    hyprctl monitors -j 2>/dev/null \
+        | jq -r '.[] | select(.focused == true) | .name'
+)
+
+monitor_index=0
+for i in "${!monitors[@]}"; do
+    if [[ "${monitors[$i]}" == "$current_mon" ]]; then
+        monitor_index=$i
+        break
+    fi
+done
+
+# Target workspace: group slot for this monitor
+ws=$(( group + monitor_index * 10 ))
+
+# Dispatch
+if $silent; then
+    hyprctl dispatch movetoworkspacesilent "$ws"
+else
+    hyprctl dispatch movetoworkspace "$ws"
+fi
