@@ -35,9 +35,9 @@ arg="${1:-1}"
 # ---------------------------------------------------------------------------
 if [[ $n -eq 1 ]]; then
     case "$arg" in
-        +*) hyprctl dispatch workspace "e+${arg:1}" ;;
-        -*) hyprctl dispatch workspace "e-${arg:1}" ;;
-        *)  hyprctl dispatch workspace "$arg" ;;
+        +*) hyprctl dispatch workspace "e+${arg:1}" >/dev/null 2>&1 ;;
+        -*) hyprctl dispatch workspace "e-${arg:1}" >/dev/null 2>&1 ;;
+        *)  hyprctl dispatch workspace "$arg" >/dev/null 2>&1 ;;
     esac
     exit 0
 fi
@@ -65,27 +65,21 @@ while [[ $target -lt 1 ]];  do target=$(( target + 10 )); done
 while [[ $target -gt 10 ]]; do target=$(( target - 10 )); done
 
 # ---------------------------------------------------------------------------
-# Remember which monitor is focused so we can restore focus afterwards
-# (the batch will leave focus on the last monitor we touch)
+# Switch all monitors — no focusmonitor needed.
+#
+# Two-step per monitor:
+#   1. hyprctl keyword workspace "N, monitor:MON"
+#      → registers a persistent workspace rule that always routes workspace N
+#        to MON.  Works even for workspaces that have never been visited before.
+#   2. hyprctl dispatch workspace N
+#      → switches MON to show workspace N (routes to MON because of the rule).
+#
+# This avoids all focusmonitor race conditions and viewport-snap-back bugs.
+# Focus is never disturbed so the user's cursor/window focus is preserved.
 # ---------------------------------------------------------------------------
-focused_mon=$(
-    hyprctl monitors -j 2>/dev/null \
-        | jq -r '.[] | select(.focused == true) | .name'
-)
-
-# ---------------------------------------------------------------------------
-# Build and send a single batch command.
-# focusmonitor + workspace are chained sequentially inside Hyprland so each
-# workspace dispatch lands on the correct monitor.
-# ---------------------------------------------------------------------------
-batch=""
 for i in "${!monitors[@]}"; do
     ws=$(( target + i * 10 ))
-    [[ -n "$batch" ]] && batch+="; "
-    batch+="dispatch focusmonitor ${monitors[$i]}; dispatch workspace $ws"
+    mon="${monitors[$i]}"
+    hyprctl keyword workspace "$ws, monitor:$mon" >/dev/null 2>&1
+    hyprctl dispatch workspace "$ws" >/dev/null 2>&1
 done
-
-hyprctl --batch "$batch"
-
-# Restore original focus
-hyprctl dispatch focusmonitor "$focused_mon" &>/dev/null || true
