@@ -22,14 +22,63 @@ exec > >(tee -a "$BUILD_LOG") 2>&1
 
 # Colors
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'
-BLUE='\033[0;34m'; BOLD='\033[1m'; NC='\033[0m'
+BLUE='\033[0;34m'; CYAN='\033[0;36m'; BOLD='\033[1m'; NC='\033[0m'
 
 log_info()  { echo -e "${GREEN}[INFO]${NC} $*"; }
 log_warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
 log_error() { echo -e "${RED}[ERROR]${NC} $*" >&2; }
 log_step()  { echo -e "\n${BLUE}${BOLD}==>${NC}${BOLD} $*${NC}"; }
+log_tip()   { echo -e "${CYAN}  Tip:${NC} $*"; }
 
-die() { log_error "$@"; exit 1; }
+# Build-stage tracking for the final summary
+BUILD_START_TIME=$SECONDS
+declare -a _STAGE_OK=()
+declare -a _STAGE_WARN=()
+declare -a _STAGE_FAIL=()
+_stage_ok()   { _STAGE_OK+=("$*"); }
+_stage_warn() { _STAGE_WARN+=("$*"); }
+_stage_fail() { _STAGE_FAIL+=("$*"); }
+
+# Print the final build summary (called on both success and failure)
+print_build_summary() {
+    local elapsed=$(( SECONDS - BUILD_START_TIME ))
+    local mins=$(( elapsed / 60 )) secs=$(( elapsed % 60 ))
+    echo ""
+    echo -e "${BOLD}══════════════════════════════════════════${NC}"
+    echo -e "${BOLD}  Build Summary${NC}"
+    echo -e "${BOLD}══════════════════════════════════════════${NC}"
+    local s
+    for s in "${_STAGE_OK[@]+${_STAGE_OK[@]}}";   do echo -e "  ${GREEN}✓${NC}  $s"; done
+    for s in "${_STAGE_WARN[@]+${_STAGE_WARN[@]}}"; do echo -e "  ${YELLOW}⚠${NC}  $s"; done
+    for s in "${_STAGE_FAIL[@]+${_STAGE_FAIL[@]}}"; do echo -e "  ${RED}✗${NC}  $s"; done
+    echo -e "  ${BLUE}⧗${NC}  Elapsed: ${mins}m ${secs}s"
+    echo -e "  ${BLUE}📄${NC}  Log: $BUILD_LOG"
+    echo -e "${BOLD}══════════════════════════════════════════${NC}"
+    echo ""
+}
+
+# die with contextual help — always shows WHAT failed, WHY, and WHAT TO DO
+#   die_help "What failed" "Likely cause" "How to fix it"
+die_help() {
+    local what="${1:-Build failed}" why="${2:-}" fix="${3:-}"
+    _stage_fail "$what"
+    echo ""
+    echo -e "${RED}${BOLD}╔══ BUILD FAILED ══════════════════════════════════════╗${NC}"
+    echo -e "${RED}${BOLD}  ✗ ${NC}${BOLD}${what}${NC}"
+    if [[ -n "$why" ]]; then
+        echo -e "${YELLOW}  ↳ Why:  ${NC}${why}"
+    fi
+    if [[ -n "$fix" ]]; then
+        echo -e "${GREEN}  ↳ Fix:  ${NC}${fix}"
+    fi
+    echo -e "${BLUE}  ↳ Log:  ${NC}${BUILD_LOG}"
+    echo -e "${RED}${BOLD}╚════════════════════════════════════════════════════╝${NC}"
+    print_build_summary
+    exit 1
+}
+
+# Legacy die — kept for caller compatibility; prefer die_help for new error sites
+die() { die_help "$*" "" "Check the log for details: $BUILD_LOG"; }
 
 ###############################################################################
 # Help
@@ -306,6 +355,7 @@ build_custom_packages() {
     [[ ${#need_build[@]} -eq 0 ]] && return 0
 
     log_step "Building custom packages: ${need_build[*]}"
+    log_info "These are smplOS-specific packages built from local PKGBUILDs (src/shared/pkgbuilds/)"
 
     for pkg in "${need_build[@]}"; do
         log_info "Building $pkg..."
@@ -335,9 +385,12 @@ build_custom_packages() {
                 sudo -u builder makepkg -s --noconfirm
                 cp *.pkg.tar.* /output/
                 echo \"==> $pkg done\"
-            " || die "Failed to build custom package: $pkg"
+            " || die_help \
+                "Custom package build failed: $pkg" \
+                "makepkg error inside the build container (see output above for details)" \
+                "Common causes:\n    - Network error downloading the package source (check connectivity and retry)\n    - Broken upstream source URL (check the PKGBUILD in src/shared/pkgbuilds/$pkg/)\n    - Disk full (need 10 GB+ free)\n  Re-run:  ./build-iso.sh          (cached packages are reused)\n  Skip:    ./build-iso.sh --skip-aur  (skips custom + AUR packages)"
     done
-
+    _stage_ok "Custom packages built: ${need_build[*]}"
     log_info "Custom packages saved to: $prebuilt_dir"
 }
 
@@ -384,7 +437,9 @@ build_missing_aur_packages() {
     [[ ${#need_build[@]} -eq 0 ]] && { log_info "All AUR packages already built"; return 0; }
 
     log_step "Building AUR packages: ${need_build[*]}"
-    log_info "This may take a while on first run..."
+    log_info "This may take a while on first run (Eww requires Rust — ~5-15 min)."
+    log_info "You will see Rust compiler WARNINGS during the Eww build. These are"
+    log_info "harmless upstream notices — they do NOT mean anything is broken."
 
     # Detect if any package needs Rust (avoid installing rustup otherwise)
     local rust_line=""
@@ -427,8 +482,9 @@ build_missing_aur_packages() {
                 [[ -z \"\$pkg\" ]] && continue
                 echo \"==> Building \$pkg...\"
                 if ! retry sudo -u builder git clone \"https://aur.archlinux.org/\$pkg.git\"; then
-                    echo \"WARN: \$pkg -- git clone failed (skipping)\"
-                    failed_pkgs+=(\"\$pkg\")
+                    echo "WARN: \$pkg -- could not clone from AUR (network error or package not found)"
+                    echo "      Check: https://aur.archlinux.org/packages/\$pkg"
+                    failed_pkgs+=(\"\$pkg (git clone failed)\")
                     continue
                 fi
                 cd \"\$pkg\"
@@ -443,23 +499,43 @@ build_missing_aur_packages() {
                                 || echo \"WARN: could not import key \$key\"
                         done
                 fi
-                if sudo -u builder makepkg -s --noconfirm; then
+                if sudo -u builder makepkg -s --noconfirm 2>&1; then
                     cp *.pkg.tar.* /output/
-                    echo \"==> \$pkg done\"
+                    echo "==> \$pkg built OK"
                 else
-                    echo \"WARN: \$pkg -- makepkg failed (skipping)\"
-                    failed_pkgs+=(\"\$pkg\")
+                    exit_code=\$?
+                    # Try to categorise the failure for a new user
+                    if dmesg 2>/dev/null | tail -5 | grep -qi 'out of memory\|oom'; then
+                        echo "WARN: \$pkg -- build killed by OOM (out of memory). Try closing other apps."
+                    elif grep -q 'curl: (22)\|HTTP error\|could not download' /tmp/\$pkg-build.log 2>/dev/null; then
+                        echo "WARN: \$pkg -- source download failed (HTTP error). Likely a temporary upstream outage."
+                        echo "      Retry the build in a few minutes."
+                    elif grep -q 'error\[E' /tmp/\$pkg-build.log 2>/dev/null; then
+                        echo "WARN: \$pkg -- Rust COMPILE ERROR (not a mere warning). See output above."
+                        echo "      This is likely a smplOS bug — please report it at https://github.com/smpl-os"
+                    else
+                        echo "WARN: \$pkg -- makepkg failed (exit \$exit_code). See output above for the root cause."
+                    fi
+                    failed_pkgs+=(\"\$pkg (makepkg failed)\")
                 fi
                 cd ..
             done < /tmp/packages.txt
             if [ \${#failed_pkgs[@]} -gt 0 ]; then
-                echo \"==> WARNING: Some AUR packages failed: \${failed_pkgs[*]}\"
-                echo \"==> ISO will be built without them.\"
+                echo ""
+                echo "==> ⚠  The following AUR packages could not be built:"
+                for fp in \"\${failed_pkgs[@]}\"; do echo \"    • \$fp\"; done
+                echo "    The ISO will still be built — these packages just won't be included."
+                echo "    Re-run ./build-iso.sh to retry them (other packages are cached)."
+                echo ""
             fi
             echo '==> All AUR packages done!'
-        " || die "AUR package build failed"
+        " || die_help \
+            "AUR package container crashed unexpectedly" \
+            "The container itself failed (not just one package). This is unusual." \
+            "Try: ./build-iso.sh --skip-aur  to skip AUR and build the ISO without those packages\n  Or:  ./build-iso.sh --no-cache  to force a fresh package download"
 
     rm -f "$pkg_list_file"
+    _stage_ok "AUR packages processed"
     log_info "AUR packages saved to: $prebuilt_dir"
 }
 
@@ -793,11 +869,23 @@ run_build() {
 
     local rc="${PIPESTATUS[0]}"
     if [[ "$rc" -ne 0 ]]; then
-        die "ISO build failed (exit $rc, log: $BUILD_LOG)"
+        echo ""
+        log_error "══ Last 25 lines of build output ══"
+        tail -40 "$BUILD_LOG" 2>/dev/null \
+            | grep -v '\[INFO\]\|\-\->' \
+            | grep -v '^$' \
+            | tail -25 \
+            || true
+        log_error "════════════════════════════════════"
+        die_help \
+            "ISO build failed inside the container (exit code: $rc)" \
+            "See the last output lines above — the real error is usually a few lines before the end" \
+            "Common fixes:\n    • Network blip?       Re-run: ./build-iso.sh\n    • Slow mirror?        Re-run: ./build-iso.sh --no-cache\n    • Flatpak failing?    Try:    ./build-iso.sh --skip-flatpak\n    • AppImage failing?   Try:    ./build-iso.sh --skip-appimage\n    • More detail?        Re-run: ./build-iso.sh --verbose\n    • Full log:           $BUILD_LOG"
     fi
 
+    _stage_ok "ISO built successfully"
     echo ""
-    log_info "Build complete! (log: $BUILD_LOG)"
+    log_info "Build complete!"
     ls -lh "$release_dir"/*.iso 2>/dev/null || log_warn "No ISO found in output"
 }
 
@@ -838,9 +926,13 @@ main() {
     if [[ -z "$SKIP_AUR" ]]; then
         build_custom_packages
         build_missing_aur_packages
+    else
+        log_warn "Skipping AUR and custom packages (--skip-aur)"
+        _stage_warn "AUR + custom packages skipped (--skip-aur)"
     fi
 
     run_build
+    print_build_summary
 }
 
 main "$@"
