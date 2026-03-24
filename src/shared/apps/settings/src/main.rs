@@ -1303,8 +1303,15 @@ fn main() -> Result<(), slint::PlatformError> {
         let ui_handle = ui.as_weak();
         ui.on_disp_apply_changes(move || {
             let mut st = state.borrow_mut();
-            let configs = st.configs_from_current();
             let ui = ui_handle.unwrap();
+
+            // Only apply if there are actual changes
+            if !st.has_changes() {
+                ui.set_disp_status_text(slint::SharedString::from("No changes to apply"));
+                return;
+            }
+
+            let configs = st.configs_from_current();
 
             match st.backend.apply(&configs) {
                 Ok(()) => {
