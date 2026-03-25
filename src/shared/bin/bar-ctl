@@ -59,11 +59,11 @@ eww_reload() { eww --config "$EWW_CONFIG" reload; }
 
 # Apply bar settings from ~/.config/smplos/bar.conf to running EWW instance.
 # File format: KEY=VALUE (shell-compatible).  Supported keys:
-#   ws_count    = 1-10   (workspace dot count, default 7)
+#   ws_count    = 1-10   (workspace dot count, default 4)
 #   ws_position = center | left  (where workspaces live, default center)
 eww_apply() {
     local conf="$HOME/.config/smplos/bar.conf"
-    local ws_count=7
+    local ws_count=4
     local ws_position="center"
     local ws_spacing=1
     local ws_style="numbers"

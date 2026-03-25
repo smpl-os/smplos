@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use std::process::Command;
 
 /// Default workspace dot count shown in the bar.
-const DEFAULT_WS_COUNT: i32 = 7;
+const DEFAULT_WS_COUNT: i32 = 4;
 /// Default spacing between workspace dots (pixels).
 const DEFAULT_WS_SPACING: i32 = 1;
 
@@ -69,7 +69,7 @@ fn eww_update(var: &str, val: &str) {
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
-/// Read current workspace count from config (default 7).
+/// Read current workspace count from config (default 4).
 pub fn ws_count() -> i32 {
     let map = read_conf();
     map.get("ws_count")

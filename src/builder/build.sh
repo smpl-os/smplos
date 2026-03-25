@@ -1236,6 +1236,13 @@ RELCONF
         # Create empty placeholder so Hyprland source doesn't fail before generator runs
         touch "$skel/.config/hypr/messenger-bindings.conf"
     fi
+
+    # Copy bar.conf (default taskbar settings: workspace count, style, etc.)
+    if [[ -f "$SRC_DIR/shared/configs/smplos/bar.conf" ]]; then
+        log_info "Copying bar.conf"
+        mkdir -p "$skel/.config/smplos"
+        cp "$SRC_DIR/shared/configs/smplos/bar.conf" "$skel/.config/smplos/bar.conf"
+    fi
     
     # Copy installer (gum-based configurator + helpers)
     if [[ -d "$SRC_DIR/shared/installer" ]]; then

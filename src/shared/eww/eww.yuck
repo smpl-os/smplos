@@ -56,12 +56,12 @@
 (deflisten window-title :initial "" `scripts/window-title.sh`)
 
 ;; Taskbar settings (written by settings app, read via bar-ctl apply)
-;; ws-count    : how many workspace dots to show (1-10, default 7)
+;; ws-count    : how many workspace dots to show (1-10, default 4)
 ;; ws-position : "center" or "left" (adjacent to start button)
 ;; ws-spacing  : pixel gap between workspace dots (1-10, default 1)
 ;; ws-style    : "numbers" or "squares" (indicator style)
-(defvar ws-count 7)
-(defvar ws-position "center")
+(defvar ws-count 4)
+(defvar ws-position "left")
 (defvar ws-spacing 1)
 (defvar ws-style "numbers")
 
@@ -97,7 +97,7 @@
                   arraylength(jq(workspaces, "map(select(. == ${ws}))")) > 0 ? "ws-dot occupied" :
                   "ws-dot"}
           :onclick "workspace-group ${ws} 2>/dev/null || true"
-    (label :text {active-workspace == ws ? "" : "${ws}"})))
+    (label :text {active-workspace == ws ? "●" : "${ws}"})))
 
 ;; Squares mode grid (2 rows x 5 cols, hidden beyond ws-count)
 (defwidget workspace-grid []
@@ -254,7 +254,7 @@
 ;; ============================================================================
 
 (defwidget bar-left []
-  (box :class "bar-left" :orientation "h" :space-evenly false :halign "start" :spacing 12
+  (box :class "bar-left" :orientation "h" :space-evenly false :halign "start" :spacing 3
     (logo)
     (box :visible {ws-position == "left"} (workspaces-widget))
     (window)))
