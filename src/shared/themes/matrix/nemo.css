@@ -43,6 +43,45 @@ menubar:backdrop {
 }
 
 /* =====================================================================
+ * Bottom status bar — NemoStatusBar extends GtkBox with class "toolbar".
+ * Distinct from toolbar.primary-toolbar (the top toolbar).
+ * ===================================================================== */
+
+box.toolbar,
+box.toolbar:backdrop {
+    background-color: #000000;
+    background-image: none;
+    color: #00FF00;
+    border-top: 1px solid #1A2E1A;
+    box-shadow: none;
+}
+
+box.toolbar button,
+box.toolbar togglebutton {
+    color: #00FF00;
+    background-color: transparent;
+    background-image: none;
+    border: none;
+    box-shadow: none;
+}
+
+box.toolbar button:hover,
+box.toolbar togglebutton:hover {
+    background-color: alpha(#00FF00, 0.1);
+    color: #00FF00;
+}
+
+box.toolbar button:checked,
+box.toolbar togglebutton:checked,
+box.toolbar button:active,
+box.toolbar togglebutton:active {
+    background-color: alpha(#66FF66, 0.25);
+    background-image: none;
+    color: #00FF00;
+    box-shadow: none;
+}
+
+/* =====================================================================
  * Toolbar
  * ===================================================================== */
 
