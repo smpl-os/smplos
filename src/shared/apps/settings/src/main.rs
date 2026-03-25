@@ -5,7 +5,7 @@ mod theme;
 mod xkb_labels;
 
 use display::backend::DisplayBackend;
-use display::monitor::{canvas_scale_factor, snap_to_nearest_edge, Monitor, MonitorConfig};
+use display::monitor::{canvas_scale_factor, Monitor, MonitorConfig};
 use slint::Model;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -168,10 +168,11 @@ impl DisplayState {
 
     fn recalc_canvas(&mut self) {
         self.scale = canvas_scale_factor(&self.monitors, CANVAS_W, CANVAS_H);
-        let min_x = self.monitors.iter().map(|m| m.x).min().unwrap_or(0) as f64;
-        let min_y = self.monitors.iter().map(|m| m.y).min().unwrap_or(0) as f64;
-        self.offset_x = -min_x;
-        self.offset_y = -min_y;
+        // Positions are logical pixels; use f64 min to match canvas_scale_factor.
+        let min_x = self.monitors.iter().map(|m| m.x as f64).fold(f64::MAX, f64::min);
+        let min_y = self.monitors.iter().map(|m| m.y as f64).fold(f64::MAX, f64::min);
+        self.offset_x = if min_x == f64::MAX { 0.0 } else { -min_x };
+        self.offset_y = if min_y == f64::MAX { 0.0 } else { -min_y };
     }
 
     fn to_slint_model(&self) -> Vec<MonitorInfo> {
@@ -209,8 +210,9 @@ impl DisplayState {
                     is_primary: m.name == self.primary,
                     canvas_x: ((m.x as f64 + self.offset_x) * self.scale + margin) as f32,
                     canvas_y: ((m.y as f64 + self.offset_y) * self.scale + margin) as f32,
-                    canvas_w: (m.width as f64 * self.scale) as f32,
-                    canvas_h: (m.height as f64 * self.scale) as f32,
+                    // Positions are logical; width/height are physical — use logical size.
+                    canvas_w: (m.width as f64 / m.scale * self.scale) as f32,
+                    canvas_h: (m.height as f64 / m.scale * self.scale) as f32,
                     available_modes: slint::ModelRc::new(slint::VecModel::from(modes)),
                     current_mode_index: cur_mode_idx,
                 }
@@ -1225,17 +1227,32 @@ fn main() -> Result<(), slint::PlatformError> {
             st.monitors[idx].x = real_x;
             st.monitors[idx].y = real_y;
 
-            let others: Vec<(i32, i32, i32, i32)> = st
-                .monitors.iter().enumerate()
-                .filter(|(i, _)| *i != idx)
-                .map(|(_, m)| (m.x, m.y, m.width, m.height))
-                .collect();
-
-            let m = &st.monitors[idx];
-            let snap_threshold = (50.0 / st.scale) as i32;
-            let (sx, sy) = snap_to_nearest_edge(m.x, m.y, m.width, m.height, &others, snap_threshold);
-            st.monitors[idx].x = sx;
-            st.monitors[idx].y = sy;
+            // X-only glue snap: always force the dragged monitor to touch the
+            // nearest adjacent edge of another monitor horizontally.
+            // Y is never snapped so the user can freely align monitors vertically.
+            let logical_w = (st.monitors[idx].width as f64 / st.monitors[idx].scale) as i32;
+            let snapped_x = {
+                let mut best_x = real_x;
+                let mut best_dist = i32::MAX;
+                for (i, m) in st.monitors.iter().enumerate() {
+                    if i == idx { continue; }
+                    let ow = (m.width as f64 / m.scale) as i32;
+                    // Candidate: place dragged immediately right of this monitor
+                    let right_of = m.x + ow;
+                    // Candidate: place dragged immediately left of this monitor
+                    let left_of = m.x - logical_w;
+                    for cx in [right_of, left_of] {
+                        let dist = (cx - real_x).abs();
+                        if dist < best_dist {
+                            best_dist = dist;
+                            best_x = cx;
+                        }
+                    }
+                }
+                best_x
+            };
+            st.monitors[idx].x = snapped_x;
+            // Y stays exactly where the user dropped it — no vertical snapping.
 
             st.recalc_canvas();
             let ui = ui_handle.unwrap();

@@ -1,0 +1,84 @@
+#!/bin/bash
+# window-to-monitor — move focused window to the next/prev monitor,
+# keeping it in the same workspace GROUP.
+#
+# Works with the workspace-group layout:
+#   right/primary  (index 0) → workspace N
+#   left/secondary (index 1) → workspace N + 10
+#   third          (index 2) → workspace N + 20   etc.
+#
+# Usage:
+#   window-to-monitor +1   move to next monitor  (wraps around)
+#   window-to-monitor -1   move to prev monitor  (wraps around)
+#
+# The window stays in the same logical group — i.e. if it was in group 3
+# on the right monitor (workspace 3) it lands in group 3 on the left
+# monitor (workspace 13). Focus follows to the new monitor.
+
+set -euo pipefail
+
+offset="${1:-+1}"
+
+# ---------------------------------------------------------------------------
+# Read monitors sorted rightmost-first (same order as workspace-group)
+# ---------------------------------------------------------------------------
+readarray -t monitors < <(
+    hyprctl monitors -j 2>/dev/null \
+        | jq -r 'sort_by(.x) | reverse | .[].name'
+)
+n=${#monitors[@]}
+[[ $n -le 1 ]] && exit 0   # nothing to do on single-monitor setup
+
+# ---------------------------------------------------------------------------
+# Get focused window's current workspace and monitor
+# ---------------------------------------------------------------------------
+active_json=$(hyprctl activewindow -j 2>/dev/null)
+cur_ws=$(echo "$active_json" | jq -r '.workspace.id // empty')
+[[ -z "$cur_ws" || "$cur_ws" == "null" ]] && exit 0   # no focused window
+
+# Derive the workspace group (1-10) from current workspace id
+group=$(( (cur_ws - 1) % 10 + 1 ))
+
+# Find which monitor the window is on (by matching active workspace)
+cur_mon=$(
+    hyprctl monitors -j 2>/dev/null \
+        | jq -r --argjson ws "$cur_ws" \
+            '.[] | select(.activeWorkspace.id == $ws) | .name'
+)
+# If monitor not found via activeWorkspace, fall back to focused monitor
+if [[ -z "$cur_mon" ]]; then
+    cur_mon=$(hyprctl monitors -j 2>/dev/null \
+        | jq -r '.[] | select(.focused == true) | .name')
+fi
+
+# Find current monitor's index in sorted list
+cur_idx=0
+for i in "${!monitors[@]}"; do
+    if [[ "${monitors[$i]}" == "$cur_mon" ]]; then
+        cur_idx=$i
+        break
+    fi
+done
+
+# ---------------------------------------------------------------------------
+# Calculate target monitor index (with wrapping)
+# ---------------------------------------------------------------------------
+case "$offset" in
+    +*) delta="${offset:1}" ;;
+    -*) delta="-${offset:1}" ;;
+    *)  delta="$offset" ;;
+esac
+target_idx=$(( (cur_idx + delta % n + n) % n ))
+
+# ---------------------------------------------------------------------------
+# Target workspace = same group, new monitor's slot
+# ---------------------------------------------------------------------------
+target_ws=$(( group + target_idx * 10 ))
+target_mon="${monitors[$target_idx]}"
+
+# Ensure Hyprland knows which monitor owns that workspace (idempotent)
+hyprctl keyword workspace "$target_ws, monitor:$target_mon" >/dev/null 2>&1
+
+# Move window silently (don't auto-jump), then focus the target monitor
+hyprctl dispatch movetoworkspacesilent "$target_ws" >/dev/null 2>&1
+hyprctl dispatch focusmonitor "$target_mon" >/dev/null 2>&1

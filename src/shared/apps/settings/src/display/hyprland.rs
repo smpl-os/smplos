@@ -158,20 +158,27 @@ impl DisplayBackend for HyprlandBackend {
     }
 
     fn identify(&self, monitors: &[Monitor]) -> Result<(), String> {
-        let original_focus = monitors.iter().find(|m| m.focused).map(|m| m.name.clone());
-
         for (i, m) in monitors.iter().enumerate() {
-            let _ = self.hyprctl(&["dispatch", "focusmonitor", &m.name]);
-            std::thread::sleep(std::time::Duration::from_millis(50));
-            let msg = format!("fontsize:40 {}  {}", i + 1, m.name);
-            let _ = self.hyprctl(&["notify", "0", "2000", "rgb(89b4fa)", &msg]);
-        }
+            // Write a tiny self-deleting script to /tmp so we avoid all shell
+            // quoting issues when passing the command through hyprctl exec.
+            let script_path = format!("/tmp/smplos-identify-{}.sh", m.name);
+            let script = format!(
+                "#!/bin/sh\nclear\nprintf '\\n\\n  {}  {}  \\n\\n'\nsleep 2.5\nrm -f '{}'\n",
+                i + 1, m.name, script_path
+            );
+            if std::fs::write(&script_path, &script).is_err() { continue; }
+            let _ = Command::new("chmod").args(["+x", &script_path]).output();
 
-        if let Some(orig) = original_focus {
-            std::thread::sleep(std::time::Duration::from_millis(50));
-            let _ = self.hyprctl(&["dispatch", "focusmonitor", &orig]);
+            // [monitor:name] tells Hyprland to open the next window from this
+            // process on the named output — reliable regardless of cursor position.
+            let rule = format!(
+                "[float;monitor:{};size 560 180;center;noborder;rounding 14;opacity 0.9 0.9]",
+                m.name
+            );
+            let exec_cmd = format!("{} st-wl -T smplos-identify -e {}", rule, script_path);
+            let _ = self.hyprctl(&["dispatch", "exec", &exec_cmd]);
+            std::thread::sleep(std::time::Duration::from_millis(120));
         }
-
         Ok(())
     }
 

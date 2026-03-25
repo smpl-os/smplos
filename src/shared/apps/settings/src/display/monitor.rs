@@ -60,67 +60,29 @@ impl MonitorConfig {
     }
 }
 
-/// Edge-snapping: given a monitor being dragged, snap it to the nearest
-/// edge of another monitor.
-pub fn snap_to_nearest_edge(
-    dragged_x: i32,
-    dragged_y: i32,
-    dragged_w: i32,
-    dragged_h: i32,
-    others: &[(i32, i32, i32, i32)],
-    threshold: i32,
-) -> (i32, i32) {
-    let mut best_x = dragged_x;
-    let mut best_y = dragged_y;
-    let mut best_dist = i32::MAX;
-
-    for &(ox, oy, ow, oh) in others {
-        let snap_candidates: [(i32, i32); 8] = [
-            (ox - dragged_w, dragged_y),
-            (ox + ow, dragged_y),
-            (dragged_x, oy - dragged_h),
-            (dragged_x, oy + oh),
-            (dragged_x, oy),
-            (dragged_x, oy + oh - dragged_h),
-            (ox, dragged_y),
-            (ox + ow - dragged_w, dragged_y),
-        ];
-
-        for (cx, cy) in snap_candidates {
-            let dx = (cx - dragged_x).abs();
-            let dy = (cy - dragged_y).abs();
-            let dist = dx + dy;
-            if dist < best_dist && dist < threshold {
-                best_dist = dist;
-                best_x = cx;
-                best_y = cy;
-            }
-        }
-    }
-
-    (best_x, best_y)
-}
-
 /// Calculate a uniform scale factor so all monitors fit inside the given canvas dimensions.
 pub fn canvas_scale_factor(monitors: &[Monitor], canvas_w: f64, canvas_h: f64) -> f64 {
     if monitors.is_empty() {
         return 1.0;
     }
 
-    let mut min_x = i32::MAX;
-    let mut min_y = i32::MAX;
-    let mut max_x = i32::MIN;
-    let mut max_y = i32::MIN;
+    let mut min_x = f64::MAX;
+    let mut min_y = f64::MAX;
+    let mut max_x = f64::MIN;
+    let mut max_y = f64::MIN;
 
     for m in monitors {
-        min_x = min_x.min(m.x);
-        min_y = min_y.min(m.y);
-        max_x = max_x.max(m.x + m.width);
-        max_y = max_y.max(m.y + m.height);
+        // Positions are logical pixels; width/height are physical — divide by scale.
+        let logical_w = m.width as f64 / m.scale;
+        let logical_h = m.height as f64 / m.scale;
+        min_x = min_x.min(m.x as f64);
+        min_y = min_y.min(m.y as f64);
+        max_x = max_x.max(m.x as f64 + logical_w);
+        max_y = max_y.max(m.y as f64 + logical_h);
     }
 
-    let total_w = (max_x - min_x) as f64;
-    let total_h = (max_y - min_y) as f64;
+    let total_w = max_x - min_x;
+    let total_h = max_y - min_y;
 
     if total_w <= 0.0 || total_h <= 0.0 {
         return 1.0;

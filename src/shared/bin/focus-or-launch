@@ -22,9 +22,15 @@ CLASS="$1"; shift
 
 # Re-source Hyprland env so WAYLAND_DISPLAY etc. are available when
 # called from notif-center (which may have a stripped environment).
-if [[ -f "$HOME/.config/hypr/envs.conf" ]]; then
+# Skip if already inside a live Hyprland session — env is already correct
+# and the naive assignment (no eval) would set PATH to a literal string
+# like '$HOME/...:$PATH' rather than expanding it, breaking command lookup.
+if [[ -f "$HOME/.config/hypr/envs.conf" && -z "$HYPRLAND_INSTANCE_SIGNATURE" ]]; then
   while IFS= read -r line; do
-    [[ "$line" =~ ^env\ =\ ([^,]+),(.+)$ ]] && export "${BASH_REMATCH[1]}"="${BASH_REMATCH[2]}"
+    if [[ "$line" =~ ^env\ =\ ([^,]+),(.+)$ ]]; then
+      # eval expands $HOME/$PATH etc. inside the value correctly
+      eval "export ${BASH_REMATCH[1]}=\"${BASH_REMATCH[2]}\""
+    fi
   done < "$HOME/.config/hypr/envs.conf"
 fi
 

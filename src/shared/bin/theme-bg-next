@@ -32,8 +32,9 @@ mapfile -d '' -t BACKGROUNDS < <(
   [[ ${#_bg_dirs[@]} -gt 0 ]] && find -L "${_bg_dirs[@]}" -maxdepth 1 -type f \( -name '*.jpg' -o -name '*.png' -o -name '*.jpeg' -o -name '*.webp' \) -print0 2>/dev/null | sort -z -u
 )
 
-# Only fall back to ~/Pictures/Wallpapers if the theme has no backgrounds at all
-if [[ ${#BACKGROUNDS[@]} -eq 0 && -d "$FALLBACK_BACKGROUNDS" ]]; then
+# Only fall back to ~/Pictures/Wallpapers if the theme has NO backgrounds directory
+# (not merely an empty one — an empty dir means the theme intentionally uses solid color)
+if [[ ${#BACKGROUNDS[@]} -eq 0 && ${#_bg_dirs[@]} -eq 0 && -d "$FALLBACK_BACKGROUNDS" ]]; then
   mapfile -d '' -t BACKGROUNDS < <(find -L "$FALLBACK_BACKGROUNDS" -maxdepth 1 -type f \( -name '*.jpg' -o -name '*.png' -o -name '*.jpeg' -o -name '*.webp' \) -print0 2>/dev/null | sort -z -u)
 fi
 
