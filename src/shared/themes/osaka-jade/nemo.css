@@ -209,7 +209,8 @@ toolbar.primary-toolbar button.suggested-action label {
 .nemo-window .nemo-inactive-pane .view:selected {
     background-color: transparent;
     color: #C1C497;
-    box-shadow: inset 0 0 0 2px #C1C497;
+    outline: 2px dotted #C1C497;
+    outline-offset: -2px;
 }
 
 .nemo-window .nemo-inactive-pane .view:selected label,

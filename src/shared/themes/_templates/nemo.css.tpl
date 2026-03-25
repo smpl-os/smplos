@@ -205,7 +205,8 @@ toolbar.primary-toolbar button.suggested-action label {
 .nemo-window .nemo-inactive-pane .view:selected {
     background-color: transparent;
     color: {{ foreground }};
-    box-shadow: inset 0 0 0 2px {{ selection_background }};
+    outline: 2px dotted {{ selection_background }};
+    outline-offset: -2px;
 }
 
 .nemo-window .nemo-inactive-pane .view:selected label,
