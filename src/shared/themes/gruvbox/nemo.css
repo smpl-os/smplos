@@ -217,7 +217,23 @@ menuitem {
     color: #d4be98;
 }
 
+/* Match Adwaita's exact selector specificity (0,1,3) so we always win */
+menu menuitem label:dir(ltr),
+menu menuitem label:dir(rtl),
+.menu menuitem label:dir(ltr),
+.menu menuitem label:dir(rtl),
+.context-menu menuitem label:dir(ltr),
+.context-menu menuitem label:dir(rtl),
 menuitem label {
+    color: #d4be98;
+}
+
+/* Menubar top-level items (Files, Edit, View…) */
+menubar > menuitem {
+    color: #d4be98;
+}
+
+menubar > menuitem:hover {
     color: #d4be98;
 }
 
@@ -227,6 +243,8 @@ menuitem:hover {
 }
 
 menuitem:hover label,
+menu menuitem:hover label:dir(ltr),
+menu menuitem:hover label:dir(rtl),
 menuitem:hover * {
     color: #ebdbb2;
 }
