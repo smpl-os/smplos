@@ -218,6 +218,81 @@ tooltip label {
 }
 
 /* =====================================================================
+ * modelbutton — used by GtkPopoverMenu (dropdown / hamburger menus
+ * inside dialogs and settings) — NOT covered by menuitem rules.
+ * ===================================================================== */
+
+modelbutton {
+    background-color: transparent;
+    color: #100F0F;
+}
+
+modelbutton:hover,
+modelbutton:focus {
+    background-color: #205EA6;
+    color: #100F0F;
+    outline: none;
+}
+
+modelbutton:selected {
+    background-color: #205EA6;
+    color: #100F0F;
+}
+
+/* =====================================================================
+ * Listbox rows (used in settings/preferences panels)
+ * ===================================================================== */
+
+listbox {
+    background-color: #FFFCF0;
+    color: #100F0F;
+}
+
+listbox row {
+    background-color: transparent;
+    color: #100F0F;
+}
+
+listbox row:hover {
+    background-color: alpha(#205EA6, 0.15);
+    color: #100F0F;
+}
+
+listbox row:selected,
+listbox row:selected:hover {
+    background-color: #205EA6;
+    color: #100F0F;
+}
+
+listbox row label {
+    color: inherit;
+}
+
+/* =====================================================================
+ * Text / cursor selection highlight
+ * ===================================================================== */
+
+selection {
+    background-color: alpha(#205EA6, 0.4);
+    color: #100F0F;
+}
+
+/* Focus outlines — use accent ring so focused items don't vanish */
+button:focus,
+entry:focus,
+treeview:focus,
+combobox:focus {
+    outline-color: #205EA6;
+}
+
+/* Combobox popup rows */
+combobox > window > frame > scrolledwindow > treeview row:hover,
+combobox > window > frame > scrolledwindow > treeview row:selected {
+    background-color: #205EA6;
+    color: #100F0F;
+}
+
+/* =====================================================================
  * Dialogs and secondary windows (preferences, properties, about)
  * ===================================================================== */
 
@@ -287,10 +362,17 @@ notebook > stack {
 /* Stack switcher (properties dialog tabs) */
 stackswitcher button {
     color: #100F0F;
+    background-color: transparent;
+}
+
+stackswitcher button:hover {
+    background-color: alpha(#205EA6, 0.15);
+    color: #100F0F;
 }
 
 stackswitcher button:checked {
-    color: #205EA6;
+    color: #100F0F;
+    background-color: #205EA6;
 }
 
 /* Text views (about license, etc.) */
