@@ -11,12 +11,12 @@
  * Must be PRIORITY_USER so they shadow active Adwaita definitions.
  * ===================================================================== */
 
-@define-color theme_selected_bg_color #205EA6;
+@define-color theme_selected_bg_color #CECDC3;
 @define-color theme_selected_fg_color #100F0F;
 @define-color theme_bg_color #FFFCF0;
 @define-color theme_fg_color #100F0F;
 @define-color theme_unfocused_bg_color #E6E4D9;
-@define-color theme_unfocused_selected_bg_color alpha(#205EA6, 0.35);
+@define-color theme_unfocused_selected_bg_color alpha(#CECDC3, 0.35);
 @define-color borders #DAD8CE;
 
 /* =====================================================================
@@ -57,7 +57,7 @@ toolbar.primary-toolbar button:checked,
 toolbar.primary-toolbar button:active,
 toolbar.primary-toolbar button.active,
 toolbar.primary-toolbar button.suggested-action {
-    background-color: #205EA6;
+    background-color: #CECDC3;
     color: #100F0F;
 }
 
@@ -86,8 +86,8 @@ toolbar.primary-toolbar button.suggested-action label {
 
 .path-bar button:checked,
 .path-bar button:active {
-    color: #205EA6;
-    background-color: #DAD8CE;
+    color: #100F0F;
+    background-color: #CECDC3;
 }
 
 /* =====================================================================
@@ -102,7 +102,7 @@ toolbar.primary-toolbar button.suggested-action label {
 
 .nemo-window .view:selected,
 .nemo-window iconview:selected {
-    background-color: #205EA6;
+    background-color: #CECDC3;
     color: #100F0F;
 }
 
@@ -134,7 +134,7 @@ toolbar.primary-toolbar button.suggested-action label {
 
 .sidebar row:selected,
 .places-treeview:selected {
-    background-color: #205EA6;
+    background-color: #CECDC3;
     color: #100F0F;
 }
 
@@ -156,7 +156,7 @@ toolbar.primary-toolbar button.suggested-action label {
 }
 
 .nemo-window .nemo-window-pane widget.entry:selected {
-    background-color: #205EA6;
+    background-color: #CECDC3;
     color: #100F0F;
     border-color: #205EA6;
 }
@@ -189,7 +189,7 @@ toolbar.primary-toolbar button.suggested-action label {
 }
 
 .nemo-desktop.nemo-canvas-item:selected {
-    background-color: alpha(#205EA6, 0.8);
+    background-color: alpha(#CECDC3, 0.8);
     color: #100F0F;
 }
 
@@ -208,7 +208,7 @@ searchbar entry {
  * ===================================================================== */
 
 menu {
-    background-color: #E6E4D9;
+    background-color: #FFFCF0;
     color: #100F0F;
     border: 1px solid #DAD8CE;
 }
@@ -222,7 +222,7 @@ menuitem label {
 }
 
 menuitem:hover {
-    background-color: #205EA6;
+    background-color: #CECDC3;
     color: #100F0F;
 }
 
@@ -263,7 +263,7 @@ modelbutton label {
 
 modelbutton:hover,
 modelbutton:focus {
-    background-color: #205EA6;
+    background-color: #CECDC3;
     color: #100F0F;
     outline: none;
 }
@@ -276,7 +276,7 @@ modelbutton:focus * {
 }
 
 modelbutton:selected {
-    background-color: #205EA6;
+    background-color: #CECDC3;
     color: #100F0F;
 }
 
@@ -300,13 +300,13 @@ listbox row {
 }
 
 listbox row:hover {
-    background-color: alpha(#205EA6, 0.15);
+    background-color: alpha(#CECDC3, 0.3);
     color: #100F0F;
 }
 
 listbox row:selected,
 listbox row:selected:hover {
-    background-color: #205EA6;
+    background-color: #CECDC3;
     color: #100F0F;
 }
 
@@ -322,7 +322,7 @@ listbox row:selected:hover * {
  * ===================================================================== */
 
 selection {
-    background-color: alpha(#205EA6, 0.4);
+    background-color: alpha(#CECDC3, 0.6);
     color: #100F0F;
 }
 
@@ -337,7 +337,7 @@ combobox:focus {
 /* Combobox popup rows */
 combobox > window > frame > scrolledwindow > treeview row:hover,
 combobox > window > frame > scrolledwindow > treeview row:selected {
-    background-color: #205EA6;
+    background-color: #CECDC3;
     color: #100F0F;
 }
 
@@ -385,7 +385,7 @@ dialog button:hover,
 messagedialog button:hover,
 .preferences button:hover,
 popover button:hover {
-    background-color: #205EA6;
+    background-color: #CECDC3;
     color: #100F0F;
 }
 
@@ -402,7 +402,7 @@ popover button:hover * {
 
 dialog button.suggested-action,
 messagedialog button.suggested-action {
-    background-color: #205EA6;
+    background-color: #CECDC3;
     color: #100F0F;
 }
 
@@ -446,7 +446,7 @@ stackswitcher button:hover {
 
 stackswitcher button:checked {
     color: #100F0F;
-    background-color: #205EA6;
+    background-color: #CECDC3;
 }
 
 stackswitcher button:checked label,
@@ -493,7 +493,7 @@ treeview {
 }
 
 treeview:selected {
-    background-color: #205EA6;
+    background-color: #CECDC3;
     color: #100F0F;
 }
 
@@ -526,5 +526,5 @@ scrollbar slider {
 }
 
 scrollbar slider:hover {
-    background-color: #205EA6;
+    background-color: #CECDC3;
 }

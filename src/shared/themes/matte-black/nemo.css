@@ -11,12 +11,12 @@
  * Must be PRIORITY_USER so they shadow active Adwaita definitions.
  * ===================================================================== */
 
-@define-color theme_selected_bg_color #e68e0d;
+@define-color theme_selected_bg_color #333333;
 @define-color theme_selected_fg_color #bebebe;
 @define-color theme_bg_color #121212;
 @define-color theme_fg_color #bebebe;
 @define-color theme_unfocused_bg_color #1e1e1e;
-@define-color theme_unfocused_selected_bg_color alpha(#e68e0d, 0.35);
+@define-color theme_unfocused_selected_bg_color alpha(#333333, 0.35);
 @define-color borders #333333;
 
 /* =====================================================================
@@ -57,7 +57,7 @@ toolbar.primary-toolbar button:checked,
 toolbar.primary-toolbar button:active,
 toolbar.primary-toolbar button.active,
 toolbar.primary-toolbar button.suggested-action {
-    background-color: #e68e0d;
+    background-color: #333333;
     color: #bebebe;
 }
 
@@ -86,7 +86,7 @@ toolbar.primary-toolbar button.suggested-action label {
 
 .path-bar button:checked,
 .path-bar button:active {
-    color: #e68e0d;
+    color: #bebebe;
     background-color: #333333;
 }
 
@@ -102,7 +102,7 @@ toolbar.primary-toolbar button.suggested-action label {
 
 .nemo-window .view:selected,
 .nemo-window iconview:selected {
-    background-color: #e68e0d;
+    background-color: #333333;
     color: #bebebe;
 }
 
@@ -134,7 +134,7 @@ toolbar.primary-toolbar button.suggested-action label {
 
 .sidebar row:selected,
 .places-treeview:selected {
-    background-color: #e68e0d;
+    background-color: #333333;
     color: #bebebe;
 }
 
@@ -156,7 +156,7 @@ toolbar.primary-toolbar button.suggested-action label {
 }
 
 .nemo-window .nemo-window-pane widget.entry:selected {
-    background-color: #e68e0d;
+    background-color: #333333;
     color: #bebebe;
     border-color: #e68e0d;
 }
@@ -189,7 +189,7 @@ toolbar.primary-toolbar button.suggested-action label {
 }
 
 .nemo-desktop.nemo-canvas-item:selected {
-    background-color: alpha(#e68e0d, 0.8);
+    background-color: alpha(#333333, 0.8);
     color: #bebebe;
 }
 
@@ -208,7 +208,7 @@ searchbar entry {
  * ===================================================================== */
 
 menu {
-    background-color: #1e1e1e;
+    background-color: #121212;
     color: #bebebe;
     border: 1px solid #333333;
 }
@@ -222,7 +222,7 @@ menuitem label {
 }
 
 menuitem:hover {
-    background-color: #e68e0d;
+    background-color: #333333;
     color: #bebebe;
 }
 
@@ -263,7 +263,7 @@ modelbutton label {
 
 modelbutton:hover,
 modelbutton:focus {
-    background-color: #e68e0d;
+    background-color: #333333;
     color: #bebebe;
     outline: none;
 }
@@ -276,7 +276,7 @@ modelbutton:focus * {
 }
 
 modelbutton:selected {
-    background-color: #e68e0d;
+    background-color: #333333;
     color: #bebebe;
 }
 
@@ -300,13 +300,13 @@ listbox row {
 }
 
 listbox row:hover {
-    background-color: alpha(#e68e0d, 0.15);
+    background-color: alpha(#333333, 0.3);
     color: #bebebe;
 }
 
 listbox row:selected,
 listbox row:selected:hover {
-    background-color: #e68e0d;
+    background-color: #333333;
     color: #bebebe;
 }
 
@@ -322,7 +322,7 @@ listbox row:selected:hover * {
  * ===================================================================== */
 
 selection {
-    background-color: alpha(#e68e0d, 0.4);
+    background-color: alpha(#333333, 0.6);
     color: #bebebe;
 }
 
@@ -337,7 +337,7 @@ combobox:focus {
 /* Combobox popup rows */
 combobox > window > frame > scrolledwindow > treeview row:hover,
 combobox > window > frame > scrolledwindow > treeview row:selected {
-    background-color: #e68e0d;
+    background-color: #333333;
     color: #bebebe;
 }
 
@@ -385,7 +385,7 @@ dialog button:hover,
 messagedialog button:hover,
 .preferences button:hover,
 popover button:hover {
-    background-color: #e68e0d;
+    background-color: #333333;
     color: #bebebe;
 }
 
@@ -402,7 +402,7 @@ popover button:hover * {
 
 dialog button.suggested-action,
 messagedialog button.suggested-action {
-    background-color: #e68e0d;
+    background-color: #333333;
     color: #bebebe;
 }
 
@@ -446,7 +446,7 @@ stackswitcher button:hover {
 
 stackswitcher button:checked {
     color: #bebebe;
-    background-color: #e68e0d;
+    background-color: #333333;
 }
 
 stackswitcher button:checked label,
@@ -493,7 +493,7 @@ treeview {
 }
 
 treeview:selected {
-    background-color: #e68e0d;
+    background-color: #333333;
     color: #bebebe;
 }
 
@@ -526,5 +526,5 @@ scrollbar slider {
 }
 
 scrollbar slider:hover {
-    background-color: #e68e0d;
+    background-color: #333333;
 }

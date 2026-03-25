@@ -43,8 +43,9 @@ def make_nemo_css(c):
     fg        = c["foreground"]
     fg_dim    = c.get("fg_dim", c["foreground"])
     accent    = c["accent"]
-    # Text colour written ON an accent-coloured background.
-    # background (darkest surface) always contrasts with accent for every theme.
+    # selection_background = hover/selected fill colour
+    # selection_foreground = text on top of that fill
+    sel_bg    = c.get("selection_background", accent)
     sel_fg    = c.get("selection_foreground", bg)
 
     return f"""\
@@ -61,12 +62,12 @@ def make_nemo_css(c):
  * Must be PRIORITY_USER so they shadow active Adwaita definitions.
  * ===================================================================== */
 
-@define-color theme_selected_bg_color {accent};
+@define-color theme_selected_bg_color {sel_bg};
 @define-color theme_selected_fg_color {sel_fg};
 @define-color theme_bg_color {bg};
 @define-color theme_fg_color {fg};
 @define-color theme_unfocused_bg_color {bg_l};
-@define-color theme_unfocused_selected_bg_color alpha({accent}, 0.35);
+@define-color theme_unfocused_selected_bg_color alpha({sel_bg}, 0.35);
 @define-color borders {bg_ll};
 
 /* =====================================================================
@@ -107,7 +108,7 @@ toolbar.primary-toolbar button:checked,
 toolbar.primary-toolbar button:active,
 toolbar.primary-toolbar button.active,
 toolbar.primary-toolbar button.suggested-action {{
-    background-color: {accent};
+    background-color: {sel_bg};
     color: {sel_fg};
 }}
 
@@ -136,8 +137,8 @@ toolbar.primary-toolbar button.suggested-action label {{
 
 .path-bar button:checked,
 .path-bar button:active {{
-    color: {accent};
-    background-color: {bg_ll};
+    color: {sel_fg};
+    background-color: {sel_bg};
 }}
 
 /* =====================================================================
@@ -152,7 +153,7 @@ toolbar.primary-toolbar button.suggested-action label {{
 
 .nemo-window .view:selected,
 .nemo-window iconview:selected {{
-    background-color: {accent};
+    background-color: {sel_bg};
     color: {sel_fg};
 }}
 
@@ -184,7 +185,7 @@ toolbar.primary-toolbar button.suggested-action label {{
 
 .sidebar row:selected,
 .places-treeview:selected {{
-    background-color: {accent};
+    background-color: {sel_bg};
     color: {sel_fg};
 }}
 
@@ -206,7 +207,7 @@ toolbar.primary-toolbar button.suggested-action label {{
 }}
 
 .nemo-window .nemo-window-pane widget.entry:selected {{
-    background-color: {accent};
+    background-color: {sel_bg};
     color: {sel_fg};
     border-color: {accent};
 }}
@@ -239,7 +240,7 @@ toolbar.primary-toolbar button.suggested-action label {{
 }}
 
 .nemo-desktop.nemo-canvas-item:selected {{
-    background-color: alpha({accent}, 0.8);
+    background-color: alpha({sel_bg}, 0.8);
     color: {sel_fg};
 }}
 
@@ -258,7 +259,7 @@ searchbar entry {{
  * ===================================================================== */
 
 menu {{
-    background-color: {bg_l};
+    background-color: {bg};
     color: {fg};
     border: 1px solid {bg_ll};
 }}
@@ -272,7 +273,7 @@ menuitem label {{
 }}
 
 menuitem:hover {{
-    background-color: {accent};
+    background-color: {sel_bg};
     color: {sel_fg};
 }}
 
@@ -313,7 +314,7 @@ modelbutton label {{
 
 modelbutton:hover,
 modelbutton:focus {{
-    background-color: {accent};
+    background-color: {sel_bg};
     color: {sel_fg};
     outline: none;
 }}
@@ -326,7 +327,7 @@ modelbutton:focus * {{
 }}
 
 modelbutton:selected {{
-    background-color: {accent};
+    background-color: {sel_bg};
     color: {sel_fg};
 }}
 
@@ -350,13 +351,13 @@ listbox row {{
 }}
 
 listbox row:hover {{
-    background-color: alpha({accent}, 0.15);
+    background-color: alpha({sel_bg}, 0.3);
     color: {fg};
 }}
 
 listbox row:selected,
 listbox row:selected:hover {{
-    background-color: {accent};
+    background-color: {sel_bg};
     color: {sel_fg};
 }}
 
@@ -372,8 +373,8 @@ listbox row:selected:hover * {{
  * ===================================================================== */
 
 selection {{
-    background-color: alpha({accent}, 0.4);
-    color: {fg};
+    background-color: alpha({sel_bg}, 0.6);
+    color: {sel_fg};
 }}
 
 /* Focus outlines — use accent ring so focused items don't vanish */
@@ -387,7 +388,7 @@ combobox:focus {{
 /* Combobox popup rows */
 combobox > window > frame > scrolledwindow > treeview row:hover,
 combobox > window > frame > scrolledwindow > treeview row:selected {{
-    background-color: {accent};
+    background-color: {sel_bg};
     color: {sel_fg};
 }}
 
@@ -435,7 +436,7 @@ dialog button:hover,
 messagedialog button:hover,
 .preferences button:hover,
 popover button:hover {{
-    background-color: {accent};
+    background-color: {sel_bg};
     color: {sel_fg};
 }}
 
@@ -452,7 +453,7 @@ popover button:hover * {{
 
 dialog button.suggested-action,
 messagedialog button.suggested-action {{
-    background-color: {accent};
+    background-color: {sel_bg};
     color: {sel_fg};
 }}
 
@@ -496,7 +497,7 @@ stackswitcher button:hover {{
 
 stackswitcher button:checked {{
     color: {sel_fg};
-    background-color: {accent};
+    background-color: {sel_bg};
 }}
 
 stackswitcher button:checked label,
@@ -543,7 +544,7 @@ treeview {{
 }}
 
 treeview:selected {{
-    background-color: {accent};
+    background-color: {sel_bg};
     color: {sel_fg};
 }}
 
@@ -576,7 +577,7 @@ scrollbar slider {{
 }}
 
 scrollbar slider:hover {{
-    background-color: {accent};
+    background-color: {sel_bg};
 }}
 """
 

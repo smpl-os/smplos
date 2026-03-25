@@ -86,8 +86,8 @@ toolbar.primary-toolbar button.suggested-action label {
 
 .path-bar button:checked,
 .path-bar button:active {
-    color: #7aa2f7;
-    background-color: #32344a;
+    color: #c0caf5;
+    background-color: #7aa2f7;
 }
 
 /* =====================================================================
@@ -208,7 +208,7 @@ searchbar entry {
  * ===================================================================== */
 
 menu {
-    background-color: #24283b;
+    background-color: #1a1b26;
     color: #a9b1d6;
     border: 1px solid #32344a;
 }
@@ -300,7 +300,7 @@ listbox row {
 }
 
 listbox row:hover {
-    background-color: alpha(#7aa2f7, 0.15);
+    background-color: alpha(#7aa2f7, 0.3);
     color: #a9b1d6;
 }
 
@@ -322,8 +322,8 @@ listbox row:selected:hover * {
  * ===================================================================== */
 
 selection {
-    background-color: alpha(#7aa2f7, 0.4);
-    color: #a9b1d6;
+    background-color: alpha(#7aa2f7, 0.6);
+    color: #c0caf5;
 }
 
 /* Focus outlines — use accent ring so focused items don't vanish */
