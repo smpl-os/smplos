@@ -158,27 +158,35 @@ impl DisplayBackend for HyprlandBackend {
     }
 
     fn identify(&self, monitors: &[Monitor]) -> Result<(), String> {
-        for (i, m) in monitors.iter().enumerate() {
-            // Write a tiny self-deleting script to /tmp so we avoid all shell
-            // quoting issues when passing the command through hyprctl exec.
-            let script_path = format!("/tmp/smplos-identify-{}.sh", m.name);
-            let script = format!(
-                "#!/bin/sh\nclear\nprintf '\\n\\n  {}  {}  \\n\\n'\nsleep 2.5\nrm -f '{}'\n",
-                i + 1, m.name, script_path
-            );
-            if std::fs::write(&script_path, &script).is_err() { continue; }
-            let _ = Command::new("chmod").args(["+x", &script_path]).output();
+        // Build a small shell script that cycles through monitors using
+        // `focusmonitor` (sets Hyprland's active-monitor pointer) then
+        // `notify` (always targets the active monitor). Running it as a
+        // detached background process ensures the settings window can't
+        // steal the active-monitor back between focusmonitor and notify.
+        let original = monitors.iter().find(|m| m.focused)
+            .map(|m| m.name.clone())
+            .unwrap_or_default();
 
-            // [monitor:name] tells Hyprland to open the next window from this
-            // process on the named output — reliable regardless of cursor position.
-            let rule = format!(
-                "[float;monitor:{};size 560 180;center;noborder;rounding 14;opacity 0.9 0.9]",
-                m.name
-            );
-            let exec_cmd = format!("{} st-wl -T smplos-identify -e {}", rule, script_path);
-            let _ = self.hyprctl(&["dispatch", "exec", &exec_cmd]);
-            std::thread::sleep(std::time::Duration::from_millis(120));
+        let mut steps = String::from("#!/bin/sh\n");
+        for (i, m) in monitors.iter().enumerate() {
+            steps.push_str(&format!(
+                "hyprctl dispatch focusmonitor {}\nsleep 0.3\nhyprctl notify 0 2500 'rgb(89b4fa)' 'fontsize:40 {}  {}'\n",
+                m.name, i + 1, m.name
+            ));
         }
+        if !original.is_empty() {
+            steps.push_str(&format!("sleep 0.1\nhyprctl dispatch focusmonitor {}\n", original));
+        }
+
+        let script_path = "/tmp/smplos-identify-bg.sh";
+        std::fs::write(script_path, &steps)
+            .map_err(|e| format!("Failed to write identify script: {e}"))?;
+        let _ = Command::new("chmod").args(["+x", script_path]).output();
+
+        // Spawn detached — don't wait, so settings stays responsive
+        // and doesn't re-steal monitor focus during the sequence.
+        let _ = Command::new("sh").arg(script_path).spawn();
+
         Ok(())
     }
 
