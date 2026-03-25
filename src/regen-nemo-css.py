@@ -111,6 +111,13 @@ toolbar.primary-toolbar button.suggested-action {{
     color: {sel_fg};
 }}
 
+toolbar.primary-toolbar button:checked label,
+toolbar.primary-toolbar button:active label,
+toolbar.primary-toolbar button.active label,
+toolbar.primary-toolbar button.suggested-action label {{
+    color: {sel_fg};
+}}
+
 /* =====================================================================
  * Path / breadcrumb bar
  * ===================================================================== */
@@ -149,6 +156,13 @@ toolbar.primary-toolbar button.suggested-action {{
     color: {sel_fg};
 }}
 
+.nemo-window .view:selected label,
+.nemo-window .view:selected *,
+.nemo-window iconview:selected label,
+.nemo-window iconview:selected * {{
+    color: {sel_fg};
+}}
+
 /* =====================================================================
  * Inactive F3 pane (split view)
  * ===================================================================== */
@@ -171,6 +185,13 @@ toolbar.primary-toolbar button.suggested-action {{
 .sidebar row:selected,
 .places-treeview:selected {{
     background-color: {accent};
+    color: {sel_fg};
+}}
+
+.sidebar row:selected label,
+.sidebar row:selected *,
+.places-treeview:selected label,
+.places-treeview:selected * {{
     color: {sel_fg};
 }}
 
@@ -246,8 +267,17 @@ menuitem {{
     color: {fg};
 }}
 
+menuitem label {{
+    color: {fg};
+}}
+
 menuitem:hover {{
     background-color: {accent};
+    color: {sel_fg};
+}}
+
+menuitem:hover label,
+menuitem:hover * {{
     color: {sel_fg};
 }}
 
@@ -277,6 +307,10 @@ modelbutton {{
     color: {fg};
 }}
 
+modelbutton label {{
+    color: {fg};
+}}
+
 modelbutton:hover,
 modelbutton:focus {{
     background-color: {accent};
@@ -284,8 +318,20 @@ modelbutton:focus {{
     outline: none;
 }}
 
+modelbutton:hover label,
+modelbutton:hover *,
+modelbutton:focus label,
+modelbutton:focus * {{
+    color: {sel_fg};
+}}
+
 modelbutton:selected {{
     background-color: {accent};
+    color: {sel_fg};
+}}
+
+modelbutton:selected label,
+modelbutton:selected * {{
     color: {sel_fg};
 }}
 
@@ -314,8 +360,11 @@ listbox row:selected:hover {{
     color: {sel_fg};
 }}
 
-listbox row label {{
-    color: inherit;
+listbox row:selected label,
+listbox row:selected *,
+listbox row:selected:hover label,
+listbox row:selected:hover * {{
+    color: {sel_fg};
 }}
 
 /* =====================================================================
@@ -339,6 +388,13 @@ combobox:focus {{
 combobox > window > frame > scrolledwindow > treeview row:hover,
 combobox > window > frame > scrolledwindow > treeview row:selected {{
     background-color: {accent};
+    color: {sel_fg};
+}}
+
+combobox > window > frame > scrolledwindow > treeview row:hover label,
+combobox > window > frame > scrolledwindow > treeview row:hover *,
+combobox > window > frame > scrolledwindow > treeview row:selected label,
+combobox > window > frame > scrolledwindow > treeview row:selected * {{
     color: {sel_fg};
 }}
 
@@ -383,9 +439,27 @@ popover button:hover {{
     color: {sel_fg};
 }}
 
+dialog button:hover label,
+dialog button:hover *,
+messagedialog button:hover label,
+messagedialog button:hover *,
+.preferences button:hover label,
+.preferences button:hover *,
+popover button:hover label,
+popover button:hover * {{
+    color: {sel_fg};
+}}
+
 dialog button.suggested-action,
 messagedialog button.suggested-action {{
     background-color: {accent};
+    color: {sel_fg};
+}}
+
+dialog button.suggested-action label,
+dialog button.suggested-action *,
+messagedialog button.suggested-action label,
+messagedialog button.suggested-action * {{
     color: {sel_fg};
 }}
 
@@ -423,6 +497,11 @@ stackswitcher button:hover {{
 stackswitcher button:checked {{
     color: {sel_fg};
     background-color: {accent};
+}}
+
+stackswitcher button:checked label,
+stackswitcher button:checked * {{
+    color: {sel_fg};
 }}
 
 /* Text views (about license, etc.) */
@@ -465,6 +544,11 @@ treeview {{
 
 treeview:selected {{
     background-color: {accent};
+    color: {sel_fg};
+}}
+
+treeview:selected label,
+treeview:selected * {{
     color: {sel_fg};
 }}
 

@@ -61,6 +61,13 @@ toolbar.primary-toolbar button.suggested-action {
     color: #0B0C16;
 }
 
+toolbar.primary-toolbar button:checked label,
+toolbar.primary-toolbar button:active label,
+toolbar.primary-toolbar button.active label,
+toolbar.primary-toolbar button.suggested-action label {
+    color: #0B0C16;
+}
+
 /* =====================================================================
  * Path / breadcrumb bar
  * ===================================================================== */
@@ -99,6 +106,13 @@ toolbar.primary-toolbar button.suggested-action {
     color: #0B0C16;
 }
 
+.nemo-window .view:selected label,
+.nemo-window .view:selected *,
+.nemo-window iconview:selected label,
+.nemo-window iconview:selected * {
+    color: #0B0C16;
+}
+
 /* =====================================================================
  * Inactive F3 pane (split view)
  * ===================================================================== */
@@ -121,6 +135,13 @@ toolbar.primary-toolbar button.suggested-action {
 .sidebar row:selected,
 .places-treeview:selected {
     background-color: #82FB9C;
+    color: #0B0C16;
+}
+
+.sidebar row:selected label,
+.sidebar row:selected *,
+.places-treeview:selected label,
+.places-treeview:selected * {
     color: #0B0C16;
 }
 
@@ -196,8 +217,17 @@ menuitem {
     color: #ddf7ff;
 }
 
+menuitem label {
+    color: #ddf7ff;
+}
+
 menuitem:hover {
     background-color: #82FB9C;
+    color: #0B0C16;
+}
+
+menuitem:hover label,
+menuitem:hover * {
     color: #0B0C16;
 }
 
@@ -227,6 +257,10 @@ modelbutton {
     color: #ddf7ff;
 }
 
+modelbutton label {
+    color: #ddf7ff;
+}
+
 modelbutton:hover,
 modelbutton:focus {
     background-color: #82FB9C;
@@ -234,8 +268,20 @@ modelbutton:focus {
     outline: none;
 }
 
+modelbutton:hover label,
+modelbutton:hover *,
+modelbutton:focus label,
+modelbutton:focus * {
+    color: #0B0C16;
+}
+
 modelbutton:selected {
     background-color: #82FB9C;
+    color: #0B0C16;
+}
+
+modelbutton:selected label,
+modelbutton:selected * {
     color: #0B0C16;
 }
 
@@ -264,8 +310,11 @@ listbox row:selected:hover {
     color: #0B0C16;
 }
 
-listbox row label {
-    color: inherit;
+listbox row:selected label,
+listbox row:selected *,
+listbox row:selected:hover label,
+listbox row:selected:hover * {
+    color: #0B0C16;
 }
 
 /* =====================================================================
@@ -289,6 +338,13 @@ combobox:focus {
 combobox > window > frame > scrolledwindow > treeview row:hover,
 combobox > window > frame > scrolledwindow > treeview row:selected {
     background-color: #82FB9C;
+    color: #0B0C16;
+}
+
+combobox > window > frame > scrolledwindow > treeview row:hover label,
+combobox > window > frame > scrolledwindow > treeview row:hover *,
+combobox > window > frame > scrolledwindow > treeview row:selected label,
+combobox > window > frame > scrolledwindow > treeview row:selected * {
     color: #0B0C16;
 }
 
@@ -333,9 +389,27 @@ popover button:hover {
     color: #0B0C16;
 }
 
+dialog button:hover label,
+dialog button:hover *,
+messagedialog button:hover label,
+messagedialog button:hover *,
+.preferences button:hover label,
+.preferences button:hover *,
+popover button:hover label,
+popover button:hover * {
+    color: #0B0C16;
+}
+
 dialog button.suggested-action,
 messagedialog button.suggested-action {
     background-color: #82FB9C;
+    color: #0B0C16;
+}
+
+dialog button.suggested-action label,
+dialog button.suggested-action *,
+messagedialog button.suggested-action label,
+messagedialog button.suggested-action * {
     color: #0B0C16;
 }
 
@@ -373,6 +447,11 @@ stackswitcher button:hover {
 stackswitcher button:checked {
     color: #0B0C16;
     background-color: #82FB9C;
+}
+
+stackswitcher button:checked label,
+stackswitcher button:checked * {
+    color: #0B0C16;
 }
 
 /* Text views (about license, etc.) */
@@ -415,6 +494,11 @@ treeview {
 
 treeview:selected {
     background-color: #82FB9C;
+    color: #0B0C16;
+}
+
+treeview:selected label,
+treeview:selected * {
     color: #0B0C16;
 }
 
