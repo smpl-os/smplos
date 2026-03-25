@@ -14,7 +14,8 @@
 set -euo pipefail
 
 STATE_DIR="$HOME/.local/state/smplos/app-versions"
-mkdir -p "$STATE_DIR"
+SMPLOS_BIN="$HOME/.local/share/smplos/bin"
+mkdir -p "$STATE_DIR" "$SMPLOS_BIN"
 
 CHECK_ONLY=0; QUIET=0
 for arg in "$@"; do
@@ -118,6 +119,8 @@ update_smpl_apps() {
         fi
 
         sudo install -m755 "$src" "/usr/local/bin/$app"
+        # Also update the user-local copy which takes priority in PATH
+        install -m755 "$src" "$SMPLOS_BIN/$app"
 
         # Restart GUI apps that were running (not daemons — those restart via systemd/autostart)
         if [[ $was_running -eq 1 ]]; then
@@ -126,7 +129,7 @@ update_smpl_apps() {
                     # Daemon — let systemd or autostart handle restart
                     ;;
                 *)
-                    nohup "/usr/local/bin/$app" &>/dev/null &
+                    nohup "$SMPLOS_BIN/$app" &>/dev/null &
                     disown
                     restarted+=("$app")
                     ;;
