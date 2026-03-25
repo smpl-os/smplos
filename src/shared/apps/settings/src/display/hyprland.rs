@@ -158,25 +158,35 @@ impl DisplayBackend for HyprlandBackend {
     }
 
     fn identify(&self, monitors: &[Monitor]) -> Result<(), String> {
-        // Build a small shell script that cycles through monitors using
-        // `focusmonitor` (sets Hyprland's active-monitor pointer) then
-        // `notify` (always targets the active monitor). Running it as a
-        // detached background process ensures the settings window can't
-        // steal the active-monitor back between focusmonitor and notify.
-        let original = monitors.iter().find(|m| m.focused)
-            .map(|m| m.name.clone())
-            .unwrap_or_default();
+        // `hyprctl notify` targets the monitor under the cursor, not the
+        // "focused" monitor. So we move the cursor to the center of each
+        // monitor in quick succession and fire a notify; all labels appear
+        // simultaneously for 2.5 s. Afterwards restore the cursor.
+        let notify_ms = 2500u32;
+        let notify_dur_s = notify_ms as f64 / 1000.0 + 0.2;
 
-        let mut steps = String::from("#!/bin/sh\n");
+        let mut steps = String::from(
+            "#!/bin/sh\n\
+             ORIG=$(hyprctl cursorpos)\n\
+             OX=$(echo $ORIG | cut -d',' -f1 | tr -d ' ')\n\
+             OY=$(echo $ORIG | cut -d',' -f2 | tr -d ' ')\n",
+        );
+
         for (i, m) in monitors.iter().enumerate() {
+            // Center in logical pixels
+            let cx = m.x + (m.width as f64 / m.scale / 2.0) as i32;
+            let cy = m.y + (m.height as f64 / m.scale / 2.0) as i32;
             steps.push_str(&format!(
-                "hyprctl dispatch focusmonitor {}\nsleep 0.3\nhyprctl notify 0 2500 'rgb(89b4fa)' 'fontsize:40 {}  {}'\n",
-                m.name, i + 1, m.name
+                "hyprctl dispatch movecursor {cx} {cy}\nsleep 0.05\n\
+                 hyprctl notify 0 {notify_ms} 'rgb(89b4fa)' 'fontsize:40 {}  {}'\n",
+                i + 1, m.name
             ));
         }
-        if !original.is_empty() {
-            steps.push_str(&format!("sleep 0.1\nhyprctl dispatch focusmonitor {}\n", original));
-        }
+
+        // Wait for notifications to expire then restore cursor
+        steps.push_str(&format!(
+            "sleep {notify_dur_s:.1}\nhyprctl dispatch movecursor $OX $OY\n"
+        ));
 
         let script_path = "/tmp/smplos-identify-bg.sh";
         std::fs::write(script_path, &steps)
@@ -184,7 +194,6 @@ impl DisplayBackend for HyprlandBackend {
         let _ = Command::new("chmod").args(["+x", script_path]).output();
 
         // Spawn detached — don't wait, so settings stays responsive
-        // and doesn't re-steal monitor focus during the sequence.
         let _ = Command::new("sh").arg(script_path).spawn();
 
         Ok(())
