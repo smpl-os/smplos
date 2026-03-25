@@ -42,6 +42,9 @@ eww_start() {
     echo "$(date '+%H:%M:%S') Opening: $BAR_NAME" >> "$LOG"
     eww --config "$EWW_CONFIG" open "$BAR_NAME" >> "$LOG" 2>&1
 
+    # Apply saved bar settings (workspace count, position, etc.)
+    eww_apply
+
     echo "$(date '+%H:%M:%S') Active windows:" >> "$LOG"
     eww --config "$EWW_CONFIG" active-windows >> "$LOG" 2>&1
     echo "$(date '+%H:%M:%S') bar-ctl start complete" >> "$LOG"
@@ -54,13 +57,40 @@ eww_toggle() {
 }
 eww_reload() { eww --config "$EWW_CONFIG" reload; }
 
+# Apply bar settings from ~/.config/smplos/bar.conf to running EWW instance.
+# File format: KEY=VALUE (shell-compatible).  Supported keys:
+#   ws_count    = 1-10   (workspace dot count, default 7)
+#   ws_position = center | left  (where workspaces live, default center)
+eww_apply() {
+    local conf="$HOME/.config/smplos/bar.conf"
+    local ws_count=7
+    local ws_position="center"
+
+    if [[ -f "$conf" ]]; then
+        while IFS='=' read -r key val; do
+            key="${key// /}"
+            val="${val// /}"
+            [[ -z "$key" || "$key" == \#* ]] && continue
+            case "$key" in
+                ws_count)    ws_count="$val" ;;
+                ws_position) ws_position="$val" ;;
+            esac
+        done < "$conf"
+    fi
+
+    eww --config "$EWW_CONFIG" update ws-count="$ws_count" 2>/dev/null
+    eww --config "$EWW_CONFIG" update ws-position="$ws_position" 2>/dev/null
+    echo "$(date '+%H:%M:%S') bar-ctl apply: ws_count=$ws_count ws_position=$ws_position" >> "$LOG"
+}
+
 case "$action" in
     start|open)   eww_start ;;
     stop|close)   eww_stop ;;
     toggle)       eww_toggle ;;
     reload)       eww_reload ;;
+    apply)        eww_apply ;;
     *)
-        echo "Usage: bar-ctl [start|stop|toggle|reload] [bar]"
+        echo "Usage: bar-ctl [start|stop|toggle|reload|apply] [bar]"
         exit 1
         ;;
 esac

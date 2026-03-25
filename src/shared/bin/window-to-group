@@ -24,6 +24,21 @@ fi
 group="${1:-1}"
 
 # ---------------------------------------------------------------------------
+# Read workspace limit from bar.conf (default 10 = no limit)
+# ---------------------------------------------------------------------------
+max_group=10
+bar_conf="$HOME/.config/smplos/bar.conf"
+if [[ -f "$bar_conf" ]]; then
+    _ws=$(grep -m1 '^ws_count=' "$bar_conf" 2>/dev/null | cut -d= -f2)
+    [[ -n "$_ws" && "$_ws" =~ ^[0-9]+$ ]] && max_group=$_ws
+fi
+[[ $max_group -lt 1 ]] && max_group=1
+[[ $max_group -gt 10 ]] && max_group=10
+
+# Refuse to move to a group beyond the limit
+[[ "$group" -gt $max_group ]] && exit 0
+
+# ---------------------------------------------------------------------------
 # Read monitors sorted rightmost-first (rightmost = primary, index 0)
 # ---------------------------------------------------------------------------
 readarray -t monitors < <(

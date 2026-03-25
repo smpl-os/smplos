@@ -46,6 +46,17 @@ struct SearchResult {
     tab-index: int,
 }
 
+struct BindingEntry {
+    idx: int,
+    combo: string,
+    description: string,
+    dispatcher: string,
+    args: string,
+    section: string,
+    submap: string,
+    is-exec: bool,
+}
+
 // ── Theme ────────────────────────────────────────────────────────────────────
 
 export global Theme {
@@ -451,6 +462,7 @@ export component MainWindow inherits Window {
     in property <bool> power-profiles-available: true;
 
     // ── About tab properties ──
+    in property <string> app-version: "dev";
     in property <string> about-version: "dev";
     in property <string> about-kernel: "";
     in property <string> about-uptime: "";
@@ -458,6 +470,25 @@ export component MainWindow inherits Window {
     in property <string> about-cpu: "";
     in property <string> about-ram: "";
     in property <string> about-gpu: "";
+
+    // ── Keybindings tab properties ──
+    in property <[BindingEntry]> kb-bindings: [];
+    in property <[string]> kb-sections: [];
+    in-out property <int> kb-selected-section: 0;
+    in-out property <string> kb-filter-text: "";
+    in-out property <int> kb-edit-idx: -1;
+    in property <string> kb-status-text: "";
+    in property <bool> kb-has-changes: false;
+    in-out property <bool> kb-capturing: false;
+    in-out property <int> kb-capture-idx: -1;
+    in property <string> kb-capture-combo: "";
+    property <bool> kb-adding: false;
+    in-out property <string> kb-new-desc: "";
+    in-out property <string> kb-new-cmd: "";
+
+    // ── Taskbar tab properties ──
+    in-out property <int> tb-ws-count: 7;
+    in-out property <int> tb-ws-position-index: 0;   // 0 = center, 1 = left
 
     // ── Callbacks ──
     callback close();
@@ -499,6 +530,23 @@ export component MainWindow inherits Window {
     callback action-restart();
     callback action-logout();
 
+    // Keybindings
+    callback kb-load();
+    callback kb-filter(string, int);
+    callback kb-edit-combo(int);
+    callback kb-save-combo(int, string, string);
+    callback kb-edit-args(int, string);
+    callback kb-remove(int);
+    callback kb-add(string, string);
+    callback kb-save();
+    callback kb-revert();
+    callback kb-open-editor();
+    callback kb-cancel-capture();
+
+    // Taskbar
+    callback tb-set-ws-count(int);
+    callback tb-set-ws-position(int);
+
     // Search
     callback filter-search(string);
 
@@ -507,6 +555,32 @@ export component MainWindow inherits Window {
         // Grab focus on launch so shortcuts work immediately
         init => { self.focus(); }
         key-pressed(e) => {
+            // Key capture mode for keybinding editing
+            if root.kb-capturing {
+                if e.text == Key.Escape {
+                    root.kb-capturing = false;
+                    root.kb-capture-idx = -1;
+                    root.kb-cancel-capture();
+                    return accept;
+                }
+                // Build modifier+key combo display and send to backend
+                // Skip pure modifier presses (they have no printable text beyond the mod key names)
+                if e.text != Key.Control && e.text != Key.Alt && e.text != Key.Shift && e.text != Key.Meta {
+                    // Build mods string for Hyprland format
+                    root.kb-save-combo(
+                        root.kb-capture-idx,
+                        (e.modifiers.meta ? "SUPER " : "")
+                            + (e.modifiers.control ? "CTRL " : "")
+                            + (e.modifiers.alt ? "ALT " : "")
+                            + (e.modifiers.shift ? "SHIFT " : ""),
+                        e.text
+                    );
+                    root.kb-capturing = false;
+                    root.kb-capture-idx = -1;
+                    return accept;
+                }
+                return accept;
+            }
             if e.text == Key.Escape {
                 if root.dropdown-open {
                     root.dropdown-open = false;
@@ -522,6 +596,16 @@ export component MainWindow inherits Window {
                 }
                 if root.dictation-configuring {
                     root.dictation-configuring = false;
+                    return accept;
+                }
+                if root.kb-edit-idx >= 0 {
+                    root.kb-edit-idx = -1;
+                    root.kb-capture-idx = -1;
+                    root.kb-capturing = false;
+                    return accept;
+                }
+                if root.kb-adding {
+                    root.kb-adding = false;
                     return accept;
                 }
                 root.close();
@@ -610,13 +694,15 @@ export component MainWindow inherits Window {
                 focus-scope.focus();
                 return accept;
             }
-            // Tab switching: 1-5
+            // Tab switching: 1-7
             if !root.dropdown-open && !root.dictation-lang-dropdown-open {
                 if e.text == "1" { root.active-tab = 0; return accept; }
                 if e.text == "2" { root.active-tab = 1; return accept; }
                 if e.text == "3" { root.active-tab = 2; return accept; }
                 if e.text == "4" { root.active-tab = 3; return accept; }
                 if e.text == "5" { root.active-tab = 4; return accept; }
+                if e.text == "6" { root.active-tab = 5; root.kb-load(); return accept; }
+                if e.text == "7" { root.active-tab = 6; return accept; }
             }
             reject
         }
@@ -842,6 +928,29 @@ export component MainWindow inherits Window {
                         active: root.active-tab == 4;
                         clicked => {
                             root.active-tab = 4;
+                            root.dropdown-open = false;
+                            focus-scope.focus();
+                        }
+                    }
+
+                    TabButton {
+                        label: "Keybindings";
+                        icon: "\u{2318}";
+                        active: root.active-tab == 5;
+                        clicked => {
+                            root.active-tab = 5;
+                            root.dropdown-open = false;
+                            root.kb-load();
+                            focus-scope.focus();
+                        }
+                    }
+
+                    TabButton {
+                        label: "Taskbar";
+                        icon: "\u{2261}";
+                        active: root.active-tab == 6;
+                        clicked => {
+                            root.active-tab = 6;
                             root.dropdown-open = false;
                             focus-scope.focus();
                         }
@@ -2635,6 +2744,887 @@ export component MainWindow inherits Window {
             }
 
             // ══════════════════════════════════════════════════════════════
+            // KEYBINDINGS TAB
+            // ══════════════════════════════════════════════════════════════
+
+            if root.active-tab == 5: Flickable {
+                horizontal-stretch: 1;
+                vertical-stretch: 1;
+
+                VerticalLayout {
+                    padding-left: 10px;
+                    padding-right: 4px;
+                    spacing: 8px;
+
+                // Header row: title + filter + section picker
+                HorizontalLayout {
+                    height: 30px;
+                    spacing: 8px;
+
+                    Text {
+                        text: "Keybindings";
+                        color: Theme.fg;
+                        font-size: 14px;
+                        font-weight: 600;
+                        vertical-alignment: center;
+                    }
+
+                    Rectangle {
+                        horizontal-stretch: 1;
+                        height: 28px;
+                        border-radius: 4px;
+                        background: Theme.bg_light;
+
+                        kb-filter-input := TextInput {
+                            x: 8px;
+                            y: 5px;
+                            width: parent.width - 16px;
+                            height: parent.height;
+                            color: Theme.fg;
+                            font-size: 12px;
+                            text <=> root.kb-filter-text;
+                            edited => {
+                                root.kb-filter(self.text, root.kb-selected-section);
+                            }
+                        }
+
+                        Text {
+                            visible: root.kb-filter-text == "";
+                            x: 8px;
+                            y: 5px;
+                            height: parent.height;
+                            text: "Filter keybindings...";
+                            color: Theme.fg_dim;
+                            font-size: 12px;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+
+                // Section tabs (chip bar)
+                HorizontalLayout {
+                    height: 26px;
+                    spacing: 4px;
+
+                    for sec[idx] in root.kb-sections: Rectangle {
+                        height: 24px;
+                        min-width: kb-sec-text.preferred-width + 16px;
+                        border-radius: 12px;
+                        background: root.kb-selected-section == idx
+                            ? Theme.accent
+                            : kb-sec-touch.has-hover ? Theme.bg_lighter : Theme.bg_light;
+
+                        kb-sec-text := Text {
+                            text: sec;
+                            color: root.kb-selected-section == idx ? Theme.bg : Theme.fg;
+                            font-size: 10px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            x: 8px;
+                            width: parent.width - 16px;
+                            height: parent.height;
+                        }
+
+                        kb-sec-touch := TouchArea {
+                            clicked => {
+                                root.kb-selected-section = idx;
+                                root.kb-filter(root.kb-filter-text, idx);
+                            }
+                            mouse-cursor: pointer;
+                        }
+                    }
+                }
+
+                // Binding list
+                Rectangle {
+                    vertical-stretch: 1;
+                    border-radius: 6px;
+                    background: Theme.bg_light;
+                    clip: true;
+
+                    Flickable {
+                        width: parent.width;
+                        height: parent.height;
+
+                        VerticalLayout {
+                            spacing: 1px;
+                            padding: 4px;
+
+                            for entry[idx] in root.kb-bindings: Rectangle {
+                                height: root.kb-edit-idx == entry.idx ? 80px : 34px;
+                                border-radius: 4px;
+                                background: root.kb-edit-idx == entry.idx
+                                    ? Theme.bg.transparentize(50%)
+                                    : kb-row-touch.has-hover ? Theme.bg_lighter.transparentize(60%) : transparent;
+                                clip: true;
+
+                                // Normal view
+                                if root.kb-edit-idx != entry.idx: HorizontalLayout {
+                                    padding-left: 10px;
+                                    padding-right: 6px;
+                                    spacing: 8px;
+                                    height: 34px;
+
+                                    // Key combo badge — click to rebind directly
+                                    Rectangle {
+                                        width: 160px;
+                                        height: 24px;
+                                        border-radius: 4px;
+                                        background: root.kb-capturing && root.kb-capture-idx == entry.idx
+                                            ? Theme.warning.transparentize(50%)
+                                            : kb-combo-touch.has-hover ? Theme.accent.transparentize(70%) : Theme.bg;
+
+                                        Text {
+                                            text: root.kb-capturing && root.kb-capture-idx == entry.idx
+                                                ? "Press keys..."
+                                                : entry.combo;
+                                            color: root.kb-capturing && root.kb-capture-idx == entry.idx
+                                                ? Theme.bg : Theme.accent;
+                                            font-size: 11px;
+                                            font-weight: 600;
+                                            vertical-alignment: center;
+                                            horizontal-alignment: center;
+                                            width: parent.width;
+                                            height: parent.height;
+                                            overflow: elide;
+                                        }
+
+                                        kb-combo-touch := TouchArea {
+                                            clicked => {
+                                                root.kb-capture-idx = entry.idx;
+                                                root.kb-capturing = true;
+                                                root.kb-edit-combo(entry.idx);
+                                            }
+                                            mouse-cursor: pointer;
+                                        }
+
+                                        y: 5px;
+                                    }
+
+                                    // Description
+                                    Text {
+                                        horizontal-stretch: 1;
+                                        text: entry.description;
+                                        color: Theme.fg;
+                                        font-size: 12px;
+                                        vertical-alignment: center;
+                                        overflow: elide;
+                                    }
+
+                                    // Submap tag
+                                    if entry.submap != "": Rectangle {
+                                        width: 60px;
+                                        height: 18px;
+                                        border-radius: 3px;
+                                        background: Theme.warning.transparentize(70%);
+                                        y: 8px;
+
+                                        Text {
+                                            text: entry.submap;
+                                            color: Theme.warning;
+                                            font-size: 9px;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                            width: parent.width;
+                                            height: parent.height;
+                                        }
+                                    }
+
+                                    // Edit button (expand for args/delete)
+                                    Rectangle {
+                                        width: 28px;
+                                        height: 24px;
+                                        border-radius: 4px;
+                                        background: kb-edit-touch.has-hover ? Theme.bg_lighter : transparent;
+                                        y: 5px;
+
+                                        Text {
+                                            text: "\u{270E}";
+                                            color: Theme.fg_dim;
+                                            font-size: 12px;
+                                            horizontal-alignment: center;
+                                            vertical-alignment: center;
+                                            width: parent.width;
+                                            height: parent.height;
+                                        }
+
+                                        kb-edit-touch := TouchArea {
+                                            clicked => { root.kb-edit-idx = entry.idx; }
+                                            mouse-cursor: pointer;
+                                        }
+                                    }
+                                }
+
+                                // Edit view
+                                if root.kb-edit-idx == entry.idx: VerticalLayout {
+                                    padding: 6px;
+                                    padding-left: 10px;
+                                    padding-right: 10px;
+                                    spacing: 6px;
+
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        height: 28px;
+
+                                        // Rebind button
+                                        Rectangle {
+                                            width: 160px;
+                                            height: 26px;
+                                            border-radius: 4px;
+                                            background: root.kb-capturing
+                                                ? Theme.warning.transparentize(50%)
+                                                : kb-rebind-touch.has-hover ? Theme.accent : Theme.bg;
+
+                                            Text {
+                                                text: root.kb-capturing
+                                                    ? (root.kb-capture-combo != "" ? root.kb-capture-combo : "Press keys...")
+                                                    : entry.combo;
+                                                color: root.kb-capturing ? Theme.bg : Theme.accent;
+                                                font-size: 11px;
+                                                font-weight: 600;
+                                                horizontal-alignment: center;
+                                                vertical-alignment: center;
+                                                width: parent.width;
+                                                height: parent.height;
+                                            }
+
+                                            kb-rebind-touch := TouchArea {
+                                                clicked => {
+                                                    root.kb-capture-idx = entry.idx;
+                                                    root.kb-capturing = true;
+                                                    root.kb-edit-combo(entry.idx);
+                                                }
+                                                mouse-cursor: pointer;
+                                            }
+                                        }
+
+                                        Text {
+                                            text: entry.description;
+                                            color: Theme.fg;
+                                            font-size: 12px;
+                                            vertical-alignment: center;
+                                            horizontal-stretch: 1;
+                                            overflow: elide;
+                                        }
+                                    }
+
+                                    HorizontalLayout {
+                                        spacing: 6px;
+                                        height: 28px;
+
+                                        // Command field (for exec bindings)
+                                        if entry.is-exec: Rectangle {
+                                            horizontal-stretch: 1;
+                                            height: 26px;
+                                            border-radius: 4px;
+                                            background: Theme.bg;
+
+                                            kb-args-input := TextInput {
+                                                x: 8px;
+                                                y: 5px;
+                                                width: parent.width - 16px;
+                                                height: parent.height;
+                                                color: Theme.fg;
+                                                font-size: 11px;
+                                                text: entry.args;
+                                                accepted => {
+                                                    root.kb-edit-args(entry.idx, self.text);
+                                                }
+                                            }
+                                        }
+
+                                        if !entry.is-exec: Text {
+                                            horizontal-stretch: 1;
+                                            text: entry.dispatcher + " " + entry.args;
+                                            color: Theme.fg_dim;
+                                            font-size: 11px;
+                                            vertical-alignment: center;
+                                            overflow: elide;
+                                        }
+
+                                        // Delete button
+                                        Rectangle {
+                                            width: 60px;
+                                            height: 26px;
+                                            border-radius: 4px;
+                                            background: kb-del-touch.has-hover ? Theme.danger : Theme.bg;
+
+                                            Text {
+                                                text: "Delete";
+                                                color: kb-del-touch.has-hover ? white : Theme.danger;
+                                                font-size: 11px;
+                                                horizontal-alignment: center;
+                                                vertical-alignment: center;
+                                                width: parent.width;
+                                                height: parent.height;
+                                            }
+
+                                            kb-del-touch := TouchArea {
+                                                clicked => {
+                                                    root.kb-edit-idx = -1;
+                                                    root.kb-remove(entry.idx);
+                                                }
+                                                mouse-cursor: pointer;
+                                            }
+                                        }
+
+                                        // Done button
+                                        Rectangle {
+                                            width: 50px;
+                                            height: 26px;
+                                            border-radius: 4px;
+                                            background: kb-done-touch.has-hover ? Theme.success : Theme.bg;
+
+                                            Text {
+                                                text: "Done";
+                                                color: kb-done-touch.has-hover ? Theme.bg : Theme.success;
+                                                font-size: 11px;
+                                                horizontal-alignment: center;
+                                                vertical-alignment: center;
+                                                width: parent.width;
+                                                height: parent.height;
+                                            }
+
+                                            kb-done-touch := TouchArea {
+                                                clicked => { root.kb-edit-idx = -1; }
+                                                mouse-cursor: pointer;
+                                            }
+                                        }
+                                    }
+                                }
+
+                                kb-row-touch := TouchArea {
+                                    // Only handle clicks in normal mode
+                                    enabled: root.kb-edit-idx != entry.idx;
+                                }
+                            }
+
+                            if root.kb-bindings.length == 0: Text {
+                                text: "No keybindings found. Check that bindings.conf exists.";
+                                color: Theme.fg_dim;
+                                font-size: 12px;
+                                horizontal-alignment: center;
+                            }
+                        }
+                    }
+                }
+
+                // Add new binding row
+                if root.kb-adding: Rectangle {
+                    height: 70px;
+                    border-radius: 6px;
+                    background: Theme.bg_light;
+
+                    VerticalLayout {
+                        padding: 8px;
+                        spacing: 6px;
+
+                        HorizontalLayout {
+                            spacing: 8px;
+                            height: 26px;
+
+                            Rectangle {
+                                horizontal-stretch: 1;
+                                height: 26px;
+                                border-radius: 4px;
+                                background: Theme.bg;
+
+                                TextInput {
+                                    x: 8px;
+                                    y: 5px;
+                                    width: parent.width - 16px;
+                                    height: parent.height;
+                                    color: Theme.fg;
+                                    font-size: 11px;
+                                    text <=> root.kb-new-desc;
+                                    input-type: text;
+                                }
+
+                                Text {
+                                    visible: root.kb-new-desc == "";
+                                    x: 8px;
+                                    y: 5px;
+                                    height: parent.height;
+                                    text: "Description (e.g. Launch Firefox)";
+                                    color: Theme.fg_dim;
+                                    font-size: 11px;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+
+                        HorizontalLayout {
+                            spacing: 8px;
+                            height: 26px;
+
+                            Rectangle {
+                                horizontal-stretch: 1;
+                                height: 26px;
+                                border-radius: 4px;
+                                background: Theme.bg;
+
+                                TextInput {
+                                    x: 8px;
+                                    y: 5px;
+                                    width: parent.width - 16px;
+                                    height: parent.height;
+                                    color: Theme.fg;
+                                    font-size: 11px;
+                                    text <=> root.kb-new-cmd;
+                                    input-type: text;
+                                }
+
+                                Text {
+                                    visible: root.kb-new-cmd == "";
+                                    x: 8px;
+                                    y: 5px;
+                                    height: parent.height;
+                                    text: "Command (e.g. firefox)";
+                                    color: Theme.fg_dim;
+                                    font-size: 11px;
+                                    vertical-alignment: center;
+                                }
+                            }
+
+                            Rectangle {
+                                width: 50px;
+                                height: 26px;
+                                border-radius: 4px;
+                                background: kb-add-ok-touch.has-hover ? Theme.success : Theme.bg_lighter;
+
+                                Text {
+                                    text: "Add";
+                                    color: kb-add-ok-touch.has-hover ? Theme.bg : Theme.fg;
+                                    font-size: 11px;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                    width: parent.width;
+                                    height: parent.height;
+                                }
+
+                                kb-add-ok-touch := TouchArea {
+                                    clicked => {
+                                        if root.kb-new-desc != "" && root.kb-new-cmd != "" {
+                                            root.kb-add(root.kb-new-desc, root.kb-new-cmd);
+                                            root.kb-new-desc = "";
+                                            root.kb-new-cmd = "";
+                                            root.kb-adding = false;
+                                        }
+                                    }
+                                    mouse-cursor: pointer;
+                                }
+                            }
+
+                            Rectangle {
+                                width: 60px;
+                                height: 26px;
+                                border-radius: 4px;
+                                background: kb-add-cancel-touch.has-hover ? Theme.bg_lighter : transparent;
+
+                                Text {
+                                    text: "Cancel";
+                                    color: Theme.fg_dim;
+                                    font-size: 11px;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                    width: parent.width;
+                                    height: parent.height;
+                                }
+
+                                kb-add-cancel-touch := TouchArea {
+                                    clicked => { root.kb-adding = false; }
+                                    mouse-cursor: pointer;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Footer: status + action buttons
+                HorizontalLayout {
+                    height: 28px;
+                    spacing: 6px;
+
+                    Text {
+                        text: root.kb-status-text;
+                        color: Theme.fg_dim;
+                        font-size: 10px;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                        overflow: elide;
+                    }
+
+                    // Add binding
+                    Rectangle {
+                        height: 26px;
+                        min-width: 80px;
+                        border-radius: 4px;
+                        background: kb-add-btn-touch.has-hover ? Theme.accent : Theme.bg_light;
+
+                        Text {
+                            text: "+ Add";
+                            color: kb-add-btn-touch.has-hover ? Theme.bg : Theme.fg;
+                            font-size: 11px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            width: parent.width;
+                            height: parent.height;
+                        }
+
+                        kb-add-btn-touch := TouchArea {
+                            clicked => { root.kb-adding = !root.kb-adding; }
+                            mouse-cursor: pointer;
+                        }
+                    }
+
+                    // Open in editor
+                    Rectangle {
+                        height: 26px;
+                        min-width: 80px;
+                        border-radius: 4px;
+                        background: kb-editor-touch.has-hover ? Theme.bg_lighter : Theme.bg_light;
+
+                        Text {
+                            text: "Edit File";
+                            color: kb-editor-touch.has-hover ? Theme.fg : Theme.fg_dim;
+                            font-size: 11px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            width: parent.width;
+                            height: parent.height;
+                        }
+
+                        kb-editor-touch := TouchArea {
+                            clicked => { root.kb-open-editor(); }
+                            mouse-cursor: pointer;
+                        }
+                    }
+
+                    // Save
+                    Rectangle {
+                        height: 26px;
+                        min-width: 60px;
+                        border-radius: 4px;
+                        background: !root.kb-has-changes
+                            ? Theme.bg_light.darker(0.2)
+                            : kb-save-touch.has-hover ? Theme.success : Theme.bg_light;
+
+                        Text {
+                            text: "Save";
+                            color: !root.kb-has-changes
+                                ? Theme.fg_dim.darker(0.3)
+                                : kb-save-touch.has-hover ? Theme.bg : Theme.fg;
+                            font-size: 11px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            width: parent.width;
+                            height: parent.height;
+                        }
+
+                        kb-save-touch := TouchArea {
+                            enabled: root.kb-has-changes;
+                            mouse-cursor: root.kb-has-changes ? pointer : default;
+                            clicked => { root.kb-save(); }
+                        }
+                    }
+
+                    // Revert
+                    Rectangle {
+                        height: 26px;
+                        min-width: 60px;
+                        border-radius: 4px;
+                        background: !root.kb-has-changes
+                            ? Theme.bg_light.darker(0.2)
+                            : kb-revert-touch.has-hover ? Theme.warning : Theme.bg_light;
+
+                        Text {
+                            text: "Revert";
+                            color: !root.kb-has-changes
+                                ? Theme.fg_dim.darker(0.3)
+                                : kb-revert-touch.has-hover ? Theme.bg : Theme.fg;
+                            font-size: 11px;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            width: parent.width;
+                            height: parent.height;
+                        }
+
+                        kb-revert-touch := TouchArea {
+                            enabled: root.kb-has-changes;
+                            mouse-cursor: root.kb-has-changes ? pointer : default;
+                            clicked => { root.kb-revert(); }
+                        }
+                    }
+                }
+                }
+            }
+
+            // ══════════════════════════════════════════════════════════════
+            // TASKBAR TAB
+            // ══════════════════════════════════════════════════════════════
+
+            if root.active-tab == 6: Flickable {
+                horizontal-stretch: 1;
+                vertical-stretch: 1;
+
+                VerticalLayout {
+                    padding-left: 10px;
+                    padding-right: 4px;
+                    spacing: 12px;
+
+                Text {
+                    text: "Taskbar";
+                    color: Theme.fg;
+                    font-size: 14px;
+                    font-weight: 600;
+                }
+
+                // ── Workspace Count card ──
+                Rectangle {
+                    border-radius: 6px;
+                    background: Theme.bg_light;
+
+                    VerticalLayout {
+                        padding: 12px;
+                        spacing: 10px;
+
+                        Text {
+                            text: "Workspace Count";
+                            color: Theme.fg_dim;
+                            font-size: 11px;
+                            font-weight: 600;
+                        }
+
+                        Text {
+                            text: "Number of workspace indicators shown in the taskbar (1–10).";
+                            color: Theme.fg_dim;
+                            font-size: 10px;
+                            wrap: word-wrap;
+                        }
+
+                        HorizontalLayout {
+                            spacing: 12px;
+                            alignment: start;
+
+                            Text {
+                                text: "1";
+                                color: Theme.fg_dim;
+                                font-size: 11px;
+                                vertical-alignment: center;
+                            }
+
+                            Rectangle {
+                                width: 220px;
+                                height: 30px;
+                                border-radius: 4px;
+                                background: Theme.bg_lighter.transparentize(50%);
+
+                                // Track
+                                Rectangle {
+                                    x: 8px;
+                                    y: (parent.height - 4px) / 2;
+                                    width: parent.width - 16px;
+                                    height: 4px;
+                                    border-radius: 2px;
+                                    background: Theme.bg_lighter;
+
+                                    // Filled portion
+                                    Rectangle {
+                                        x: 0;
+                                        y: 0;
+                                        width: parent.width * (root.tb-ws-count - 1) / 9;
+                                        height: parent.height;
+                                        border-radius: 2px;
+                                        background: Theme.accent;
+                                    }
+                                }
+
+                                // Thumb
+                                Rectangle {
+                                    x: 8px + (parent.width - 16px - self.width) * (root.tb-ws-count - 1) / 9;
+                                    y: (parent.height - self.height) / 2;
+                                    width: 16px;
+                                    height: 16px;
+                                    border-radius: 8px;
+                                    background: ws-slider-touch.has-hover ? Theme.accent.brighter(20%)
+                                                : ws-slider-touch.pressed ? Theme.accent.brighter(40%)
+                                                : Theme.accent;
+
+                                    ws-slider-touch := TouchArea {
+                                        mouse-cursor: pointer;
+                                    }
+                                }
+
+                                // Click area for the entire slider track
+                                ws-track-touch := TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => {
+                                        // Map click x to 1–10
+                                        root.tb-ws-count = clamp(round(1 + 9 * (self.mouse-x - 8px) / (self.width - 16px)), 1, 10);
+                                        root.tb-set-ws-count(root.tb-ws-count);
+                                    }
+                                    moved => {
+                                        if self.pressed {
+                                            root.tb-ws-count = clamp(round(1 + 9 * (self.mouse-x - 8px) / (self.width - 16px)), 1, 10);
+                                            root.tb-set-ws-count(root.tb-ws-count);
+                                        }
+                                    }
+                                }
+                            }
+
+                            Text {
+                                text: "10";
+                                color: Theme.fg_dim;
+                                font-size: 11px;
+                                vertical-alignment: center;
+                            }
+
+                            // Current value badge
+                            Rectangle {
+                                width: 32px;
+                                height: 24px;
+                                border-radius: 4px;
+                                background: Theme.accent.transparentize(70%);
+
+                                Text {
+                                    text: root.tb-ws-count;
+                                    color: Theme.accent;
+                                    font-size: 12px;
+                                    font-weight: 700;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ── Workspace Position card ──
+                Rectangle {
+                    border-radius: 6px;
+                    background: Theme.bg_light;
+
+                    VerticalLayout {
+                        padding: 12px;
+                        spacing: 8px;
+
+                        Text {
+                            text: "Workspace Position";
+                            color: Theme.fg_dim;
+                            font-size: 11px;
+                            font-weight: 600;
+                        }
+
+                        Text {
+                            text: "Place workspace indicators in the center of the bar or on the left next to the start button.";
+                            color: Theme.fg_dim;
+                            font-size: 10px;
+                            wrap: word-wrap;
+                        }
+
+                        // Center option
+                        Rectangle {
+                            height: 40px;
+                            border-radius: 4px;
+                            background: root.tb-ws-position-index == 0
+                                ? Theme.accent.transparentize(70%)
+                                : ws-pos-center-touch.has-hover ? Theme.bg_lighter : transparent;
+
+                            HorizontalLayout {
+                                padding-left: 10px;
+                                padding-right: 10px;
+                                spacing: 10px;
+
+                                VerticalLayout {
+                                    alignment: center;
+                                    width: 14px;
+                                    Rectangle {
+                                        width: 14px; height: 14px;
+                                        border-radius: 7px;
+                                        border-width: 1.5px;
+                                        border-color: root.tb-ws-position-index == 0 ? Theme.accent : Theme.fg_dim;
+                                        background: transparent;
+                                        Rectangle {
+                                            visible: root.tb-ws-position-index == 0;
+                                            x: 3px; y: 3px; width: 8px; height: 8px;
+                                            border-radius: 4px;
+                                            background: Theme.accent;
+                                        }
+                                    }
+                                }
+
+                                VerticalLayout {
+                                    alignment: center;
+                                    spacing: 2px;
+                                    Text { text: "Center"; color: Theme.fg; font-size: 12px; }
+                                    Text { text: "Workspace dots centered in the taskbar"; color: Theme.fg_dim; font-size: 10px; }
+                                }
+                            }
+
+                            ws-pos-center-touch := TouchArea {
+                                clicked => {
+                                    root.tb-ws-position-index = 0;
+                                    root.tb-set-ws-position(0);
+                                }
+                                mouse-cursor: pointer;
+                            }
+                        }
+
+                        // Left option
+                        Rectangle {
+                            height: 40px;
+                            border-radius: 4px;
+                            background: root.tb-ws-position-index == 1
+                                ? Theme.accent.transparentize(70%)
+                                : ws-pos-left-touch.has-hover ? Theme.bg_lighter : transparent;
+
+                            HorizontalLayout {
+                                padding-left: 10px;
+                                padding-right: 10px;
+                                spacing: 10px;
+
+                                VerticalLayout {
+                                    alignment: center;
+                                    width: 14px;
+                                    Rectangle {
+                                        width: 14px; height: 14px;
+                                        border-radius: 7px;
+                                        border-width: 1.5px;
+                                        border-color: root.tb-ws-position-index == 1 ? Theme.accent : Theme.fg_dim;
+                                        background: transparent;
+                                        Rectangle {
+                                            visible: root.tb-ws-position-index == 1;
+                                            x: 3px; y: 3px; width: 8px; height: 8px;
+                                            border-radius: 4px;
+                                            background: Theme.accent;
+                                        }
+                                    }
+                                }
+
+                                VerticalLayout {
+                                    alignment: center;
+                                    spacing: 2px;
+                                    Text { text: "Left"; color: Theme.fg; font-size: 12px; }
+                                    Text { text: "Workspace dots next to the start button"; color: Theme.fg_dim; font-size: 10px; }
+                                }
+                            }
+
+                            ws-pos-left-touch := TouchArea {
+                                clicked => {
+                                    root.tb-ws-position-index = 1;
+                                    root.tb-set-ws-position(1);
+                                }
+                                mouse-cursor: pointer;
+                            }
+                        }
+                    }
+                }
+
+                Rectangle { vertical-stretch: 1; }
+                }
+            }
+
+            // ══════════════════════════════════════════════════════════════
             // ABOUT TAB
             // ══════════════════════════════════════════════════════════════
 
@@ -2791,7 +3781,7 @@ export component MainWindow inherits Window {
                         horizontal-alignment: center;
                     }
                     Text {
-                        text: "v2.0.0";
+                        text: root.app-version;
                         color: Theme.fg_dim;
                         font-size: 12px;
                         horizontal-alignment: center;
@@ -2811,7 +3801,7 @@ export component MainWindow inherits Window {
                             font-weight: 600;
                         }
                         Text {
-                            text: "1-5       Switch tabs\nCtrl+F  Search settings\nAlt+C   Open layout dropdown\nAlt+A   Add selected layout\nAlt+D   Remove second layout\nAlt+I    Identify monitors\nAlt+R   Refresh monitors\nAlt+P   Set primary monitor\nEsc      Close overlay / app\n?         Toggle this Help";
+                            text: "1-7       Switch tabs\nCtrl+F  Search settings\nAlt+C   Open layout dropdown\nAlt+A   Add selected layout\nAlt+D   Remove second layout\nAlt+I    Identify monitors\nAlt+R   Refresh monitors\nAlt+P   Set primary monitor\nEsc      Close overlay / app\n?         Toggle this Help";
                             color: Theme.fg;
                             font-size: 12px;
                             wrap: word-wrap;

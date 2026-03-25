@@ -19,6 +19,18 @@
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
+# Read workspace limit from bar.conf (default 10 = no limit)
+# ---------------------------------------------------------------------------
+max_group=10
+bar_conf="$HOME/.config/smplos/bar.conf"
+if [[ -f "$bar_conf" ]]; then
+    _ws=$(grep -m1 '^ws_count=' "$bar_conf" 2>/dev/null | cut -d= -f2)
+    [[ -n "$_ws" && "$_ws" =~ ^[0-9]+$ ]] && max_group=$_ws
+fi
+[[ $max_group -lt 1 ]] && max_group=1
+[[ $max_group -gt 10 ]] && max_group=10
+
+# ---------------------------------------------------------------------------
 # Read monitors sorted rightmost-first (rightmost = primary, index 0)
 # ---------------------------------------------------------------------------
 readarray -t monitors < <(
@@ -35,9 +47,21 @@ arg="${1:-1}"
 # ---------------------------------------------------------------------------
 if [[ $n -eq 1 ]]; then
     case "$arg" in
-        +*) hyprctl dispatch workspace "e+${arg:1}" >/dev/null 2>&1 ;;
-        -*) hyprctl dispatch workspace "e-${arg:1}" >/dev/null 2>&1 ;;
-        *)  hyprctl dispatch workspace "$arg" >/dev/null 2>&1 ;;
+        +*)
+            new_ws=$(( $(hyprctl activeworkspace -j 2>/dev/null | jq '.id') + ${arg:1} ))
+            new_group=$(( (new_ws - 1) % 10 + 1 ))
+            [[ $new_group -gt $max_group ]] && new_ws=1
+            [[ $new_group -lt 1 ]] && new_ws=$max_group
+            hyprctl dispatch workspace "$new_ws" >/dev/null 2>&1 ;;
+        -*)
+            new_ws=$(( $(hyprctl activeworkspace -j 2>/dev/null | jq '.id') - ${arg:1} ))
+            new_group=$(( (new_ws - 1) % 10 + 1 ))
+            [[ $new_group -lt 1 || $new_ws -lt 1 ]] && new_ws=$max_group
+            [[ $new_group -gt $max_group ]] && new_ws=$max_group
+            hyprctl dispatch workspace "$new_ws" >/dev/null 2>&1 ;;
+        *)
+            [[ "$arg" -gt $max_group ]] && exit 0
+            hyprctl dispatch workspace "$arg" >/dev/null 2>&1 ;;
     esac
     exit 0
 fi
@@ -60,9 +84,9 @@ case "$arg" in
     *)  target="$arg" ;;
 esac
 
-# Wrap to 1-10
-while [[ $target -lt 1 ]];  do target=$(( target + 10 )); done
-while [[ $target -gt 10 ]]; do target=$(( target - 10 )); done
+# Wrap to 1-max_group
+while [[ $target -lt 1 ]];          do target=$(( target + max_group )); done
+while [[ $target -gt $max_group ]]; do target=$(( target - max_group )); done
 
 # ---------------------------------------------------------------------------
 # Switch all monitors — no focusmonitor needed.

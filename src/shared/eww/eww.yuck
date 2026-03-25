@@ -55,6 +55,12 @@
 ;; Window title
 (deflisten window-title :initial "" `scripts/window-title.sh`)
 
+;; Taskbar settings (written by settings app, read via bar-ctl apply)
+;; ws-count : how many workspace dots to show (1-10, default 7)
+;; ws-position : "center" or "left" (adjacent to start button)
+(defvar ws-count 7)
+(defvar ws-position "center")
+
 ;; Keyboard layout (only visible when multiple layouts configured)
 (deflisten kb-data :initial '{"code":"","layout":"","xkb_layout":"","xkb_variant":"","visible":"no"}' `scripts/keyboard-listener.sh`)
 
@@ -72,16 +78,11 @@
     (image :path "icons/status/start.svg"
            :image-width 18 :image-height 18)))
 
-;; Workspaces widget (7 dot indicators, active = accent-filled circle)
+;; Workspaces widget (dynamic dot count, controlled by ws-count defvar)
 (defwidget workspaces-widget []
   (box :class "workspaces" :orientation "h" :space-evenly false :spacing 0
-    (workspace-dot :ws 1)
-    (workspace-dot :ws 2)
-    (workspace-dot :ws 3)
-    (workspace-dot :ws 4)
-    (workspace-dot :ws 5)
-    (workspace-dot :ws 6)
-    (workspace-dot :ws 7)))
+    (for entry in {jq("[1,2,3,4,5,6,7,8,9,10]", ".[0:${ws-count}]")}
+      (workspace-dot :ws entry))))
 
 (defwidget workspace-dot [ws]
   (button :class {active-workspace == ws ? "ws-dot active" :
@@ -221,11 +222,12 @@
 (defwidget bar-left []
   (box :class "bar-left" :orientation "h" :space-evenly false :halign "start" :spacing 12
     (logo)
+    (box :visible {ws-position == "left"} (workspaces-widget))
     (window)))
 
 (defwidget bar-center []
   (box :class "bar-center" :orientation "h" :space-evenly false :halign "center"
-    (workspaces-widget)))
+    (box :visible {ws-position == "center"} (workspaces-widget))))
 
 (defwidget bar-right []
   (box :class "bar-right" :orientation "h" :space-evenly false :halign "end" :spacing 8
