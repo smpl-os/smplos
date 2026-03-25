@@ -7,12 +7,12 @@
  * shadow the active Adwaita definitions inside nemo's widget rules.
  * ===================================================================== */
 
-@define-color theme_selected_bg_color {{ accent }};
+@define-color theme_selected_bg_color {{ selection_background }};
 @define-color theme_selected_fg_color {{ selection_foreground }};
 @define-color theme_bg_color {{ background }};
 @define-color theme_fg_color {{ foreground }};
 @define-color theme_unfocused_bg_color {{ bg_light }};
-@define-color theme_unfocused_selected_bg_color alpha({{ accent }}, 0.35);
+@define-color theme_unfocused_selected_bg_color alpha({{ selection_background }}, 0.35);
 @define-color borders {{ bg_lighter }};
 
 /* =====================================================================
@@ -25,11 +25,27 @@
 }
 
 /* =====================================================================
+ * Menu bar (File / Edit / View …)
+ * Lock bg to theme background in both focused and backdrop (unfocused)
+ * states — Adwaita sets menubar:backdrop to a grey that differs from bg.
+ * ===================================================================== */
+
+menubar,
+menubar:backdrop {
+    background-color: {{ background }};
+    background-image: none;
+    color: {{ foreground }};
+    box-shadow: none;
+}
+
+/* =====================================================================
  * Toolbar
  * ===================================================================== */
 
-toolbar.primary-toolbar {
-    background-color: {{ bg_lighter }};
+toolbar.primary-toolbar,
+toolbar.primary-toolbar:backdrop {
+    background-color: {{ background }};
+    background-image: none;
     color: {{ foreground }};
     border-bottom: 1px solid {{ bg_lighter }};
     box-shadow: none;
@@ -53,30 +69,66 @@ toolbar.primary-toolbar button:checked,
 toolbar.primary-toolbar button:active,
 toolbar.primary-toolbar button.active,
 toolbar.primary-toolbar button.suggested-action {
-    background-color: {{ accent }};
-    color: {{ selection_foreground }};
+    /* Subtle tint only — keep icon at fg so symbols remain visible */
+    background-color: alpha({{ selection_background }}, 0.25);
+    color: {{ foreground }};
+}
+
+toolbar.primary-toolbar button:checked label,
+toolbar.primary-toolbar button:active label,
+toolbar.primary-toolbar button.active label,
+toolbar.primary-toolbar button.suggested-action label {
+    color: {{ foreground }};
 }
 
 /* =====================================================================
- * Path bar
+ * Path / breadcrumb bar
  * ===================================================================== */
 
 .path-bar button {
-    color: {{ bg_lighter }};
+    color: {{ foreground }};
     background-color: transparent;
     border: none;
     box-shadow: none;
 }
 
+/* Match Adwaita .path-bar button label:dir() specificity (0,2,2) */
+.path-bar button label:dir(ltr),
+.path-bar button label:dir(rtl),
+.path-bar button label {
+    color: {{ foreground }};
+}
+
 .path-bar button:hover {
-    background-color: alpha({{ bg_lighter }}, 0.1);
-    color: {{ bg_lighter }};
+    background-color: alpha({{ bg_lighter }}, 0.6);
+    color: {{ foreground }};
+}
+
+.path-bar button:hover label:dir(ltr),
+.path-bar button:hover label:dir(rtl),
+.path-bar button:hover label {
+    color: {{ foreground }};
 }
 
 .path-bar button:checked,
 .path-bar button:active {
-    color: {{ accent }};
-    background-color: {{ bg_lighter }};
+    /* Current directory: show with selection accent.
+     * background-image: none required to clear Adwaita's
+     * button:checked { background-image: image(#191919) } which
+     * renders on top of background-color and hides our sel_bg. */
+    background-color: {{ selection_background }};
+    background-image: none;
+    color: {{ selection_foreground }};
+    box-shadow: none;
+}
+
+.path-bar button:checked label:dir(ltr),
+.path-bar button:checked label:dir(rtl),
+.path-bar button:active label:dir(ltr),
+.path-bar button:active label:dir(rtl),
+.path-bar button:checked label,
+.path-bar button:active label {
+    color: {{ selection_foreground }};
 }
 
 /* =====================================================================
@@ -91,7 +143,14 @@ toolbar.primary-toolbar button.suggested-action {
 
 .nemo-window .view:selected,
 .nemo-window iconview:selected {
-    background-color: {{ accent }};
+    background-color: {{ selection_background }};
+    color: {{ selection_foreground }};
+}
+
+.nemo-window .view:selected label,
+.nemo-window .view:selected *,
+.nemo-window iconview:selected label,
+.nemo-window iconview:selected * {
     color: {{ selection_foreground }};
 }
 
@@ -101,7 +160,7 @@ toolbar.primary-toolbar button.suggested-action {
 
 .nemo-window .nemo-inactive-pane .view:not(:selected),
 .nemo-window .nemo-inactive-pane iconview {
-    background-color: {{ bg_lighter }};
+    background-color: {{ bg_light }};
 }
 
 /* =====================================================================
@@ -116,7 +175,14 @@ toolbar.primary-toolbar button.suggested-action {
 
 .sidebar row:selected,
 .places-treeview:selected {
-    background-color: {{ accent }};
+    background-color: {{ selection_background }};
+    color: {{ selection_foreground }};
+}
+
+.sidebar row:selected label,
+.sidebar row:selected *,
+.places-treeview:selected label,
+.places-treeview:selected * {
     color: {{ selection_foreground }};
 }
 
@@ -131,9 +197,9 @@ toolbar.primary-toolbar button.suggested-action {
 }
 
 .nemo-window .nemo-window-pane widget.entry:selected {
-    background-color: {{ accent }};
+    background-color: {{ selection_background }};
     color: {{ selection_foreground }};
-    border-color: {{ accent }};
+    border-color: {{ foreground }};
 }
 
 /* =====================================================================
@@ -141,9 +207,9 @@ toolbar.primary-toolbar button.suggested-action {
  * ===================================================================== */
 
 .floating-bar {
-    background-color: {{ accent }};
-    color: {{ selection_foreground }};
-    border-color: {{ accent }};
+    background-color: {{ foreground }};
+    color: {{ background }};
+    border-color: {{ foreground }};
 }
 
 /* =====================================================================
@@ -164,7 +230,7 @@ toolbar.primary-toolbar button.suggested-action {
 }
 
 .nemo-desktop.nemo-canvas-item:selected {
-    background-color: alpha({{ accent }}, 0.8);
+    background-color: alpha({{ selection_background }}, 0.8);
     color: {{ selection_foreground }};
 }
 
@@ -183,7 +249,7 @@ searchbar entry {
  * ===================================================================== */
 
 menu {
-    background-color: {{ bg_light }};
+    background-color: {{ background }};
     color: {{ foreground }};
     border: 1px solid {{ bg_lighter }};
 }
@@ -192,8 +258,155 @@ menuitem {
     color: {{ foreground }};
 }
 
+/* Match Adwaita's exact selector specificity (0,1,3) so we always win */
+menu menuitem label:dir(ltr),
+menu menuitem label:dir(rtl),
+.menu menuitem label:dir(ltr),
+.menu menuitem label:dir(rtl),
+.context-menu menuitem label:dir(ltr),
+.context-menu menuitem label:dir(rtl),
+menuitem label {
+    color: {{ foreground }};
+}
+
+/* Menubar top-level items (Files, Edit, View…) */
+menubar > menuitem,
+menubar > menuitem:backdrop {
+    color: {{ foreground }};
+    box-shadow: none;
+}
+
+menubar > menuitem:hover {
+    background-color: alpha({{ foreground }}, 0.1);
+    color: {{ foreground }};
+    box-shadow: none;
+}
+
 menuitem:hover {
-    background-color: {{ accent }};
+    background-color: {{ selection_background }};
+    color: {{ selection_foreground }};
+}
+
+menuitem:hover label,
+menu menuitem:hover label:dir(ltr),
+menu menuitem:hover label:dir(rtl),
+menuitem:hover * {
+    color: {{ selection_foreground }};
+}
+
+/* =====================================================================
+ * Tooltips
+ * ===================================================================== */
+
+tooltip {
+    background-color: {{ bg_lighter }};
+    color: {{ foreground }};
+    border: 1px solid {{ bg_lighter }};
+    border-radius: 4px;
+    padding: 4px 8px;
+}
+
+tooltip label {
+    color: {{ foreground }};
+}
+
+/* =====================================================================
+ * modelbutton — used by GtkPopoverMenu (dropdown / hamburger menus)
+ * ===================================================================== */
+
+modelbutton {
+    background-color: transparent;
+    color: {{ foreground }};
+}
+
+modelbutton label {
+    color: {{ foreground }};
+}
+
+modelbutton:hover,
+modelbutton:focus {
+    background-color: {{ selection_background }};
+    color: {{ selection_foreground }};
+    outline: none;
+}
+
+modelbutton:hover label,
+modelbutton:hover *,
+modelbutton:focus label,
+modelbutton:focus * {
+    color: {{ selection_foreground }};
+}
+
+modelbutton:selected {
+    background-color: {{ selection_background }};
+    color: {{ selection_foreground }};
+}
+
+modelbutton:selected label,
+modelbutton:selected * {
+    color: {{ selection_foreground }};
+}
+
+/* =====================================================================
+ * Listbox rows (used in settings/preferences panels)
+ * ===================================================================== */
+
+listbox {
+    background-color: {{ background }};
+    color: {{ foreground }};
+}
+
+listbox row {
+    background-color: transparent;
+    color: {{ foreground }};
+}
+
+listbox row:hover {
+    background-color: alpha({{ selection_background }}, 0.3);
+    color: {{ foreground }};
+}
+
+listbox row:selected,
+listbox row:selected:hover {
+    background-color: {{ selection_background }};
+    color: {{ selection_foreground }};
+}
+
+listbox row:selected label,
+listbox row:selected *,
+listbox row:selected:hover label,
+listbox row:selected:hover * {
+    color: {{ selection_foreground }};
+}
+
+/* =====================================================================
+ * Text / cursor selection highlight
+ * ===================================================================== */
+
+selection {
+    background-color: alpha({{ selection_background }}, 0.6);
+    color: {{ selection_foreground }};
+}
+
+/* Focus outlines */
+button:focus,
+entry:focus,
+treeview:focus,
+combobox:focus {
+    outline-color: {{ foreground }};
+}
+
+/* Combobox popup rows */
+combobox > window > frame > scrolledwindow > treeview row:hover,
+combobox > window > frame > scrolledwindow > treeview row:selected {
+    background-color: {{ selection_background }};
+    color: {{ selection_foreground }};
+}
+
+combobox > window > frame > scrolledwindow > treeview row:hover label,
+combobox > window > frame > scrolledwindow > treeview row:hover *,
+combobox > window > frame > scrolledwindow > treeview row:selected label,
+combobox > window > frame > scrolledwindow > treeview row:selected * {
     color: {{ selection_foreground }};
 }
 
@@ -205,120 +418,152 @@ dialog,
 messagedialog,
 window.background {
     background-color: {{ background }};
-    color: {{ bg_lighter }};
+    color: {{ foreground }};
 }
 
 dialog .dialog-vbox,
 messagedialog .dialog-vbox {
     background-color: {{ background }};
-    color: {{ bg_lighter }};
+    color: {{ foreground }};
 }
 
 dialog headerbar,
 messagedialog headerbar {
     background-color: {{ bg_lighter }};
-    color: {{ bg_lighter }};
+    color: {{ foreground }};
 }
 
-/* General button styling for all windows */
-button {
-    color: {{ bg_lighter }};
-}
-
-button:hover {
-    background-color: {{ accent }};
-    color: {{ accent }};
-}
-
+/* Scoped to dialogs/popovers so toolbar buttons keep their own hover */
 dialog button,
-messagedialog button {
-    background-color: {{ bg_lighter }};
-    color: {{ bg_lighter }};
+messagedialog button,
+.preferences button,
+popover button {
+    background-color: {{ bg_light }};
+    color: {{ foreground }};
     border: 1px solid {{ bg_lighter }};
 }
 
 dialog button:hover,
-messagedialog button:hover {
-    background-color: {{ accent }};
-    color: {{ accent }};
+messagedialog button:hover,
+.preferences button:hover,
+popover button:hover {
+    background-color: {{ selection_background }};
+    color: {{ selection_foreground }};
+}
+
+dialog button:hover label,
+dialog button:hover *,
+messagedialog button:hover label,
+messagedialog button:hover *,
+.preferences button:hover label,
+.preferences button:hover *,
+popover button:hover label,
+popover button:hover * {
+    color: {{ selection_foreground }};
 }
 
 dialog button.suggested-action,
 messagedialog button.suggested-action {
-    background-color: {{ accent }};
-    color: {{ accent }};
+    background-color: {{ selection_background }};
+    color: {{ selection_foreground }};
+}
+
+dialog button.suggested-action label,
+dialog button.suggested-action *,
+messagedialog button.suggested-action label,
+messagedialog button.suggested-action * {
+    color: {{ selection_foreground }};
 }
 
 /* Notebook tabs (preferences, properties) */
 notebook header {
     background-color: {{ bg_lighter }};
-    color: {{ bg_lighter }};
+    color: {{ foreground }};
 }
 
 notebook header tab {
-    color: {{ bg_lighter }};
+    color: {{ foreground }};
 }
 
 notebook header tab:checked {
     background-color: {{ background }};
-    color: {{ accent }};
+    color: {{ foreground }};
 }
 
 notebook > stack {
     background-color: {{ background }};
-    color: {{ bg_lighter }};
+    color: {{ foreground }};
 }
 
 /* Stack switcher (properties dialog tabs) */
 stackswitcher button {
-    color: {{ bg_lighter }};
+    color: {{ foreground }};
+    background-color: transparent;
+}
+
+stackswitcher button:hover {
+    background-color: alpha({{ foreground }}, 0.15);
+    color: {{ foreground }};
 }
 
 stackswitcher button:checked {
-    color: {{ accent }};
+    color: {{ selection_foreground }};
+    background-color: {{ selection_background }};
+    background-image: none;
+    box-shadow: none;
+}
+
+stackswitcher button:checked label,
+stackswitcher button:checked * {
+    color: {{ selection_foreground }};
 }
 
 /* Text views (about license, etc.) */
 textview,
 textview text {
     background-color: {{ background }};
-    color: {{ bg_lighter }};
+    color: {{ foreground }};
 }
 
-/* Entry fields */
+/* Entry fields in dialogs */
 entry {
     background-color: {{ bg_light }};
-    color: {{ bg_lighter }};
+    color: {{ foreground }};
     border: 1px solid {{ bg_lighter }};
 }
 
 /* Labels */
 label {
-    color: {{ bg_lighter }};
+    color: {{ foreground }};
 }
 
 /* Check / radio buttons */
 checkbutton label,
 radiobutton label {
-    color: {{ bg_lighter }};
+    color: {{ foreground }};
 }
 
 /* Combo boxes */
 combobox button {
     background-color: {{ bg_light }};
-    color: {{ bg_lighter }};
+    color: {{ foreground }};
     border: 1px solid {{ bg_lighter }};
 }
 
 /* Tree / list views in preferences */
 treeview {
     background-color: {{ background }};
-    color: {{ bg_lighter }};
+    color: {{ foreground }};
 }
 
 treeview:selected {
-    background-color: {{ accent }};
-    color: {{ accent }};
+    background-color: {{ selection_background }};
+    color: {{ selection_foreground }};
+}
+
+treeview:selected label,
+treeview:selected * {
+    color: {{ selection_foreground }};
 }
 
 /* Frames and separators */
@@ -333,7 +578,7 @@ separator {
 /* Links in about dialog */
 *:link,
 *:visited {
-    color: {{ accent }};
+    color: {{ foreground }};
 }
 
 /* =====================================================================
@@ -341,9 +586,9 @@ separator {
  * ===================================================================== */
 
 scrollbar slider {
-    background-color: {{ muted }};
+    background-color: {{ bg_lighter }};
 }
 
 scrollbar slider:hover {
-    background-color: {{ accent }};
+    background-color: {{ selection_background }};
 }
