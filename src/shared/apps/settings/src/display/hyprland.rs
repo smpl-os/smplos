@@ -158,38 +158,41 @@ impl DisplayBackend for HyprlandBackend {
     }
 
     fn identify(&self, monitors: &[Monitor]) -> Result<(), String> {
-        // hyprctl notify has no per-monitor targeting — it always fires on
-        // the monitor under the cursor. So we move the cursor to each
-        // monitor's centre, fire notify, move to the next. The whole loop
-        // takes ~100 ms, after which the cursor is immediately restored.
-        // All labels then stay visible simultaneously for 5 seconds.
-        let notify_ms = 5000u32;
+        // Use eww overlay windows — each defwindow targets a specific monitor
+        // by index so labels appear simultaneously on every screen for 5 s
+        // without touching the cursor.
+        let home = std::env::var("HOME").unwrap_or_default();
+        let cfg = format!("{home}/.config/eww");
 
-        let mut steps = String::from(
-            "#!/bin/sh\n\
-             ORIG=$(hyprctl cursorpos)\n\
-             OX=$(echo $ORIG | cut -d',' -f1 | tr -d ' ')\n\
-             OY=$(echo $ORIG | cut -d',' -f2 | tr -d ' ')\n",
-        );
-
-        for (i, m) in monitors.iter().enumerate() {
-            let cx = m.x + (m.width as f64 / m.scale / 2.0) as i32;
-            let cy = m.y + (m.height as f64 / m.scale / 2.0) as i32;
-            steps.push_str(&format!(
-                "hyprctl dispatch movecursor {cx} {cy}\nsleep 0.05\n\
-                 hyprctl notify 0 {notify_ms} 'rgb(89b4fa)' 'fontsize:40 {}  {}'\n",
-                i + 1, m.name
-            ));
+        // Update the eww label variables for each monitor (up to 4)
+        for (idx, m) in monitors.iter().enumerate().take(4) {
+            let arg = format!("mon-id-label-{idx}={}  {}", idx + 1, m.name);
+            let _ = Command::new("eww").args(["-c", &cfg, "update", &arg]).output();
         }
 
-        // Cursor back immediately — labels stay up on their own
-        steps.push_str("hyprctl dispatch movecursor $OX $OY\n");
+        let wins: Vec<String> = (0..monitors.len().min(4))
+            .map(|i| format!("mon-identify-{i}"))
+            .collect();
 
-        let script_path = "/tmp/smplos-identify-bg.sh";
-        std::fs::write(script_path, &steps)
-            .map_err(|e| format!("Failed to write identify script: {e}"))?;
-        let _ = Command::new("chmod").args(["+x", script_path]).output();
-        let _ = Command::new("sh").arg(script_path).spawn();
+        // Close any stale instances first
+        let _ = Command::new("eww").arg("-c").arg(&cfg)
+            .arg("close").args(&wins).output();
+
+        // Open all windows simultaneously
+        let _ = Command::new("eww").arg("-c").arg(&cfg)
+            .arg("open-many").args(&wins).output();
+
+        // Close after 5 s in a detached thread
+        let cfg2 = cfg.clone();
+        let wins2 = wins.clone();
+        std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_secs(5));
+            let _ = std::process::Command::new("eww")
+                .arg("-c").arg(&cfg2)
+                .arg("close").args(&wins2)
+                .output();
+        });
+
         Ok(())
     }
 

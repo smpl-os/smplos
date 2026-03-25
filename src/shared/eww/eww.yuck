@@ -302,3 +302,44 @@
   :focusable false
   (usb-popup-widget))
 
+;; ============================================================================
+;; MONITOR IDENTIFY OVERLAYS  (Settings > Display > Identify)
+;; ============================================================================
+
+(defvar mon-id-label-0 "")
+(defvar mon-id-label-1 "")
+(defvar mon-id-label-2 "")
+(defvar mon-id-label-3 "")
+
+(defwidget mon-id-widget [label]
+  (box :class "mon-identify" :halign "center" :valign "center"
+    (label :class "mon-identify-label" :text label)))
+
+(defwindow mon-identify-0
+  :monitor 0
+  :stacking "overlay"
+  :focusable false
+  :geometry (geometry :x "0" :y "0" :width "380px" :height "140px" :anchor "center center")
+  (mon-id-widget :label mon-id-label-0))
+
+(defwindow mon-identify-1
+  :monitor 1
+  :stacking "overlay"
+  :focusable false
+  :geometry (geometry :x "0" :y "0" :width "380px" :height "140px" :anchor "center center")
+  (mon-id-widget :label mon-id-label-1))
+
+(defwindow mon-identify-2
+  :monitor 2
+  :stacking "overlay"
+  :focusable false
+  :geometry (geometry :x "0" :y "0" :width "380px" :height "140px" :anchor "center center")
+  (mon-id-widget :label mon-id-label-2))
+
+(defwindow mon-identify-3
+  :monitor 3
+  :stacking "overlay"
+  :focusable false
+  :geometry (geometry :x "0" :y "0" :width "380px" :height "140px" :anchor "center center")
+  (mon-id-widget :label mon-id-label-3))
+

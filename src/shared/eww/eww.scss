@@ -38,6 +38,7 @@ $warning-alt: $theme-warning-alt;
 $popup-opacity: $theme-popup-opacity;
 $border-radius: 2px;
 $font: "JetBrains Mono Nerd Font";
+$identify-font-size: 42px;
 
 /* ============================================================================
    GLOBAL
@@ -53,6 +54,21 @@ $font: "JetBrains Mono Nerd Font";
 /* ============================================================================
    TOOLTIPS
    ============================================================================ */
+
+/* ============================================================================
+   MONITOR IDENTIFY OVERLAYS
+   ============================================================================ */
+.mon-identify {
+  background: rgba($bg, 0.94);
+  border: 2px solid $accent;
+  border-radius: 20px;
+  padding: 24px 40px;
+}
+.mon-identify-label {
+  font-size: $identify-font-size;
+  font-weight: bold;
+  color: $accent;
+}
 
 tooltip {
   background-color: rgba(darken($bg, 5%), 0.92);
