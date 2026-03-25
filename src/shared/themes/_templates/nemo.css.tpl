@@ -490,8 +490,40 @@ messagedialog button,
 .preferences button,
 popover button {
     background-color: {{ bg_light }};
+    background-image: none;
     color: {{ foreground }};
     border: 1px solid {{ bg_lighter }};
+}
+
+dialog button:focus,
+messagedialog button:focus,
+.preferences button:focus,
+popover button:focus,
+dialog button:active,
+messagedialog button:active,
+.preferences button:active,
+popover button:active,
+dialog button:checked,
+messagedialog button:checked,
+dialog button.default,
+messagedialog button.default {
+    background-color: {{ bg_lighter }};
+    background-image: none;
+    color: {{ foreground }};
+    box-shadow: none;
+}
+
+dialog button:focus label,
+dialog button:focus *,
+messagedialog button:focus label,
+messagedialog button:focus *,
+dialog button:active label,
+dialog button:active *,
+messagedialog button:active label,
+messagedialog button:active *,
+dialog button.default label,
+messagedialog button.default label {
+    color: {{ foreground }};
 }
 
 dialog button:hover,

@@ -491,8 +491,40 @@ messagedialog button,
 .preferences button,
 popover button {
     background-color: #24283b;
+    background-image: none;
     color: #a9b1d6;
     border: 1px solid #32344a;
+}
+
+dialog button:focus,
+messagedialog button:focus,
+.preferences button:focus,
+popover button:focus,
+dialog button:active,
+messagedialog button:active,
+.preferences button:active,
+popover button:active,
+dialog button:checked,
+messagedialog button:checked,
+dialog button.default,
+messagedialog button.default {
+    background-color: #32344a;
+    background-image: none;
+    color: #a9b1d6;
+    box-shadow: none;
+}
+
+dialog button:focus label,
+dialog button:focus *,
+messagedialog button:focus label,
+messagedialog button:focus *,
+dialog button:active label,
+dialog button:active *,
+messagedialog button:active label,
+messagedialog button:active *,
+dialog button.default label,
+messagedialog button.default label {
+    color: #a9b1d6;
 }
 
 dialog button:hover,
