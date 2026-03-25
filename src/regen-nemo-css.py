@@ -80,11 +80,27 @@ def make_nemo_css(c):
 }}
 
 /* =====================================================================
+ * Menu bar (File / Edit / View …)
+ * Lock bg to theme background in both focused and backdrop (unfocused)
+ * states — Adwaita sets menubar:backdrop to a grey that differs from bg.
+ * ===================================================================== */
+
+menubar,
+menubar:backdrop {{
+    background-color: {bg};
+    background-image: none;
+    color: {fg};
+    box-shadow: none;
+}}
+
+/* =====================================================================
  * Toolbar
  * ===================================================================== */
 
-toolbar.primary-toolbar {{
-    background-color: {bg_ll};
+toolbar.primary-toolbar,
+toolbar.primary-toolbar:backdrop {{
+    background-color: {bg};
+    background-image: none;
     color: {fg};
     border-bottom: 1px solid {bg_ll};
     box-shadow: none;
@@ -309,12 +325,17 @@ menuitem label {{
 }}
 
 /* Menubar top-level items (Files, Edit, View…) */
-menubar > menuitem {{
+menubar > menuitem,
+menubar > menuitem:backdrop {{
     color: {fg};
+    box-shadow: none;
 }}
 
 menubar > menuitem:hover {{
+    /* Adwaita uses box-shadow: inset 0 -3px <accent> as underline \u2014 clear it */
+    background-color: alpha({fg}, 0.1);
     color: {fg};
+    box-shadow: none;
 }}
 
 menuitem:hover {{

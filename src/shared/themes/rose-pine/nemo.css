@@ -29,11 +29,27 @@
 }
 
 /* =====================================================================
+ * Menu bar (File / Edit / View …)
+ * Lock bg to theme background in both focused and backdrop (unfocused)
+ * states — Adwaita sets menubar:backdrop to a grey that differs from bg.
+ * ===================================================================== */
+
+menubar,
+menubar:backdrop {
+    background-color: #faf4ed;
+    background-image: none;
+    color: #575279;
+    box-shadow: none;
+}
+
+/* =====================================================================
  * Toolbar
  * ===================================================================== */
 
-toolbar.primary-toolbar {
-    background-color: #e4dcd4;
+toolbar.primary-toolbar,
+toolbar.primary-toolbar:backdrop {
+    background-color: #faf4ed;
+    background-image: none;
     color: #575279;
     border-bottom: 1px solid #e4dcd4;
     box-shadow: none;
@@ -258,12 +274,17 @@ menuitem label {
 }
 
 /* Menubar top-level items (Files, Edit, View…) */
-menubar > menuitem {
+menubar > menuitem,
+menubar > menuitem:backdrop {
     color: #575279;
+    box-shadow: none;
 }
 
 menubar > menuitem:hover {
+    /* Adwaita uses box-shadow: inset 0 -3px <accent> as underline — clear it */
+    background-color: alpha(#575279, 0.1);
     color: #575279;
+    box-shadow: none;
 }
 
 menuitem:hover {
