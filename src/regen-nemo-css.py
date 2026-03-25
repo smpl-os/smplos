@@ -248,12 +248,24 @@ toolbar.primary-toolbar button.suggested-action label {{
 }}
 
 /* =====================================================================
- * Inactive F3 pane (split view)
+ * Inactive F3 pane (split view) — same background as active pane;
+ * selected item gets an outline ring instead of a filled highlight.
  * ===================================================================== */
 
 .nemo-window .nemo-inactive-pane .view:not(:selected),
 .nemo-window .nemo-inactive-pane iconview {{
-    background-color: {bg_l};
+    background-color: {bg};
+}}
+
+.nemo-window .nemo-inactive-pane .view:selected {{
+    background-color: transparent;
+    color: {fg};
+    box-shadow: inset 0 0 0 2px {sel_bg};
+}}
+
+.nemo-window .nemo-inactive-pane .view:selected label,
+.nemo-window .nemo-inactive-pane .view:selected * {{
+    color: {fg};
 }}
 
 /* =====================================================================
