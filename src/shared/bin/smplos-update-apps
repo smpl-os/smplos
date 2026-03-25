@@ -185,6 +185,7 @@ update_st_smpl() {
     if curl -fSL --connect-timeout 30 --retry 3 --progress-bar \
             "$asset_url" -o "$tmpfile"; then
         sudo install -m755 "$tmpfile" "/usr/local/bin/st-wl"
+        install -m755 "$tmpfile" "$SMPLOS_BIN/st-wl"
         echo "$remote_ver" > "$STATE_DIR/st-smpl"
         ok "st-smpl: updated to $remote_ver"
         ((n_updated++)) || true
