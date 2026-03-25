@@ -125,9 +125,11 @@ fi
 # Nemo file manager — deploy per-theme GTK3 CSS override
 # nemo-smpl watches ~/.config/smplos/nemo-theme.css via GFileMonitor
 # and reloads it live, so no nemo restart is required.
+# Use atomic rename so the monitor never sees a truncated file.
 if [[ -f "$CURRENT_THEME_PATH/nemo.css" ]]; then
   mkdir -p "$HOME/.config/smplos"
-  cp "$CURRENT_THEME_PATH/nemo.css" "$HOME/.config/smplos/nemo-theme.css"
+  cp "$CURRENT_THEME_PATH/nemo.css" "$HOME/.config/smplos/nemo-theme.css.tmp"
+  mv -f "$HOME/.config/smplos/nemo-theme.css.tmp" "$HOME/.config/smplos/nemo-theme.css"
 fi
 
 # Link fish theme colors
