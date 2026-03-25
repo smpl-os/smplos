@@ -39,7 +39,11 @@ fn acquire_single_instance() {
     let fd = file.as_raw_fd();
     let ret = unsafe { libc::flock(fd, libc::LOCK_EX | libc::LOCK_NB) };
     if ret != 0 {
-        eprintln!("[settings] another instance is already running");
+        eprintln!("[settings] another instance is already running — bringing it to focus");
+        // Bring the existing window to the foreground
+        let _ = std::process::Command::new("hyprctl")
+            .args(["dispatch", "focuswindow", "class:settings"])
+            .status();
         std::process::exit(0);
     }
     std::mem::forget(file);
