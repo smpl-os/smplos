@@ -24,10 +24,18 @@ if [[ -n "$target" && -f "$target" ]]; then
   exit 0
 fi
 
-# 2. Symlink missing or broken -- find the first background from current theme
-first_bg=$(find -L "$THEME_BACKGROUNDS" "$HOME/Pictures/Wallpapers" \
-  -maxdepth 1 -type f \( -name '*.jpg' -o -name '*.png' -o -name '*.jpeg' -o -name '*.webp' \) \
-  2>/dev/null | sort | head -1)
+# 2. Symlink missing or broken -- find the first background from current theme.
+# Only fall back to ~/Pictures/Wallpapers if the theme has NO backgrounds directory
+# (an empty dir means the theme intentionally uses solid color, same as theme-bg-next).
+if [[ -d "$THEME_BACKGROUNDS" ]]; then
+  first_bg=$(find -L "$THEME_BACKGROUNDS" -maxdepth 1 -type f \
+    \( -name '*.jpg' -o -name '*.png' -o -name '*.jpeg' -o -name '*.webp' \) \
+    2>/dev/null | sort | head -1)
+else
+  first_bg=$(find -L "$HOME/Pictures/Wallpapers" -maxdepth 1 -type f \
+    \( -name '*.jpg' -o -name '*.png' -o -name '*.jpeg' -o -name '*.webp' \) \
+    2>/dev/null | sort | head -1)
+fi
 
 if [[ -n "$first_bg" ]]; then
   mkdir -p "$(dirname "$CURRENT_BG_LINK")"
