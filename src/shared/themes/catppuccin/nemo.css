@@ -100,9 +100,14 @@ toolbar.primary-toolbar button.suggested-action label {
 
 .path-bar button:checked,
 .path-bar button:active {
-    /* Current directory: show with selection accent */
+    /* Current directory: show with selection accent.
+     * background-image: none required to clear Adwaita's
+     * button:checked { background-image: image(#191919) } which
+     * renders on top of background-color and hides our sel_bg. */
     background-color: #f5e0dc;
+    background-image: none;
     color: #1e1e2e;
+    box-shadow: none;
 }
 
 .path-bar button:checked label:dir(ltr),

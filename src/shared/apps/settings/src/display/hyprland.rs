@@ -158,12 +158,12 @@ impl DisplayBackend for HyprlandBackend {
     }
 
     fn identify(&self, monitors: &[Monitor]) -> Result<(), String> {
-        // `hyprctl notify` targets the monitor under the cursor, not the
-        // "focused" monitor. So we move the cursor to the center of each
-        // monitor in quick succession and fire a notify; all labels appear
-        // simultaneously for 2.5 s. Afterwards restore the cursor.
-        let notify_ms = 2500u32;
-        let notify_dur_s = notify_ms as f64 / 1000.0 + 0.2;
+        // hyprctl notify has no per-monitor targeting — it always fires on
+        // the monitor under the cursor. So we move the cursor to each
+        // monitor's centre, fire notify, move to the next. The whole loop
+        // takes ~100 ms, after which the cursor is immediately restored.
+        // All labels then stay visible simultaneously for 5 seconds.
+        let notify_ms = 5000u32;
 
         let mut steps = String::from(
             "#!/bin/sh\n\
@@ -173,7 +173,6 @@ impl DisplayBackend for HyprlandBackend {
         );
 
         for (i, m) in monitors.iter().enumerate() {
-            // Center in logical pixels
             let cx = m.x + (m.width as f64 / m.scale / 2.0) as i32;
             let cy = m.y + (m.height as f64 / m.scale / 2.0) as i32;
             steps.push_str(&format!(
@@ -183,19 +182,14 @@ impl DisplayBackend for HyprlandBackend {
             ));
         }
 
-        // Wait for notifications to expire then restore cursor
-        steps.push_str(&format!(
-            "sleep {notify_dur_s:.1}\nhyprctl dispatch movecursor $OX $OY\n"
-        ));
+        // Cursor back immediately — labels stay up on their own
+        steps.push_str("hyprctl dispatch movecursor $OX $OY\n");
 
         let script_path = "/tmp/smplos-identify-bg.sh";
         std::fs::write(script_path, &steps)
             .map_err(|e| format!("Failed to write identify script: {e}"))?;
         let _ = Command::new("chmod").args(["+x", script_path]).output();
-
-        // Spawn detached — don't wait, so settings stays responsive
         let _ = Command::new("sh").arg(script_path).spawn();
-
         Ok(())
     }
 
