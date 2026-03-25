@@ -1223,14 +1223,7 @@ fn main() -> Result<(), slint::PlatformError> {
             if idx >= st.monitors.len() { return; }
 
             let real_x = ((canvas_x as f64 - 20.0) / st.scale - st.offset_x) as i32;
-            let real_y_raw = ((canvas_y as f64 - 20.0) / st.scale - st.offset_y) as i32;
-            // Clamp Y to the range of the tallest monitor height so dragging
-            // off the canvas edge never produces absurd positions.
-            let max_logical_h = st.monitors.iter()
-                .map(|m| (m.height as f64 / m.scale) as i32)
-                .max()
-                .unwrap_or(2160);
-            let real_y = real_y_raw.clamp(-max_logical_h, max_logical_h);
+            let real_y = ((canvas_y as f64 - 20.0) / st.scale - st.offset_y) as i32;
             st.monitors[idx].x = real_x;
             st.monitors[idx].y = real_y;
 
