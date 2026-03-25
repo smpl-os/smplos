@@ -112,13 +112,12 @@ toolbar.primary-toolbar button.suggested-action label {
 
 .path-bar button:checked,
 .path-bar button:active {
-    /* Current directory: show with selection accent.
-     * background-image: none required to clear Adwaita's
-     * button:checked { background-image: image(#191919) } which
-     * renders on top of background-color and hides our sel_bg. */
-    background-color: {{ selection_background }};
+    /* Current directory: subtle tint, keep foreground text colour.
+     * background-image: none clears Adwaita's button:checked
+     * { background-image: image(#191919) } which paints over bg-color. */
+    background-color: alpha({{ selection_background }}, 0.25);
     background-image: none;
-    color: {{ selection_foreground }};
+    color: {{ foreground }};
     box-shadow: none;
 }
 
@@ -128,7 +127,7 @@ toolbar.primary-toolbar button.suggested-action label {
 .path-bar button:active label:dir(rtl),
 .path-bar button:checked label,
 .path-bar button:active label {
-    color: {{ selection_foreground }};
+    color: {{ foreground }};
 }
 
 /* =====================================================================

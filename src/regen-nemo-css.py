@@ -167,13 +167,12 @@ toolbar.primary-toolbar button.suggested-action label {{
 
 .path-bar button:checked,
 .path-bar button:active {{
-    /* Current directory: show with selection accent.
-     * background-image: none required to clear Adwaita's
-     * button:checked {{ background-image: image(#191919) }} which
-     * renders on top of background-color and hides our sel_bg. */
-    background-color: {sel_bg};
+    /* Current directory: subtle tint, keep foreground text colour.
+     * background-image: none clears Adwaita's button:checked
+     * {{ background-image: image(#191919) }} which paints over bg-color. */
+    background-color: alpha({sel_bg}, 0.25);
     background-image: none;
-    color: {sel_fg};
+    color: {fg};
     box-shadow: none;
 }}
 
@@ -183,7 +182,7 @@ toolbar.primary-toolbar button.suggested-action label {{
 .path-bar button:active label:dir(rtl),
 .path-bar button:checked label,
 .path-bar button:active label {{
-    color: {sel_fg};
+    color: {fg};
 }}
 
 /* =====================================================================
@@ -325,17 +324,12 @@ menuitem label {{
 }}
 
 /* Menubar top-level items (Files, Edit, View…) */
-menubar > menuitem,
-menubar > menuitem:backdrop {{
+menubar > menuitem {{
     color: {fg};
-    box-shadow: none;
 }}
 
 menubar > menuitem:hover {{
-    /* Adwaita uses box-shadow: inset 0 -3px <accent> as underline \u2014 clear it */
-    background-color: alpha({fg}, 0.1);
     color: {fg};
-    box-shadow: none;
 }}
 
 menuitem:hover {{
