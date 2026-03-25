@@ -489,6 +489,8 @@ export component MainWindow inherits Window {
     // ── Taskbar tab properties ──
     in-out property <int> tb-ws-count: 7;
     in-out property <int> tb-ws-position-index: 0;   // 0 = center, 1 = left
+    in-out property <int> tb-ws-spacing: 1;            // pixel gap between dots (1-10)
+    in-out property <int> tb-ws-style-index: 0;        // 0 = numbers, 1 = squares
 
     // ── Callbacks ──
     callback close();
@@ -546,6 +548,8 @@ export component MainWindow inherits Window {
     // Taskbar
     callback tb-set-ws-count(int);
     callback tb-set-ws-position(int);
+    callback tb-set-ws-spacing(int);
+    callback tb-set-ws-style(int);
 
     // Search
     callback filter-search(string);
@@ -3613,6 +3617,239 @@ export component MainWindow inherits Window {
                                 clicked => {
                                     root.tb-ws-position-index = 1;
                                     root.tb-set-ws-position(1);
+                                }
+                                mouse-cursor: pointer;
+                            }
+                        }
+                    }
+                }
+
+                // ── Workspace Spacing card ──
+                Rectangle {
+                    border-radius: 6px;
+                    background: Theme.bg_light;
+
+                    VerticalLayout {
+                        padding: 12px;
+                        spacing: 8px;
+
+                        Text {
+                            text: "Workspace Spacing";
+                            color: Theme.fg_dim;
+                            font-size: 11px;
+                            font-weight: 600;
+                        }
+
+                        Text {
+                            text: "Gap in pixels between workspace indicators (1-10).";
+                            color: Theme.fg_dim;
+                            font-size: 10px;
+                            wrap: word-wrap;
+                        }
+
+                        HorizontalLayout {
+                            spacing: 12px;
+                            alignment: start;
+
+                            Text {
+                                text: "1";
+                                color: Theme.fg_dim;
+                                font-size: 11px;
+                                vertical-alignment: center;
+                            }
+
+                            Rectangle {
+                                width: 220px;
+                                height: 30px;
+                                border-radius: 4px;
+                                background: Theme.bg_lighter.transparentize(50%);
+
+                                // Track
+                                Rectangle {
+                                    x: 8px;
+                                    y: (parent.height - 4px) / 2;
+                                    width: parent.width - 16px;
+                                    height: 4px;
+                                    border-radius: 2px;
+                                    background: Theme.bg_lighter;
+
+                                    // Filled portion
+                                    Rectangle {
+                                        x: 0;
+                                        y: 0;
+                                        width: parent.width * (root.tb-ws-spacing - 1) / 9;
+                                        height: parent.height;
+                                        border-radius: 2px;
+                                        background: Theme.accent;
+                                    }
+                                }
+
+                                // Thumb
+                                Rectangle {
+                                    x: 8px + (parent.width - 16px - self.width) * (root.tb-ws-spacing - 1) / 9;
+                                    y: (parent.height - self.height) / 2;
+                                    width: 16px;
+                                    height: 16px;
+                                    border-radius: 8px;
+                                    background: ws-spacing-slider-touch.has-hover ? Theme.accent.brighter(20%)
+                                                : ws-spacing-slider-touch.pressed ? Theme.accent.brighter(40%)
+                                                : Theme.accent;
+
+                                    ws-spacing-slider-touch := TouchArea {
+                                        mouse-cursor: pointer;
+                                    }
+                                }
+
+                                // Click area for the entire slider track
+                                ws-spacing-track-touch := TouchArea {
+                                    mouse-cursor: pointer;
+                                    clicked => {
+                                        root.tb-ws-spacing = clamp(round(1 + 9 * (self.mouse-x - 8px) / (self.width - 16px)), 1, 10);
+                                        root.tb-set-ws-spacing(root.tb-ws-spacing);
+                                    }
+                                    moved => {
+                                        if self.pressed {
+                                            root.tb-ws-spacing = clamp(round(1 + 9 * (self.mouse-x - 8px) / (self.width - 16px)), 1, 10);
+                                            root.tb-set-ws-spacing(root.tb-ws-spacing);
+                                        }
+                                    }
+                                }
+                            }
+
+                            Text {
+                                text: "10";
+                                color: Theme.fg_dim;
+                                font-size: 11px;
+                                vertical-alignment: center;
+                            }
+
+                            // Current value badge
+                            Rectangle {
+                                width: 38px;
+                                height: 24px;
+                                border-radius: 4px;
+                                background: Theme.accent.transparentize(70%);
+
+                                Text {
+                                    text: root.tb-ws-spacing + "px";
+                                    color: Theme.accent;
+                                    font-size: 12px;
+                                    font-weight: 700;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // ── Workspace Style card ──
+                Rectangle {
+                    border-radius: 6px;
+                    background: Theme.bg_light;
+
+                    VerticalLayout {
+                        padding: 12px;
+                        spacing: 8px;
+
+                        Text {
+                            text: "Workspace Style";
+                            color: Theme.fg_dim;
+                            font-size: 11px;
+                            font-weight: 600;
+                        }
+
+                        // Numbers option
+                        Rectangle {
+                            height: 40px;
+                            border-radius: 4px;
+                            background: root.tb-ws-style-index == 0
+                                ? Theme.accent.transparentize(70%)
+                                : ws-style-numbers-touch.has-hover ? Theme.bg_lighter : transparent;
+
+                            HorizontalLayout {
+                                padding-left: 10px;
+                                padding-right: 10px;
+                                spacing: 10px;
+
+                                VerticalLayout {
+                                    alignment: center;
+                                    width: 14px;
+                                    Rectangle {
+                                        width: 14px; height: 14px;
+                                        border-radius: 7px;
+                                        border-width: 1.5px;
+                                        border-color: root.tb-ws-style-index == 0 ? Theme.accent : Theme.fg_dim;
+                                        background: transparent;
+                                        Rectangle {
+                                            visible: root.tb-ws-style-index == 0;
+                                            x: 3px; y: 3px; width: 8px; height: 8px;
+                                            border-radius: 4px;
+                                            background: Theme.accent;
+                                        }
+                                    }
+                                }
+
+                                VerticalLayout {
+                                    alignment: center;
+                                    spacing: 2px;
+                                    Text { text: "Numbers"; color: Theme.fg; font-size: 12px; }
+                                    Text { text: "Numbered dots showing workspace index"; color: Theme.fg_dim; font-size: 10px; }
+                                }
+                            }
+
+                            ws-style-numbers-touch := TouchArea {
+                                clicked => {
+                                    root.tb-ws-style-index = 0;
+                                    root.tb-set-ws-style(0);
+                                }
+                                mouse-cursor: pointer;
+                            }
+                        }
+
+                        // Squares option
+                        Rectangle {
+                            height: 40px;
+                            border-radius: 4px;
+                            background: root.tb-ws-style-index == 1
+                                ? Theme.accent.transparentize(70%)
+                                : ws-style-squares-touch.has-hover ? Theme.bg_lighter : transparent;
+
+                            HorizontalLayout {
+                                padding-left: 10px;
+                                padding-right: 10px;
+                                spacing: 10px;
+
+                                VerticalLayout {
+                                    alignment: center;
+                                    width: 14px;
+                                    Rectangle {
+                                        width: 14px; height: 14px;
+                                        border-radius: 7px;
+                                        border-width: 1.5px;
+                                        border-color: root.tb-ws-style-index == 1 ? Theme.accent : Theme.fg_dim;
+                                        background: transparent;
+                                        Rectangle {
+                                            visible: root.tb-ws-style-index == 1;
+                                            x: 3px; y: 3px; width: 8px; height: 8px;
+                                            border-radius: 4px;
+                                            background: Theme.accent;
+                                        }
+                                    }
+                                }
+
+                                VerticalLayout {
+                                    alignment: center;
+                                    spacing: 2px;
+                                    Text { text: "Squares"; color: Theme.fg; font-size: 12px; }
+                                    Text { text: "Compact grid of colored squares"; color: Theme.fg_dim; font-size: 10px; }
+                                }
+                            }
+
+                            ws-style-squares-touch := TouchArea {
+                                clicked => {
+                                    root.tb-ws-style-index = 1;
+                                    root.tb-set-ws-style(1);
                                 }
                                 mouse-cursor: pointer;
                             }

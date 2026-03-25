@@ -11,6 +11,8 @@ use std::process::Command;
 
 /// Default workspace dot count shown in the bar.
 const DEFAULT_WS_COUNT: i32 = 7;
+/// Default spacing between workspace dots (pixels).
+const DEFAULT_WS_SPACING: i32 = 1;
 
 fn config_path() -> PathBuf {
     let mut p = dirs::home_dir().unwrap_or_else(|| PathBuf::from("/tmp"));
@@ -109,6 +111,42 @@ pub fn set_ws_position(index: i32) {
     map.insert("ws_position".into(), val.to_string());
     write_conf(&map);
     eww_update("ws-position", val);
+}
+
+/// Read current workspace spacing from config (default 1).
+pub fn ws_spacing() -> i32 {
+    let map = read_conf();
+    map.get("ws_spacing")
+        .and_then(|v| v.parse::<i32>().ok())
+        .unwrap_or(DEFAULT_WS_SPACING)
+        .clamp(1, 10)
+}
+
+/// Set workspace dot spacing (1-10 px), persist, and apply live.
+pub fn set_ws_spacing(px: i32) {
+    let px = px.clamp(1, 10);
+    let mut map = read_conf();
+    map.insert("ws_spacing".into(), px.to_string());
+    write_conf(&map);
+    eww_update("ws-spacing", &px.to_string());
+}
+
+/// Read workspace style: 0 = numbers (dots), 1 = squares.
+pub fn ws_style_index() -> i32 {
+    let map = read_conf();
+    match map.get("ws_style").map(|s| s.as_str()) {
+        Some("squares") => 1,
+        _ => 0,
+    }
+}
+
+/// Set workspace style (0=numbers, 1=squares), persist, and apply live.
+pub fn set_ws_style(index: i32) {
+    let val = if index == 1 { "squares" } else { "numbers" };
+    let mut map = read_conf();
+    map.insert("ws_style".into(), val.to_string());
+    write_conf(&map);
+    eww_update("ws-style", val);
 }
 
 /// Move all windows from workspace groups > `max_group` to group 1.

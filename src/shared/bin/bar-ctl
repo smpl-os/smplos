@@ -65,6 +65,8 @@ eww_apply() {
     local conf="$HOME/.config/smplos/bar.conf"
     local ws_count=7
     local ws_position="center"
+    local ws_spacing=1
+    local ws_style="numbers"
 
     if [[ -f "$conf" ]]; then
         while IFS='=' read -r key val; do
@@ -74,13 +76,17 @@ eww_apply() {
             case "$key" in
                 ws_count)    ws_count="$val" ;;
                 ws_position) ws_position="$val" ;;
+                ws_spacing)  ws_spacing="$val" ;;
+                ws_style)    ws_style="$val" ;;
             esac
         done < "$conf"
     fi
 
     eww --config "$EWW_CONFIG" update ws-count="$ws_count" 2>/dev/null
     eww --config "$EWW_CONFIG" update ws-position="$ws_position" 2>/dev/null
-    echo "$(date '+%H:%M:%S') bar-ctl apply: ws_count=$ws_count ws_position=$ws_position" >> "$LOG"
+    eww --config "$EWW_CONFIG" update ws-spacing="$ws_spacing" 2>/dev/null
+    eww --config "$EWW_CONFIG" update ws-style="$ws_style" 2>/dev/null
+    echo "$(date '+%H:%M:%S') bar-ctl apply: ws_count=$ws_count ws_position=$ws_position ws_spacing=$ws_spacing ws_style=$ws_style" >> "$LOG"
 }
 
 case "$action" in

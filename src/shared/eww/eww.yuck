@@ -56,10 +56,14 @@
 (deflisten window-title :initial "" `scripts/window-title.sh`)
 
 ;; Taskbar settings (written by settings app, read via bar-ctl apply)
-;; ws-count : how many workspace dots to show (1-10, default 7)
+;; ws-count    : how many workspace dots to show (1-10, default 7)
 ;; ws-position : "center" or "left" (adjacent to start button)
+;; ws-spacing  : pixel gap between workspace dots (1-10, default 1)
+;; ws-style    : "numbers" or "squares" (indicator style)
 (defvar ws-count 7)
 (defvar ws-position "center")
+(defvar ws-spacing 1)
+(defvar ws-style "numbers")
 
 ;; Keyboard layout (only visible when multiple layouts configured)
 (deflisten kb-data :initial '{"code":"","layout":"","xkb_layout":"","xkb_variant":"","visible":"no"}' `scripts/keyboard-listener.sh`)
@@ -78,18 +82,48 @@
     (image :path "icons/status/start.svg"
            :image-width 18 :image-height 18)))
 
-;; Workspaces widget (dynamic dot count, controlled by ws-count defvar)
+;; Workspaces widget -- switches between numbers and squares based on ws-style
 (defwidget workspaces-widget []
-  (box :class "workspaces" :orientation "h" :space-evenly false :spacing 0
-    (for entry in {jq("[1,2,3,4,5,6,7,8,9,10]", ".[0:${ws-count}]")}
-      (workspace-dot :ws entry))))
+  (box :class "workspaces" :orientation "h" :space-evenly false
+    (box :visible {ws-style == "numbers"} :orientation "h" :space-evenly false :spacing ws-spacing
+      (for entry in {jq("[1,2,3,4,5,6,7,8,9,10]", ".[0:${ws-count}]")}
+        (workspace-dot :ws entry)))
+    (box :visible {ws-style == "squares"}
+      (workspace-grid))))
 
+;; Numbers mode dot
 (defwidget workspace-dot [ws]
   (button :class {active-workspace == ws ? "ws-dot active" :
                   arraylength(jq(workspaces, "map(select(. == ${ws}))")) > 0 ? "ws-dot occupied" :
                   "ws-dot"}
           :onclick "workspace-group ${ws} 2>/dev/null || true"
-    (label :text {active-workspace == ws ? "●" : "${ws}"})))
+    (label :text {active-workspace == ws ? "" : "${ws}"})))
+
+;; Squares mode grid (2 rows x 5 cols, hidden beyond ws-count)
+(defwidget workspace-grid []
+  (box :orientation "v" :spacing ws-spacing
+    (box :orientation "h" :spacing ws-spacing
+      (workspace-btn :id 1)
+      (workspace-btn :id 2)
+      (workspace-btn :id 3)
+      (workspace-btn :id 4)
+      (workspace-btn :id 5))
+    (box :orientation "h" :spacing ws-spacing
+      (workspace-btn :id 6)
+      (workspace-btn :id 7)
+      (workspace-btn :id 8)
+      (workspace-btn :id 9)
+      (workspace-btn :id 10))))
+
+;; Single square button for the grid
+(defwidget workspace-btn [id]
+  (button
+    :visible {id <= ws-count}
+    :class {id == active-workspace ? "ws-btn active" :
+            arraylength(jq(workspaces, "map(select(. == ${id}))")) > 0 ? "ws-btn occupied" :
+            "ws-btn"}
+    :onclick "workspace-group ${id} 2>/dev/null || true"
+    ""))
 
 ;; Window title
 (defwidget window []

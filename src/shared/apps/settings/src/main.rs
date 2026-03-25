@@ -951,6 +951,8 @@ fn main() -> Result<(), slint::PlatformError> {
 
     ui.set_tb_ws_count(taskbar::ws_count());
     ui.set_tb_ws_position_index(taskbar::ws_position_index());
+    ui.set_tb_ws_spacing(taskbar::ws_spacing());
+    ui.set_tb_ws_style_index(taskbar::ws_style_index());
 
     // ══════════════════════════════════════════════════════════════════════════
     // CALLBACKS
@@ -1896,6 +1898,14 @@ fn main() -> Result<(), slint::PlatformError> {
         taskbar::set_ws_position(idx);
     });
 
+    ui.on_tb_set_ws_spacing(|px| {
+        taskbar::set_ws_spacing(px);
+    });
+
+    ui.on_tb_set_ws_style(|idx| {
+        taskbar::set_ws_style(idx);
+    });
+
     // ── Search callback ──────────────────────────────────────────────────────
 
     {
@@ -1958,6 +1968,10 @@ fn main() -> Result<(), slint::PlatformError> {
             ("Taskbar", "Taskbar", 6),
             ("Workspace Count", "Taskbar", 6),
             ("Workspace Position", "Taskbar", 6),
+            ("Workspace Spacing", "Taskbar", 6),
+            ("Workspace Style", "Taskbar", 6),
+            ("Numbers", "Taskbar", 6),
+            ("Squares", "Taskbar", 6),
             ("Workspaces", "Taskbar", 6),
             ("Bar", "Taskbar", 6),
             ("EWW", "Taskbar", 6),
