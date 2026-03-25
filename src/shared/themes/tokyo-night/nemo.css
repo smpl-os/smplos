@@ -57,15 +57,16 @@ toolbar.primary-toolbar button:checked,
 toolbar.primary-toolbar button:active,
 toolbar.primary-toolbar button.active,
 toolbar.primary-toolbar button.suggested-action {
-    background-color: #7aa2f7;
-    color: #c0caf5;
+    /* Subtle tint only — keep icon at fg so symbols remain visible */
+    background-color: alpha(#7aa2f7, 0.25);
+    color: #a9b1d6;
 }
 
 toolbar.primary-toolbar button:checked label,
 toolbar.primary-toolbar button:active label,
 toolbar.primary-toolbar button.active label,
 toolbar.primary-toolbar button.suggested-action label {
-    color: #c0caf5;
+    color: #a9b1d6;
 }
 
 /* =====================================================================
@@ -79,15 +80,38 @@ toolbar.primary-toolbar button.suggested-action label {
     box-shadow: none;
 }
 
+/* Match Adwaita .path-bar button label:dir() specificity (0,2,2) */
+.path-bar button label:dir(ltr),
+.path-bar button label:dir(rtl),
+.path-bar button label {
+    color: #a9b1d6;
+}
+
 .path-bar button:hover {
     background-color: alpha(#32344a, 0.6);
     color: #a9b1d6;
 }
 
+.path-bar button:hover label:dir(ltr),
+.path-bar button:hover label:dir(rtl),
+.path-bar button:hover label {
+    color: #a9b1d6;
+}
+
 .path-bar button:checked,
 .path-bar button:active {
-    color: #c0caf5;
+    /* Current directory: show with selection accent */
     background-color: #7aa2f7;
+    color: #c0caf5;
+}
+
+.path-bar button:checked label:dir(ltr),
+.path-bar button:checked label:dir(rtl),
+.path-bar button:active label:dir(ltr),
+.path-bar button:active label:dir(rtl),
+.path-bar button:checked label,
+.path-bar button:active label {
+    color: #c0caf5;
 }
 
 /* =====================================================================
