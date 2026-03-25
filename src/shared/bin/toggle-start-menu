@@ -9,6 +9,8 @@ BIN_PATH="/usr/local/bin/$APP_NAME"
 
 cleanup_bind() {
     hyprctl keyword unbind ", mouse:272" 2>/dev/null
+    # Force wl_pointer.enter re-synthesis on bar after window unmaps
+    { sleep 0.1; p=$(hyprctl cursorpos 2>/dev/null) && hyprctl dispatch movecursor ${p%,*} ${p#*, } 2>/dev/null; } &
 }
 
 if pkill -x "$APP_NAME" 2>/dev/null; then

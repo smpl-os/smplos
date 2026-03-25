@@ -11,4 +11,6 @@ read -r cx cy <<< "$CURSOR"
 
 if (( cx < wx || cx > wx + ww || cy < wy || cy > wy + wh )); then
     pkill -x start-menu
+    # Force wl_pointer.enter re-synthesis on bar after window unmaps
+    { sleep 0.1; p=$(hyprctl cursorpos 2>/dev/null) && hyprctl dispatch movecursor ${p%,*} ${p#*, } 2>/dev/null; } &
 fi

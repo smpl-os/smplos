@@ -7,7 +7,8 @@ BIN_PATH="/usr/local/bin/$APP_NAME"
 [[ -f "$BIN_PATH" ]] || BIN_PATH="$HOME/Documents/sources/smplos/src/shared/apps/notif-center/target/release/$APP_NAME"
 
 if pkill -x "$APP_NAME" 2>/dev/null; then
-    : # was running, now killed
+    # Force wl_pointer.enter re-synthesis on bar after window unmaps
+    { sleep 0.1; p=$(hyprctl cursorpos 2>/dev/null) && hyprctl dispatch movecursor ${p%,*} ${p#*, } 2>/dev/null; } &
 else
     "$BIN_PATH" &
     disown

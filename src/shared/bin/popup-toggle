@@ -12,6 +12,15 @@ EWW="eww --config $HOME/.config/eww"
 # All known popup windows (add new popups here)
 POPUPS=(calendar-popup quick-settings notification-hub usb-popup)
 
+# After closing a layer-shell surface, Hyprland/Wayland doesn't synthesise a
+# fresh wl_pointer.enter for surfaces below until the cursor physically moves.
+# Warping to the current position (no visible change) forces the re-enter.
+_reenter() {
+  sleep 0.1
+  local p; p=$(hyprctl cursorpos 2>/dev/null) || return 0
+  hyprctl dispatch movecursor ${p%,*} ${p#*, } 2>/dev/null || true
+}
+
 # eww active-windows outputs "id: name" per line
 is_window_open() {
   $EWW active-windows 2>/dev/null | grep -q "^${1}"
@@ -26,6 +35,7 @@ close_all() {
 # --close: just close everything
 if [[ "${1:-}" == "--close" ]]; then
   close_all
+  _reenter &
   exit 0
 fi
 
@@ -34,6 +44,7 @@ WINDOW="${1:?Usage: popup-toggle <window-name> | --close}"
 # Toggle: if open, close; if closed, close others and open
 if is_window_open "$WINDOW"; then
   $EWW close "$WINDOW" 2>/dev/null
+  _reenter &
 else
   close_all
   $EWW open "$WINDOW" 2>/dev/null
