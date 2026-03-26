@@ -1,0 +1,51 @@
+# smplOS micro colorscheme — auto-generated from colors.toml
+# Managed by generate-theme-configs.sh — do not edit by hand
+
+# ── Base ─────────────────────────────────────────────────────────────────────
+color-link default "#bebebe,#121212"
+color-link background "#121212,#121212"
+
+# ── UI chrome ────────────────────────────────────────────────────────────────
+color-link line-number "#bebebe,#121212"
+color-link current-line-number "#e68e0d,#121212"
+color-link statusline "#121212,#e68e0d"
+color-link tabbar "#bebebe,#1e1e1e"
+color-link indent-char "#8a8a8d,"
+color-link scrollbar "#8a8a8d,"
+
+# ── Selection & search ───────────────────────────────────────────────────────
+color-link selection "#bebebe,#333333"
+
+# ── Gutter / diff ────────────────────────────────────────────────────────────
+color-link gutter-error "#D35F5F,"
+color-link gutter-warning "#b91c1c,"
+color-link diff-added "#FFC107,"
+color-link diff-modified "#b91c1c,"
+color-link diff-deleted "#D35F5F,"
+
+# ── Syntax ───────────────────────────────────────────────────────────────────
+color-link comment "#bebebe"
+color-link todo "#b91c1c,bold"
+
+color-link keyword "#D35F5F"
+color-link keyword.control "#D35F5F"
+color-link keyword.operator "#bebebe"
+
+color-link type "#FFC107"
+color-link type.keyword "#FFC107"
+
+color-link constant "#f59e0b"
+color-link constant.string "#FFC107"
+color-link constant.number "#b91c1c"
+color-link constant.bool "#D35F5F"
+color-link constant.character "#FFC107"
+
+color-link identifier "#e68e0d"
+
+color-link function "#e68e0d"
+
+color-link statement "#D35F5F"
+color-link preproc "#e68e0d"
+color-link special "#b91c1c"
+color-link underlined "#bebebe"
+color-link error "#D35F5F,bold"

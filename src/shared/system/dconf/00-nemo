@@ -57,3 +57,13 @@ start-with-dual-pane=true
 
 # Show per-pane location labels in dual-pane mode
 show-dual-pane-location-labels=true
+
+# Always use list (details) view by default
+default-folder-viewer='list-view'
+
+# Child folders inherit the current view from the parent window
+inherit-folder-viewer=true
+
+# Ignore per-folder view metadata so every folder uses the setting above
+# (prevents Nemo from switching back to icon-view based on past sessions)
+ignore-view-metadata=true

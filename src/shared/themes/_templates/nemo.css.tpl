@@ -19,7 +19,8 @@
  * Main window chrome
  * ===================================================================== */
 
-.nemo-window {
+.nemo-window,
+.nemo-window:backdrop {
     background-color: {{ background }};
     color: {{ foreground }};
 }
@@ -174,7 +175,9 @@ toolbar.primary-toolbar button.suggested-action label {
  * ===================================================================== */
 
 .nemo-window .view,
-.nemo-window iconview {
+.nemo-window iconview,
+.nemo-window .view:backdrop,
+.nemo-window iconview:backdrop {
     background-color: {{ background }};
     color: {{ foreground }};
 }
@@ -198,7 +201,9 @@ toolbar.primary-toolbar button.suggested-action label {
  * ===================================================================== */
 
 .nemo-window .nemo-inactive-pane .view:not(:selected),
-.nemo-window .nemo-inactive-pane iconview {
+.nemo-window .nemo-inactive-pane .view:backdrop:not(:selected),
+.nemo-window .nemo-inactive-pane iconview,
+.nemo-window .nemo-inactive-pane iconview:backdrop {
     background-color: {{ background }};
 }
 
@@ -219,7 +224,9 @@ toolbar.primary-toolbar button.suggested-action label {
  * ===================================================================== */
 
 .sidebar,
-.places-treeview {
+.sidebar:backdrop,
+.places-treeview,
+.places-treeview:backdrop {
     background-color: {{ bg_light }};
     color: {{ foreground }};
 }
@@ -349,15 +356,17 @@ menuitem:hover * {
  * Tooltips
  * ===================================================================== */
 
-tooltip {
+tooltip,
+tooltip.background {
     background-color: {{ bg_lighter }};
     color: {{ foreground }};
-    border: 1px solid {{ bg_lighter }};
+    border: 1px solid {{ accent }};
     border-radius: 4px;
     padding: 4px 8px;
 }
 
-tooltip label {
+tooltip label,
+tooltip .label {
     color: {{ foreground }};
 }
 

@@ -1,0 +1,14 @@
+{
+    "CtrlLeft":       "WordLeft",
+    "CtrlRight":      "WordRight",
+    "CtrlBackspace":  "DeleteWordLeft",
+    "CtrlDelete":     "DeleteWordRight",
+    "ShiftUp":        "SelectUp",
+    "ShiftDown":      "SelectDown",
+    "ShiftEnd":       "SelectToEndOfLine",
+    "ShiftHome":      "SelectToStartOfLine",
+    "CtrlShiftLeft":  "SelectWordLeft",
+    "CtrlShiftRight": "SelectWordRight",
+    "CtrlShiftZ":     "Redo",
+    "CtrlY":          "Redo"
+}

@@ -1,0 +1,51 @@
+# smplOS micro colorscheme — auto-generated from colors.toml
+# Managed by generate-theme-configs.sh — do not edit by hand
+
+# ── Base ─────────────────────────────────────────────────────────────────────
+color-link default "#ddf7ff,#0B0C16"
+color-link background "#0B0C16,#0B0C16"
+
+# ── UI chrome ────────────────────────────────────────────────────────────────
+color-link line-number "#85E1FB,#0B0C16"
+color-link current-line-number "#82FB9C,#0B0C16"
+color-link statusline "#0B0C16,#82FB9C"
+color-link tabbar "#85E1FB,#181a2a"
+color-link indent-char "#6a6e95,"
+color-link scrollbar "#6a6e95,"
+
+# ── Selection & search ───────────────────────────────────────────────────────
+color-link selection "#0B0C16,#ddf7ff"
+
+# ── Gutter / diff ────────────────────────────────────────────────────────────
+color-link gutter-error "#50f872,"
+color-link gutter-warning "#50f7d4,"
+color-link diff-added "#4fe88f,"
+color-link diff-modified "#50f7d4,"
+color-link diff-deleted "#50f872,"
+
+# ── Syntax ───────────────────────────────────────────────────────────────────
+color-link comment "#85E1FB"
+color-link todo "#50f7d4,bold"
+
+color-link keyword "#50f872"
+color-link keyword.control "#86a7df"
+color-link keyword.operator "#ddf7ff"
+
+color-link type "#4fe88f"
+color-link type.keyword "#4fe88f"
+
+color-link constant "#c4d2ed"
+color-link constant.string "#4fe88f"
+color-link constant.number "#50f7d4"
+color-link constant.bool "#86a7df"
+color-link constant.character "#4fe88f"
+
+color-link identifier "#82FB9C"
+
+color-link function "#82FB9C"
+
+color-link statement "#50f872"
+color-link preproc "#82FB9C"
+color-link special "#50f7d4"
+color-link underlined "#7cf8f7"
+color-link error "#50f872,bold"

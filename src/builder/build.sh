@@ -1173,6 +1173,8 @@ DCONF_PROFILE
         mkdir -p "$skel/.config/btop/themes" && cp "$theme_src/btop.theme" "$skel/.config/btop/themes/current.theme" 2>/dev/null || true
         # Fish shell theme colors
         mkdir -p "$skel/.config/fish" && cp "$theme_src/fish.theme" "$skel/.config/fish/theme.fish" 2>/dev/null || true
+        # micro text editor colorscheme
+        mkdir -p "$skel/.config/micro/colorschemes" && cp "$theme_src/micro.theme" "$skel/.config/micro/colorschemes/smplos.micro" 2>/dev/null || true
         # Browser (Brave/Chromium) -- set toolbar color via managed policy
         local browser_bg
         browser_bg=$(grep '^background' "$theme_src/colors.toml" | sed 's/.*"\(#[0-9a-fA-F]*\)".*/\1/')

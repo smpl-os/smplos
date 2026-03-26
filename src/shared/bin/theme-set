@@ -122,6 +122,12 @@ if [[ -f "$CURRENT_THEME_PATH/btop.theme" ]]; then
   cp "$CURRENT_THEME_PATH/btop.theme" "$HOME/.config/btop/themes/current.theme"
 fi
 
+# micro text editor — deploy colorscheme (reloads on next file open)
+if [[ -f "$CURRENT_THEME_PATH/micro.theme" ]]; then
+  mkdir -p "$HOME/.config/micro/colorschemes"
+  cp "$CURRENT_THEME_PATH/micro.theme" "$HOME/.config/micro/colorschemes/smplos.micro"
+fi
+
 # Nemo file manager — deploy per-theme GTK3 CSS override
 # nemo-smpl watches ~/.config/smplos/nemo-theme.css via GFileMonitor
 # and reloads it live, so no nemo restart is required.
@@ -541,53 +547,127 @@ EOJSON
   fi
 fi
 
-# Chromium / Brave -- set browser toolbar color and dark/light mode
-# Derives color from colors.toml background (no separate chromium.theme file needed)
-BROWSER_BG=$(grep '^background' "$CURRENT_THEME_PATH/colors.toml" 2>/dev/null | head -1 | sed 's/.*"\(#[^"]*\)".*/\1/')
-if [[ -n "$BROWSER_BG" ]]; then
-  # Determine dark/light mode
+# Chromium / Brave -- full theme support
+# Generates a Chrome theme extension from colors.toml (no root required).
+# Browser toolbar/tab colors apply on next Brave launch.
+# --force-dark-mode applies immediately on next Brave start (pages go dark).
+
+_hex_to_rgb_array() {
+  # Convert #rrggbb to "r, g, b" for Chrome theme manifest JSON
+  local hex="${1#\#}"
+  printf "%d, %d, %d" "0x${hex:0:2}" "0x${hex:2:2}" "0x${hex:4:2}"
+}
+
+_toml_color() {
+  grep "^${1}[[:space:]]*=" "$CURRENT_THEME_PATH/colors.toml" 2>/dev/null \
+    | head -1 | sed 's/.*"\(#[^"]*\)".*/\1/'
+}
+
+_bg=$(      _toml_color background)
+_bg_light=$(  _toml_color bg_light)
+_surface=$(   _toml_color surface)
+_fg=$(        _toml_color foreground)
+_fg_alt=$(    _toml_color fg_alt)
+_accent=$(    _toml_color accent)
+_muted=$(     _toml_color muted)
+
+if [[ -n "$_bg" ]]; then
+  # ── Dark/light mode ────────────────────────────────────────────────────────
   if [[ -f "$CURRENT_THEME_PATH/light.mode" ]]; then
     DARK_MODE=false
   else
     DARK_MODE=true
   fi
 
-  # Build managed policy with dark mode preference
-  BROWSER_POLICY=$(printf '{"BrowserThemeColor":"%s","BackgroundModeEnabled":false}' "$BROWSER_BG")
+  # ── Chrome theme extension manifest ───────────────────────────────────────
+  # Loaded via --load-extension in brave-flags.conf.
+  # Toolbar and tab colors apply on next Brave launch (extensions read at startup).
+  # No root required. No compiling. No Chrome Web Store.
+  BRAVE_THEME_DIR="$HOME/.config/smplos/brave-theme"
+  mkdir -p "$BRAVE_THEME_DIR"
 
-  # Write browser policies (requires root -- skip silently if not root;
-  # dev-apply.sh handles this separately since theme-set runs as user)
-  if [[ $EUID -eq 0 ]]; then
-    for browser in chromium brave; do
-      command -v "$browser" &>/dev/null || continue
-      mkdir -p "/etc/$browser/policies/managed" 2>/dev/null
-      echo "$BROWSER_POLICY" > "/etc/$browser/policies/managed/color.json" 2>/dev/null
-    done
-  fi
+  _rgb_bg=$(      _hex_to_rgb_array "$_bg")
+  _rgb_bg_light=$(  _hex_to_rgb_array "${_bg_light:-$_bg}")
+  _rgb_surface=$(   _hex_to_rgb_array "${_surface:-$_bg_light}")
+  _rgb_fg=$(        _hex_to_rgb_array "${_fg:-#e0e0e0}")
+  _rgb_fg_alt=$(    _hex_to_rgb_array "${_fg_alt:-#888888}")
+  _rgb_accent=$(    _hex_to_rgb_array "${_accent:-#7aa2f7}")
+  _rgb_muted=$(     _hex_to_rgb_array "${_muted:-#444444}")
 
-  # Brave/Chromium flags files -- the launcher scripts read these on every start.
-  # --force-dark-mode controls the browser UI chrome (title bar, tabs, menus).
-  # --enable-features=WebUIDarkMode controls internal pages (settings, etc.).
-  _set_browser_dark_flag() {
+  cat > "$BRAVE_THEME_DIR/manifest.json" << EOJSON
+{
+  "manifest_version": 2,
+  "name": "smplOS ${THEME_NAME}",
+  "version": "1.0",
+  "theme": {
+    "colors": {
+      "frame":                  [${_rgb_bg}],
+      "frame_inactive":         [${_rgb_bg_light}],
+      "frame_incognito":        [${_rgb_bg}],
+      "toolbar":                [${_rgb_surface}],
+      "tab_text":               [${_rgb_fg}],
+      "tab_background_text":    [${_rgb_fg_alt}],
+      "bookmark_text":          [${_rgb_fg}],
+      "ntp_background":         [${_rgb_bg}],
+      "ntp_text":               [${_rgb_fg}],
+      "ntp_link":               [${_rgb_accent}],
+      "omnibox_background":     [${_rgb_bg_light}],
+      "omnibox_text":           [${_rgb_fg}],
+      "button_background":      [${_rgb_surface}],
+      "control_background":     [${_rgb_bg_light}]
+    },
+    "tints": {
+      "background_tab": [0.0, 0.0, 0.45],
+      "buttons": [-1, -1, -1]
+    }
+  }
+}
+EOJSON
+
+  # ── Brave/Chromium flags ───────────────────────────────────────────────────
+  # brave-flags.conf is read by the Brave launcher on every start.
+  _set_browser_flags() {
     local flags_file="$1"
+    local ext_path="$BRAVE_THEME_DIR"
     mkdir -p "$(dirname "$flags_file")"
     touch "$flags_file"
-    # Remove any existing dark mode flags
-    sed -i '/^--force-dark-mode$/d; /^--enable-features=.*WebUIDarkMode/d' "$flags_file"
+
+    # Remove previously managed flags (dark mode + our extension load)
+    sed -i \
+      -e '/^--force-dark-mode$/d' \
+      -e '/^--enable-features=.*WebUIDarkMode/d' \
+      -e '/^--load-extension=.*smplos\/brave-theme/d' \
+      "$flags_file" 2>/dev/null || true
+
+    # Dark mode flags (controls browser chrome + forces sites dark)
     if $DARK_MODE; then
       echo "--force-dark-mode" >> "$flags_file"
-      # Add WebUIDarkMode to existing --enable-features or as new line
       if grep -q '^--enable-features=' "$flags_file"; then
         sed -i 's/^--enable-features=\(.*\)/--enable-features=\1,WebUIDarkMode/' "$flags_file"
       else
         echo "--enable-features=WebUIDarkMode" >> "$flags_file"
       fi
     fi
-    # Clean up empty lines
-    sed -i '/^$/d' "$flags_file"
+
+    # Load our theme extension (applies toolbar/tab colors on next Brave start)
+    echo "--load-extension=${ext_path}" >> "$flags_file"
+
+    # Clean up blank lines
+    sed -i '/^[[:space:]]*$/d' "$flags_file"
   }
-  _set_browser_dark_flag "$HOME/.config/brave-flags.conf"
-  _set_browser_dark_flag "$HOME/.config/chromium-flags.conf"
+  _set_browser_flags "$HOME/.config/brave-flags.conf"
+  _set_browser_flags "$HOME/.config/chromium-flags.conf"
+
+  # ── Managed policy (only if root — e.g. dev-apply.sh) ─────────────────────
+  # BrowserThemeColor hints the native window title bar on some Linux WMs.
+  if [[ $EUID -eq 0 ]]; then
+    for browser in chromium brave; do
+      command -v "$browser" &>/dev/null || continue
+      mkdir -p "/etc/$browser/policies/managed" 2>/dev/null
+      printf '{"BrowserThemeColor":"%s","BackgroundModeEnabled":false}\n' "$_bg" \
+        > "/etc/$browser/policies/managed/color.json" 2>/dev/null
+    done
+  fi
 fi
 
 echo "Theme set to: $THEME_NAME"

@@ -1,0 +1,19 @@
+{
+    "colorscheme": "smplos",
+    "truecolor": "on",
+    "autoclose": true,
+    "autocomplete": true,
+    "autoindent": true,
+    "tabsize": 4,
+    "tabstospaces": false,
+    "softwrap": true,
+    "syntax": true,
+    "ruler": true,
+    "savecursor": true,
+    "saveundo": true,
+    "statusline": true,
+    "diffgutter": true,
+    "scrollmargin": 5,
+    "mouse": true,
+    "clipboard": "external"
+}
