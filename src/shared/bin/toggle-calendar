@@ -1,6 +1,8 @@
 #!/bin/bash
-# Toggle smplOS Calendar app
-# Launches or kills the smpl-calendar binary.
+# Toggle smplOS Calendar app.
+# Uses a Hyprland bindn (non-consuming bind) on left click to detect
+# clicks outside the calendar window and dismiss it — same pattern
+# as toggle-start-menu so the eww bar button never double-fires.
 
 APP_NAME="smpl-calendar"
 BIN_PATH="/usr/local/bin/$APP_NAME"
@@ -8,10 +10,27 @@ BIN_PATH="/usr/local/bin/$APP_NAME"
 [[ -f "$BIN_PATH" ]] || BIN_PATH="$HOME/Documents/sources/smpl-apps/calendar/target/debug/$APP_NAME"
 [[ -f "$BIN_PATH" ]] || BIN_PATH="$HOME/Documents/sources/smplos/src/shared/apps/smpl-calendar/target/release/$APP_NAME"
 
-if pkill -x "$APP_NAME" 2>/dev/null; then
+cleanup_bind() {
+    hyprctl keyword unbind ", mouse:272" 2>/dev/null
     # Force wl_pointer.enter re-synthesis on bar after window unmaps
-    { sleep 0.1; p=$(hyprctl cursorpos 2>/dev/null) && hyprctl dispatch movecursor ${p%,*} ${p#*, } 2>/dev/null; } &
+    { sleep 0.1; p=$(hyprctl cursorpos 2>/dev/null) \
+        && hyprctl dispatch movecursor ${p%,*} ${p#*, } 2>/dev/null; } &
+}
+
+if pkill -x "$APP_NAME" 2>/dev/null; then
+    cleanup_bind
 else
     "$BIN_PATH" &
+    disown
+    local_pid=$!
+
+    # Add non-consuming global click bind (doesn't block normal click delivery)
+    (sleep 0.1; hyprctl keyword bindn ", mouse:272, exec, smpl-calendar-click-check" 2>/dev/null) &
+    disown
+
+    # Cleanup bind when smpl-calendar exits (however it exits)
+    (while kill -0 $local_pid 2>/dev/null; do sleep 0.2; done
+     cleanup_bind
+    ) &
     disown
 fi
