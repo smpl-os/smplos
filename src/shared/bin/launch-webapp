@@ -274,36 +274,12 @@ bwrap_output=$(bwrap "${bwrap_args[@]}" "$real_bin" --app="$url" --user-data-dir
 rc=$?
 [[ -n "$bwrap_output" ]] && printf '%s [launch-webapp] bwrap=%s\n' "$(date '+%F %T')" "$bwrap_output" >> "$LOG_FILE"
 
-# Clear browsing data on exit if requested
+# Clear browsing data on exit if requested — full wipe so next launch is first-run clean
 if [[ "$clear_on_exit" == "1" ]]; then
-  profile_default="$profile_dir/Default"
-  if [[ -d "$profile_default" ]]; then
-    rm -f  "$profile_default/Cookies" "$profile_default/Cookies-journal"
-    rm -f  "$profile_default/Login Data" "$profile_default/Login Data-journal"
-    rm -f  "$profile_default/Web Data" "$profile_default/Web Data-journal"
-    rm -f  "$profile_default/History" "$profile_default/History-journal"
-    rm -f  "$profile_default/Visited Links"
-    rm -rf "$profile_default/Local Storage/"
-    rm -rf "$profile_default/Session Storage/"
-    rm -rf "$profile_default/IndexedDB/"
-    rm -rf "$profile_default/databases/"
-    rm -rf "$profile_default/Cache/"
-    rm -rf "$profile_default/Code Cache/"
-    rm -rf "$profile_default/Network/"
-    # Session & tab restore files — without these Chromium restores old tabs on relaunch
-    rm -rf "$profile_default/Sessions/"
-    rm -f  "$profile_default/Current Session"
-    rm -f  "$profile_default/Current Tabs"
-    rm -f  "$profile_default/Last Session"
-    rm -f  "$profile_default/Last Tabs"
-    # bwrap kills the browser (no graceful shutdown), so Chromium writes exit_type=Crashed.
-    # Reset it to Normal so the next launch doesn't offer to restore the (now-deleted) session.
-    if [[ -f "$profile_default/Preferences" ]]; then
-      sed -i 's/"exit_type":"Crashed"/"exit_type":"Normal"/g;
-              s/"exit_type": "Crashed"/"exit_type": "Normal"/g' \
-        "$profile_default/Preferences"
-    fi
-    printf '%s [launch-webapp] cleared browsing data for %s\n' "$(date '+%F %T')" "$app_name" >> "$LOG_FILE"
+  if [[ -d "$profile_dir" ]]; then
+    rm -rf "$profile_dir"
+    mkdir -p "$profile_dir"
+    printf '%s [launch-webapp] wiped profile for %s (first-run clean)\n' "$(date '+%F %T')" "$app_name" >> "$LOG_FILE"
   fi
 fi
 
