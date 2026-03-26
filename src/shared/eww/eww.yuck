@@ -10,9 +10,9 @@
 ;; ============================================================================
 
 ;; Time & Date
-(defpoll time :interval "1s" `date +"%H:%M"`)
-(defpoll date :interval "60s" `date +"%a, %b %d"`)
-(defpoll date-full :interval "60s" `date +"%A, %B %d, %Y"`)
+(defpoll clock-top  :interval "1s"    `scripts/clock-top.sh`)
+(defpoll clock-bot  :interval "10s"   `scripts/clock-bot.sh`)
+(defpoll date-full  :interval "60s"   `date +"%A, %B %d, %Y"`)
 (defpoll calendar-data :interval "3600s" `scripts/calendar.sh`)
 
 ;; System Info (disabled -- uncomment to re-enable)
@@ -234,7 +234,11 @@
   (button :class "tray-clock"
           :onclick "toggle-calendar"
           :tooltip date-full
-    (label :text time)))
+    (box :orientation "v" :space-evenly false :spacing 0
+         :halign "center" :valign "center"
+      (label :class "clock-top" :text clock-top)
+      (label :class "clock-bot" :text clock-bot
+             :visible {clock-bot != ""} :halign "center"))))
 
 (defwidget tray []
   (box :class "tray" :orientation "h" :space-evenly false :spacing 6

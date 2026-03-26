@@ -276,10 +276,17 @@ window {
 
 /* Notifications: shape conveys state (outline=empty, filled=has, slash=DND) */
 
-/* Clock in tray */
-.tray-clock .time {
+/* Clock in tray -- primary line bigger+bold, secondary line smaller */
+.tray-clock .clock-top {
+  font-size: 13px;
   font-weight: bold;
   color: $accent;
+}
+
+.tray-clock .clock-bot {
+  font-size: 10px;
+  color: $fg-dim;
+  margin-top: -1px;
 }
 
 /* ============================================================================
