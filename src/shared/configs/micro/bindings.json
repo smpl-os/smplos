@@ -2,6 +2,7 @@
     "CtrlLeft":       "WordLeft",
     "CtrlRight":      "WordRight",
     "CtrlBackspace":  "DeleteWordLeft",
+    "CtrlUnderscore": "DeleteWordLeft",
     "CtrlDelete":     "DeleteWordRight",
     "ShiftUp":        "SelectUp",
     "ShiftDown":      "SelectDown",

@@ -48,6 +48,7 @@ if [[ "$(cat "$MICRO_CONFIG/bindings.json" 2>/dev/null | tr -d '[:space:]')" == 
     "CtrlLeft":       "WordLeft",
     "CtrlRight":      "WordRight",
     "CtrlBackspace":  "DeleteWordLeft",
+    "CtrlUnderscore": "DeleteWordLeft",
     "CtrlDelete":     "DeleteWordRight",
     "ShiftUp":        "SelectUp",
     "ShiftDown":      "SelectDown",
