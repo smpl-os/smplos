@@ -278,15 +278,22 @@ window {
 
 /* Clock in tray -- primary line bigger+bold, secondary line smaller */
 .tray-clock .clock-top {
-  font-size: 13px;
+  font-size: 11px;
   font-weight: bold;
   color: $accent;
 }
 
 .tray-clock .clock-bot {
-  font-size: 10px;
+  font-size: 9px;
   color: $fg-dim;
-  margin-top: -1px;
+  margin-top: 0px;
+}
+
+/* When showing two lines, remove top/bottom padding so the bar height
+   stays the same as a single-line clock */
+.tray-clock {
+  padding-top: 0;
+  padding-bottom: 0;
 }
 
 /* ============================================================================
