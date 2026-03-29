@@ -11,5 +11,6 @@
     "CtrlShiftLeft":  "SelectWordLeft",
     "CtrlShiftRight": "SelectWordRight",
     "CtrlShiftZ":     "Redo",
-    "CtrlY":          "Redo"
+    "CtrlY":          "Redo",
+    "ShiftDelete":    "Cut|CutLine"
 }
