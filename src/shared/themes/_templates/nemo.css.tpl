@@ -366,28 +366,15 @@ menubar > menuitem:active {
     box-shadow: none;
 }
 
-/* Explicit label rules — needed because menuitem label { color: foreground }
- * has its own specificity that blocks color inheritance from the parent.
- * NOTE: use menubar > menuitem:active > menu … to reset popup descendants — the
- * :active label rule is a descendant selector and would otherwise colour ALL
- * labels inside the open dropdown (popup is a child of the active menuitem). */
-menubar > menuitem:hover label,
-menubar > menuitem:selected label,
-menubar > menuitem:active label {
+/* Explicit label rules — use direct child selectors only so the selection
+ * foreground color does NOT cascade into the popup menu's own labels. */
+menubar > menuitem:hover > label,
+menubar > menuitem:hover > box > label,
+menubar > menuitem:selected > label,
+menubar > menuitem:selected > box > label,
+menubar > menuitem:active > label,
+menubar > menuitem:active > box > label {
     color: {{ selection_foreground }};
-}
-
-/* Reset the popup's own labels back to normal foreground */
-menubar > menuitem:active > menu,
-menubar > menuitem:active > menu menuitem {
-    background-color: {{ background }};
-    color: {{ foreground }};
-}
-
-menubar > menuitem:active > menu menuitem label,
-menubar > menuitem:active > menu menuitem > box > label,
-menubar > menuitem:active > menu menuitem accelerator {
-    color: {{ foreground }};
 }
 
 menuitem:hover {
