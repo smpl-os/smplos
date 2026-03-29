@@ -303,6 +303,15 @@ searchbar entry {
 }
 
 /* =====================================================================
+ * Bookmark / Disk Picker (Alt+F1 / Alt+F2 menu)
+ * Give it a distinct border so it stands out from the background.
+ * ===================================================================== */
+#bookmark-picker-menu {
+    border: 2px solid alpha({{ foreground }}, 0.4);
+    border-radius: 4px;
+}
+
+/* =====================================================================
  * Popup menus (e.g. bookmark picker)
  * ===================================================================== */
 
