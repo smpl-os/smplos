@@ -315,8 +315,8 @@ if $need_opt_bind && [[ -d /opt ]]; then
   bwrap_args+=(--ro-bind /opt /opt)
 fi
 
-printf '%s [launch-webapp] name=%s class=%s browser=%s cmd=%s real=%s opt_bind=%s\n' \
-  "$(date '+%F %T')" "$app_name" "$_wm_class" "$bin" "$browser_cmd" "$real_bin" "$need_opt_bind" >> "$LOG_FILE"
+printf '%s [launch-webapp] name=%s class=%s clear=%s browser=%s real=%s\n' \
+  "$(date '+%F %T')" "$app_name" "$_wm_class" "${clear_on_exit:-0}" "$bin" "$real_bin" >> "$LOG_FILE"
 
 # ── Clear profile BEFORE launch if clear-on-exit is set ──────────────────────
 # This guarantees a fresh session even if a previous post-exit cleanup was
