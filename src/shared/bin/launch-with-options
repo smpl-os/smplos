@@ -1,0 +1,99 @@
+#!/bin/bash
+# smplOS: Wrapper that applies user-configured launch options (env vars, prefix)
+# to any app before executing it.
+#
+# Usage: launch-with-options <app-id> <original-exec-command...>
+#
+# Reads options from ~/.config/smplos/launch-options/<app-id>.conf
+# Config format:
+#   [environment]
+#   KEY=VALUE
+#   KEY2=VALUE2
+#
+#   [launch]
+#   prefix = gamemoderun
+#
+# If no config file exists, the original command is run unmodified.
+
+set -e
+
+APP_ID="$1"
+shift
+
+if [[ -z "$APP_ID" ]]; then
+  echo "Usage: launch-with-options <app-id> <command...>" >&2
+  exit 1
+fi
+
+CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/smplos/launch-options"
+CONF_FILE="$CONF_DIR/$APP_ID.conf"
+
+prefix=""
+declare -a env_vars=()
+
+if [[ -f "$CONF_FILE" ]]; then
+  section=""
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    # Strip comments and leading/trailing whitespace
+    line="${line%%#*}"
+    line="${line#"${line%%[![:space:]]*}"}"
+    line="${line%"${line##*[![:space:]]}"}"
+    [[ -z "$line" ]] && continue
+
+    # Section headers
+    if [[ "$line" == "["*"]" ]]; then
+      section="${line:1:${#line}-2}"
+      continue
+    fi
+
+    case "$section" in
+      environment)
+        # Each line is KEY=VALUE
+        if [[ "$line" == *=* ]]; then
+          env_vars+=("$line")
+        fi
+        ;;
+      launch)
+        # key = value pairs
+        key="${line%%=*}"
+        key="${key#"${key%%[![:space:]]*}"}"
+        key="${key%"${key##*[![:space:]]}"}"
+        val="${line#*=}"
+        val="${val#"${val%%[![:space:]]*}"}"
+        val="${val%"${val##*[![:space:]]}"}"
+        case "$key" in
+          prefix) prefix="$val" ;;
+        esac
+        ;;
+    esac
+  done < "$CONF_FILE"
+fi
+
+# Export environment variables
+for ev in "${env_vars[@]}"; do
+  export "$ev"
+done
+
+# Also apply env vars via flatpak override if this is a flatpak app
+# (so they persist for desktop-file and keybind launches too)
+if [[ "$*" == *"flatpak run"* ]]; then
+  flatpak_id=""
+  # Extract the flatpak app ID (last argument that looks like a reverse-domain)
+  for arg in "$@"; do
+    if [[ "$arg" =~ ^[a-zA-Z][a-zA-Z0-9]*\.[a-zA-Z] ]]; then
+      flatpak_id="$arg"
+    fi
+  done
+  if [[ -n "$flatpak_id" ]] && command -v flatpak &>/dev/null; then
+    for ev in "${env_vars[@]}"; do
+      flatpak override --user --env="$ev" "$flatpak_id" 2>/dev/null || true
+    done
+  fi
+fi
+
+# Build the final command
+if [[ -n "$prefix" ]]; then
+  exec $prefix "$@"
+else
+  exec "$@"
+fi
