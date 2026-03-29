@@ -366,6 +366,14 @@ menubar > menuitem:active {
     box-shadow: none;
 }
 
+/* Explicit label rules — needed because menuitem label { color: foreground }
+ * has its own specificity that blocks color inheritance from the parent. */
+menubar > menuitem:hover label,
+menubar > menuitem:selected label,
+menubar > menuitem:active label {
+    color: {{ selection_foreground }};
+}
+
 menuitem:hover {
     background-color: {{ selection_background }};
     color: {{ selection_foreground }};
