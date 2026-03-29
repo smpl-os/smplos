@@ -29,6 +29,16 @@ for arg in "$@"; do
     esac
 done
 
+# ── Ensure sudo is ready ─────────────────────────────────────────────────────
+# When called from smplos-update, SMPLOS_SUDO_READY is set and credentials are
+# already cached. When run standalone, authenticate once and start a keepalive.
+if [[ "${SMPLOS_SUDO_READY:-0}" != "1" && $CHECK_ONLY -eq 0 ]]; then
+    sudo -v || { echo "ERROR: sudo authentication failed" >&2; exit 1; }
+    ( while kill -0 $$ 2>/dev/null; do sudo -n -v; sleep 30; done ) &
+    _SUDO_PID=$!
+    trap 'kill $_SUDO_PID 2>/dev/null' EXIT
+fi
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 log()  { [[ $QUIET -eq 0 ]] && echo "  $*" || true; }
 ok()   { [[ $QUIET -eq 0 ]] && echo "  \u2713 $*" || true; }
@@ -187,6 +197,26 @@ update_st_smpl() {
             "$asset_url" -o "$tmpfile"; then
         sudo install -m755 "$tmpfile" "/usr/local/bin/st-wl"
         install -m755 "$tmpfile" "$SMPLOS_BIN/st-wl"
+
+        # Also install the matching terminfo so key sequences work correctly.
+        # Download from the same release if available; fall back to repo copy.
+        local info_url
+        info_url=$(echo "$_gh_json" \
+            | grep -oP '"browser_download_url"\s*:\s*"\K[^"]*st-wl\.info' \
+            | head -1 || true)
+        if [[ -n "$info_url" ]]; then
+            local tmpinfo
+            tmpinfo=$(mktemp /tmp/st-wl-info.XXXXXX)
+            if curl -fsSL --connect-timeout 15 "$info_url" -o "$tmpinfo" 2>/dev/null; then
+                sudo tic -sx "$tmpinfo" 2>/dev/null || true
+                tic -sx "$tmpinfo" 2>/dev/null || true   # user terminfo too
+                rm -f "$tmpinfo"
+                log "  terminfo updated"
+            else
+                rm -f "$tmpinfo"
+            fi
+        fi
+
         echo "$remote_ver" > "$STATE_DIR/st-smpl"
         ok "st-smpl: updated to $remote_ver"
         ((n_updated++)) || true
@@ -236,10 +266,26 @@ update_nemo_smpl() {
 
     if curl -fSL --connect-timeout 30 --retry 3 --progress-bar \
             "$pkg_url" -o "$tmpfile"; then
+        # If nemo is running, remember so we can restart it after install
+        local nemo_was_running=0
+        if pgrep -x nemo &>/dev/null; then
+            nemo_was_running=1
+        fi
+
         if sudo pacman -U --noconfirm "$tmpfile"; then
             echo "$remote_ver" > "$STATE_DIR/nemo-smpl"
             ok "nemo-smpl: updated to $remote_ver"
             ((n_updated++)) || true
+
+            # Restart nemo if it was running so it picks up the new binary
+            if [[ $nemo_was_running -eq 1 ]]; then
+                nemo --quit 2>/dev/null || pkill -x nemo 2>/dev/null || true
+                sleep 0.5
+                pkill -9 -x nemo 2>/dev/null || true
+                nohup nemo &>/dev/null &
+                disown
+                log "  nemo restarted"
+            fi
         else
             warn "nemo-smpl: pacman -U failed"
         fi

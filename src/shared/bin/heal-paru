@@ -31,7 +31,10 @@ fi
 
 cd "$WORK_DIR/paru-bin"
 echo "Building paru-bin (downloads pre-compiled binary, no Rust needed)..."
-if makepkg -si --noconfirm; then
+# --nocheck avoids test suite; --noconfirm avoids interactive prompts.
+# When called from smplos-update the sudo credential is already cached,
+# so makepkg -si won't re-prompt for a password.
+if makepkg -si --noconfirm --nocheck; then
     echo "── paru healed successfully ──"
     exit 0
 else
