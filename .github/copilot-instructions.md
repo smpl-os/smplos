@@ -23,6 +23,74 @@ ask first.**
 
 ---
 
+## For AI Assistants: Debugging UI Code Efficiently
+
+Hard-won lessons from a 3-hour session that should have taken 30 minutes.
+
+### Rule 1 — Verify the exact widget target before writing any code
+
+When the user mentions a UI element by name (e.g. "the Alt+F1 menu"), do NOT
+assume which widget it maps to based on the first plausible code you find.
+**Always identify the GType/widget name first.**
+
+- Ask for a screenshot, or
+- Run `GTK_DEBUG=interactive nemo` / `GDK_BACKEND=x11 GTK_DEBUG=interactive`
+  to open the GTK Inspector and click the widget, or
+- Grep for the keybinding handler:
+  ```bash
+  grep -rn "GDK_KEY_F1\|<Alt>F1\|alt.*f1" src/ --include="*.c"
+  ```
+  Then read what that handler actually shows — before writing anything.
+
+**Why:** "The Alt+F1 menu" could mean the app menubar (File/Edit/View/Go) OR
+a custom popup. They are completely different widgets with different APIs.
+Patching the wrong one wastes N build cycles with zero visible effect.
+
+### Rule 2 — Add a one-line probe BEFORE building the real fix
+
+When a GTK/GLib API call might silently no-op (returns void, no error code),
+verify the precondition with `g_warning()` before committing to a fix:
+
+```c
+// Before the real fix:
+g_warning ("toplevel type: %s  is-window: %d",
+           G_OBJECT_TYPE_NAME (gtk_widget_get_toplevel (menu)),
+           GTK_IS_WINDOW (gtk_widget_get_toplevel (menu)));
+```
+
+Build, run, check `journalctl -f` or stderr. If the output disproves the
+assumption, iterate on the probe — NOT on increasingly elaborate "real" fixes.
+One extra build cycle with a probe saves three blind fix cycles.
+
+Common silent failure patterns in GTK:
+- `gtk_widget_get_toplevel()` on a `GtkMenu` returns the menu itself (not a
+  `GtkWindow`) — `GTK_IS_WINDOW()` is always `FALSE`
+- `gtk_window_set_mnemonics_visible()` called before `map` is reset to FALSE
+  by GTK's own map-time handler
+- `g_settings_set_*()` where a dconf value exists and no `changed::` signal fires
+- Signal handlers connected before the widget is realized never fire
+
+### Rule 3 — After 3 failed attempts using framework APIs, route around them
+
+If you've tried 3+ variations of the same GTK/GLib API and the behavior never
+changes, that API is the wrong tool for the job. Stop and ask:
+
+> "What does this framework feature actually do mechanically?
+>  Can I implement just that behaviour myself in 20 lines?"
+
+The answer is often yes and the result is simpler:
+
+| Problem | Wrong approach (fought framework) | Right approach (routed around) |
+|---|---|---|
+| Underlines in popup menu | `mnemonics_visible`, `select_first`, map signal | `gtk_label_set_markup("<u>c</u>har")` — Pango renders unconditionally |
+| Key activation in popup menu | GTK mnemonic scanning (needs `GtkWindow`) | `key-press-event` + `g_object_set_data` + manual `activate_item()` |
+
+Framework APIs are designed for the common case. Programmatically spawned popups,
+non-hardware-triggered events, and non-standard widget hierarchies are edge cases
+where the framework's assumptions break silently.
+
+---
+
 ## Architecture: Cross-Compositor First
 
 smplOS supports multiple compositors (Hyprland/Wayland, DWM/X11). Every feature
