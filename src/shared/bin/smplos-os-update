@@ -113,6 +113,9 @@ sync_scripts() {
     header ""
     header "── Syncing scripts ──"
 
+    local smplos_bin="$HOME/.local/share/smplos/bin"
+    mkdir -p "$smplos_bin"
+
     local n_updated=0 n_total=0
     for script in "$bin_dir"/*; do
         [[ -f "$script" ]] || continue
@@ -122,8 +125,12 @@ sync_scripts() {
 
         ((n_total++)) || true
 
-        # Only copy if changed
+        # Only copy if changed (compare against the system copy)
         if [[ -f "$dest" ]] && cmp -s "$script" "$dest"; then
+            # Still sync to user-local bin in case it's stale
+            if [[ -f "$smplos_bin/$name" ]] && ! cmp -s "$script" "$smplos_bin/$name"; then
+                install -m755 "$script" "$smplos_bin/$name" 2>/dev/null || true
+            fi
             continue
         fi
 
@@ -132,6 +139,8 @@ sync_scripts() {
         else
             warn "Failed to install $name (sudo required)"
         fi
+        # Also update the user-local copy (takes priority in PATH)
+        install -m755 "$script" "$smplos_bin/$name" 2>/dev/null || true
     done
 
     if [[ $n_updated -gt 0 ]]; then
