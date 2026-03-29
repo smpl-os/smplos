@@ -343,9 +343,12 @@ menubar > menuitem:backdrop {
     box-shadow: none;
 }
 
-menubar > menuitem:hover {
-    background-color: alpha(#d4be98, 0.1);
-    color: #d4be98;
+menubar > menuitem:hover,
+menubar > menuitem:selected,
+menubar > menuitem:active {
+    background-color: #d65d0e;
+    background-image: none;
+    color: #ebdbb2;
     box-shadow: none;
 }
 
