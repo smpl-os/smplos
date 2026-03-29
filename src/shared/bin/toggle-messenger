@@ -48,8 +48,10 @@ calc_position() {
   local eff_w eff_h
   eff_w=$(awk "BEGIN { printf \"%d\", ${mon_w}/${scale} }")
   eff_h=$(awk "BEGIN { printf \"%d\", ${mon_h}/${scale} }")
-  POS_X=$(( mon_x + eff_w - WIDTH - MARGIN_RIGHT ))
-  POS_Y=$(( mon_y + eff_h - HEIGHT - MARGIN_BOTTOM ))
+  # Coordinates are relative to the monitor (movewindowpixel exact and exec
+  # [move ...] both position within the monitor), so do NOT add mon_x/mon_y.
+  POS_X=$(( eff_w - WIDTH - MARGIN_RIGHT ))
+  POS_Y=$(( eff_h - HEIGHT - MARGIN_BOTTOM ))
 }
 
 # --- Query window state ---

@@ -212,9 +212,12 @@ if [[ "${WEBAPP_SECURE:-}" == "1" || "$secure" == "1" ]]; then
     --disable-extensions
     --disable-plugins
     --disable-background-networking
-    --no-first-run
   )
 fi
+
+# Always suppress Chromium/Brave first-run dialogs — especially important
+# for --clear-on-exit webapps whose profile is wiped every launch.
+base_flags=(--no-first-run)
 
 # --- VPN & Network Sandboxing ---
 bwrap_net_args=()
@@ -327,12 +330,34 @@ if [[ "$clear_on_exit" == "1" && -d "$profile_dir" ]]; then
   printf '%s [launch-webapp] pre-launch wipe for %s\n' "$(date '+%F %T')" "$app_name" >> "$LOG_FILE"
 fi
 
+# ── Pre-seed Brave preferences to suppress first-run dialogs ─────────────
+# Brave shows a P3A ("completely private product analytics") notice on every
+# fresh profile. When --clear-on-exit is active the profile is brand-new each
+# launch, so the notice reappears endlessly. Pre-writing the acknowledgment
+# into Local State silences it.
+if [[ "$real_bin" == *brave* ]]; then
+  _local_state="$profile_dir/Local State"
+  if [[ ! -f "$_local_state" ]]; then
+    mkdir -p "$profile_dir"
+    cat > "$_local_state" <<'LOCALSTATE'
+{
+  "brave": {
+    "p3a": { "notice_acknowledged": true },
+    "stats": { "reporting_enabled": false }
+  },
+  "browser": { "has_seen_welcome_page": true }
+}
+LOCALSTATE
+  fi
+fi
+
 # Launch the sandbox.  Use file redirection (not command substitution) so the
 # script does not hang waiting for child processes to close the pipe.
 bwrap "${bwrap_args[@]}" "$real_bin" \
   --app="$url" \
   --user-data-dir="$profile_dir" \
   --class="$_wm_class" \
+  "${base_flags[@]}" \
   "${secure_flags[@]}" \
   >> "$LOG_FILE" 2>&1
 rc=$?
