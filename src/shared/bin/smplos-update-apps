@@ -5,6 +5,7 @@
 #   - smpl-apps (start-menu, notif-center, settings, app-center, webapp-center, etc.)
 #   - st-smpl (st-wl terminal)
 #   - nemo-smpl (file manager)
+#   - micro-smpl (text editor with dynamic config reloading)
 #
 # Each app is only downloaded if a newer version exists on GitHub.
 # Version state is tracked in ~/.local/state/smplos/app-versions/
@@ -247,12 +248,71 @@ update_nemo_smpl() {
     fi
 }
 
+# ── micro-smpl ────────────────────────────────────────────────────────────────
+update_micro_smpl() {
+    local cached_ver remote_ver
+    cached_ver=$(_cached_ver micro-smpl)
+
+    if ! _gh_api "https://api.github.com/repos/smpl-os/micro/releases/latest"; then
+        warn "micro-smpl: GitHub unreachable"
+        return
+    fi
+
+    remote_ver=$(echo "$_gh_json" | grep -oP '"tag_name"\s*:\s*"\K[^"]+' || true)
+    [[ -z "$remote_ver" ]] && { warn "micro-smpl: could not parse version"; return; }
+
+    if [[ -n "$cached_ver" ]] && ! _version_gt "$remote_ver" "$cached_ver"; then
+        ok "micro-smpl: up to date ($cached_ver)"
+        return
+    fi
+
+    if [[ $CHECK_ONLY -eq 1 ]]; then
+        log "micro-smpl: update available ${cached_ver:-none} -> $remote_ver"
+        return
+    fi
+
+    local asset_url
+    asset_url=$(echo "$_gh_json" \
+        | grep -oP '"browser_download_url"\s*:\s*"\K[^"]*micro[^"]*linux64[^"]*\.tar\.gz' \
+        | head -1 || true)
+
+    if [[ -z "$asset_url" ]]; then
+        warn "micro-smpl: no linux64 tarball in release $remote_ver"
+        return
+    fi
+
+    log "micro-smpl: updating ${cached_ver:-none} -> $remote_ver"
+
+    local tmpdir
+    tmpdir=$(mktemp -d /tmp/micro-smpl.XXXXXX)
+    trap "rm -rf '$tmpdir'" RETURN
+
+    if curl -fSL --connect-timeout 30 --retry 3 --progress-bar \
+            "$asset_url" | tar -xz -C "$tmpdir"; then
+        # The tarball extracts to micro-VERSION/micro
+        local micro_bin
+        micro_bin=$(find "$tmpdir" -name micro -type f | head -1)
+        if [[ -n "$micro_bin" ]]; then
+            sudo install -m755 "$micro_bin" "/usr/local/bin/micro"
+            install -m755 "$micro_bin" "$SMPLOS_BIN/micro"
+            echo "$remote_ver" > "$STATE_DIR/micro-smpl"
+            ok "micro-smpl: updated to $remote_ver"
+            ((n_updated++)) || true
+        else
+            warn "micro-smpl: binary not found in tarball"
+        fi
+    else
+        warn "micro-smpl: download failed"
+    fi
+}
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 [[ $QUIET -eq 0 ]] && echo "── smplOS App Updates ──"
 
 update_smpl_apps
 update_st_smpl
 update_nemo_smpl
+update_micro_smpl
 
 if [[ $CHECK_ONLY -eq 0 && $n_updated -gt 0 ]]; then
     ok "$n_updated app(s) updated"

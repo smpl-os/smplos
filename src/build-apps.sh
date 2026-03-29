@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 #
-# build-apps.sh -- Build all Rust apps + st-wl in a Podman container
+# build-apps.sh -- Build all Rust apps + st-wl + micro in a Podman container
 #
 # Usage:  ./build-apps.sh                    # build all Rust apps (incremental)
 #         ./build-apps.sh st                  # build st-wl terminal only
-#         ./build-apps.sh all                 # build Rust apps + st-wl
+#         ./build-apps.sh micro               # build micro editor only
+#         ./build-apps.sh all                 # build Rust apps + st-wl + micro
 #         ./build-apps.sh --clean             # wipe build cache, full rebuild
 #         ./build-apps.sh --clean all         # clean + rebuild everything
 #
@@ -52,13 +53,15 @@ detect_runtime() {
 
 # ── Parse arguments ──
 BUILD_ST=false
+BUILD_MICRO=false
 CLEAN_BUILD=false
 
 for arg in "$@"; do
     case "$arg" in
         --clean) CLEAN_BUILD=true ;;
         st|st-wl) BUILD_ST=true ;;
-        all) BUILD_ST=true ;;
+        micro) BUILD_MICRO=true ;;
+        all) BUILD_ST=true; BUILD_MICRO=true ;;
         *) ;; # Individual app args ignored — workspace builds everything
     esac
 done
@@ -68,7 +71,7 @@ detect_runtime
 
 BIN_OUTPUT="$PROJECT_ROOT/.cache/app-binaries"
 BUILD_CACHE="$PROJECT_ROOT/.cache/build-cache"
-mkdir -p "$BIN_OUTPUT" "$BUILD_CACHE/cargo" "$BUILD_CACHE/st-build"
+mkdir -p "$BIN_OUTPUT" "$BUILD_CACHE/cargo" "$BUILD_CACHE/st-build" "$BUILD_CACHE/micro-build"
 
 if [[ "$CLEAN_BUILD" == "true" ]]; then
     warn "Clean build requested — wiping build cache"
@@ -126,9 +129,24 @@ if [[ "$CLEAN_BUILD" == "false" ]]; then
             BUILD_ST=false
         fi
     fi
+
+    # micro: the source lives in the micro/ sibling repo (separate git root).
+    # We use the micro-patched binary's mtime or a stored hash for staleness.
+    if [[ "$BUILD_MICRO" == "true" ]]; then
+        MICRO_REPO="$PROJECT_ROOT/../micro"
+        if [[ -d "$MICRO_REPO/.git" ]]; then
+            micro_current=$(git -C "$MICRO_REPO" rev-parse HEAD 2>/dev/null || echo "")
+            micro_stored=$(cat "$BIN_OUTPUT/micro.built-at" 2>/dev/null || echo "")
+            if [[ -f "$BIN_OUTPUT/micro" && -n "$micro_current" \
+                  && "$micro_current" == "$micro_stored" ]]; then
+                log "micro: up to date"
+                BUILD_MICRO=false
+            fi
+        fi
+    fi
 fi
 
-if [[ "$BUILD_RUST_APPS" == "false" && "$BUILD_ST" == "false" ]]; then
+if [[ "$BUILD_RUST_APPS" == "false" && "$BUILD_ST" == "false" && "$BUILD_MICRO" == "false" ]]; then
     log "All apps up to date — nothing to build"
     exit 0
 fi
@@ -183,7 +201,7 @@ pacman -Sy --noconfirm --needed \
     base-devel rust cargo cmake pkgconf rsync \
     fontconfig freetype2 harfbuzz imlib2 \
     libxkbcommon wayland wayland-protocols pixman \
-    libglvnd mesa openssl mold 2>/dev/null
+    libglvnd mesa openssl mold go 2>/dev/null
 
 # Use mold linker -- significantly faster than GNU ld for Rust link step
 export RUSTFLAGS="-C link-arg=-fuse-ld=mold"
@@ -252,6 +270,30 @@ if [[ "$BUILD_ST" == "true" ]]; then
     fi
 fi
 
+# Build micro editor if requested
+if [[ "$BUILD_MICRO" == "true" ]]; then
+    echo "[build] Building micro editor..."
+    MICRO_SRC="/build/micro-src"
+    MICRO_BUILD="$CACHE_DIR/micro-build"
+    if [[ -d "$MICRO_SRC" ]]; then
+        mkdir -p "$MICRO_BUILD"
+        rsync -a --delete "$MICRO_SRC/" "$MICRO_BUILD/"
+        cd "$MICRO_BUILD"
+        make generate
+        make build-release
+        if [[ -f "$MICRO_BUILD/micro" ]]; then
+            strip "$MICRO_BUILD/micro"
+            cp "$MICRO_BUILD/micro" "$OUT_DIR/micro"
+            echo "[build] micro: OK ($(du -h "$OUT_DIR/micro" | cut -f1))"
+        else
+            echo "[build] micro: FAILED"
+            exit 1
+        fi
+    else
+        echo "[build] micro: source not found at $MICRO_SRC (skipping)"
+    fi
+fi
+
 echo ""
 echo "[build] Done! Binaries in /build/out/:"
 ls -lh "$OUT_DIR/"
@@ -267,11 +309,18 @@ run_args+=(-v "$BIN_OUTPUT:/build/out")
 run_args+=(-v "$BUILD_CACHE:/build/cache")
 run_args+=(-v "$BUILD_CACHE/pacman-pkg:/var/cache/pacman/pkg")
 
+# Mount the micro source repo (sibling directory) if building micro
+MICRO_REPO="$PROJECT_ROOT/../micro"
+if [[ "$BUILD_MICRO" == "true" && -d "$MICRO_REPO" ]]; then
+    run_args+=(-v "$(cd "$MICRO_REPO" && pwd):/build/micro-src:ro")
+fi
+
 run_args+=(-e "BUILD_RUST_APPS=$BUILD_RUST_APPS")
 run_args+=(-e "BUILD_ST=$BUILD_ST")
+run_args+=(-e "BUILD_MICRO=$BUILD_MICRO")
 run_args+=(-e "CLEAN_BUILD=$CLEAN_BUILD")
 
-log "Building:${BUILD_RUST_APPS:+ Rust workspace}${BUILD_ST:+ st-wl}${CLEAN_BUILD:+ (clean)}"
+log "Building:${BUILD_RUST_APPS:+ Rust workspace}${BUILD_ST:+ st-wl}${BUILD_MICRO:+ micro}${CLEAN_BUILD:+ (clean)}"
 log "Container: archlinux:latest via ${CTR}"
 log "Cache:     $BUILD_CACHE/"
 log "Output:    $BIN_OUTPUT/"
@@ -296,6 +345,12 @@ fi
 if [[ "$BUILD_ST" == "true" && -f "$BIN_OUTPUT/st-wl" ]]; then
     if git_tree_clean "src/compositors/hyprland/st"; then
         git_tree_hash "src/compositors/hyprland/st" > "$BIN_OUTPUT/st-wl.built-at"
+    fi
+fi
+if [[ "$BUILD_MICRO" == "true" && -f "$BIN_OUTPUT/micro" ]]; then
+    MICRO_REPO="$PROJECT_ROOT/../micro"
+    if [[ -d "$MICRO_REPO/.git" ]]; then
+        git -C "$MICRO_REPO" rev-parse HEAD > "$BIN_OUTPUT/micro.built-at" 2>/dev/null || true
     fi
 fi
 

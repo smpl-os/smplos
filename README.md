@@ -28,14 +28,14 @@
 - **Migration system.** Timestamped migration scripts in `migrations/` handle breaking changes from upstream packages and smplOS config changes. `smplos-migrate` runs pending migrations in order, tracks state in `~/.local/state/smplos/migrations/`, and never runs the same migration twice. Current migrations: update system bootstrap, EWW button grab fix, Hyprshell default config, and micro default editor.
 - **Modular updates.** The update system has separate stages you can run independently:
   - `smplos-os-update` — pull latest repo, sync scripts/configs, run migrations, bump OS version
-  - `smplos-update-apps` — download latest smpl-apps, st-smpl, and nemo-smpl binaries from GitHub releases (with smart caching + offline fallback)
+  - `smplos-update-apps` — download latest smpl-apps, st-smpl, nemo-smpl, and micro binaries from GitHub releases (with smart caching + offline fallback)
   - `smplos-update` — orchestrates everything: OS update → app update → pacman/AUR/Flatpak
   - `smplos-refresh-config` — selectively restore a default config file (e.g. `smplos-refresh-config hypr/hyprlock.conf`)
 - **Calendar app.** New `smpl-calendar` app with popup calendar + `smpl-calendar-alertd` daemon for desktop notifications on upcoming events. Integrates with the EWW bar clock — click the time to open it. Supports local ICS files, live theme refresh, and positioned at the bottom-right corner matching the notification center.
 - **Settings: Keybindings tab.** The Settings app now has a full Keybindings tab — browse, search, and edit all system keybindings. Features 1-click capture (press the key combo you want) with auto-save back to `bindings.conf`. Keybinding logic extracted to `smpl-common` for reuse across apps.
 - **Webapp Center: hotkey support.** Webapp Center now supports a Super+key hotkey column — assign a global shortcut to any web app.
 - **App Center: auto-close after update.** The App Center window now closes automatically after launching a system update, so you're not left with a stale window behind the terminal.
-- **GitHub release downloads.** Forked app binaries (smpl-apps, st-smpl, nemo-smpl) are now downloaded from GitHub releases instead of being compiled locally. Smart caching compares the latest release tag to a local version file — only downloads when there's a new release. Falls back to cached binaries when offline.
+- **GitHub release downloads.** Forked app binaries (smpl-apps, st-smpl, nemo-smpl, micro) are now downloaded from GitHub releases instead of being compiled locally. Smart caching compares the latest release tag to a local version file — only downloads when there's a new release. Falls back to cached binaries when offline.
 - **Hyprshell alt-tab.** Alt-Tab window switching via Hyprshell, with a default config deployed by migration.
 - **BambuStudio for Creators edition.** The Creators edition now includes BambuStudio for 3D printer management.
 - **micro as default editor.** Replaced neovim with micro as the default text editor in the Dev edition. More approachable for new users; neovim is still installable. Existing installs get a migration.
@@ -111,6 +111,17 @@ We also fixed several upstream bugs in the suckless st codebase:
 
 <a href="images/4.term.png"><img src="images/4.term.png" width="720" /></a>
 
+#### Text Editor (micro)
+
+micro is our default text editor — a modern, intuitive terminal editor that works like a desktop app (Ctrl+S to save, Ctrl+C/V for clipboard, Ctrl+Z to undo). We maintain a [lightweight fork](https://github.com/smpl-os/micro) that adds **dynamic config reloading** — when `theme-set` switches the system theme, micro picks up the new colorscheme instantly without restarting. The fork stays fully compatible with upstream micro and is synced periodically.
+
+Our patch adds:
+
+- **Live colorscheme reload** — watches `~/.config/micro/colorschemes/*.micro` for changes and reloads on the fly. When `theme-set` writes a new theme file, every running micro instance updates immediately.
+- **Live settings reload** — watches `settings.json` and `bindings.json` for changes.
+
+This is the same pattern we use everywhere: the theme system writes config files, and each app watches for changes. No restart, no manual reload.
+
 #### Themes
 
 smplOS ships with 14 themes inherited and expanded from the Omarchy project. A single `theme-set` command applies colors system-wide - terminal, EWW bar, notifications, Hyprland borders, lock screen, btop, neovim, and VS Code. Every theme includes matching wallpapers and is generated from a single `colors.toml` source of truth.
@@ -160,6 +171,7 @@ Every tool in smplOS was chosen to work across compositors (Wayland and X11) so 
 | **Bar & widgets** | EWW | GTK3-based, runs natively on both X11 and Wayland. One codebase for bar, widgets, theme picker, and keybind help. Replaces waybar and polybar. |
 | **Start Menu** | Rust + Slint | Native GPU-rendered app launcher with categories, search, source badges (AUR/Flatpak/AppImage/Web App), and Settings tab. Theme-aware, keyboard-driven, under 5 MB. |
 | **Terminal** | st / st-wl | Suckless st has an X11 build and a Wayland port (marchaesen/st-wl). Same config.h, same patches, same look. Starts in ~5ms and uses ~4 MB of RAM - critical for staying under the 850 MB cold-boot target. |
+| **Text Editor** | micro (fork) | Fork of [micro-editor/micro](https://github.com/micro-editor/micro) with dynamic config reloading for live theme switching. Single static binary, no dependencies. Fully compatible with upstream. |
 | **Notifications** | Dunst | Works on both X11 and Wayland with the same config. Lightweight, themeable, no dependencies on a specific compositor. |
 
 The rule is simple: if a tool only works on one display server, it doesn't ship in `src/shared/`. Compositor-specific code stays in `src/compositors/<name>/` and is kept as thin as possible.
@@ -296,6 +308,13 @@ src/
 release/                    VM testing tools (dev-push.sh, dev-apply.sh, test-iso.sh, QEMU scripts)
 build/
   prebuilt/                 Pre-compiled AUR packages (.pkg.tar.zst) bundled into the ISO
+
+# Sibling repos (separate git repositories in the smpl-os GitHub org):
+../micro/                   Fork of micro-editor with dynamic config reloading (live themes)
+../st-smpl/                 Fork of suckless st-wl with SIXEL, scrollback, transparency
+../nemo-smpl/               Fork of Nemo file manager with smplOS patches
+../eww/                     Fork of ElKowars wacky widgets (EWW) with pointer grab fix
+../smpl-apps/               Rust app suite (start-menu, notif-center, settings, etc.)
 ```
 
 ## Design Principles

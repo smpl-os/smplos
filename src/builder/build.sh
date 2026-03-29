@@ -872,6 +872,15 @@ install_prebuilt_apps() {
         fi
     done
 
+    # ── micro editor ──
+    if [[ -f "$bin_dir/micro" ]]; then
+        install -Dm755 "$bin_dir/micro" "$airootfs/usr/local/bin/micro"
+        install -Dm755 "$bin_dir/micro" "$airootfs/root/smplos/bin/micro"
+        log_info "micro: installed (smpl-os fork with dynamic config reloading)"
+    else
+        log_warn "micro: not found in $bin_dir (will fall back to upstream pacman package)"
+    fi
+
     log_info "All pre-built apps installed"
 }
 

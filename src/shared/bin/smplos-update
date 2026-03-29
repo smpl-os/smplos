@@ -7,7 +7,7 @@
 #   1. smplos-os-update  — git pull smplOS repo, sync scripts, run migrations
 #   2. pacman -Syu       — system packages (Hyprland/EWW skipped via IgnorePkg)
 #   3. pacman -S pinned  — update Hyprland/EWW explicitly (safe after migrations)
-#   4. smplos-update-apps — forked apps from GitHub (smpl-apps, st-smpl, nemo-smpl)
+#   4. smplos-update-apps — forked apps from GitHub (smpl-apps, st-smpl, nemo-smpl, micro)
 #   5. paru -Sua         — AUR packages
 #   6. flatpak update    — Flatpak apps
 #

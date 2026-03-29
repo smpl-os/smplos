@@ -543,7 +543,7 @@ build_missing_aur_packages() {
 # Download Pre-built App Binaries from GitHub Releases (with local cache)
 ###############################################################################
 
-# Resolution order for each app repo (smpl-apps, st-smpl, nemo):
+# Resolution order for each app repo (smpl-apps, st-smpl, nemo, micro):
 #
 #   1. Query GitHub API for the latest release tag.
 #   2. If GitHub is reachable and the remote version is NEWER than the local
@@ -561,6 +561,7 @@ build_missing_aur_packages() {
 #   .cache/app-binaries/.smpl-apps-version   ← e.g. "v0.1.1"
 #   .cache/app-binaries/.st-smpl-version     ← e.g. "v1.0.0"
 #   .cache/app-binaries/.nemo-smpl-version   ← e.g. "v1.4.2"
+#   .cache/app-binaries/.micro-smpl-version  ← e.g. "v2.0.15"
 
 # Compare two semver tags (with optional leading 'v'). Returns 0 if $1 > $2.
 _version_gt() {
@@ -768,6 +769,68 @@ Place binaries in build/prebuilt-apps/ or use --build-apps to compile locally."
         else
             log_info "nemo-smpl: no prebuilt package — build_custom_packages() will build it"
         fi
+    fi
+
+    # ── micro-smpl (text editor binary) ──────────────────────────────────────
+    # micro-smpl is a standalone binary (like st-smpl), not a pacman package.
+    # It's a fork of micro with dynamic config reloading (live theme switching).
+    local cached_micro_ver="" remote_micro_ver="" need_micro_download=false
+    local micro_ver_file="$cache_dir/.micro-smpl-version"
+
+    [[ -f "$micro_ver_file" ]] && cached_micro_ver=$(cat "$micro_ver_file")
+
+    if _gh_api "https://api.github.com/repos/smpl-os/micro/releases/latest"; then
+        remote_micro_ver=$(echo "$_gh_json" | grep -oP '"tag_name"\s*:\s*"\K[^"]+' || true)
+
+        if [[ -n "$remote_micro_ver" ]]; then
+            if [[ -z "$cached_micro_ver" ]]; then
+                need_micro_download=true
+            elif _version_gt "$remote_micro_ver" "$cached_micro_ver"; then
+                log_info "micro-smpl: newer release $remote_micro_ver (cached: $cached_micro_ver)"
+                need_micro_download=true
+            else
+                log_info "micro-smpl: cache is up-to-date ($cached_micro_ver)"
+            fi
+        fi
+    else
+        log_warn "micro-smpl: GitHub unreachable"
+    fi
+
+    if $need_micro_download; then
+        local micro_asset_url
+        micro_asset_url=$(echo "$_gh_json" \
+            | grep -oP '"browser_download_url"\s*:\s*"\K[^"]*micro[^"]*linux64[^"]*\.tar\.gz' \
+            | head -1 || true)
+        if [[ -n "$micro_asset_url" ]]; then
+            log_info "Downloading micro-smpl $remote_micro_ver"
+            local micro_tmpdir
+            micro_tmpdir=$(mktemp -d)
+            if curl -fSL --connect-timeout 30 --retry 3 \
+                    "$micro_asset_url" | tar -xz -C "$micro_tmpdir"; then
+                # The tarball extracts to micro-VERSION/micro
+                local micro_bin
+                micro_bin=$(find "$micro_tmpdir" -name micro -type f | head -1)
+                if [[ -n "$micro_bin" ]]; then
+                    cp "$micro_bin" "$cache_dir/micro"
+                    chmod +x "$cache_dir/micro"
+                    echo "$remote_micro_ver" > "$micro_ver_file"
+                    log_info "micro-smpl $remote_micro_ver cached"
+                fi
+            else
+                log_warn "micro-smpl: download failed"
+            fi
+            rm -rf "$micro_tmpdir"
+        fi
+    fi
+
+    # Fallback: user-provided micro binary
+    if [[ ! -f "$cache_dir/micro" ]] && [[ -f "$fallback_dir/micro" ]]; then
+        log_info "micro-smpl: using manually-provided binary from build/prebuilt-apps/"
+        cp -a "$fallback_dir/micro" "$cache_dir/micro"
+    fi
+
+    if [[ ! -f "$cache_dir/micro" ]]; then
+        log_warn "micro-smpl: no binary available (will fall back to upstream micro package)"
     fi
 
     # Make all binaries executable

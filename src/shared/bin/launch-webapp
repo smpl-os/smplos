@@ -57,6 +57,25 @@ done
 
 [[ -z "$url" ]] && { echo "Usage: launch-webapp [--name NAME] [--secure] [--vpn-interface IFACE] [--vpn-required] <url>" >&2; exit 1; }
 
+# ── Focus existing window if the webapp is already running ──
+# The .desktop files set StartupWMClass=brave-<slug>.  If Hyprland already
+# has a window with that class, just focus it instead of launching a second
+# sandboxed instance (which would fail trying to lock the same profile).
+_slug_for_class="${app_name:-$(echo "$url" | sed 's|https\?://||; s|/.*||; s|^www\.||; s|\..*||')}"
+_wm_class="brave-${_slug_for_class}"
+if command -v hyprctl &>/dev/null && [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]]; then
+  _existing=$(hyprctl clients -j 2>/dev/null \
+    | jq -r --arg cls "$_wm_class" \
+        '.[] | select(.class == $cls) | .address' 2>/dev/null \
+    | head -1)
+  if [[ -n "$_existing" ]]; then
+    hyprctl dispatch focuswindow "address:${_existing}" >/dev/null 2>&1
+    printf '%s [launch-webapp] focused existing window class=%s addr=%s\n' \
+      "$(date '+%F %T')" "$_wm_class" "$_existing" >> "$LOG_FILE"
+    exit 0
+  fi
+fi
+
 # Hyprland UX: open many webapps centered + floating so small web UIs don't appear
 # as awkward tiled full-screen windows. Discord is better as a normal tiled window.
 # Recursion guard avoids infinite relaunch.
