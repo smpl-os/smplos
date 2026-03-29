@@ -12,6 +12,8 @@
 //! Without ALL of these, either the blur breaks, the window gets decorated,
 //! or Hyprland can't target it with windowrulev2. See copilot-instructions.md.
 
+pub mod keybindings;
+
 use i_slint_backend_winit::winit::dpi::LogicalSize;
 use i_slint_backend_winit::winit::platform::wayland::WindowAttributesExtWayland;
 use slint::PlatformError;
