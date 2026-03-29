@@ -8,6 +8,7 @@
         items_per_row: 5,
         switch: (
             modifier: "alt",
+            filter_by: [],
         ),
     ),
 )
