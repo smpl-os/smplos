@@ -39,6 +39,8 @@ gtk-font-name=JetBrains Mono 11
 gtk-cursor-theme-name=Adwaita
 gtk-application-prefer-dark-theme=1
 gtk-overlay-scrolling=0
+gtk-enable-mnemonics=1
+gtk-auto-mnemonics=0
 GTKEOF
 chown smplos:smplos /home/smplos/.config/gtk-3.0/settings.ini
 
@@ -52,6 +54,8 @@ gtk-font-name=JetBrains Mono 11
 gtk-cursor-theme-name=Adwaita
 gtk-application-prefer-dark-theme=1
 gtk-overlay-scrolling=0
+gtk-enable-mnemonics=1
+gtk-auto-mnemonics=0
 GTKEOF
 chown smplos:smplos /home/smplos/.config/gtk-4.0/settings.ini
 
