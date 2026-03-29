@@ -389,9 +389,9 @@ menuitem:hover {{
     color: {sel_fg};
 }}
 
-menuitem:hover > label,
-menuitem:hover > box > label,
-menuitem:hover > box > image {{
+menu menuitem:hover > label,
+menu menuitem:hover > box > label,
+menu menuitem:hover > box > image {{
     color: {sel_fg};
 }}
 

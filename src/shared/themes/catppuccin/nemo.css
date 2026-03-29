@@ -345,10 +345,9 @@ menuitem:hover {
     color: #1e1e2e;
 }
 
-menuitem:hover label,
-menu menuitem:hover label:dir(ltr),
-menu menuitem:hover label:dir(rtl),
-menuitem:hover * {
+menu menuitem:hover > label,
+menu menuitem:hover > box > label,
+menu menuitem:hover > box > image {
     color: #1e1e2e;
 }
 

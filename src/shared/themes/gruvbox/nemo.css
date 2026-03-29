@@ -345,10 +345,9 @@ menuitem:hover {
     color: #ebdbb2;
 }
 
-menuitem:hover label,
-menu menuitem:hover label:dir(ltr),
-menu menuitem:hover label:dir(rtl),
-menuitem:hover * {
+menu menuitem:hover > label,
+menu menuitem:hover > box > label,
+menu menuitem:hover > box > image {
     color: #ebdbb2;
 }
 
