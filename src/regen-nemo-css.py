@@ -389,10 +389,9 @@ menuitem:hover {{
     color: {sel_fg};
 }}
 
-menuitem:hover label,
-menu menuitem:hover label:dir(ltr),
-menu menuitem:hover label:dir(rtl),
-menuitem:hover * {{
+menuitem:hover > label,
+menuitem:hover > box > label,
+menuitem:hover > box > image {{
     color: {sel_fg};
 }}
 

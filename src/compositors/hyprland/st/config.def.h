@@ -483,7 +483,7 @@ static uint forceselmod = MOD_MASK_SHIFT;
  */
 static Key key[] = {
 	/* keysym           mask            string      appkey appcursor */
-	{ XKB_KEY_KP_Home,       MOD_MASK_SHIFT,      "\033[1;2H",     0,    0},
+	{ XKB_KEY_KP_Home,       MOD_MASK_SHIFT,      "\033[1;2~",     0,    0},
 	{ XKB_KEY_KP_Home,       MOD_MASK_ANY,     "\033[H",        0,   -1},
 	{ XKB_KEY_KP_Home,       MOD_MASK_ANY,     "\033[1~",       0,   +1},
 	{ XKB_KEY_KP_Up,         MOD_MASK_ANY,     "\033Ox",       +1,    0},
@@ -501,8 +501,8 @@ static Key key[] = {
 	{ XKB_KEY_KP_Prior,      MOD_MASK_SHIFT,      "\033[5;2~",     0,    0},
 	{ XKB_KEY_KP_Prior,      MOD_MASK_ANY,     "\033[5~",       0,    0},
 	{ XKB_KEY_KP_Begin,      MOD_MASK_ANY,     "\033[E",        0,    0},
-	{ XKB_KEY_KP_End,        MOD_MASK_CTRL,    "\033[1;5F",    0,     0},
-	{ XKB_KEY_KP_End,        MOD_MASK_SHIFT,      "\033[1;2F",    0,     0},
+	{ XKB_KEY_KP_End,        MOD_MASK_CTRL,    "\033[4;5~",    0,     0},
+	{ XKB_KEY_KP_End,        MOD_MASK_SHIFT,      "\033[4;2~",    0,     0},
 	{ XKB_KEY_KP_End,        MOD_MASK_ANY,     "\033[4~",       0,    0},
 	{ XKB_KEY_KP_Next,       MOD_MASK_SHIFT,      "\033[6;2~",     0,    0},
 	{ XKB_KEY_KP_Next,       MOD_MASK_ANY,     "\033[6~",       0,    0},
@@ -597,11 +597,11 @@ static Key key[] = {
 	{ XKB_KEY_BackSpace,     MOD_MASK_NONE,      "\177",          0,    0},
 	{ XKB_KEY_BackSpace,     MOD_MASK_ALT,       "\033\177",      0,    0},
 	{ XKB_KEY_BackSpace,     MOD_MASK_CTRL,    "\037",          0,    0},  /* \x1f = CtrlUnderscore — micro binds this to DeleteWordLeft */
-	{ XKB_KEY_Home,          MOD_MASK_SHIFT,      "\033[1;2H",     0,    0},
+	{ XKB_KEY_Home,          MOD_MASK_SHIFT,      "\033[1;2~",     0,    0},
 	{ XKB_KEY_Home,          MOD_MASK_ANY,     "\033[H",        0,   -1},
 	{ XKB_KEY_Home,          MOD_MASK_ANY,     "\033[1~",       0,   +1},
-	{ XKB_KEY_End,           MOD_MASK_CTRL,    "\033[1;5F",    0,     0},
-	{ XKB_KEY_End,           MOD_MASK_SHIFT,      "\033[1;2F",    0,     0},
+	{ XKB_KEY_End,           MOD_MASK_CTRL,    "\033[4;5~",    0,     0},
+	{ XKB_KEY_End,           MOD_MASK_SHIFT,      "\033[4;2~",    0,     0},
 	{ XKB_KEY_End,           MOD_MASK_ANY,     "\033[4~",       0,    0},
 	{ XKB_KEY_Prior,         MOD_MASK_CTRL,    "\033[5;5~",     0,    0},
 	{ XKB_KEY_Prior,         MOD_MASK_SHIFT,      "\033[5;2~",     0,    0},
