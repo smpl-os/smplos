@@ -1,0 +1,189 @@
+#!/bin/bash
+# smplOS: Window guard — keep every window on-screen, system-wide.
+#
+# Hyprland has no built-in setting to prevent windows from appearing
+# off-screen.  This daemon fills that gap for all floating windows:
+#
+#   1. Event-driven — reacts instantly to openwindow, movewindow,
+#      changefloatingmode, and monitor hot-plug events.
+#
+#   2. Deferred recheck — for apps (Electron, XWayland) that restore
+#      their saved position a few hundred ms *after* the initial map,
+#      a second check fires 1.5 s later.
+#
+#   3. Periodic sweep — every 5 s, all floating windows are scanned.
+#      This catches anything the events miss (e.g. apps that move
+#      themselves, resolution changes from randr, etc.).
+#
+# Tiled windows are managed by the compositor and cannot go off-screen,
+# so only floating windows are checked.
+#
+# Usage:  window-guard   (runs as a daemon, launched from autostart)
+
+set -euo pipefail
+
+# ── Check setting ────────────────────────────────────────────────────────────
+# The Settings app writes window_guard=true/false to display.conf.
+# Default is enabled (true) when the file or key doesn't exist.
+DISPLAY_CONF="${XDG_CONFIG_HOME:-$HOME/.config}/smplos/display.conf"
+if [[ -f "$DISPLAY_CONF" ]]; then
+  val=$(grep -oP '^window_guard\s*=\s*\K.*' "$DISPLAY_CONF" 2>/dev/null || echo "true")
+  val=$(echo "$val" | tr -d '[:space:]')
+  if [[ "$val" == "false" || "$val" == "0" ]]; then
+    exit 0  # disabled by user
+  fi
+fi
+
+# ── Tunables ─────────────────────────────────────────────────────────────────
+SETTLE_MS=200          # ms before first check after an event
+RECHECK_MS=1500        # ms for deferred second check (catch apps restoring pos)
+SWEEP_INTERVAL=5       # seconds between full periodic sweeps
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+snap_window() {
+  local addr="$1"
+
+  # Single jq call: extract everything we need in one shot
+  local info
+  info=$(hyprctl -j clients 2>/dev/null \
+    | jq -e --arg a "$addr" '
+        .[] | select(.address == $a)
+            | { floating, ws: .workspace.id, fs: .fullscreen,
+                x: .at[0], y: .at[1], w: .size[0], h: .size[1],
+                mon: .monitor }' 2>/dev/null) || return 0
+
+  # Only floating, non-fullscreen, visible (ws >= 0) windows
+  local floating ws fs
+  floating=$(echo "$info" | jq -r '.floating')
+  ws=$(echo "$info" | jq -r '.ws')
+  fs=$(echo "$info" | jq -r '.fs')
+  [[ "$floating" == "true" ]] || return 0
+  (( ws >= 0 )) || return 0
+  [[ "$fs" == "0" ]] || return 0
+
+  local win_x win_y win_w win_h mon_id
+  win_x=$(echo "$info" | jq -r '.x')
+  win_y=$(echo "$info" | jq -r '.y')
+  win_w=$(echo "$info" | jq -r '.w')
+  win_h=$(echo "$info" | jq -r '.h')
+  mon_id=$(echo "$info" | jq -r '.mon')
+
+  # Get monitor geometry
+  local mon_info
+  mon_info=$(hyprctl -j monitors 2>/dev/null \
+    | jq -e --argjson mid "$mon_id" '
+        .[] | select(.id == $mid)
+            | { x, y, w: .width, h: .height, s: .scale }' 2>/dev/null) || return 0
+
+  local mon_x mon_y mon_w mon_h scale
+  mon_x=$(echo "$mon_info" | jq -r '.x')
+  mon_y=$(echo "$mon_info" | jq -r '.y')
+  mon_w=$(echo "$mon_info" | jq -r '.w')
+  mon_h=$(echo "$mon_info" | jq -r '.h')
+  scale=$(echo "$mon_info" | jq -r '.s')
+
+  # Effective pixel area (accounts for fractional scaling)
+  local eff_w eff_h
+  eff_w=$(awk "BEGIN { printf \"%d\", ${mon_w}/${scale} }")
+  eff_h=$(awk "BEGIN { printf \"%d\", ${mon_h}/${scale} }")
+
+  local mon_right=$(( mon_x + eff_w ))
+  local mon_bottom=$(( mon_y + eff_h ))
+
+  local new_x=$win_x new_y=$win_y needs_move=false
+
+  # Right edge
+  if (( win_x + win_w > mon_right )); then
+    new_x=$(( mon_right - win_w ))
+    needs_move=true
+  fi
+  # Bottom edge
+  if (( win_y + win_h > mon_bottom )); then
+    new_y=$(( mon_bottom - win_h ))
+    needs_move=true
+  fi
+  # Left edge (after right clamp, in case window is wider than monitor)
+  if (( new_x < mon_x )); then
+    new_x=$mon_x
+    needs_move=true
+  fi
+  # Top edge
+  if (( new_y < mon_y )); then
+    new_y=$mon_y
+    needs_move=true
+  fi
+
+  if [[ "$needs_move" == "true" ]]; then
+    hyprctl dispatch movewindowpixel "exact ${new_x} ${new_y},address:${addr}" \
+      >/dev/null 2>&1
+  fi
+}
+
+snap_all_floating() {
+  local addrs
+  addrs=$(hyprctl -j clients 2>/dev/null \
+    | jq -r '.[] | select(.floating and .workspace.id >= 0) | .address' 2>/dev/null) || return 0
+  local addr
+  for addr in $addrs; do
+    snap_window "$addr"
+  done
+}
+
+# ── Periodic sweep (background) ─────────────────────────────────────────────
+periodic_sweep() {
+  while true; do
+    sleep "$SWEEP_INTERVAL"
+    snap_all_floating
+  done
+}
+periodic_sweep &
+SWEEP_PID=$!
+trap 'kill $SWEEP_PID 2>/dev/null; wait' EXIT
+
+# ── Event loop ───────────────────────────────────────────────────────────────
+#
+#   openwindow>>ADDR,WORKSPACE,CLASS,TITLE   — new window appeared
+#   movewindow>>ADDR,WORKSPACE               — window moved between workspaces
+#   changefloatingmode>>ADDR,FLOATING        — window toggled float/tile
+#   monitoradded>>NAME                        — monitor plugged in
+#   monitorremoved>>NAME                      — monitor unplugged
+
+SETTLE_DELAY=$(awk "BEGIN { printf \"%.3f\", ${SETTLE_MS}/1000 }")
+RECHECK_DELAY=$(awk "BEGIN { printf \"%.3f\", ${RECHECK_MS}/1000 }")
+
+socat -u "UNIX-CONNECT:${XDG_RUNTIME_DIR}/hypr/${HYPRLAND_INSTANCE_SIGNATURE}/.socket2.sock" - 2>/dev/null \
+| while IFS= read -r line; do
+  event="${line%%>>*}"
+  payload="${line#*>>}"
+
+  case "$event" in
+    openwindow)
+      raw_addr="${payload%%,*}"
+      addr="0x${raw_addr}"
+
+      # Quick check after window settles
+      sleep "$SETTLE_DELAY"
+      snap_window "$addr"
+
+      # Deferred recheck — many apps (Electron, XWayland) restore their
+      # saved position a moment after the initial map.  A second pass
+      # catches those without being so aggressive that it fights the user.
+      ( sleep "$RECHECK_DELAY"; snap_window "$addr" ) &
+      ;;
+
+    movewindow|changefloatingmode)
+      raw_addr="${payload%%,*}"
+      addr="0x${raw_addr}"
+      sleep "$SETTLE_DELAY"
+      snap_window "$addr"
+      ;;
+
+    monitoradded|monitorremoved)
+      # Layout changed — give Hyprland a moment to finish reconfiguring,
+      # then snap every floating window.
+      sleep 2
+      snap_all_floating
+      ;;
+  esac
+done

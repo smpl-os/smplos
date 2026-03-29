@@ -28,14 +28,20 @@ MARGIN_RIGHT=2
 MARGIN_BOTTOM=34  # 30px bar + 2px offset + 2px gap (matches notif-center)
 
 # Compute pixel position from active monitor
+# POS_X / POS_Y  = monitor-relative  (for exec [move ...] and windowrules)
+# ABS_X / ABS_Y  = compositor-absolute (for movewindowpixel exact)
 POS_X=0
 POS_Y=0
+ABS_X=0
+ABS_Y=0
 calc_position() {
   local mon_json
   mon_json=$(hyprctl -j monitors 2>/dev/null | jq -e '.[] | select(.focused)' 2>/dev/null) || {
     # Fallback: assume 1920x1080 at origin
     POS_X=$(( 1920 - WIDTH - MARGIN_RIGHT ))
     POS_Y=$(( 1080 - HEIGHT - MARGIN_BOTTOM ))
+    ABS_X=$POS_X
+    ABS_Y=$POS_Y
     return 0
   }
   local mon_w mon_h mon_x mon_y scale
@@ -48,10 +54,13 @@ calc_position() {
   local eff_w eff_h
   eff_w=$(awk "BEGIN { printf \"%d\", ${mon_w}/${scale} }")
   eff_h=$(awk "BEGIN { printf \"%d\", ${mon_h}/${scale} }")
-  # Coordinates are relative to the monitor (movewindowpixel exact and exec
-  # [move ...] both position within the monitor), so do NOT add mon_x/mon_y.
+  # Monitor-relative position (for exec [move ...] which is relative to the
+  # window's monitor).
   POS_X=$(( eff_w - WIDTH - MARGIN_RIGHT ))
   POS_Y=$(( eff_h - HEIGHT - MARGIN_BOTTOM ))
+  # Absolute compositor position (for movewindowpixel exact).
+  ABS_X=$(( mon_x + POS_X ))
+  ABS_Y=$(( mon_y + POS_Y ))
 }
 
 # --- Query window state ---
@@ -72,7 +81,7 @@ if [[ -n "$window_json" ]]; then
       dispatch focuswindow address:${addr};\
       dispatch setfloating address:${addr};\
       dispatch resizewindowpixel exact ${WIDTH} ${HEIGHT},address:${addr};\
-      dispatch movewindowpixel exact ${POS_X} ${POS_Y},address:${addr}" \
+      dispatch movewindowpixel exact ${ABS_X} ${ABS_Y},address:${addr}" \
       >/dev/null 2>&1
   else
     # Visible → hide to special workspace
