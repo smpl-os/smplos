@@ -482,8 +482,8 @@ build_missing_aur_packages() {
                 [[ -z \"\$pkg\" ]] && continue
                 echo \"==> Building \$pkg...\"
                 if ! retry sudo -u builder git clone \"https://aur.archlinux.org/\$pkg.git\"; then
-                    echo "WARN: \$pkg -- could not clone from AUR (network error or package not found)"
-                    echo "      Check: https://aur.archlinux.org/packages/\$pkg"
+                    echo \"WARN: \$pkg -- could not clone from AUR (network error or package not found)\"
+                    echo \"      Check: https://aur.archlinux.org/packages/\$pkg\"
                     failed_pkgs+=(\"\$pkg (git clone failed)\")
                     continue
                 fi
@@ -501,32 +501,32 @@ build_missing_aur_packages() {
                 fi
                 if sudo -u builder makepkg -s --noconfirm 2>&1; then
                     cp *.pkg.tar.* /output/
-                    echo "==> \$pkg built OK"
+                    echo \"==> \$pkg built OK\"
                 else
                     exit_code=\$?
                     # Try to categorise the failure for a new user
                     if dmesg 2>/dev/null | tail -5 | grep -qi 'out of memory\|oom'; then
-                        echo "WARN: \$pkg -- build killed by OOM (out of memory). Try closing other apps."
+                        echo \"WARN: \$pkg -- build killed by OOM (out of memory). Try closing other apps.\"
                     elif grep -q 'curl: (22)\|HTTP error\|could not download' /tmp/\$pkg-build.log 2>/dev/null; then
-                        echo "WARN: \$pkg -- source download failed (HTTP error). Likely a temporary upstream outage."
-                        echo "      Retry the build in a few minutes."
+                        echo \"WARN: \$pkg -- source download failed (HTTP error). Likely a temporary upstream outage.\"
+                        echo \"      Retry the build in a few minutes.\"
                     elif grep -q 'error\[E' /tmp/\$pkg-build.log 2>/dev/null; then
-                        echo "WARN: \$pkg -- Rust COMPILE ERROR (not a mere warning). See output above."
-                        echo "      This is likely a smplOS bug — please report it at https://github.com/smpl-os"
+                        echo \"WARN: \$pkg -- Rust COMPILE ERROR (not a mere warning). See output above.\"
+                        echo \"      This is likely a smplOS bug — please report it at https://github.com/smpl-os\"
                     else
-                        echo "WARN: \$pkg -- makepkg failed (exit \$exit_code). See output above for the root cause."
+                        echo \"WARN: \$pkg -- makepkg failed (exit \$exit_code). See output above for the root cause.\"
                     fi
                     failed_pkgs+=(\"\$pkg (makepkg failed)\")
                 fi
                 cd ..
             done < /tmp/packages.txt
             if [ \${#failed_pkgs[@]} -gt 0 ]; then
-                echo ""
-                echo "==> ⚠  The following AUR packages could not be built:"
+                echo \"\"
+                echo \"==> ⚠  The following AUR packages could not be built:\"
                 for fp in \"\${failed_pkgs[@]}\"; do echo \"    • \$fp\"; done
-                echo "    The ISO will still be built — these packages just won't be included."
-                echo "    Re-run ./build-iso.sh to retry them (other packages are cached)."
-                echo ""
+                echo \"    The ISO will still be built — these packages just won't be included.\"
+                echo \"    Re-run ./build-iso.sh to retry them (other packages are cached).\"
+                echo \"\"
             fi
             echo '==> All AUR packages done!'
         " || die_help \
