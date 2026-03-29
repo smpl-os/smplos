@@ -336,6 +336,20 @@ menuitem label {
     color: #C1C497;
 }
 
+/* Same specificity with :hover — beats the unselected rule above */
+menu menuitem:hover label:dir(ltr),
+menu menuitem:hover label:dir(rtl),
+.menu menuitem:hover label:dir(ltr),
+.menu menuitem:hover label:dir(rtl),
+.context-menu menuitem:hover label:dir(ltr),
+.context-menu menuitem:hover label:dir(rtl),
+menuitem:hover label,
+menuitem:hover > box > label,
+menuitem:hover > box > image,
+menuitem:hover accelerator {
+    color: #111C18;
+}
+
 /* Menubar top-level items (Files, Edit, View…) */
 menubar > menuitem,
 menubar > menuitem:backdrop {
