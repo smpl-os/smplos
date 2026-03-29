@@ -26,15 +26,14 @@ show_error() {
   local msg="$1"
   printf '%s %s\n' "$(date '+%F %T')" "$msg" >> "$LOG_FILE"
   echo "$msg" >&2
-  # Always send to dunst so it appears in notif-center and is clickable.
-  # Body includes the log path so notif-center's action matcher can open it.
+  # Desktop notification via notif-center
   if command -v notify-send &>/dev/null; then
     notify-send -u critical -a "launch-webapp" \
       "Web App Launch Error" \
       "${msg}\n\nLog: ${LOG_FILE}" 2>/dev/null || true
   fi
-  # Also show a blocking dialog for immediate visibility
-  if command -v zenity &>/dev/null; then
+  # Blocking dialog — but only if this is a real error, not a silent duplicate
+  if [[ "${_SILENT_ERROR:-}" != "1" ]] && command -v zenity &>/dev/null; then
     zenity --error \
       --text="${msg}\n\nSee log: ${LOG_FILE}" \
       --title="Web App Launch Error" 2>/dev/null || true
@@ -58,9 +57,10 @@ done
 [[ -z "$url" ]] && { echo "Usage: launch-webapp [--name NAME] [--secure] [--vpn-interface IFACE] [--vpn-required] <url>" >&2; exit 1; }
 
 # ── Focus existing window if the webapp is already running ──
-# The .desktop files set StartupWMClass=brave-<slug>.  If Hyprland already
-# has a window with that class, just focus it instead of launching a second
-# sandboxed instance (which would fail trying to lock the same profile).
+# The .desktop files set StartupWMClass=brave-<slug>.  We pass --class to the
+# browser so the actual window class matches.  If Hyprland already has a window
+# with that class, just focus it instead of launching a second sandboxed
+# instance (which would fail trying to lock the same profile).
 _slug_for_class="${app_name:-$(echo "$url" | sed 's|https\?://||; s|/.*||; s|^www\.||; s|\..*||')}"
 _wm_class="brave-${_slug_for_class}"
 if command -v hyprctl &>/dev/null && [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]]; then
@@ -75,6 +75,26 @@ if command -v hyprctl &>/dev/null && [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]]
     exit 0
   fi
 fi
+
+# Secondary duplicate check: if the profile is locked by another bwrap instance,
+# there's no window to focus (WM class might not have appeared yet) but launching
+# a second instance would fail.  Use a lockfile to detect this.
+_lockfile="/tmp/launch-webapp-${_slug_for_class}.lock"
+if [[ -f "$_lockfile" ]]; then
+  _lock_pid=$(cat "$_lockfile" 2>/dev/null)
+  if [[ -n "$_lock_pid" ]] && kill -0 "$_lock_pid" 2>/dev/null; then
+    printf '%s [launch-webapp] already running (pid=%s lock=%s), exiting\n' \
+      "$(date '+%F %T')" "$_lock_pid" "$_lockfile" >> "$LOG_FILE"
+    # Try one more time to focus by WM class (window may have appeared since check)
+    if command -v hyprctl &>/dev/null && [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]]; then
+      hyprctl dispatch focuswindow "class:${_wm_class}" >/dev/null 2>&1 || true
+    fi
+    exit 0
+  fi
+  rm -f "$_lockfile"
+fi
+echo "$$" > "$_lockfile"
+trap 'rm -f "$_lockfile"' EXIT
 
 # Hyprland UX: open many webapps centered + floating so small web UIs don't appear
 # as awkward tiled full-screen windows. Discord is better as a normal tiled window.
@@ -266,9 +286,18 @@ bwrap_args=(
   --bind "$profile_dir" "$profile_dir"
 )
 
+# GPU: bind /dev/dri so hardware-accelerated rendering works inside the sandbox
+[[ -d /dev/dri ]] && bwrap_args+=(--dev-bind /dev/dri /dev/dri)
+
+# D-Bus: bind the system and session bus sockets so Chromium features work
+# (screen reader, power status, portal-based file dialogs, etc.)
+[[ -S /run/dbus/system_bus_socket ]] && bwrap_args+=(
+  --ro-bind /run/dbus /run/dbus
+)
+
 if [[ -n "${XDG_RUNTIME_DIR:-}" && -d "${XDG_RUNTIME_DIR:-}" ]]; then
   bwrap_args+=(--setenv XDG_RUNTIME_DIR "$XDG_RUNTIME_DIR")
-  bwrap_args+=(--ro-bind "$XDG_RUNTIME_DIR" "$XDG_RUNTIME_DIR")
+  bwrap_args+=(--bind "$XDG_RUNTIME_DIR" "$XDG_RUNTIME_DIR")
 fi
 
 [[ -d "$HOME/.fonts" ]] && bwrap_args+=(--ro-bind "$HOME/.fonts" "$HOME/.fonts")
@@ -286,23 +315,40 @@ if $need_opt_bind && [[ -d /opt ]]; then
   bwrap_args+=(--ro-bind /opt /opt)
 fi
 
-printf '%s [launch-webapp] browser=%s cmd=%s real=%s opt_bind=%s\n' \
-  "$(date '+%F %T')" "$bin" "$browser_cmd" "$real_bin" "$need_opt_bind" >> "$LOG_FILE"
+printf '%s [launch-webapp] name=%s class=%s browser=%s cmd=%s real=%s opt_bind=%s\n' \
+  "$(date '+%F %T')" "$app_name" "$_wm_class" "$bin" "$browser_cmd" "$real_bin" "$need_opt_bind" >> "$LOG_FILE"
 
-bwrap_output=$(bwrap "${bwrap_args[@]}" "$real_bin" --app="$url" --user-data-dir="$profile_dir" "${secure_flags[@]}" 2>&1)
+# ── Clear profile BEFORE launch if clear-on-exit is set ──────────────────────
+# This guarantees a fresh session even if a previous post-exit cleanup was
+# interrupted (crash, power loss, script killed).
+if [[ "$clear_on_exit" == "1" && -d "$profile_dir" ]]; then
+  rm -rf "$profile_dir"
+  mkdir -p "$profile_dir"
+  printf '%s [launch-webapp] pre-launch wipe for %s\n' "$(date '+%F %T')" "$app_name" >> "$LOG_FILE"
+fi
+
+# Launch the sandbox.  Use file redirection (not command substitution) so the
+# script does not hang waiting for child processes to close the pipe.
+bwrap "${bwrap_args[@]}" "$real_bin" \
+  --app="$url" \
+  --user-data-dir="$profile_dir" \
+  --class="$_wm_class" \
+  "${secure_flags[@]}" \
+  >> "$LOG_FILE" 2>&1
 rc=$?
-[[ -n "$bwrap_output" ]] && printf '%s [launch-webapp] bwrap=%s\n' "$(date '+%F %T')" "$bwrap_output" >> "$LOG_FILE"
 
 # Clear browsing data on exit if requested — full wipe so next launch is first-run clean
 if [[ "$clear_on_exit" == "1" ]]; then
   if [[ -d "$profile_dir" ]]; then
     rm -rf "$profile_dir"
     mkdir -p "$profile_dir"
-    printf '%s [launch-webapp] wiped profile for %s (first-run clean)\n' "$(date '+%F %T')" "$app_name" >> "$LOG_FILE"
+    printf '%s [launch-webapp] wiped profile for %s (post-exit clean)\n' "$(date '+%F %T')" "$app_name" >> "$LOG_FILE"
   fi
 fi
 
 if [[ $rc -ne 0 ]]; then
-  show_error "Failed to launch web app sandbox (exit $rc). Check $LOG_FILE for details."
+  # Profile-lock failures (exit 1 from Chromium) are typically duplicate launches —
+  # don't spam the user with dialogs, just log and exit quietly.
+  _SILENT_ERROR=1 show_error "Failed to launch web app sandbox (exit $rc). Check $LOG_FILE for details."
 fi
 exit $rc
