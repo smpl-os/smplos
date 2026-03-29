@@ -345,10 +345,33 @@ menuitem:hover {
     color: {{ selection_foreground }};
 }
 
-menuitem:hover label,
-menu menuitem:hover label:dir(ltr),
-menu menuitem:hover label:dir(rtl),
-menuitem:hover * {
+menuitem:hover > label,
+menuitem:hover > box > label,
+menuitem:hover > box > image {
+    color: {{ selection_foreground }};
+}
+
+/* Prevent hover color from cascading into submenus */
+menuitem:hover > menu,
+menuitem:hover > menu menuitem {
+    background-color: {{ background }};
+    color: {{ foreground }};
+}
+
+menuitem:hover > menu menuitem label,
+menuitem:hover > menu menuitem > box > label,
+menuitem:hover > menu menuitem > box > image {
+    color: {{ foreground }};
+}
+
+menuitem:hover > menu menuitem:hover {
+    background-color: {{ selection_background }};
+    color: {{ selection_foreground }};
+}
+
+menuitem:hover > menu menuitem:hover > label,
+menuitem:hover > menu menuitem:hover > box > label,
+menuitem:hover > menu menuitem:hover > box > image {
     color: {{ selection_foreground }};
 }
 

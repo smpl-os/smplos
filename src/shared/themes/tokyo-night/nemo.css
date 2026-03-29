@@ -345,9 +345,33 @@ menuitem:hover {
     color: #c0caf5;
 }
 
-menu menuitem:hover > label,
-menu menuitem:hover > box > label,
-menu menuitem:hover > box > image {
+menuitem:hover > label,
+menuitem:hover > box > label,
+menuitem:hover > box > image {
+    color: #c0caf5;
+}
+
+/* Prevent hover color from cascading into submenus */
+menuitem:hover > menu,
+menuitem:hover > menu menuitem {
+    background-color: #1a1b26;
+    color: #a9b1d6;
+}
+
+menuitem:hover > menu menuitem label,
+menuitem:hover > menu menuitem > box > label,
+menuitem:hover > menu menuitem > box > image {
+    color: #a9b1d6;
+}
+
+menuitem:hover > menu menuitem:hover {
+    background-color: #7aa2f7;
+    color: #c0caf5;
+}
+
+menuitem:hover > menu menuitem:hover > label,
+menuitem:hover > menu menuitem:hover > box > label,
+menuitem:hover > menu menuitem:hover > box > image {
     color: #c0caf5;
 }
 
