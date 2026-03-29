@@ -246,7 +246,7 @@ gtk-application-prefer-dark-theme=$_dark_pref
 gtk-icon-theme-name=Adwaita
 gtk-font-name=JetBrains Mono 11
 gtk-cursor-theme-name=$_cursor_theme
-gtk-enable-mnemonics=1
+gtk-enable-mnemonics=0
 gtk-auto-mnemonics=1
 EOF
 done
