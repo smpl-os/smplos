@@ -4,7 +4,31 @@ Full changelog for all smplOS releases. For the latest release, see the [README]
 
 ---
 
-## v0.6.52
+## v0.6.8
+
+- **Window positioning fixed for Hyprland 0.54.** All `move` window rules updated from the deprecated `100%` percentage syntax to Hyprland 0.54's `monitor_w`/`monitor_h` expression variables. Fixes start-menu, notification center, calendar, and all messenger windows launching in the center of the screen instead of their configured positions.
+- **Window guard daemon.** New `window-guard` background service that monitors Hyprland IPC events and snaps floating windows back on-screen if they end up partially or fully outside the visible area. Three-layer approach: event-driven (200ms settle), deferred recheck (1.5s for Electron apps), and periodic sweep (every 5s). Toggle it from Settings → Display → "Keep windows on-screen", or via `~/.config/smplos/display.conf`.
+- **Settings: window guard toggle.** New "Keep windows on-screen" toggle switch in the Settings app Display tab. Starts/stops the window-guard daemon in real time and persists the preference to `display.conf`.
+- **Messenger toggle fix.** Fixed Signal Desktop (and other messenger windows launched via Super+Shift+hotkey) appearing off-screen on multi-monitor setups. The `toggle-messenger` script now correctly separates monitor-relative coordinates (for `exec [move]`) from compositor-absolute coordinates (for `movewindowpixel exact`), preventing double-counting of monitor offset.
+- **Migration script.** Automatic migration (`20260329-200000-window-positioning-fixes.sh`) patches existing installations: updates `windows.conf` move rules, adds window-guard to autostart, creates `display.conf` defaults, and reloads Hyprland.
+
+---
+
+## v0.6.62
+
+- **Webapp sandbox: cookie clearing fixed.** The "clear all data on exit" checkbox in Webapp Center now actually works. Cookies, login tokens, local storage, and session data are wiped on both launch and exit. Previously, data persisted indefinitely due to a pipe-handling bug in the sandbox wrapper.
+- **Webapp duplicate launch fixed.** Opening a webapp that's already running now focuses the existing window instead of spawning error dialogs. Added `--class` passthrough to Chromium for correct WM class matching, plus a lockfile guard as a safety net.
+- **Webapp sandbox improvements.** GPU acceleration (`/dev/dri`), D-Bus access, and writable XDG runtime directory are now available inside the bubblewrap sandbox — eliminates GPU crashes, dconf errors, and broken portal dialogs.
+- **Terminal key sequence fix (st-wl).** Shift+Home, Shift+End, and Ctrl+End now work correctly in micro and other tcell-based apps. Changed from xterm F/H-style sequences to tilde-style sequences that match tcell's built-in `st-256color` terminfo. Terminfo is now installed alongside the binary during OTA updates.
+- **Reliable OTA updates.** Single sudo prompt for the entire update session — no more double password prompts. The keepalive interval was tightened to 30s, child scripts detect the parent's cached credentials via `SMPLOS_SUDO_READY`, and paru uses `--sudoloop`. Running apps (smpl-apps GUI, nemo) are automatically restarted after update.
+- **Script sync fix.** `smplos-os-update` now syncs scripts to both `/usr/local/bin/` and `~/.local/share/smplos/bin/` (which takes PATH priority), preventing stale user-local copies from shadowing system updates.
+- **Nemo file manager theming.** Full CSS theming for nemo — breadcrumbs, toolbars, dialogs, list-view defaults, inactive pane outlines, and tooltip fixes all match the active smplOS theme.
+- **EWW two-line clock.** The bar clock now shows time and date on two lines with configurable format scripts (`clock-top`, `clock-bot`), fitting within the existing bar height.
+- **Workspace squares.** EWW bar workspace indicators now support a squares display mode with tighter spacing and configurable count.
+- **Settings: display identify.** The Display tab's "Identify monitors" feature now uses EWW overlay windows — no cursor tricks, simultaneous labels on all monitors.
+- **Per-app launch options.** New `launch-with-options` wrapper script lets webapps and desktop entries specify per-app environment variables.
+- **Cursor warp fixes.** Disabled cursor warp on workspace change (`no_warps = true`) and fixed `wl_pointer.enter` re-synthesis after window close.
+- **Theme submenu fix.** CSS hover selectors use direct-child combinators to prevent black-on-black text in nested menus.
 
 - **Over-the-air updates.** smplOS can now update itself. The OS repo is cloned to each machine and a `git pull` brings in new scripts, configs, themes, and migrations — no re-imaging required. Run `smplos-update` for a full update (OS configs + system packages + forked apps), or let the App Center trigger it. Scripts, themes, and bindings are synced automatically; breaking changes are handled by one-shot migrations that run exactly once per user. See [UPDATING.md](UPDATING.md) for the full architecture.
 - **Migration system.** Timestamped migration scripts in `migrations/` handle breaking changes from upstream packages and smplOS config changes. `smplos-migrate` runs pending migrations in order, tracks state in `~/.local/state/smplos/migrations/`, and never runs the same migration twice. Current migrations: update system bootstrap, EWW button grab fix, Hyprshell default config, and micro default editor.
