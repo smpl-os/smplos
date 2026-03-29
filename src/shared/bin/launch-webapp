@@ -69,6 +69,14 @@ if command -v hyprctl &>/dev/null && [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]]
         '.[] | select(.class == $cls) | .address' 2>/dev/null \
     | head -1)
   if [[ -n "$_existing" ]]; then
+    # Sync all monitors to the webapp's workspace group before focusing.
+    _ws_id=$(hyprctl clients -j 2>/dev/null \
+      | jq -r --arg addr "$_existing" \
+          '.[] | select(.address == $addr) | .workspace.id // empty' 2>/dev/null)
+    if [[ -n "$_ws_id" && "$_ws_id" =~ ^[0-9]+$ ]]; then
+      _group=$(( (_ws_id - 1) % 10 + 1 ))
+      workspace-group "$_group" 2>/dev/null || true
+    fi
     hyprctl dispatch focuswindow "address:${_existing}" >/dev/null 2>&1
     printf '%s [launch-webapp] focused existing window class=%s addr=%s\n' \
       "$(date '+%F %T')" "$_wm_class" "$_existing" >> "$LOG_FILE"
@@ -87,6 +95,13 @@ if [[ -f "$_lockfile" ]]; then
       "$(date '+%F %T')" "$_lock_pid" "$_lockfile" >> "$LOG_FILE"
     # Try one more time to focus by WM class (window may have appeared since check)
     if command -v hyprctl &>/dev/null && [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]]; then
+      _ws_id2=$(hyprctl clients -j 2>/dev/null \
+        | jq -r --arg cls "$_wm_class" \
+            '[.[] | select(.class == $cls)] | first | .workspace.id // empty' 2>/dev/null)
+      if [[ -n "$_ws_id2" && "$_ws_id2" =~ ^[0-9]+$ ]]; then
+        _group2=$(( (_ws_id2 - 1) % 10 + 1 ))
+        workspace-group "$_group2" 2>/dev/null || true
+      fi
       hyprctl dispatch focuswindow "class:${_wm_class}" >/dev/null 2>&1 || true
     fi
     exit 0

@@ -1,0 +1,42 @@
+#!/bin/bash
+# smplOS: Focus the existing browser window (switching all monitors to its
+# workspace group), or open the browser if it's not running.
+#
+# Called by SUPER+SHIFT+B in bindings.conf.
+# Uses workspace-group to keep all monitors in sync (issues #10).
+
+# Map desktop file → WM class (first word is sufficient for class: matching)
+_browser_class_for() {
+  case "$1" in
+    brave-browser.desktop)  echo "brave-browser" ;;
+    google-chrome.desktop)  echo "google-chrome" ;;
+    chromium.desktop)       echo "chromium" ;;
+    microsoft-edge.desktop) echo "microsoft-edge" ;;
+    vivaldi.desktop|vivaldi-stable.desktop) echo "vivaldi-stable" ;;
+    firefox.desktop)        echo "firefox" ;;
+    librewolf.desktop)      echo "librewolf" ;;
+    zen.desktop|zen-browser.desktop) echo "zen" ;;
+    helium.desktop)         echo "helium" ;;
+    *)                      echo "" ;;
+  esac
+}
+
+default_desktop=$(xdg-settings get default-web-browser 2>/dev/null)
+cls=$(_browser_class_for "$default_desktop")
+
+if [[ -n "$cls" ]] && command -v hyprctl &>/dev/null \
+    && [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]]; then
+  ws_id=$(hyprctl clients -j 2>/dev/null \
+    | jq -r --arg c "$cls" \
+        '[.[] | select(.class // "" | test($c; "i"))] | first | .workspace.id // empty' \
+    2>/dev/null)
+  if [[ -n "$ws_id" && "$ws_id" =~ ^[0-9]+$ ]]; then
+    group=$(( (ws_id - 1) % 10 + 1 ))
+    workspace-group "$group" 2>/dev/null || true
+    hyprctl dispatch focuswindow "class:(?i)${cls}" >/dev/null 2>&1
+    exit 0
+  fi
+fi
+
+# Not running — open with default browser
+exec xdg-open https://
