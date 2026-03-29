@@ -60,11 +60,17 @@ sha256sums=()
 
 prepare() {
   # Query GitHub API for the latest release tag
+  # Respect PKGVER_OVERRIDE if set by the build system (avoids race with new releases)
   local api_url="https://api.github.com/repos/${_gh_owner}/${_gh_repo}/releases/latest"
   local latest
-  latest=$(curl -fsSL "$api_url" \
-           | grep -oP '"tag_name"\s*:\s*"\Kv?[^"]+' \
-           | sed 's/^v//')
+  if [[ -n "${PKGVER_OVERRIDE:-}" ]]; then
+    latest="$PKGVER_OVERRIDE"
+    echo "==> Using locked version: $latest"
+  else
+    latest=$(curl -fsSL "$api_url" \
+             | grep -oP '"tag_name"\s*:\s*"\Kv?[^"]+' \
+             | sed 's/^v//')
+  fi
 
   if [[ -z "$latest" ]]; then
     echo "ERROR: Could not determine latest nemo-smpl version from GitHub" >&2

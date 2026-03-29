@@ -314,6 +314,7 @@ build_custom_packages() {
     [[ -d "$pkgbuild_dir" ]] || return 0
 
     local need_build=()
+    declare -A pkg_resolved_ver
     for dir in "$pkgbuild_dir"/*/; do
         [[ -f "$dir/PKGBUILD" ]] || continue
         local pkg
@@ -350,6 +351,7 @@ build_custom_packages() {
             fi
             need_build+=("$pkg")
         fi
+        pkg_resolved_ver[$pkg]="$pkgver"
     done
 
     [[ ${#need_build[@]} -eq 0 ]] && return 0
@@ -358,9 +360,11 @@ build_custom_packages() {
     log_info "These are smplOS-specific packages built from local PKGBUILDs (src/shared/pkgbuilds/)"
 
     for pkg in "${need_build[@]}"; do
-        log_info "Building $pkg..."
+        local pkgver_override="${pkg_resolved_ver[$pkg]}"
+        log_info "Building $pkg (locked to v${pkgver_override})..."
         $CTR run --rm \
             --network=host \
+            -e "PKGVER_OVERRIDE=${pkgver_override}" \
             -v "$pkgbuild_dir/$pkg:/build/pkg:ro" \
             -v "$prebuilt_dir:/output" \
             archlinux:latest bash -c "
