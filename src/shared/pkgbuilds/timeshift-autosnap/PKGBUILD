@@ -13,6 +13,7 @@ license=('MIT')
 depends=('timeshift')
 optdepends=('grub-btrfs')
 source=("git+${url}.git#tag=${pkgver}")
+sha256sums=('SKIP')
 backup=('etc/timeshift-autosnap.conf')
 
 pkgver() {
