@@ -322,14 +322,14 @@ build_custom_packages() {
 
         # Read the expected version from the PKGBUILD
         local pkgver pkgrel
-        pkgver=$(grep -E '^pkgver=' "$dir/PKGBUILD" | head -1 | cut -d= -f2 | tr -d '"'"'"' ')
-        pkgrel=$(grep -E '^pkgrel=' "$dir/PKGBUILD" | head -1 | cut -d= -f2 | tr -d '"'"'"' ')
+        pkgver=$(grep -E '^pkgver=' "$dir/PKGBUILD" | head -1 | cut -d= -f2 | tr -d '"'"'"' ' || true)
+        pkgrel=$(grep -E '^pkgrel=' "$dir/PKGBUILD" | head -1 | cut -d= -f2 | tr -d '"'"'"' ' || true)
 
         # If the PKGBUILD defines _gh_owner/_gh_repo, query GitHub for the
         # latest release so we always build the newest version automatically.
         local gh_owner gh_repo
-        gh_owner=$(grep -E '^_gh_owner=' "$dir/PKGBUILD" | head -1 | cut -d= -f2 | tr -d '"'"'"' ')
-        gh_repo=$(grep -E '^_gh_repo=' "$dir/PKGBUILD" | head -1 | cut -d= -f2 | tr -d '"'"'"' ')
+        gh_owner=$(grep -E '^_gh_owner=' "$dir/PKGBUILD" | head -1 | cut -d= -f2 | tr -d '"'"'"' ' || true)
+        gh_repo=$(grep -E '^_gh_repo=' "$dir/PKGBUILD" | head -1 | cut -d= -f2 | tr -d '"'"'"' ' || true)
         if [[ -n "$gh_owner" && -n "$gh_repo" ]]; then
             local latest
             latest=$(curl -fsSL "https://api.github.com/repos/${gh_owner}/${gh_repo}/releases/latest" \
