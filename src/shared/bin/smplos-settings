@@ -71,8 +71,18 @@ case "${1:-}" in
     notify-send "smplOS" "Version: ${local_ver:-dev}\nKernel: $(uname -r)\nUptime: $(uptime -p | sed 's/up //')"
     ;;
 
+  keybindings)
+    command -v settings &>/dev/null && exec settings --tab keybindings
+    die "Settings app not found"
+    ;;
+
+  taskbar)
+    command -v settings &>/dev/null && exec settings --tab taskbar
+    die "Settings app not found"
+    ;;
+
   *)
-    echo "Usage: smplos-settings {appearance|display|keyboard|network|bluetooth|audio|dictation|power|about}" >&2
+    echo "Usage: smplos-settings {appearance|display|keyboard|network|bluetooth|audio|dictation|power|about|keybindings|taskbar}" >&2
     exit 1
     ;;
 esac

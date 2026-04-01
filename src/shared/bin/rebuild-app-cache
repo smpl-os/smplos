@@ -117,6 +117,10 @@ scan_appimages() {
 
 # ── Settings entries (curated) ──
 emit_settings() {
+  # Format: Name;Exec;Category;Icon[;1]
+  # The optional 5th field '1' marks an entry as search-only:
+  #   - shown in search results when the user types a query
+  #   - hidden from the settings browse list (only tabs + smpl apps shown there)
   cat <<'EOF'
 App Center;toggle-app-center;settings;app-center
 Web App Center;webapp-center;settings;webapp-center
@@ -129,6 +133,47 @@ Audio;smplos-settings audio;settings;audio-volume-high
 Dictation;smplos-settings dictation;settings;audio-input-microphone
 Power;smplos-settings power;settings;preferences-system-power-management
 About smplOS;smplos-settings about;settings;help-about
+Keybindings;smplos-settings keybindings;settings;preferences-desktop-keyboard
+Taskbar;smplos-settings taskbar;settings;preferences-system
+EOF
+
+  # ── Search-only card keywords ─────────────────────────────────────────────
+  # These entries are NOT shown when browsing the Settings category, but DO
+  # appear when the user types a search query. Each maps back to the parent
+  # tab so clicking opens the right place in settings.
+  cat <<'EOF'
+Version;smplos-settings about;settings;help-about;1
+Hostname;smplos-settings about;settings;help-about;1
+Kernel;smplos-settings about;settings;help-about;1
+Uptime;smplos-settings about;settings;help-about;1
+Compositor;smplos-settings about;settings;help-about;1
+Keyboard Layout;smplos-settings keyboard;settings;preferences-desktop-keyboard;1
+Input Language;smplos-settings keyboard;settings;preferences-desktop-keyboard;1
+XKB Layout;smplos-settings keyboard;settings;preferences-desktop-keyboard;1
+Speech to Text;smplos-settings dictation;settings;audio-input-microphone;1
+Whisper;smplos-settings dictation;settings;audio-input-microphone;1
+Voice Input;smplos-settings dictation;settings;audio-input-microphone;1
+Monitor;smplos-settings display;settings;preferences-desktop-display;1
+Resolution;smplos-settings display;settings;preferences-desktop-display;1
+Scale;smplos-settings display;settings;preferences-desktop-display;1
+Refresh Rate;smplos-settings display;settings;preferences-desktop-display;1
+Primary Monitor;smplos-settings display;settings;preferences-desktop-display;1
+Screen Layout;smplos-settings display;settings;preferences-desktop-display;1
+Power Profile;smplos-settings power;settings;preferences-system-power-management;1
+Power Saver;smplos-settings power;settings;preferences-system-power-management;1
+Sleep;smplos-settings power;settings;preferences-system-power-management;1
+Suspend;smplos-settings power;settings;preferences-system-power-management;1
+Lock Screen;smplos-settings power;settings;preferences-system-power-management;1
+Shut Down;smplos-settings power;settings;preferences-system-power-management;1
+Restart;smplos-settings power;settings;preferences-system-power-management;1
+Log Out;smplos-settings power;settings;preferences-system-power-management;1
+Keyboard Shortcuts;smplos-settings keybindings;settings;preferences-desktop-keyboard;1
+Hotkeys;smplos-settings keybindings;settings;preferences-desktop-keyboard;1
+Key Binding;smplos-settings keybindings;settings;preferences-desktop-keyboard;1
+Workspaces;smplos-settings taskbar;settings;preferences-system;1
+Workspace Count;smplos-settings taskbar;settings;preferences-system;1
+Workspace Style;smplos-settings taskbar;settings;preferences-system;1
+Bar;smplos-settings taskbar;settings;preferences-system;1
 EOF
 }
 
