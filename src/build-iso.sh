@@ -344,12 +344,40 @@ build_custom_packages() {
            ls "$prebuilt_dir"/${pkg}-${pkgver}-${pkgrel}-*.pkg.tar.* &>/dev/null 2>&1; then
             log_info "Found prebuilt custom package: $pkg ($pkgver-$pkgrel)"
         else
-            # Evict any stale older version so it doesn't get injected into the ISO
-            if ls "$prebuilt_dir"/${pkg}-[0-9]*-*-*.pkg.tar.* &>/dev/null 2>&1; then
-                log_info "Evicting stale prebuilt for $pkg (want $pkgver-$pkgrel)"
-                rm -f "$prebuilt_dir"/${pkg}-[0-9]*-*-*.pkg.tar.*
+            # Try to download a pre-built .pkg.tar.zst from the GitHub release
+            # before falling back to a slow container build from source.
+            local _downloaded=false
+            if [[ -n "${gh_owner:-}" && -n "${gh_repo:-}" && -n "$pkgver" ]]; then
+                local _pkg_asset_url
+                _pkg_asset_url=$(curl -fsSL \
+                    "https://api.github.com/repos/${gh_owner}/${gh_repo}/releases/latest" \
+                    2>/dev/null \
+                    | grep -oP '"browser_download_url"\s*:\s*"\K[^"]*'"${pkg}"'-[^"]*x86_64\.pkg\.tar\.zst' \
+                    | head -1 || true)
+                if [[ -n "$_pkg_asset_url" ]]; then
+                    log_info "Downloading prebuilt $pkg $pkgver from GitHub release..."
+                    local _pkg_filename
+                    _pkg_filename=$(basename "$_pkg_asset_url")
+                    # Evict all old versions of this package (including -debug splits)
+                    rm -f "$prebuilt_dir"/${pkg}-[0-9]*-*-*.pkg.tar.*
+                    rm -f "$prebuilt_dir"/${pkg}-debug-[0-9]*-*-*.pkg.tar.*
+                    if curl -fSL --connect-timeout 30 --retry 3 \
+                        "$_pkg_asset_url" -o "$prebuilt_dir/$_pkg_filename"; then
+                        log_info "Downloaded $pkg $pkgver prebuilt package"
+                        _downloaded=true
+                    else
+                        log_warn "$pkg: download failed, will build from source"
+                    fi
+                fi
             fi
-            need_build+=("$pkg")
+            if ! $_downloaded; then
+                # Evict any stale older version so it doesn't get injected into the ISO
+                if ls "$prebuilt_dir"/${pkg}-[0-9]*-*-*.pkg.tar.* &>/dev/null 2>&1; then
+                    log_info "Evicting stale prebuilt for $pkg (want $pkgver-$pkgrel)"
+                    rm -f "$prebuilt_dir"/${pkg}-[0-9]*-*-*.pkg.tar.*
+                fi
+                need_build+=("$pkg")
+            fi
         fi
         pkg_resolved_ver[$pkg]="$pkgver"
     done
