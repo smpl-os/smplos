@@ -43,8 +43,8 @@ power-profiles-daemon
 # ── Theming / GTK ────────────────────────────────────────────
 gtk3
 gtk4
-gtk4-layer-shell    # Wayland layer-shell for GTK4 apps (hyprshell)
-libadwaita          # GTK4 UI library (hyprshell)
+gtk4-layer-shell    # Wayland layer-shell for GTK4 apps
+libadwaita          # GTK4 UI library
 qt5ct
 kvantum
 kvantum-qt5
@@ -142,7 +142,7 @@ plymouth
 mpv
 keepassxc
 btop
-flameshot
+
 kooha
 wtype                 # Wayland text injector (used by dictation-toggle / Voxtype)
 

@@ -684,8 +684,8 @@ Every theme defines all its values in a single `colors.toml` file. Here's the fu
 | `rounding` | `"10"` | Window corner radius in pixels |
 | `blur_size` | `"6"` | Background blur kernel size |
 | `blur_passes` | `"3"` | Number of blur passes (higher = smoother, more GPU) |
-| `opacity_active` | `"0.92"` | Opacity of focused windows (all regular apps) |
-| `opacity_inactive` | `"0.85"` | Opacity of unfocused windows |
+| `opacity_active` | `"1.0"` | Opacity of focused windows (all regular apps). **Keep at 1.0** — the compositor multiplies the entire rendered frame, including text, by this value. Sub-1.0 values make text appear faded and less legible. |
+| `opacity_inactive` | `"1.0"` | Opacity of unfocused windows. **Keep at 1.0** for the same reason — sub-1.0 dims foreground text at the compositor level, not just the background. |
 | `term_opacity_active` | `"0.85"` | st-wl **background-only** alpha. Text is always 100% opaque — only the background pixels carry this alpha in the ARGB surface. |
 | `browser_opacity` | `"1.0"` | Opacity of browsers (Brave, Firefox, Chrome, etc.) |
 | `messenger_opacity` | `"0.85"` | Opacity of messengers (Signal, Telegram, Slack, Discord, Teams, WhatsApp) |
@@ -735,8 +735,8 @@ color15 = "#cdd6f4"
 rounding = "12"
 blur_size = "14"
 blur_passes = "3"
-opacity_active = "0.60"
-opacity_inactive = "0.50"
+opacity_active = "1.0"
+opacity_inactive = "1.0"
 browser_opacity = "1.0"
 messenger_opacity = "0.85"
 popup_opacity = "0.85"

@@ -1,45 +1,67 @@
 #!/bin/bash
 # Screenshot Tool
-# Takes screenshots, saves to Pictures/Screenshots
-# Wayland: grim + slurp | X11: maim + slop
+# Wayland: grim + slurp [+ satty for annotation] | X11: maim + slop
+#
+# Usage: screenshot [region|window|fullscreen] [edit|quick]
+#   edit  (default) — capture then open in satty for annotation before saving
+#   quick           — capture, save immediately, copy to clipboard, no editor
 
 SCREENSHOT_DIR="${XDG_PICTURES_DIR:-$HOME/Pictures}/Screenshots"
 mkdir -p "$SCREENSHOT_DIR"
 
 FILENAME="$SCREENSHOT_DIR/screenshot-$(date +'%Y-%m-%d_%H-%M-%S').png"
+MODE="${1:-region}"
+EDIT="${2:-edit}"
+
+do_notify() {
+  notify-send "Screenshot saved" "$FILENAME" -i "$FILENAME" -t 3000
+}
 
 if [[ -n "$WAYLAND_DISPLAY" ]]; then
-  # ── Wayland (grim + slurp) ──
-  case "${1:-region}" in
+  # ── Wayland capture ──
+  case "$MODE" in
     region)
       SELECTION=$(slurp 2>/dev/null)
       [[ -z "$SELECTION" ]] && exit 0
-      grim -g "$SELECTION" "$FILENAME"
-      ;;
-    window)
-      if command -v hyprctl &>/dev/null; then
-        SELECTION=$(hyprctl activewindow -j | jq -r '"\(.at[0]),\(.at[1]) \(.size[0])x\(.size[1])"')
+      if [[ "$EDIT" == quick ]] || ! command -v satty &>/dev/null; then
         grim -g "$SELECTION" "$FILENAME"
+        wl-copy < "$FILENAME" 2>/dev/null
+        do_notify
       else
-        grim "$FILENAME"
+        grim -g "$SELECTION" - | satty --filename - --output-filename "$FILENAME" --copy-command "wl-copy"
       fi
       ;;
-    fullscreen|full) grim "$FILENAME" ;;
-    *) echo "Usage: screenshot [region|window|fullscreen]"; exit 1 ;;
+    window)
+      SELECTION=$(hyprctl activewindow -j 2>/dev/null | jq -r '"\(.at[0]),\(.at[1]) \(.size[0])x\(.size[1])"')
+      if [[ "$EDIT" == quick ]] || ! command -v satty &>/dev/null; then
+        grim ${SELECTION:+-g "$SELECTION"} "$FILENAME"
+        wl-copy < "$FILENAME" 2>/dev/null
+        do_notify
+      else
+        grim ${SELECTION:+-g "$SELECTION"} - | satty --filename - --output-filename "$FILENAME" --copy-command "wl-copy"
+      fi
+      ;;
+    fullscreen|full)
+      if [[ "$EDIT" == quick ]] || ! command -v satty &>/dev/null; then
+        grim "$FILENAME"
+        wl-copy < "$FILENAME" 2>/dev/null
+        do_notify
+      else
+        grim - | satty --filename - --output-filename "$FILENAME" --copy-command "wl-copy" --fullscreen
+      fi
+      ;;
+    *) echo "Usage: screenshot [region|window|fullscreen] [edit|quick]"; exit 1 ;;
   esac
-  wl-copy < "$FILENAME" 2>/dev/null
 else
-  # ── X11 (maim + slop) ──
-  case "${1:-region}" in
-    region)   maim -s "$FILENAME" || exit 0 ;;
-    window)   maim -i "$(xdotool getactivewindow)" "$FILENAME" ;;
+  # ── X11 capture ──
+  case "$MODE" in
+    region)        maim -s "$FILENAME" || exit 0 ;;
+    window)        maim -i "$(xdotool getactivewindow)" "$FILENAME" ;;
     fullscreen|full) maim "$FILENAME" ;;
-    *) echo "Usage: screenshot [region|window|fullscreen]"; exit 1 ;;
+    *) echo "Usage: screenshot [region|window|fullscreen] [edit|quick]"; exit 1 ;;
   esac
   xclip -selection clipboard -t image/png < "$FILENAME" 2>/dev/null
+  do_notify
 fi
-
-# Notify
-notify-send "Screenshot saved" "$FILENAME" -i "$FILENAME" -t 3000
 
 echo "$FILENAME"

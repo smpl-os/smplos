@@ -70,6 +70,7 @@ fi
 if [[ -f "$INPUT_CONF" ]]; then
     sed -i "s/^\(\s*\)kb_layout\s*=.*/\1kb_layout = $layouts/" "$INPUT_CONF"
     sed -i "s/^\(\s*\)kb_variant\s*=.*/\1kb_variant = $variants/" "$INPUT_CONF"
+    # Use grp:alt_shift_toggle for native XKB switching (no process spawn, instant)
     sed -i "s/^\(\s*\)kb_options\s*=.*/\1kb_options = compose:caps,grp:alt_shift_toggle/" "$INPUT_CONF"
     sed -i "s/^\(\s*\)kb_rules\s*=.*/\1kb_rules = evdev/" "$INPUT_CONF"
 fi

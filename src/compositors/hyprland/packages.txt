@@ -17,7 +17,7 @@ xdg-desktop-portal-hyprland
 grim
 slurp
 wl-clipboard
-swappy
+# satty-bin is the AUR screenshot annotation tool — listed in packages-aur.txt
 
 # ── Wayland Input Simulation ─────────────────────────────────
 wtype

@@ -104,9 +104,10 @@ emit() {
     local layouts variants active_idx
     layouts=$(hyprctl getoption input:kb_layout -j 2>/dev/null | jq -r '.str' 2>/dev/null)
     variants=$(hyprctl getoption input:kb_variant -j 2>/dev/null | jq -r '.str' 2>/dev/null)
+    # Use active_layout_index (the correct field name in Hyprland)
     active_idx=$(hyprctl devices -j 2>/dev/null | jq -r '
       [.keyboards[] | select(.name | test("power|button"; "i") | not)] |
-      first | .active_keymap_index // 0' 2>/dev/null)
+      first | .active_layout_index // 0' 2>/dev/null)
 
     # Split comma-separated lists and pick active index
     IFS=',' read -ra layout_arr <<< "$layouts"
@@ -137,6 +138,47 @@ emit() {
     "$code" "$layout" "$xkb_layout" "$xkb_variant" "$visible"
 }
 
+# Fast emit when we already know the layout name from an activelayout event.
+# Parses xkb_layout/variant by matching the active_layout_index after the switch.
+emit_from_event() {
+  local event_layout="$1"
+
+  if ! has_multi_layout; then
+    echo '{"code":"","layout":"","xkb_layout":"","xkb_variant":"","visible":"no"}'
+    return
+  fi
+
+  local code active_idx xkb_layout xkb_variant
+  code=$(layout_to_code "$event_layout")
+
+  # Resolve xkb code/variant using the (now-updated) active_layout_index
+  local layouts variants
+  layouts=$(hyprctl getoption input:kb_layout -j 2>/dev/null | jq -r '.str' 2>/dev/null)
+  variants=$(hyprctl getoption input:kb_variant -j 2>/dev/null | jq -r '.str' 2>/dev/null)
+  active_idx=$(hyprctl devices -j 2>/dev/null | jq -r '
+    [.keyboards[] | select(.name | test("power|button"; "i") | not)] |
+    first | .active_layout_index // 0' 2>/dev/null)
+
+  IFS=',' read -ra layout_arr <<< "$layouts"
+  IFS=',' read -ra variant_arr <<< "$variants"
+  local clean_layouts=() clean_variants=()
+  for i in "${!layout_arr[@]}"; do
+    local l="${layout_arr[$i]// /}"
+    [[ -z "$l" ]] && continue
+    clean_layouts+=("$l")
+    clean_variants+=("${variant_arr[$i]:-}")
+  done
+  layout_arr=("${clean_layouts[@]}")
+  variant_arr=("${clean_variants[@]}")
+  xkb_layout="${layout_arr[$active_idx]:-${layout_arr[0]:-}}"
+  xkb_variant="${variant_arr[$active_idx]:-}"
+  xkb_layout="${xkb_layout// /}"
+  xkb_variant="${xkb_variant// /}"
+
+  printf '{"code":"%s","layout":"%s","xkb_layout":"%s","xkb_variant":"%s","visible":"yes"}\n' \
+    "$code" "$event_layout" "$xkb_layout" "$xkb_variant"
+}
+
 # Initial emit
 emit
 
@@ -144,7 +186,13 @@ emit
 if [[ -n "$HYPRLAND_INSTANCE_SIGNATURE" ]]; then
   socat -U - "UNIX-CONNECT:$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket2.sock" 2>/dev/null | \
     while IFS= read -r line; do
-      [[ "$line" == activelayout* ]] && emit
+      if [[ "$line" == activelayout* ]]; then
+        # Event format: activelayout>>DEVICE_NAME,LAYOUT_DISPLAY_NAME
+        # Parse the layout name directly from the event — no re-query race.
+        _payload="${line#*>>}"
+        _name="${_payload#*,}"
+        emit_from_event "$_name"
+      fi
     done
 elif [[ -n "$DISPLAY" ]] && command -v xkb-switch &>/dev/null; then
   xkb-switch -W 2>/dev/null | while IFS= read -r _; do emit; done

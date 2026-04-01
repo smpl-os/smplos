@@ -26,8 +26,5 @@ nemo-smpl
 # Local AI dictation daemon (Whisper-based, fully offline speech-to-text)
 voxtype-bin
 
-# Window switcher / Alt-Tab GUI (previously hyprswitch, renamed to hyprshell)
-hyprshell-bin
-
 # Hyprland plugins/extras (optional)
 # hyprland-plugins-git

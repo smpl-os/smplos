@@ -95,26 +95,13 @@ if [[ -n "${SMPLOS_EXTRA_LAYOUT:-}" ]]; then
   if [[ -f "$input_conf" ]]; then
     sed -i "s/^    kb_layout = .*/    kb_layout = ${layouts}/" "$input_conf"
     sed -i "s/^    kb_variant = .*/    kb_variant = ${variants}/" "$input_conf"
-    # Add grp:alt_shift_toggle to kb_options (keep existing options like compose:caps)
-    current_opts=$(grep '^\s*kb_options' "$input_conf" | sed 's/.*= *//')
-    if [[ -n "$current_opts" && "$current_opts" != *"grp:"* ]]; then
-      sed -i "s/^    kb_options = .*/    kb_options = ${current_opts},grp:alt_shift_toggle/" "$input_conf"
-    elif [[ -z "$current_opts" ]]; then
-      sed -i "s/^    kb_options = .*/    kb_options = grp:alt_shift_toggle/" "$input_conf"
-    fi
+    # Do NOT add grp:alt_shift_toggle separately — kb-sync will set it on first
+    # multi-layout boot. No Hyprland binding is needed.
     echo "    Hyprland input.conf updated"
   fi
 
-  # Add Alt+Shift keybinding for layout switching to bindings.conf
-  bindings_conf="$HOME/.config/hypr/bindings.conf"
-  if [[ -f "$bindings_conf" ]] && ! grep -q "switchxkblayout" "$bindings_conf"; then
-    cat >> "$bindings_conf" <<'KBBIND'
-
-# Keyboard layout switching (also available via Alt+Shift through XKB options)
-bindd = ALT, SHIFT_L, Switch keyboard layout, exec, hyprctl switchxkblayout current next
-KBBIND
-    echo "    Keybinding added to bindings.conf"
-  fi
+  # No Hyprland binding needed — grp:alt_shift_toggle in kb_options handles switching
+  # natively and instantly via the XKB input stack.
 fi
 
 # Deploy theme system

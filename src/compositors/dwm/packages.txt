@@ -16,6 +16,7 @@ xorg-xsetroot
 maim
 slop
 xclip
+flameshot             # Screenshot + annotation tool (X11)
 
 # ── X11 Input Simulation ────────────────────────────────────
 xdotool

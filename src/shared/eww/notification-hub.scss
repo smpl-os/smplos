@@ -105,12 +105,12 @@
 
 .notif-date {
   font-size: 9px;
-  color: rgba($fg-dim, 0.5);
+  color: $fg-dim;
 }
 
 .notif-time {
   font-size: 10px;
-  color: rgba($fg-dim, 0.7);
+  color: $fg-dim;
 }
 
 /* Dismiss button (right side) */
@@ -120,18 +120,12 @@
   padding: 2px 4px;
   border-radius: 4px;
   min-width: 20px;
-  opacity: 0.4;
   transition: all 150ms ease;
-}
-
-.notif-card:hover .notif-dismiss {
-  opacity: 1.0;
 }
 
 .notif-dismiss:hover {
   background-color: $danger;
   color: $bg;
-  opacity: 1.0;
 }
 
 /* ============================================================================
@@ -144,10 +138,10 @@
 
 .notif-empty-icon {
   font-size: 36px;
-  color: rgba($fg-dim, 0.3);
+  color: $fg-dim;
 }
 
 .notif-empty-text {
   font-size: 13px;
-  color: rgba($fg-dim, 0.5);
+  color: $fg-dim;
 }
