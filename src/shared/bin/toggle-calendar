@@ -6,9 +6,8 @@
 
 APP_NAME="smpl-calendar"
 BIN_PATH="/usr/local/bin/$APP_NAME"
-[[ -f "$BIN_PATH" ]] || BIN_PATH="$HOME/Documents/sources/smpl-apps/calendar/target/release/$APP_NAME"
-[[ -f "$BIN_PATH" ]] || BIN_PATH="$HOME/Documents/sources/smpl-apps/calendar/target/debug/$APP_NAME"
-[[ -f "$BIN_PATH" ]] || BIN_PATH="$HOME/Documents/sources/smplos/src/shared/apps/smpl-calendar/target/release/$APP_NAME"
+[[ -f "$BIN_PATH" ]] || BIN_PATH="$HOME/Documents/source/smpl-os/smpl-apps/target/release/$APP_NAME"
+[[ -f "$BIN_PATH" ]] || BIN_PATH="$HOME/Documents/source/smpl-os/smpl-apps/target/debug/$APP_NAME"
 
 cleanup_bind() {
     hyprctl keyword unbind ", mouse:272" 2>/dev/null

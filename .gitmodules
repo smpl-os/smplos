@@ -1,0 +1,3 @@
+[submodule "src/shared/apps"]
+	path = src/shared/apps
+	url = https://github.com/smpl-os/smpl-apps.git

@@ -105,8 +105,8 @@ src/shared/          ← Everything here works on ALL compositors
   eww/               ← EWW bar, launcher, theme picker, keybind help (GTK3, works on X11 + Wayland)
   configs/smplos/    ← Cross-compositor configs (bindings.conf = single source of truth)
   themes/            ← 14 themes with templates for all apps
-  apps/              ← Cargo workspace (synced from smpl-apps repo)
-    Cargo.toml       ← workspace root (shared deps, renderer-software)
+  apps/              ← git submodule → github.com/smpl-os/smpl-apps
+    Cargo.toml       ← workspace root (shared deps, renderer-femtovg)
     smpl-common/     ← shared init library for all apps
     start-menu/      ← app crates (use workspace deps via smpl-common)
     notif-center/
@@ -274,11 +274,11 @@ look with NO error message.**
 
 #### Source of Truth: smpl-apps Workspace
 
-`src/shared/apps/` is a **full Cargo workspace** — a direct copy of the
+`src/shared/apps/` is a **git submodule** pointing to the
 [smpl-apps](https://github.com/smpl-os/smpl-apps) repo. It contains:
 
 ```
-src/shared/apps/
+src/shared/apps/   ← git submodule (smpl-os/smpl-apps)
   Cargo.toml          ← workspace root (version, shared deps)
   Cargo.lock
   smpl-common/        ← shared init library (transparency + Wayland setup)
@@ -296,31 +296,24 @@ calls `smpl_common::init(app_id, w, h)` which sets the FemtoVG renderer,
 disables decorations, and configures the Wayland app_id. **NO app should
 inline this init code or have its own Backend::builder() calls.**
 
-⚠️ **STOP — Read this if you are editing ANY file in `src/shared/apps/`:**
+⚠️ **STOP — Read this if you need to change app code:**
 
-**RULE 1: NEVER create standalone Cargo.toml files for individual apps.**
+**RULE 1: ALL changes go in the smpl-apps repo.**
+`src/shared/apps/` is a read-only submodule. NEVER commit app code changes
+directly in smplos — they belong in the smpl-apps repo. After pushing to
+smpl-apps, update the submodule pointer:
+```bash
+cd smplos && git submodule update --remote src/shared/apps && git add src/shared/apps && git commit -m "chore: update smpl-apps submodule"
+```
+
+**RULE 2: NEVER create standalone Cargo.toml files for individual apps.**
 Apps use `workspace = true` for all shared dependencies. The workspace
 `Cargo.toml` declares `renderer-femtovg` once; individual apps inherit it.
-Standalone Cargo.toml files (with their own slint dependency) caused the
-March 2026 transparency regression — divergent copies got `renderer-software`
-and nobody noticed for weeks.
 
-**RULE 2: Changes go in smpl-apps FIRST, then sync to smplos.**
-The smpl-apps repo is the development workspace. After changes are made and
-tested there, sync to smplos with:
-```bash
-rsync -a --delete --exclude='target/' --exclude='.git/' \
-  /path/to/smpl-apps/ smplos/src/shared/apps/
-```
-NEVER edit files inside `smplos/src/shared/apps/` directly — they will be
-overwritten on the next sync. If you see a bug in an app, fix it in smpl-apps.
-
-**RULE 3: build-apps.sh builds the WORKSPACE, not individual apps.**
+**RULE 3: build-iso.sh downloads pre-built binaries by default.**
+The default build path downloads release binaries from GitHub. Only when
+`--build-apps` is passed does it compile from the submodule source.
 `build-apps.sh` runs `cargo build --release --workspace` inside a container.
-This compiles smpl-common once and links it into every app identically.
-The build has guardrails that fail if `renderer-software` or `renderer-skia`
-appears in the workspace Cargo.toml, or if smpl-common is missing
-`.with_renderer_name("femtovg")`.
 
 ```toml
 # ✅ CORRECT — in workspace Cargo.toml (ONE place, inherited by all apps):
@@ -375,7 +368,7 @@ slint::platform::set_platform(Box::new(backend))
 - NEVER set `with_decorations(true)` or omit the decorations call
 - NEVER hardcode an opaque `#rrggbb` background on a `.slint` Window (use theme alpha)
 - NEVER create standalone per-app Cargo.toml files with their own slint dependency
-- NEVER edit files in `smplos/src/shared/apps/` directly — edit smpl-apps, then sync
+- NEVER commit app code changes directly in smplos — edit smpl-apps, then update submodule
 - NEVER inline Backend::builder() in individual apps — use `smpl_common::init()`
 
 ### Packages

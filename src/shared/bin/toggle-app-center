@@ -4,7 +4,7 @@
 APP_NAME="app-center"
 BIN_PATH="/usr/local/bin/$APP_NAME"
 # Fallback for dev environment
-[[ -f "$BIN_PATH" ]] || BIN_PATH="$HOME/Documents/sources/smplos/src/shared/apps/app-center/target/release/$APP_NAME"
+[[ -f "$BIN_PATH" ]] || BIN_PATH="$HOME/Documents/source/smpl-os/smpl-apps/target/release/$APP_NAME"
 
 if pkill -x "$APP_NAME" 2>/dev/null; then
     # Force wl_pointer.enter re-synthesis on bar after window unmaps

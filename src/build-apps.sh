@@ -92,8 +92,17 @@ git_tree_clean() {
 
 # All Rust apps are built as a single workspace — check the entire workspace
 # directory for changes, not individual app subdirs.
+# The workspace source lives in the smpl-apps submodule (src/shared/apps/).
 APPS_REL="src/shared/apps"
 BUILD_RUST_APPS=true
+
+# Ensure the smpl-apps submodule is initialised and up to date.
+if [[ -f "$PROJECT_ROOT/.gitmodules" ]] && grep -q "src/shared/apps" "$PROJECT_ROOT/.gitmodules" 2>/dev/null; then
+    if [[ ! -f "$PROJECT_ROOT/$APPS_REL/Cargo.toml" ]]; then
+        log "Initialising smpl-apps submodule..."
+        git -C "$PROJECT_ROOT" submodule update --init --depth 1 -- "$APPS_REL"
+    fi
+fi
 
 # Skip up-to-date builds (skips pacman + container overhead).
 # In clean builds we skip this and let cargo decide what to recompile.
