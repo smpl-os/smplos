@@ -415,6 +415,19 @@ fn main() -> Result<(), slint::PlatformError> {
         });
     }
 
+    // ── Search pop-char callback (Backspace from FocusScope) ──
+    {
+        let ui_weak = ui.as_weak();
+        ui.on_search_pop_char(move || {
+            let Some(ui) = ui_weak.upgrade() else { return };
+            let mut s = ui.get_search_text().to_string();
+            if !s.is_empty() {
+                s.pop();
+                ui.set_search_text(s.into());
+            }
+        });
+    }
+
     // ── Launch app ──
     {
         let model = model.clone();

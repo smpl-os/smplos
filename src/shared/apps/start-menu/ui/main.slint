@@ -373,6 +373,7 @@ export component MainWindow inherits Window {
 
     // Callbacks
     callback filter-changed();
+    callback search-pop-char();   // remove last character from search text (Rust handles string slice)
     callback launch-app(int);
     callback close();
     callback start-drag();
@@ -387,7 +388,9 @@ export component MainWindow inherits Window {
     in-out property <bool> power-menu-follow-hover: true;
 
     // Focus the search bar
-    public function focus-search() { root.focus-zone = 0; search-input.focus(); }
+    // Focus the search scope (not the TextInput) so FocusScope owns ALL key events,
+    // including arrow keys that TextInput would otherwise consume for cursor movement.
+    public function focus-search() { root.focus-zone = 0; search-scope.focus(); }
     function focus-cat() {
         root.focus-zone = 1;
         if (root.active-category < 0) {
@@ -537,11 +540,13 @@ export component MainWindow inherits Window {
                         root.focus-cat();
                         return accept;
                     }
+                    // Down Arrow: jump into the app list (or categories if no results).
+                    // Item 0 is already pre-highlighted as you type, so jump to item 1
+                    // if it exists — matching Windows/KDE/GNOME launcher behavior.
                     if (event.text == Key.DownArrow) {
                         if (root.is-searching && root.app-count > 0) {
-                            if (root.selected-app < root.app-count - 1) {
-                                root.selected-app += 1;
-                            }
+                            root.selected-app = root.app-count > 1 ? 1 : 0;
+                            root.focus-app();
                         } else {
                             root.focus-cat();
                         }
@@ -551,6 +556,12 @@ export component MainWindow inherits Window {
                         if (root.selected-app > 0) {
                             root.selected-app -= 1;
                         }
+                        return accept;
+                    }
+                    // Backspace: remove last character from search text
+                    if (event.text == Key.Backspace) {
+                        root.search-pop-char();
+                        root.filter-changed();
                         return accept;
                     }
                     if (event.modifiers.control && event.text == "p") {
@@ -567,6 +578,29 @@ export component MainWindow inherits Window {
                     }
                     if (event.modifiers.control && event.text == "y") {
                         root.open-sync-center();
+                        return accept;
+                    }
+                    // Any printable character: append to search text and update results.
+                    // FocusScope owns this because focus-search() calls search-scope.focus(),
+                    // NOT search-input.focus() — so TextInput never consumes arrow keys.
+                    if (!event.modifiers.control && !event.modifiers.alt &&
+                        event.text != "" &&
+                        event.text != Key.Delete &&
+                        event.text != Key.LeftArrow &&
+                        event.text != Key.RightArrow &&
+                        event.text != Key.Home &&
+                        event.text != Key.End &&
+                        event.text != Key.PageUp &&
+                        event.text != Key.PageDown &&
+                        event.text != Key.Return &&
+                        event.text != Key.Shift &&
+                        event.text != Key.Control &&
+                        event.text != Key.Alt &&
+                        event.text != Key.AltGr &&
+                        event.text != Key.CapsLock &&
+                        event.text != Key.Menu) {
+                        root.search-text = root.search-text + event.text;
+                        root.filter-changed();
                         return accept;
                     }
                     return reject;
@@ -768,6 +802,9 @@ export component MainWindow inherits Window {
                                     if (root.selected-app * 38px < -app-flick.viewport-y) {
                                         app-flick.viewport-y = -(root.selected-app * 38px);
                                     }
+                                } else {
+                                    // At the top of the list — Up Arrow returns to the search box
+                                    root.focus-search();
                                 }
                                 return accept;
                             }
@@ -812,6 +849,35 @@ export component MainWindow inherits Window {
                             }
                             if (event.modifiers.control && event.text == "y") {
                                 root.open-sync-center();
+                                return accept;
+                            }
+                            // Backspace: pop last search char and return to search box
+                            if (event.text == Key.Backspace) {
+                                root.search-pop-char();
+                                root.focus-search();
+                                root.filter-changed();
+                                return accept;
+                            }
+                            // Type-to-search: any printable key appends to search and refocuses it
+                            if (!event.modifiers.control && !event.modifiers.alt &&
+                                event.text != "" &&
+                                event.text != Key.Delete &&
+                                event.text != Key.LeftArrow &&
+                                event.text != Key.RightArrow &&
+                                event.text != Key.Home &&
+                                event.text != Key.End &&
+                                event.text != Key.PageUp &&
+                                event.text != Key.PageDown &&
+                                event.text != Key.Return &&
+                                event.text != Key.Shift &&
+                                event.text != Key.Control &&
+                                event.text != Key.Alt &&
+                                event.text != Key.AltGr &&
+                                event.text != Key.CapsLock &&
+                                event.text != Key.Menu) {
+                                root.search-text = root.search-text + event.text;
+                                root.focus-search();
+                                root.filter-changed();
                                 return accept;
                             }
                             return reject;
