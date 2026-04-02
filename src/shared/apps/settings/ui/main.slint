@@ -997,10 +997,10 @@ export component MainWindow inherits Window {
                                 horizontal-stretch: 1;
                                 text: root.available-layouts.length <= 0
                                     ? "No layouts found"
-                                    : root.selected-dropdown-index >= 0
+                                    : root.selected-dropdown-index >= 0 && root.selected-dropdown-index < root.available-layouts.length
                                         ? root.available-layouts[root.selected-dropdown-index]
                                         : "Select a layout... (Alt+C)";
-                                color: root.selected-dropdown-index >= 0 ? Theme.fg : Theme.fg_dim;
+                                color: root.selected-dropdown-index >= 0 && root.selected-dropdown-index < root.available-layouts.length ? Theme.fg : Theme.fg_dim;
                                 font-size: 12px;
                                 vertical-alignment: center;
                                 overflow: elide;

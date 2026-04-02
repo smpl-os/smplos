@@ -134,8 +134,8 @@ emit() {
   layout="${layout:-Unknown}"
   code=$(layout_to_code "$layout")
 
-  printf '{"code":"%s","layout":"%s","xkb_layout":"%s","xkb_variant":"%s","visible":"%s"}\n' \
-    "$code" "$layout" "$xkb_layout" "$xkb_variant" "$visible"
+  jq -nc --arg code "$code" --arg layout "$layout" --arg xkb_layout "$xkb_layout" --arg xkb_variant "$xkb_variant" --arg visible "$visible" \
+    '{code: $code, layout: $layout, xkb_layout: $xkb_layout, xkb_variant: $xkb_variant, visible: $visible}'
 }
 
 # Fast emit when we already know the layout name from an activelayout event.
@@ -175,8 +175,8 @@ emit_from_event() {
   xkb_layout="${xkb_layout// /}"
   xkb_variant="${xkb_variant// /}"
 
-  printf '{"code":"%s","layout":"%s","xkb_layout":"%s","xkb_variant":"%s","visible":"yes"}\n' \
-    "$code" "$event_layout" "$xkb_layout" "$xkb_variant"
+  jq -nc --arg code "$code" --arg layout "$event_layout" --arg xkb_layout "$xkb_layout" --arg xkb_variant "$xkb_variant" \
+    '{code: $code, layout: $layout, xkb_layout: $xkb_layout, xkb_variant: $xkb_variant, visible: "yes"}'
 }
 
 # Initial emit

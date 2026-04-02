@@ -1110,10 +1110,10 @@ fn main() -> Result<(), slint::PlatformError> {
             *fi.borrow_mut() = new_indices;
 
             if let Some(ui) = ui_weak.upgrade() {
+                ui.set_selected_dropdown_index(-1);
                 ui.set_available_layouts(slint::ModelRc::from(Rc::new(slint::VecModel::from(
                     filtered_strings,
                 ))));
-                ui.set_selected_dropdown_index(-1);
             }
         });
     }

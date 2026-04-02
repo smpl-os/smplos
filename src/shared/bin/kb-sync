@@ -51,7 +51,24 @@ clean_csv() {
     echo "$result"
 }
 layouts=$(clean_csv "$layouts")
-variants=$(clean_csv "$variants")
+
+# Variants are positional — empty entries mean "no variant" for the layout
+# at that position. We must NOT strip them, only trim whitespace.
+clean_variants_csv() {
+    local input="$1" result="" first=true
+    IFS=',' read -ra parts <<< "$input"
+    for p in "${parts[@]}"; do
+        p="${p// /}"
+        if $first; then
+            result="$p"
+            first=false
+        else
+            result="$result,$p"
+        fi
+    done
+    echo "$result"
+}
+variants=$(clean_variants_csv "$variants")
 
 if [[ -z "$layouts" ]]; then
     log "no layouts resolved from input.conf, exiting"
@@ -93,10 +110,10 @@ if [[ -n "$WAYLAND_DISPLAY" ]] || [[ -n "$HYPRLAND_INSTANCE_SIGNATURE" ]]; then
         main_kb=$(hyprctl -j devices 2>/dev/null | jq -r '.keyboards[] | select(.main == true) | .name' | head -n1)
         [[ -z "$main_kb" || "$main_kb" == "null" ]] && main_kb="current"
 
-        before_idx=$(hyprctl -j devices 2>/dev/null | jq -r --arg kb "$main_kb" '(.keyboards[] | select(.name == $kb) | .active_keymap_index) // 0' | head -n1)
+        before_idx=$(hyprctl -j devices 2>/dev/null | jq -r --arg kb "$main_kb" '(.keyboards[] | select(.name == $kb) | .active_layout_index) // 0' | head -n1)
         hyprctl switchxkblayout "$main_kb" next >/dev/null 2>&1
         sleep 0.05
-        after_idx=$(hyprctl -j devices 2>/dev/null | jq -r --arg kb "$main_kb" '(.keyboards[] | select(.name == $kb) | .active_keymap_index) // 0' | head -n1)
+        after_idx=$(hyprctl -j devices 2>/dev/null | jq -r --arg kb "$main_kb" '(.keyboards[] | select(.name == $kb) | .active_layout_index) // 0' | head -n1)
 
         if [[ "$before_idx" != "$after_idx" ]]; then
             hyprctl switchxkblayout "$main_kb" prev >/dev/null 2>&1
