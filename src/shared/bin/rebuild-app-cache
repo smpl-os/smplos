@@ -128,6 +128,7 @@ Appearance;smplos-settings appearance;settings;preferences-desktop-theme
 Display;smplos-settings display;settings;preferences-desktop-display
 Keyboard;smplos-settings keyboard;settings;preferences-desktop-keyboard
 Network;smplos-settings network;settings;preferences-system-network
+Wi-Fi;smplos-settings wifi;settings;network-wireless
 Bluetooth;smplos-settings bluetooth;settings;bluetooth
 Audio;smplos-settings audio;settings;audio-volume-high
 Dictation;smplos-settings dictation;settings;audio-input-microphone
@@ -174,14 +175,56 @@ Workspaces;smplos-settings taskbar;settings;preferences-system;1
 Workspace Count;smplos-settings taskbar;settings;preferences-system;1
 Workspace Style;smplos-settings taskbar;settings;preferences-system;1
 Bar;smplos-settings taskbar;settings;preferences-system;1
+WiFi;smplos-settings wifi;settings;network-wireless;1
+Wireless;smplos-settings wifi;settings;network-wireless;1
+Connect Wi-Fi;smplos-settings wifi;settings;network-wireless;1
+Wi-Fi Password;smplos-settings wifi;settings;network-wireless;1
+Airplane Mode;smplos-settings wifi;settings;network-wireless;1
+QR Code Wi-Fi;smplos-settings wifi;settings;network-wireless;1
+Bluetooth Devices;smplos-settings bluetooth;settings;bluetooth;1
+Pair Bluetooth;smplos-settings bluetooth;settings;bluetooth;1
+Connect Bluetooth;smplos-settings bluetooth;settings;bluetooth;1
+Headphones;smplos-settings bluetooth;settings;bluetooth;1
+Discoverable;smplos-settings bluetooth;settings;bluetooth;1
 EOF
 }
 
+# ── Merge deep-link entries from settings app index ──
+# The settings binary writes a per-card search index to settings_index.
+# Each line:  Label;settings --tab X --highlight "Label";settings;
+# We convert to app_index format with an icon derived from the tab name,
+# and mark every entry as search-only (;1).
+merge_settings_deep_links() {
+  local idx="$CACHE_DIR/settings_index"
+  [[ -f "$idx" ]] || return 0
+
+  while IFS=';' read -r name exec _cat _rest; do
+    [[ -z "$name" || -z "$exec" ]] && continue
+    local icon="preferences-system"
+    case "$exec" in
+      *"--tab about"*)       icon="help-about" ;;
+      *"--tab keyboard"*)    icon="preferences-desktop-keyboard" ;;
+      *"--tab dictation"*)   icon="audio-input-microphone" ;;
+      *"--tab display"*)     icon="preferences-desktop-display" ;;
+      *"--tab power"*)       icon="preferences-system-power-management" ;;
+      *"--tab keybindings"*) icon="preferences-desktop-keyboard" ;;
+      *"--tab taskbar"*)     icon="preferences-system" ;;
+      *"--tab wifi"*)        icon="network-wireless" ;;
+      *"--tab bluetooth"*)   icon="bluetooth" ;;
+    esac
+    printf '%s;%s;%s;%s;1\n' "$name" "$exec" "settings" "$icon"
+  done < "$idx"
+}
+
 # ── Build cache ──
+# Browsable category entries come first so they win the awk dedup (first
+# occurrence of each Name, case-insensitive).  Deep-link search-only entries
+# follow and fill in any additional keywords.
 {
   scan_desktop_dirs
   scan_appimages
   emit_settings
-} | sort -t';' -k1,1 -f | uniq > "$CACHE_TMP"
+  merge_settings_deep_links
+} | sort -s -t';' -k1,1 -f | awk -F';' '!seen[tolower($1)]++' > "$CACHE_TMP"
 
 mv -f "$CACHE_TMP" "$CACHE_FILE"

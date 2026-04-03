@@ -33,7 +33,13 @@ case "${1:-}" in
     die "No network manager UI found"
     ;;
 
+  wifi)
+    command -v settings &>/dev/null && exec settings --tab wifi
+    die "Settings app not found"
+    ;;
+
   bluetooth)
+    command -v settings &>/dev/null && exec settings --tab bluetooth
     command -v blueman-manager &>/dev/null && exec blueman-manager
     command -v bluetuith &>/dev/null && exec term bluetuith
     die "No bluetooth manager found (install blueman)"
@@ -82,7 +88,7 @@ case "${1:-}" in
     ;;
 
   *)
-    echo "Usage: smplos-settings {appearance|display|keyboard|network|bluetooth|audio|dictation|power|about|keybindings|taskbar}" >&2
+    echo "Usage: smplos-settings {appearance|display|keyboard|network|wifi|bluetooth|audio|dictation|power|about|keybindings|taskbar}" >&2
     exit 1
     ;;
 esac
