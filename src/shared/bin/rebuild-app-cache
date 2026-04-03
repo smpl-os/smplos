@@ -140,52 +140,52 @@ EOF
 
   # ── Search-only card keywords ─────────────────────────────────────────────
   # These entries are NOT shown when browsing the Settings category, but DO
-  # appear when the user types a search query. Each maps back to the parent
-  # tab so clicking opens the right place in settings.
+  # appear when the user types a search query. Each uses the deep-link format
+  # (settings --tab X --highlight "Label") so the card is highlighted on open.
   cat <<'EOF'
-Version;smplos-settings about;settings;help-about;1
-Hostname;smplos-settings about;settings;help-about;1
-Kernel;smplos-settings about;settings;help-about;1
-Uptime;smplos-settings about;settings;help-about;1
-Compositor;smplos-settings about;settings;help-about;1
-Keyboard Layout;smplos-settings keyboard;settings;preferences-desktop-keyboard;1
-Input Language;smplos-settings keyboard;settings;preferences-desktop-keyboard;1
-XKB Layout;smplos-settings keyboard;settings;preferences-desktop-keyboard;1
-Speech to Text;smplos-settings dictation;settings;audio-input-microphone;1
-Whisper;smplos-settings dictation;settings;audio-input-microphone;1
-Voice Input;smplos-settings dictation;settings;audio-input-microphone;1
-Monitor;smplos-settings display;settings;preferences-desktop-display;1
-Resolution;smplos-settings display;settings;preferences-desktop-display;1
-Scale;smplos-settings display;settings;preferences-desktop-display;1
-Refresh Rate;smplos-settings display;settings;preferences-desktop-display;1
-Primary Monitor;smplos-settings display;settings;preferences-desktop-display;1
-Screen Layout;smplos-settings display;settings;preferences-desktop-display;1
-Power Profile;smplos-settings power;settings;preferences-system-power-management;1
-Power Saver;smplos-settings power;settings;preferences-system-power-management;1
-Sleep;smplos-settings power;settings;preferences-system-power-management;1
-Suspend;smplos-settings power;settings;preferences-system-power-management;1
-Lock Screen;smplos-settings power;settings;preferences-system-power-management;1
-Shut Down;smplos-settings power;settings;preferences-system-power-management;1
-Restart;smplos-settings power;settings;preferences-system-power-management;1
-Log Out;smplos-settings power;settings;preferences-system-power-management;1
-Keyboard Shortcuts;smplos-settings keybindings;settings;preferences-desktop-keyboard;1
-Hotkeys;smplos-settings keybindings;settings;preferences-desktop-keyboard;1
-Key Binding;smplos-settings keybindings;settings;preferences-desktop-keyboard;1
-Workspaces;smplos-settings taskbar;settings;preferences-system;1
-Workspace Count;smplos-settings taskbar;settings;preferences-system;1
-Workspace Style;smplos-settings taskbar;settings;preferences-system;1
-Bar;smplos-settings taskbar;settings;preferences-system;1
-WiFi;smplos-settings wifi;settings;network-wireless;1
-Wireless;smplos-settings wifi;settings;network-wireless;1
-Connect Wi-Fi;smplos-settings wifi;settings;network-wireless;1
-Wi-Fi Password;smplos-settings wifi;settings;network-wireless;1
-Airplane Mode;smplos-settings wifi;settings;network-wireless;1
-QR Code Wi-Fi;smplos-settings wifi;settings;network-wireless;1
-Bluetooth Devices;smplos-settings bluetooth;settings;bluetooth;1
-Pair Bluetooth;smplos-settings bluetooth;settings;bluetooth;1
-Connect Bluetooth;smplos-settings bluetooth;settings;bluetooth;1
-Headphones;smplos-settings bluetooth;settings;bluetooth;1
-Discoverable;smplos-settings bluetooth;settings;bluetooth;1
+Version;settings --tab about --highlight "Version";settings;help-about;1
+Hostname;settings --tab about --highlight "Hostname";settings;help-about;1
+Kernel;settings --tab about --highlight "Kernel";settings;help-about;1
+Uptime;settings --tab about --highlight "Uptime";settings;help-about;1
+Compositor;settings --tab about --highlight "Compositor";settings;help-about;1
+Keyboard Layout;settings --tab keyboard --highlight "Keyboard Layout";settings;preferences-desktop-keyboard;1
+Input Language;settings --tab keyboard --highlight "Input Language";settings;preferences-desktop-keyboard;1
+XKB Layout;settings --tab keyboard --highlight "XKB Layout";settings;preferences-desktop-keyboard;1
+Speech to Text;settings --tab dictation --highlight "Speech to Text";settings;audio-input-microphone;1
+Whisper;settings --tab dictation --highlight "Whisper";settings;audio-input-microphone;1
+Voice Input;settings --tab dictation --highlight "Voice Input";settings;audio-input-microphone;1
+Monitor;settings --tab display --highlight "Monitor";settings;preferences-desktop-display;1
+Resolution;settings --tab display --highlight "Resolution";settings;preferences-desktop-display;1
+Scale;settings --tab display --highlight "Scale";settings;preferences-desktop-display;1
+Refresh Rate;settings --tab display --highlight "Refresh Rate";settings;preferences-desktop-display;1
+Primary Monitor;settings --tab display --highlight "Primary Monitor";settings;preferences-desktop-display;1
+Screen Layout;settings --tab display --highlight "Screen Layout";settings;preferences-desktop-display;1
+Power Profile;settings --tab power --highlight "Power Profile";settings;preferences-system-power-management;1
+Power Saver;settings --tab power --highlight "Power Saver";settings;preferences-system-power-management;1
+Sleep;settings --tab power --highlight "Sleep";settings;preferences-system-power-management;1
+Suspend;settings --tab power --highlight "Suspend";settings;preferences-system-power-management;1
+Lock Screen;settings --tab power --highlight "Lock Screen";settings;preferences-system-power-management;1
+Shut Down;settings --tab power --highlight "Shut Down";settings;preferences-system-power-management;1
+Restart;settings --tab power --highlight "Restart";settings;preferences-system-power-management;1
+Log Out;settings --tab power --highlight "Log Out";settings;preferences-system-power-management;1
+Keyboard Shortcuts;settings --tab keybindings --highlight "Keyboard Shortcuts";settings;preferences-desktop-keyboard;1
+Hotkeys;settings --tab keybindings --highlight "Hotkeys";settings;preferences-desktop-keyboard;1
+Key Binding;settings --tab keybindings --highlight "Key Binding";settings;preferences-desktop-keyboard;1
+Workspaces;settings --tab taskbar --highlight "Workspaces";settings;preferences-system;1
+Workspace Count;settings --tab taskbar --highlight "Workspace Count";settings;preferences-system;1
+Workspace Style;settings --tab taskbar --highlight "Workspace Style";settings;preferences-system;1
+Bar;settings --tab taskbar --highlight "Bar";settings;preferences-system;1
+WiFi;settings --tab wifi --highlight "WiFi";settings;network-wireless;1
+Wireless;settings --tab wifi --highlight "Wireless";settings;network-wireless;1
+Connect Wi-Fi;settings --tab wifi --highlight "Connect Wi-Fi";settings;network-wireless;1
+Wi-Fi Password;settings --tab wifi --highlight "Wi-Fi Password";settings;network-wireless;1
+Airplane Mode;settings --tab wifi --highlight "Airplane Mode";settings;network-wireless;1
+QR Code Wi-Fi;settings --tab wifi --highlight "QR Code Wi-Fi";settings;network-wireless;1
+Bluetooth Devices;settings --tab bluetooth --highlight "Bluetooth Devices";settings;bluetooth;1
+Pair Bluetooth;settings --tab bluetooth --highlight "Pair Bluetooth";settings;bluetooth;1
+Connect Bluetooth;settings --tab bluetooth --highlight "Connect Bluetooth";settings;bluetooth;1
+Headphones;settings --tab bluetooth --highlight "Headphones";settings;bluetooth;1
+Discoverable;settings --tab bluetooth --highlight "Discoverable";settings;bluetooth;1
 EOF
 }
 

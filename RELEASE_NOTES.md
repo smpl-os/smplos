@@ -4,6 +4,40 @@ Full changelog for all smplOS releases. For the latest release, see the [README]
 
 ---
 
+## v0.7.0
+
+- **Start-menu Enter key launches top search result.** Pressing Enter while
+  typing a search query now immediately launches the first result. The search
+  `FocusScope` (needed for arrow-key navigation) had no `Key.Return` handler
+  so Enter silently did nothing.
+
+- **Settings card deep-links restored.** Clicking a keyword result like
+  "Airplane Mode", "WiFi", "Resolution", or "Bluetooth Devices" in
+  start-menu now opens Settings and highlights the relevant card.
+  `rebuild-app-cache` was generating `smplos-settings wifi` exec format for
+  search-only entries instead of `settings --tab wifi --highlight "Airplane Mode"`
+  deep-link format — Settings opened on the right tab but never blinked the card.
+
+- **"Airplane Mode" and other missing keywords added to settings search index.**
+  `settings_search_index` was missing Airplane Mode and several other
+  WiFi/Bluetooth entries.
+
+- **Deployment no longer leaves search keywords stale.** `deploy-local.sh`
+  now calls `rebuild-app-cache` after `settings --export-index` so keywords
+  are immediately searchable after every deploy.
+
+- **Alt-Shift keyboard layout switching fixed.** `kb_variant` was written
+  without a leading comma (`phonetic` instead of `,phonetic`), applying the
+  phonetic variant to `us` — an invalid XKB combination that caused Hyprland
+  to reject the multi-layout config entirely and load only `us` with no
+  options. Alt-Shift now reliably switches between `us` and `ru (phonetic)`.
+
+- **CI regression guardrails.** Four new checks in smpl-apps CI block future
+  regressions for the Enter key, settings keyword completeness, and
+  `deploy-local.sh` rebuild step before merging.
+
+---
+
 ## v0.6.8
 
 - **Window positioning fixed for Hyprland 0.54.** All `move` window rules updated from the deprecated `100%` percentage syntax to Hyprland 0.54's `monitor_w`/`monitor_h` expression variables. Fixes start-menu, notification center, calendar, and all messenger windows launching in the center of the screen instead of their configured positions.

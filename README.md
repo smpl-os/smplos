@@ -17,20 +17,48 @@
 </p>
 
 <p align="center">
-  <strong>Latest release: v0.6.8</strong>
+  <strong>Latest release: v0.7.0</strong>
   &nbsp;&bull;&nbsp;
   <a href="https://archive.org/download/smplos_260313-0458/smplos_260313-0458.iso"><strong>⬇ Download Base ISO</strong></a>
 </p>
 
 ---
 
-## What's new in v0.6.8
+## What's new in v0.7.0
 
-- **Window positioning fixed for Hyprland 0.54.** All `move` window rules updated from the deprecated `100%` percentage syntax to Hyprland 0.54's `monitor_w`/`monitor_h` expression variables. Fixes start-menu, notification center, calendar, and all messenger windows launching in the center of the screen instead of their configured positions.
-- **Window guard daemon.** New `window-guard` background service that monitors Hyprland IPC events and snaps floating windows back on-screen if they end up partially or fully outside the visible area. Three-layer approach: event-driven (200ms settle), deferred recheck (1.5s for Electron apps), and periodic sweep (every 5s). Toggle it from Settings → Display → "Keep windows on-screen", or via `~/.config/smplos/display.conf`.
-- **Settings: window guard toggle.** New "Keep windows on-screen" toggle switch in the Settings app Display tab. Starts/stops the window-guard daemon in real time and persists the preference to `display.conf`.
-- **Messenger toggle fix.** Fixed Signal Desktop (and other messenger windows launched via Super+Shift+hotkey) appearing off-screen on multi-monitor setups. The `toggle-messenger` script now correctly separates monitor-relative coordinates (for `exec [move]`) from compositor-absolute coordinates (for `movewindowpixel exact`), preventing double-counting of monitor offset.
-- **Migration script.** Automatic migration (`20260329-200000-window-positioning-fixes.sh`) patches existing installations: updates `windows.conf` move rules, adds window-guard to autostart, creates `display.conf` defaults, and reloads Hyprland.
+- **Start-menu Enter key launches top search result.** Pressing Enter while
+  typing a search query now immediately launches the first result. Previously
+  the search `FocusScope` (needed for arrow-key navigation) had no `Key.Return`
+  handler so Enter silently did nothing.
+
+- **Settings card deep-links restored in start-menu search.** Clicking a
+  keyword result like "Airplane Mode", "WiFi", "Resolution", or "Bluetooth
+  Devices" in start-menu now opens Settings and highlights (blinks) the
+  relevant card. The `rebuild-app-cache` script was generating
+  `smplos-settings wifi` style execs for search-only entries instead of the
+  `settings --tab wifi --highlight "Airplane Mode"` deep-link format — so
+  Settings opened on the right tab but never highlighted the card.
+
+- **"Airplane Mode" and other missing keywords added.** `settings_search_index`
+  was missing "Airplane Mode" along with several other WiFi/Bluetooth card
+  entries. All are now present and searchable.
+
+- **Deployment no longer leaves search keywords stale.** `deploy-local.sh`
+  now calls `rebuild-app-cache` after `settings --export-index` so keywords
+  are immediately live after every deploy.
+
+- **Alt-Shift keyboard layout switching fixed.** The `kb_variant` line in
+  `input.conf` was written as `phonetic` (no leading comma), which applied
+  the phonetic variant to the first layout (`us`) — an invalid combination
+  that caused Hyprland to reject the whole multi-layout config and load only
+  `us` with no XKB options. Fixed to use the positional form `,phonetic`.
+  Alt-Shift now reliably switches between layouts.
+
+- **Regression guardrails in smpl-apps CI.** Four new CI checks prevent
+  the above regressions from returning undetected in future syncs:
+  - Enter-key handler present in search FocusScope
+  - `Airplane Mode` / `Wi-Fi` / `Bluetooth` present in settings search index
+  - `rebuild-app-cache` called in `deploy-local.sh`
 
 For previous releases, see [RELEASE_NOTES.md](RELEASE_NOTES.md).
 
