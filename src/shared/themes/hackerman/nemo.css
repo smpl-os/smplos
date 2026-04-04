@@ -290,6 +290,94 @@ toolbar.primary-toolbar button.suggested-action label {
 }
 
 /* =====================================================================
+ * Quick Preview window (F3 / Space preview popup)
+ * ===================================================================== */
+
+/* Window background */
+.nemo-quick-preview {
+    background-color: #0B0C16;
+    color: #ddf7ff;
+}
+
+/* Header bar */
+.nemo-quick-preview headerbar,
+.nemo-quick-preview headerbar:backdrop {
+    background-color: #181a2a;
+    background-image: none;
+    color: #ddf7ff;
+    border-bottom: 1px solid #252840;
+    box-shadow: none;
+}
+
+.nemo-quick-preview headerbar .title {
+    color: #ddf7ff;
+    font-weight: bold;
+}
+
+.nemo-quick-preview headerbar .subtitle {
+    color: #ddf7ff;
+    font-size: smaller;
+}
+
+.nemo-quick-preview headerbar label {
+    color: #ddf7ff;
+}
+
+/* Header bar buttons (prev/next nav, fullscreen, search icon, close) */
+.nemo-quick-preview headerbar button,
+.nemo-quick-preview headerbar button.titlebutton {
+    background-color: transparent;
+    background-image: none;
+    color: #ddf7ff;
+    border: none;
+    box-shadow: none;
+}
+
+.nemo-quick-preview headerbar button:hover,
+.nemo-quick-preview headerbar button.titlebutton:hover {
+    background-color: #252840;
+    color: #ddf7ff;
+}
+
+.nemo-quick-preview headerbar button:active,
+.nemo-quick-preview headerbar button:checked {
+    background-color: #ddf7ff;
+    color: #0B0C16;
+    box-shadow: none;
+}
+
+.nemo-quick-preview headerbar button image,
+.nemo-quick-preview headerbar button label {
+    color: inherit;
+}
+
+/* Window decoration (shadow/rounding from WM) */
+.nemo-quick-preview decoration {
+    border-radius: 3px;
+}
+
+/* Scrollbars inside the preview */
+.nemo-quick-preview scrollbar {
+    background-color: #0B0C16;
+}
+
+.nemo-quick-preview scrollbar slider {
+    background-color: #252840;
+    border-radius: 4px;
+    min-width: 6px;
+    min-height: 6px;
+}
+
+.nemo-quick-preview scrollbar slider:hover {
+    background-color: #ddf7ff;
+}
+
+/* Dir-analyzer / label text */
+.nemo-quick-preview label {
+    color: #ddf7ff;
+}
+
+/* =====================================================================
  * Search bar (nemo file-search, top of window)
  * ===================================================================== */
 
