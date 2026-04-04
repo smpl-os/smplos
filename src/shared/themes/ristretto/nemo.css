@@ -290,13 +290,70 @@ toolbar.primary-toolbar button.suggested-action label {
 }
 
 /* =====================================================================
- * Search bar
+ * Search bar (nemo file-search, top of window)
  * ===================================================================== */
 
 searchbar,
 searchbar entry {
     background-color: #4e4444;
     color: #e6d9db;
+}
+
+/* =====================================================================
+ * Quick Preview in-file search bar (bottom of preview window)
+ * ===================================================================== */
+
+.nemo-quick-preview searchbar {
+    background-color: #3d3535;
+    color: #e6d9db;
+    border-top: 1px solid #4e4444;
+}
+
+.nemo-quick-preview searchbar > revealer > box {
+    background-color: #3d3535;
+}
+
+.nemo-quick-preview searchbar entry {
+    background-color: #2c2525;
+    color: #e6d9db;
+    border: 1px solid #4e4444;
+    caret-color: #f38d70;
+}
+
+.nemo-quick-preview searchbar entry:focus {
+    border-color: #f38d70;
+    outline: none;
+}
+
+.nemo-quick-preview searchbar entry selection {
+    background-color: #403e41;
+    color: #e6d9db;
+}
+
+/* Prev / next match buttons */
+.nemo-quick-preview searchbar button {
+    background-color: transparent;
+    background-image: none;
+    color: #e6d9db;
+    border: none;
+    box-shadow: none;
+}
+
+.nemo-quick-preview searchbar button:hover {
+    background-color: #4e4444;
+    color: #e6d9db;
+}
+
+.nemo-quick-preview searchbar button:active,
+.nemo-quick-preview searchbar button:checked {
+    background-color: #403e41;
+    color: #e6d9db;
+}
+
+/* "No matches" status label */
+.nemo-quick-preview .search-no-match {
+    color: #fd6883;
+    font-style: italic;
 }
 
 /* =====================================================================
