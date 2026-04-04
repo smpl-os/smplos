@@ -209,6 +209,42 @@ sync_configs() {
     fi
 }
 
+# ── Fetch + install latest smpl-apps binaries ────────────────────────────────
+sync_apps() {
+    local fetch_script="$SMPLOS_REPO/src/fetch-apps.sh"
+    [[ -f "$fetch_script" ]] || { warn "fetch-apps.sh not found"; return; }
+
+    header ""
+    header "── Updating smpl-apps ──"
+
+    bash "$fetch_script"
+
+    # Install fetched binaries to /usr/local/bin/
+    local bin_dir="$SMPLOS_REPO/.cache/app-binaries"
+    local n_updated=0
+    for bin in start-menu notif-center settings app-center webapp-center \
+               sync-center-gui sync-center-daemon smpl-calendar smpl-calendar-alertd; do
+        local src="$bin_dir/$bin"
+        [[ -x "$src" ]] || continue
+        local dest="/usr/local/bin/$bin"
+        if [[ ! -f "$dest" ]] || ! cmp -s "$src" "$dest"; then
+            if sudo install -m755 "$src" "$dest" 2>/dev/null; then
+                ((n_updated++)) || true
+            else
+                warn "Failed to install $bin"
+            fi
+        fi
+    done
+
+    if [[ $n_updated -gt 0 ]]; then
+        ok "$n_updated smpl-apps binary/binaries updated"
+        # Rebuild app cache so search keywords reflect the new build
+        rebuild-app-cache 2>/dev/null && ok "App cache rebuilt" || true
+    else
+        ok "smpl-apps already current"
+    fi
+}
+
 # ── Run migrations ────────────────────────────────────────────────────────────
 run_migrations() {
     if command -v smplos-migrate &>/dev/null; then
@@ -277,6 +313,7 @@ fi
 if [[ $SCRIPTS_ONLY -eq 0 ]]; then
     sync_scripts
     sync_configs
+    sync_apps
     run_migrations
 
     if [[ $had_updates -eq 1 ]]; then
