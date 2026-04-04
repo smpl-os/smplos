@@ -172,9 +172,10 @@ CSS fix MUST go into `regen-nemo-css.py` first, then regenerate:
 cd src && python3 regen-nemo-css.py
 ```
 
-`src/shared/themes/_templates/nemo.css.tpl` is a parallel Jinja-style template
-used by `generate-theme-configs.sh`. Keep it in sync with `regen-nemo-css.py`
-— they must produce equivalent CSS.
+`nemo.css.tpl` has been **intentionally deleted** — `generate-theme-configs.sh`
+processes every `*.tpl` file unconditionally, so having a `nemo.css.tpl` would
+silently clobber all 15 nemo.css files with inferior CSS any time that script
+was run for any reason. Do NOT recreate `nemo.css.tpl`.
 
 #### The black-on-black submenu regression (DO NOT REPEAT)
 
