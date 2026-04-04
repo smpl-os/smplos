@@ -91,6 +91,7 @@ zip
 wget
 curl
 micro
+tmux
 bubblewrap
 zenity
 
