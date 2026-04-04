@@ -159,6 +159,96 @@ src/compositors/dwm/        ← ONLY DWM-specific config (future)
    EWW, st, foot, btop, mako, Hyprland borders, hyprlock, neovim.
    Adding a compositor means adding one more template, not rewriting themes.
 
+### Nemo CSS Theming (REGRESSION-PRONE — READ BEFORE TOUCHING)
+
+#### Source of truth: `src/regen-nemo-css.py`
+
+`regen-nemo-css.py` is the **single source of truth** for all 15 per-theme
+`nemo.css` files. Any fix applied directly to individual theme `nemo.css` files
+**will be silently reverted** the next time anyone runs the regen script. Every
+CSS fix MUST go into `regen-nemo-css.py` first, then regenerate:
+
+```bash
+cd src && python3 regen-nemo-css.py
+```
+
+`src/shared/themes/_templates/nemo.css.tpl` is a parallel Jinja-style template
+used by `generate-theme-configs.sh`. Keep it in sync with `regen-nemo-css.py`
+— they must produce equivalent CSS.
+
+#### The black-on-black submenu regression (DO NOT REPEAT)
+
+**Symptom:** Context menu submenus (e.g. "Open With") show black text on black
+background — completely unreadable.
+
+**Root cause — CSS inheritance + specificity interaction:**
+1. `menuitem:hover { color: sel_fg }` is a CSS *inherited* property. Every
+   descendant of the hovered menuitem, including the popup submenu and all items
+   inside it, inherits `sel_fg` unless explicitly overridden.
+2. On dark themes (matrix, catppuccin, matte-black, etc.) `sel_fg` is the
+   background color (e.g. `#000000` on matrix, `#1e1e2e` on catppuccin) —
+   so submenu labels become invisible.
+
+**The fix — two parts, both are required:**
+
+Part 1 — Direct-child `>` selectors for hover label rules (prevents cascade via
+selector matching):
+```css
+/* CORRECT — > means only the hovered item's own labels */
+menu menuitem:hover > label:dir(ltr),
+.context-menu menuitem:hover > label:dir(ltr),
+menuitem:hover > label { color: sel_fg; }
+
+/* WRONG — descendant selector bleeds sel_fg into submenu labels */
+menu menuitem:hover label:dir(ltr),
+.context-menu menuitem:hover label:dir(ltr),
+menuitem:hover label { color: sel_fg; }
+```
+
+Part 2 — Explicit submenu reset block (stops CSS color *inheritance*):
+```css
+/* Required — direct-child selectors alone don't stop CSS inheritance */
+menuitem:hover > menu,
+menuitem:hover > menu menuitem { background-color: bg; color: fg; }
+
+menuitem:hover > menu menuitem label,
+menuitem:hover > menu menuitem > box > label,
+menuitem:hover > menu menuitem accelerator { color: fg; }
+
+menuitem:hover > menu menuitem:hover { background-color: sel_bg; color: sel_fg; }
+menuitem:hover > menu menuitem:hover > label { color: sel_fg; }
+```
+
+**Why both are needed:**
+- Without Part 1: high-specificity descendant selectors (e.g. `.context-menu
+  menuitem:hover label:dir(ltr)`, specificity 0,3,2) beat the reset block
+  (specificity 0,1,4) → reset loses → submenus get sel_fg anyway.
+- Without Part 2: CSS `color` property inherits down the widget tree regardless
+  of selectors → submenu items inherit sel_fg from their ancestor menuitem.
+
+**Deployment:** After fixing `regen-nemo-css.py`, regenerate all themes, then
+deploy the active theme's CSS to the running system:
+```bash
+# Find active theme:
+cat ~/.config/smplos/current/theme.name
+
+# Deploy (atomic rename so nemo's GFileMonitor sees a complete file):
+cp src/shared/themes/<name>/nemo.css ~/.config/smplos/nemo-theme.css.tmp
+mv -f ~/.config/smplos/nemo-theme.css.tmp ~/.config/smplos/nemo-theme.css
+
+# Relaunch nemo to pick up the change:
+pkill nemo; nemo &
+```
+
+**NEVER do these:**
+- NEVER fix only the per-theme `nemo.css` files without also fixing
+  `regen-nemo-css.py` — the fix will be reverted on the next regeneration.
+- NEVER use descendant selectors (`menuitem:hover label`) for hover colors —
+  always use direct-child (`menuitem:hover > label`).
+- NEVER remove the submenu reset block (`menuitem:hover > menu …`).
+- NEVER use a wildcard descendant (`menuitem:hover *`) — it paints everything
+  including submenus, separators, and accelerator labels with sel_fg.
+
 ### Logseq Theming (REGRESSION-PRONE — READ BEFORE TOUCHING)
 
 `theme-set` applies Logseq themes via two mechanisms:
