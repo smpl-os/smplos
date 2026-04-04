@@ -336,17 +336,23 @@ menuitem label {
     color: {{ foreground }};
 }
 
-/* Same specificity with :hover — beats the unselected rule above */
-menu menuitem:hover label:dir(ltr),
-menu menuitem:hover label:dir(rtl),
-.menu menuitem:hover label:dir(ltr),
-.menu menuitem:hover label:dir(rtl),
-.context-menu menuitem:hover label:dir(ltr),
-.context-menu menuitem:hover label:dir(rtl),
-menuitem:hover label,
+/* High-specificity hover label rules — direct-child selectors only to
+ * prevent selection_foreground from cascading into popup submenus.
+ * Using prefixed selectors (menu, .menu, .context-menu) beats the (0,1,3)
+ * non-hover rule [menu menuitem label:dir(ltr)] that would otherwise
+ * override the bare (0,1,1) menuitem:hover > label. The > combinator
+ * ensures ONLY the hovered item's own labels are coloured, never labels
+ * inside a child submenu popup. */
+menu menuitem:hover > label:dir(ltr),
+menu menuitem:hover > label:dir(rtl),
+.menu menuitem:hover > label:dir(ltr),
+.menu menuitem:hover > label:dir(rtl),
+.context-menu menuitem:hover > label:dir(ltr),
+.context-menu menuitem:hover > label:dir(rtl),
+menuitem:hover > label,
 menuitem:hover > box > label,
 menuitem:hover > box > image,
-menuitem:hover accelerator {
+menuitem:hover > accelerator {
     color: {{ selection_foreground }};
 }
 
@@ -397,7 +403,8 @@ menuitem:hover > menu menuitem {
 
 menuitem:hover > menu menuitem label,
 menuitem:hover > menu menuitem > box > label,
-menuitem:hover > menu menuitem > box > image {
+menuitem:hover > menu menuitem > box > image,
+menuitem:hover > menu menuitem accelerator {
     color: {{ foreground }};
 }
 

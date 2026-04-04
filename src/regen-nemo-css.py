@@ -389,9 +389,47 @@ menuitem:hover {{
     color: {sel_fg};
 }}
 
-menu menuitem:hover > label,
-menu menuitem:hover > box > label,
-menu menuitem:hover > box > image {{
+/* High-specificity hover label rules — direct-child (>) selectors only so
+ * selection_foreground does NOT cascade into popup submenus.
+ * The prefixed selectors beat the (0,1,3) / (0,2,2) non-hover label rules
+ * that would otherwise override the bare menuitem:hover > label rule. */
+menu menuitem:hover > label:dir(ltr),
+menu menuitem:hover > label:dir(rtl),
+.menu menuitem:hover > label:dir(ltr),
+.menu menuitem:hover > label:dir(rtl),
+.context-menu menuitem:hover > label:dir(ltr),
+.context-menu menuitem:hover > label:dir(rtl),
+menuitem:hover > label,
+menuitem:hover > box > label,
+menuitem:hover > box > image,
+menuitem:hover > accelerator {{
+    color: {sel_fg};
+}}
+
+/* Prevent inherited hover color from reaching submenu popups.
+ * menuitem:hover {{ color: sel_fg }} is inherited by all descendants — including
+ * the submenu menu widget and its items.  These explicit resets undo that. */
+menuitem:hover > menu,
+menuitem:hover > menu menuitem {{
+    background-color: {bg};
+    color: {fg};
+}}
+
+menuitem:hover > menu menuitem label,
+menuitem:hover > menu menuitem > box > label,
+menuitem:hover > menu menuitem > box > image,
+menuitem:hover > menu menuitem accelerator {{
+    color: {fg};
+}}
+
+menuitem:hover > menu menuitem:hover {{
+    background-color: {sel_bg};
+    color: {sel_fg};
+}}
+
+menuitem:hover > menu menuitem:hover > label,
+menuitem:hover > menu menuitem:hover > box > label,
+menuitem:hover > menu menuitem:hover > box > image {{
     color: {sel_fg};
 }}
 
