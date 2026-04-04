@@ -1,7 +1,9 @@
 #!/bin/bash
 # Sync keyboard layouts from OS config on startup.
-# Source of truth: ~/.config/hypr/input.conf
-# Applies layouts to the running compositor (runtime) and keeps input.conf normalized.
+# Source of truth: ~/.config/hypr/input.conf (managed by the Settings app).
+#
+# The Settings app validates all layout/variant pairs before writing, so this
+# script just reads the values and applies them — no "fixing" needed.
 
 set -u
 
@@ -18,78 +20,23 @@ fi
 
 log "start: input_conf=$INPUT_CONF"
 
-parse_input_conf() {
-    local conf="$1"
-    local l=""
-    local v=""
-    [[ -f "$conf" ]] || { echo "|"; return; }
-    l=$(sed -n 's/^\s*kb_layout\s*=\s*//p' "$conf" | head -n1)
-    v=$(sed -n 's/^\s*kb_variant\s*=\s*//p' "$conf" | head -n1)
-    l="${l//[[:space:]]/}"
-    v="${v//[[:space:]]/}"
-    echo "$l|$v"
-}
-
-conf_pair=$(parse_input_conf "$INPUT_CONF")
-conf_layouts="${conf_pair%%|*}"
-conf_variants="${conf_pair#*|}"
-
-layouts="$conf_layouts"
-variants="$conf_variants"
-
-# Strip empty entries from comma-separated layout/variant strings.
-# A bug in settings or manual editing can leave ",ru" instead of "us,ru".
-# Hyprland rejects empty layout codes: "layout: (unset),ru"
-clean_csv() {
-    local input="$1" result=""
-    IFS=',' read -ra parts <<< "$input"
-    for p in "${parts[@]}"; do
-        p="${p// /}"
-        [[ -z "$p" ]] && continue
-        result="${result:+$result,}$p"
-    done
-    echo "$result"
-}
-layouts=$(clean_csv "$layouts")
-
-# Variants are positional — empty entries mean "no variant" for the layout
-# at that position. We must NOT strip them, only trim whitespace.
-clean_variants_csv() {
-    local input="$1" result="" first=true
-    IFS=',' read -ra parts <<< "$input"
-    for p in "${parts[@]}"; do
-        p="${p// /}"
-        if $first; then
-            result="$p"
-            first=false
-        else
-            result="$result,$p"
-        fi
-    done
-    echo "$result"
-}
-variants=$(clean_variants_csv "$variants")
+# Parse kb_layout and kb_variant from input.conf (strip whitespace only).
+layouts=$(sed -n 's/^\s*kb_layout\s*=\s*//p' "$INPUT_CONF" | head -n1)
+variants=$(sed -n 's/^\s*kb_variant\s*=\s*//p' "$INPUT_CONF" | head -n1)
+layouts="${layouts//[[:space:]]/}"
+variants="${variants//[[:space:]]/}"
 
 if [[ -z "$layouts" ]]; then
     log "no layouts resolved from input.conf, exiting"
     exit 0
 fi
 
-log "resolved: source=input.conf layouts='$layouts' variants='$variants'"
+log "resolved: layouts='$layouts' variants='$variants'"
 
 # Only one layout? Nothing to sync (compositor default is fine)
 if [[ "$layouts" != *","* ]]; then
     log "single-layout ('${layouts}'), exiting"
     exit 0
-fi
-
-# ── Update Hyprland input.conf (persistent across reboots) ──
-if [[ -f "$INPUT_CONF" ]]; then
-    sed -i "s/^\(\s*\)kb_layout\s*=.*/\1kb_layout = $layouts/" "$INPUT_CONF"
-    sed -i "s/^\(\s*\)kb_variant\s*=.*/\1kb_variant = $variants/" "$INPUT_CONF"
-    # Use grp:alt_shift_toggle for native XKB switching (no process spawn, instant)
-    sed -i "s/^\(\s*\)kb_options\s*=.*/\1kb_options = compose:caps,grp:alt_shift_toggle/" "$INPUT_CONF"
-    sed -i "s/^\(\s*\)kb_rules\s*=.*/\1kb_rules = evdev/" "$INPUT_CONF"
 fi
 
 # ── Apply to running compositor (live, immediate) ──
