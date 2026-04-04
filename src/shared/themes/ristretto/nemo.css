@@ -377,6 +377,14 @@ toolbar.primary-toolbar button.suggested-action label {
     color: #e6d9db;
 }
 
+/* Text/hex drawing area — GTK "view" class defaults to white bg in Adwaita */
+.nemo-quick-preview .view,
+.nemo-quick-preview textview,
+.nemo-quick-preview textview text {
+    background-color: #2c2525;
+    color: #e6d9db;
+}
+
 /* =====================================================================
  * Search bar (nemo file-search, top of window)
  * ===================================================================== */
