@@ -55,7 +55,12 @@ eww_stop() {
 eww_toggle() {
     eww --config "$EWW_CONFIG" open --toggle "$BAR_NAME"
 }
-eww_reload() { eww --config "$EWW_CONFIG" reload; }
+eww_reload() {
+    eww --config "$EWW_CONFIG" reload
+    # eww reload resets all defvar to defaults — re-apply saved settings
+    sleep 0.3
+    eww_apply
+}
 
 # Apply bar settings from ~/.config/smplos/bar.conf to running EWW instance.
 # File format: KEY=VALUE (shell-compatible).  Supported keys:
