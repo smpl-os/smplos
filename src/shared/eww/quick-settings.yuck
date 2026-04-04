@@ -72,9 +72,13 @@
 (defwidget qs-wired []
   (qs-pill
     :icon ""
-    :icon-path {net-data.wired == "yes" ? "icons/status/network-wired-activated-inverted.svg" : "icons/status/network-wired-disconnected-symbolic.svg"}
-    :label {net-data.wired == "yes" ? "Connected" : "Off"}
-    :active {net-data.wired == "yes"}
+    :icon-path {net-data.online == "full" ? "icons/status/network-wired-activated-inverted.svg" :
+                net-data.online == "local" ? "icons/status/network-wired-no-internet.svg" :
+                "icons/status/network-wired-disconnected-symbolic.svg"}
+    :label {net-data.online == "full" ? "Connected" :
+            net-data.online == "local" ? "Local only" :
+            net-data.wired == "yes" ? "No internet" : "Off"}
+    :active {net-data.wired == "yes" || net-data.online != "none"}
     :onclick "wired-toggle"
     :arrow-cmd "nm-connection-editor &"
     :tooltip "Toggle Wired"

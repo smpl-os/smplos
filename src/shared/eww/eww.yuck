@@ -34,7 +34,7 @@
 
 ;; Network (event-driven via nmcli monitor)
 ;; display_icon = absolute path to pre-baked SVG (colors from theme-set)
-(deflisten net-data :initial '{"wired":"no","wired_icon":"icons/status/network-wired-disconnected.svg","display_icon":"icons/status/network-wired-disconnected.svg","wifi_on":"no","wifi_icon":"󰤮","ssid":"","online":"no","vpn":"off","wifi_available":"yes","wired_available":"yes"}' `scripts/network-listener.sh`)
+(deflisten net-data :initial '{"wired":"no","wired_icon":"icons/status/network-wired-disconnected.svg","display_icon":"icons/status/network-wired-disconnected.svg","wifi_on":"no","wifi_icon":"󰤮","ssid":"","online":"none","vpn":"off","wifi_available":"yes","wired_available":"yes"}' `scripts/network-listener.sh`)
 
 ;; Bluetooth
 (deflisten bt-data :initial '{"powered":"off","connected":"no","device":"","icon":"󰂲","available":"yes"}' `scripts/bluetooth-listener.sh`)
@@ -159,8 +159,9 @@
   (button :class "tray-internet"
           :onclick "popup-toggle quick-settings"
           :tooltip {net-data.vpn == "on" ? "VPN active" :
-                    net-data.wired == "yes" ? "Wired connected" :
-                    net-data.online == "yes" ? "Online" : "Disconnected"}
+                    net-data.online == "full" ? (net-data.wired == "yes" ? "Wired connected" : "Online") :
+                    net-data.online == "local" ? "Local network only — no internet" :
+                    "Disconnected"}
     (image :path {net-data.display_icon}
            :image-width 16 :image-height 16)))
 

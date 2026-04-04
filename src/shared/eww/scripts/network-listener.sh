@@ -8,12 +8,13 @@
 #   wifi_on      - "yes"/"no" (adapter enabled)
 #   wifi_icon    - Nerd Font glyph (signal bars or off)
 #   ssid         - connected SSID or ""
-#   online       - "yes"/"no" (can reach internet)
+#   online       - "full"/"local"/"none" (internet / LAN-only / disconnected)
 #   vpn          - "on"/"off"
 
 # SVG icons (baked with theme colors by theme-set)
 ICON_DIR="$HOME/.config/eww/icons/status"
 ICON_ONLINE="$ICON_DIR/network-wired-activated.svg"
+ICON_LOCAL="$ICON_DIR/network-wired-no-internet.svg"
 ICON_OFFLINE="$ICON_DIR/network-wired-disconnected.svg"
 ICON_VPN="$ICON_DIR/network-vpn.svg"
 
@@ -39,14 +40,14 @@ fi
 emit() {
   local wired="no" wired_icon="$ICON_OFFLINE"
   local wifi_on="no" wifi_icon=$'\U000f092e'
-  local ssid="" online="no" vpn="off"
+  local ssid="" online="none" vpn="off"
 
   if nm_running; then
     # ── NetworkManager path ──────────────────────────────────────────
     # Wired: check ALL ethernet devices, connected if any is
     while IFS=: read -r type state _; do
       if [[ "${type,,}" == "ethernet" && "$state" == "connected" ]]; then
-        wired="yes"; wired_icon="$ICON_ONLINE"
+        wired="yes"
         break
       fi
     done < <(nmcli -t -f TYPE,STATE device 2>/dev/null)
@@ -72,10 +73,14 @@ emit() {
       fi
     fi
 
-    # Connectivity
-    local state
-    state=$(nmcli networking connectivity check 2>/dev/null || echo "unknown")
-    [[ "$state" == "full" || "$state" == "limited" ]] && online="yes"
+    # Connectivity: "full" = internet, "limited"/"portal" = local only
+    local nm_conn
+    nm_conn=$(nmcli networking connectivity check 2>/dev/null || echo "unknown")
+    if [[ "$nm_conn" == "full" ]]; then
+      online="full"
+    elif [[ "$nm_conn" == "limited" || "$nm_conn" == "portal" ]]; then
+      online="local"
+    fi
 
     # VPN: detect any active VPN/WireGuard/tunnel via NM connections
     local vpn_name
@@ -91,14 +96,17 @@ emit() {
       local operstate
       operstate=$(< /sys/class/net/"$iface"/operstate)
       if [[ "$operstate" == "up" ]] && ip addr show "$iface" 2>/dev/null | grep -q 'inet '; then
-        wired="yes"; wired_icon="$ICON_ONLINE"
+        wired="yes"
         break
       fi
     done
 
-    # Connectivity: quick ping
+    # Connectivity: quick ping for internet, then check local
     if ping -c1 -W2 1.1.1.1 &>/dev/null; then
-      online="yes"
+      online="full"
+    elif [[ "$wired" == "yes" ]]; then
+      # Link is up but no internet — local-only
+      online="local"
     fi
 
     # VPN: check for active WireGuard or tun/tap interfaces
@@ -109,8 +117,18 @@ emit() {
     fi
   fi
 
-  # Display icon: VPN takes priority over wired (like Windows taskbar)
-  local display_icon="$wired_icon"
+  # Display icon priority: VPN > connectivity-aware wired icon
+  # 3 states: connected (internet OK), local-only (LAN but no internet), disconnected
+  local display_icon="$ICON_OFFLINE"
+  if [[ "$wired" == "yes" || -n "$ssid" ]]; then
+    if [[ "$online" == "full" ]]; then
+      display_icon="$ICON_ONLINE"
+    elif [[ "$online" == "local" ]]; then
+      display_icon="$ICON_LOCAL"
+    else
+      display_icon="$ICON_OFFLINE"
+    fi
+  fi
   [[ "$vpn" == "on" ]] && display_icon="$ICON_VPN"
 
   printf '{"wired":"%s","wired_icon":"%s","display_icon":"%s","wifi_on":"%s","wifi_icon":"%s","ssid":"%s","online":"%s","vpn":"%s","wifi_available":"%s","wired_available":"%s"}\n' \
