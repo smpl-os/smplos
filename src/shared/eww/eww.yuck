@@ -99,26 +99,23 @@
           :onclick "workspace-group ${ws} 2>/dev/null || true"
     (label :text {active-workspace == ws ? "●" : "${ws}"})))
 
-;; Squares mode grid (2 rows x 5 cols, hidden beyond ws-count)
+;; Squares mode grid — balanced 2 rows (e.g. 7 → 4+3, 8 → 4+4)
+;; Split point = ceil(ws-count / 2): top row gets IDs 1..split, bottom gets split+1..ws-count.
+;; Each ID appears in both rows; visibility picks the correct one.
 (defwidget workspace-grid []
   (box :orientation "v" :spacing ws-spacing
+    ;; ── Top row ──
     (box :orientation "h" :spacing ws-spacing
-      (workspace-btn :id 1)
-      (workspace-btn :id 2)
-      (workspace-btn :id 3)
-      (workspace-btn :id 4)
-      (workspace-btn :id 5))
-    (box :orientation "h" :spacing ws-spacing
-      (workspace-btn :id 6)
-      (workspace-btn :id 7)
-      (workspace-btn :id 8)
-      (workspace-btn :id 9)
-      (workspace-btn :id 10))))
+      (for id in {jq("[1,2,3,4,5,6,7,8,9,10]", ".[0:${ws-count}] | .[0:${ceil(ws-count / 2)}]")}
+        (workspace-sq :id id)))
+    ;; ── Bottom row (hidden when ws-count <= 1) ──
+    (box :visible {ws-count > 1} :orientation "h" :spacing ws-spacing
+      (for id in {jq("[1,2,3,4,5,6,7,8,9,10]", ".[0:${ws-count}] | .[${ceil(ws-count / 2)}:]")}
+        (workspace-sq :id id)))))
 
 ;; Single square button for the grid
-(defwidget workspace-btn [id]
+(defwidget workspace-sq [id]
   (button
-    :visible {id <= ws-count}
     :class {id == active-workspace ? "ws-btn active" :
             arraylength(jq(workspaces, "map(select(. == ${id}))")) > 0 ? "ws-btn occupied" :
             "ws-btn"}
