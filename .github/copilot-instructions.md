@@ -161,21 +161,35 @@ src/compositors/dwm/        ← ONLY DWM-specific config (future)
 
 ### Nemo CSS Theming (REGRESSION-PRONE — READ BEFORE TOUCHING)
 
-#### Source of truth: `src/regen-nemo-css.py`
+#### Source of truth: `src/regen-nemo-css.py` — run via `regen-all-themes.sh`
 
-`regen-nemo-css.py` is the **single source of truth** for all 15 per-theme
-`nemo.css` files. Any fix applied directly to individual theme `nemo.css` files
-**will be silently reverted** the next time anyone runs the regen script. Every
-CSS fix MUST go into `regen-nemo-css.py` first, then regenerate:
+`src/regen-all-themes.sh` is the **single entry point** for all theme file
+generation. Run it whenever you change any template or `colors.toml`:
 
 ```bash
-cd src && python3 regen-nemo-css.py
+cd src && bash regen-all-themes.sh
 ```
 
+It runs both generators in order:
+1. `generate-theme-configs.sh` — all `.tpl` files → 12 outputs per theme
+2. `regen-nemo-css.py` — `nemo.css` only (GTK CSS; cannot use simple sed expansion)
+
+**Never run `generate-theme-configs.sh` or `regen-nemo-css.py` directly.**
+Use `regen-all-themes.sh` so both always run and outputs stay in sync.
+
+To verify nothing is out of sync (CI / pre-commit):
+```bash
+cd src && bash regen-all-themes.sh --check   # exits 1 if any file drifted
+```
+
+`regen-nemo-css.py` is the sole source of truth for `nemo.css`. Any fix
+applied directly to individual theme `nemo.css` files will be silently
+reverted on the next run. Every CSS fix MUST go into `regen-nemo-css.py`.
+
 `nemo.css.tpl` has been **intentionally deleted** — `generate-theme-configs.sh`
-processes every `*.tpl` file unconditionally, so having a `nemo.css.tpl` would
-silently clobber all 15 nemo.css files with inferior CSS any time that script
-was run for any reason. Do NOT recreate `nemo.css.tpl`.
+now **hard-errors** if it is ever recreated, because the simple sed expansion
+cannot reproduce the GTK CSS submenu reset blocks (it would silently overwrite
+all 15 nemo.css files with broken CSS and reintroduce black-on-black menus).
 
 #### The black-on-black submenu regression (DO NOT REPEAT)
 
@@ -242,8 +256,12 @@ pkill nemo; nemo &
 ```
 
 **NEVER do these:**
+- NEVER run `generate-theme-configs.sh` or `regen-nemo-css.py` directly —
+  always use `regen-all-themes.sh` so both generators run and stay in sync.
 - NEVER fix only the per-theme `nemo.css` files without also fixing
   `regen-nemo-css.py` — the fix will be reverted on the next regeneration.
+- NEVER recreate `nemo.css.tpl` — `generate-theme-configs.sh` now hard-errors
+  if it exists; the sed expansion cannot reproduce the GTK CSS submenu resets.
 - NEVER use descendant selectors (`menuitem:hover label`) for hover colors —
   always use direct-child (`menuitem:hover > label`).
 - NEVER remove the submenu reset block (`menuitem:hover > menu …`).
