@@ -1,4 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 22" fill="{{accent}}">
-  <path d="m3 3v6h2v7c0 1.662 1.338 3 3 3h4v-5h-5v2h2v2h-1c-1.108 0-2-0.892-2-2v-7h2v-6zm6 0v1h9v7h1v-8h-1zm-5 1h3v4h-3zm1 1v2h1v-2zm-2 5v6h1v-6z"/>
-  <path d="M 13.848,13.003 13,13.852 15.152,16.003 13,18.155 l 0.848,0.848 2.152,-2.152 2.152,2.152 L 19,18.155 16.848,16.003 19,13.852 18.152,13.003 16,15.155 Z"/>
+  <!-- Cable base shape (dimmed via opacity) -->
+  <path d="m3 3v6h2v7c0 1.662 1.338 3 3 3h4v-5h-5v2h2v2h-1c-1.108 0-2-0.892-2-2v-7h2v-6zm6 0v1h9v7h1v-8h-1zm-5 1h3v4h-3zm1 1v2h1v-2zm-2 5v6h1v-6z" opacity="0.7"/>
+  <!-- Bold X overlay -->
+  <path d="M13.5 13 L19 18.5 M19 13 L13.5 18.5" fill="none" stroke="{{accent}}" stroke-width="2" stroke-linecap="round"/>
 </svg>

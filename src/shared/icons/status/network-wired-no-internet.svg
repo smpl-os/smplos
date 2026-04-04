@@ -1,7 +1,9 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 22" fill="{{accent}}">
-  <!-- Base: wired network shape (same as disconnected — cable visible but partial) -->
-  <path d="m3 3v6h2v7c0 1.662 1.338 3 3 3h4v-5h-5v2h2v2h-1c-1.108 0-2-0.892-2-2v-7h2v-6zm6 0v1h9v7h1v-8h-1zm-5 1h3v4h-3zm1 1v2h1v-2zm-2 5v6h1v-6z"/>
-  <!-- Exclamation mark overlay: "local only, no internet" -->
-  <rect x="15.25" y="12.5" width="1.5" height="4" rx="0.5"/>
-  <rect x="15.25" y="17.5" width="1.5" height="1.5" rx="0.5"/>
+  <!-- Cable base (partial connection shape, dimmed) -->
+  <path d="m3 3v6h2v7c0 1.662 1.338 3 3 3h4v-5h-5v2h2v2h-1c-1.108 0-2-0.892-2-2v-7h2v-6zm6 0v1h9v7h1v-8h-1zm-5 1h3v4h-3zm1 1v2h1v-2zm-2 5v6h1v-6z" opacity="0.7"/>
+  <!-- Warning triangle: "local network only" (KDE-style, monochrome) -->
+  <path d="M16 11.5 L19.5 18.5 L12.5 18.5 Z" fill="none" stroke="{{accent}}" stroke-width="1.5" stroke-linejoin="round"/>
+  <!-- Exclamation inside triangle -->
+  <rect x="15.4" y="13.8" width="1.2" height="2.8" rx="0.4"/>
+  <rect x="15.4" y="17.2" width="1.2" height="1.2" rx="0.4"/>
 </svg>
