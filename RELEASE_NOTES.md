@@ -4,6 +4,19 @@ Full changelog for all smplOS releases. For the latest release, see the [README]
 
 ---
 
+## v0.7.2
+
+- **kb-sync simplified — settings app now owns layout validation.** Removed
+  `clean_csv` and `clean_variants_csv` workaround code (~40 lines) from
+  `kb-sync`. The settings app now validates layout:variant pairs and runs an
+  XKB compile check before writing `input.conf`, so `kb-sync` can apply the
+  config as-is without second-guessing it.
+
+- **Picks up smpl-apps v0.7.1** with idle shutdown via hypridle, Sleep in
+  the start-menu power popup, and keyboard layout variant validation.
+
+---
+
 ## v0.7.0
 
 - **Start-menu Enter key launches top search result.** Pressing Enter while
