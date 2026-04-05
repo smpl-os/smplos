@@ -516,28 +516,17 @@ if [[ "$(cat /sys/devices/virtual/dmi/id/sys_vendor 2>/dev/null)" == "Microsoft 
       | sudo tee -a /etc/pacman.conf > /dev/null
   fi
 
-  if curl -sf --max-time 10 --head https://pkg.surfacelinux.com >/dev/null 2>&1; then
-    # Install Surface kernel + drivers (keeps linux-lts as fallback)
-    if sudo pacman --noconfirm -Sy linux-surface linux-surface-headers iptsd linux-firmware-marvell; then
-      # Enable touch/pen input daemon
-      chrootable_systemctl_enable iptsd || echo "    WARNING: failed to enable iptsd service"
-      # Rebuild GRUB config so linux-surface appears in the boot menu.
-      # Set GRUB_DEFAULT=saved so we can make linux-surface the default
-      # regardless of version-sort ordering.
-      if [[ -f /boot/grub/grub.cfg ]]; then
-        sudo sed -i 's/^GRUB_DEFAULT=.*/GRUB_DEFAULT=saved/' /etc/default/grub 2>/dev/null || true
-        sudo grub-mkconfig -o /boot/grub/grub.cfg || echo "    WARNING: grub-mkconfig failed"
-        # Set the default to the first linux-surface entry
-        sudo grub-set-default "$(grep -m1 'menuentry.*linux-surface' /boot/grub/grub.cfg | sed "s/menuentry '\\([^']*\\)'.*/\\1/")" 2>/dev/null || true
-      fi
-      echo "    Surface kernel installed successfully (linux-lts kept as fallback)"
-    else
-      echo "    WARNING: Surface package install failed, continuing with linux-lts"
-    fi
-  else
-    echo "    No internet -- skipping Surface kernel install (linux-lts still works)"
-    echo "    Run after connecting: sudo pacman -Sy linux-surface linux-surface-headers iptsd linux-firmware-marvell"
+  # Surface packages are now included in the ISO and offline repo. 
+  # They are pacstrapped automatically. We just need to enable services and set default kernel.
+  chrootable_systemctl_enable iptsd || echo "    WARNING: failed to enable iptsd service"
+  
+  if [[ -f /boot/grub/grub.cfg ]]; then
+    sudo sed -i 's/^GRUB_DEFAULT=.*/GRUB_DEFAULT=saved/' /etc/default/grub 2>/dev/null || true
+    sudo grub-mkconfig -o /boot/grub/grub.cfg >/dev/null 2>&1 || true
+    sudo grub-set-default "$(grep -m1 'menuentry.*linux-surface' /boot/grub/grub.cfg | sed "s/menuentry '\\([^']*\\)'.*/\\1/")" 2>/dev/null || true
   fi
+
+  echo "    Surface support enabled (linux-surface kernel + iptsd)."
 fi
 
 # Set up smplOS repo clone for future updates (git-based update system)

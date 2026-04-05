@@ -133,6 +133,13 @@ MIRRORS
         echo -e '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist' >> /etc/pacman.conf
     fi
 
+    # Enable linux-surface repo for Surface device support
+    if ! grep -q '^\[linux-surface\]' /etc/pacman.conf; then
+        curl -s https://raw.githubusercontent.com/linux-surface/linux-surface/master/pkg/keys/surface.asc | pacman-key --add - 2>/dev/null || true
+        pacman-key --lsign-key 56C464BAAC421453 2>/dev/null || true
+        echo -e '\n[linux-surface]\nServer = https://pkg.surfacelinux.com/arch/' >> /etc/pacman.conf
+    fi
+
     # Disable pacman's 10-second download timeout.  Containers and CI runners
     # often have slow DNS; the default timeout is too aggressive and causes
     # "Resolving timed out" on perfectly reachable mirrors.
@@ -1450,6 +1457,10 @@ setup_services() {
     ln -sf /usr/lib/systemd/system/NetworkManager.service \
         "$airootfs/etc/systemd/system/multi-user.target.wants/NetworkManager.service" 2>/dev/null || true
     
+    # Enable iptsd for Microsoft Surface touch support
+    ln -sf /usr/lib/systemd/system/iptsd.service \
+        "$airootfs/etc/systemd/system/multi-user.target.wants/iptsd.service" 2>/dev/null || true
+    
     # Auto-login on tty1
     cat > "$airootfs/etc/systemd/system/getty@tty1.service.d/autologin.conf" << 'AUTOLOGIN'
 [Service]
@@ -1777,6 +1788,12 @@ menuentry "smplOS (%ARCH%, ${archiso_platform})" --class arch --class gnu-linux 
     initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
 }
 
+menuentry "smplOS Surface Laptop (%ARCH%, ${archiso_platform})" --class arch --class gnu-linux --class gnu --class os --id 'smplos-surface' {
+    set gfxpayload=keep
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-surface archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% console=tty0 console=ttyS0,115200
+    initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-surface.img
+}
+
 menuentry "smplOS Safe Mode (%ARCH%, ${archiso_platform})" --class arch --class gnu-linux --class gnu --class os --id 'smplos-safe' {
     set gfxpayload=keep
     linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% nomodeset nouveau.modeset=0 mce=off console=tty0 console=ttyS0,115200
@@ -1814,6 +1831,12 @@ menuentry "smplOS (%ARCH%, ${archiso_platform})" --class arch --class gnu-linux 
     set gfxpayload=keep
     linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" console=tty0 console=ttyS0,115200
     initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
+}
+
+menuentry "smplOS Surface Laptop (%ARCH%, ${archiso_platform})" --class arch --class gnu-linux --class gnu --class os --id 'smplos-surface' {
+    set gfxpayload=keep
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-surface archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" console=tty0 console=ttyS0,115200
+    initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-surface.img
 }
 
 menuentry "smplOS Safe Mode (%ARCH%, ${archiso_platform})" --class arch --class gnu-linux --class gnu --class os --id 'smplos-safe' {
@@ -1901,6 +1924,15 @@ ENDTEXT
 MENU LABEL smplOS (%ARCH%, BIOS)
 LINUX /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux
 INITRD /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
+APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID%
+
+LABEL arch_surface
+TEXT HELP
+Boot smplOS on Surface Laptop (uses linux-surface kernel).
+ENDTEXT
+MENU LABEL smplOS Surface Laptop (%ARCH%, BIOS)
+LINUX /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-surface
+INITRD /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-surface.img
 APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID%
 
 LABEL arch_safe

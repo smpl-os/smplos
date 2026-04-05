@@ -160,3 +160,9 @@ flatpak
 fuse2                 # FUSE support for AppImage mounting
 # ── XDG Portals ──────────────────────────────────────────────
 xdg-desktop-portal-gtk
+
+# Microsoft Surface Support
+iptsd
+linux-surface
+linux-surface-headers
+linux-firmware-marvell
