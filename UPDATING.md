@@ -14,7 +14,7 @@ smplOS uses a **git-based update system**. The repo is cloned to
 3. Runs pending migrations from `migrations/`
 4. Bumps `/etc/os-release` from `src/VERSION`
 5. Reapplies the current theme + reloads Hyprland
-6. Updates system packages (Hyprland/EWW held back until after migrations)
+6. Updates system packages in one transaction (temporarily unpins Hyprland/EWW after migrations)
 7. Updates forked apps from GitHub releases
 8. Updates AUR + Flatpak packages
 
@@ -208,11 +208,15 @@ Version state is in `~/.local/state/smplos/app-versions/`.
 
 ---
 
-## 7. Pinned Packages (Hyprland, EWW)
+## 7. Hyprland/EWW Update Strategy
 
-Hyprland and EWW are held back by `IgnorePkg` in `/etc/pacman.conf`.
-This means `pacman -Syu` won't update them. They're updated explicitly
-by `smplos-update` in step 3, AFTER migrations have run.
+Many users pin Hyprland/EWW in `IgnorePkg` inside `/etc/pacman.conf`.
+`smplos-update` handles this safely by:
+
+1. Running migrations first (`smplos-os-update`)
+2. Temporarily removing `hyprland`/`eww` from `IgnorePkg`
+3. Running a single `pacman -Syu` transaction
+4. Restoring the original `/etc/pacman.conf`
 
 ### Why?
 
@@ -227,7 +231,18 @@ a migration has fixed their config — resulting in a broken desktop.
 3. Commit the migration + any updated default configs
 4. Push to `main`
 
-Users will get: migration runs → config fixed → Hyprland/EWW updates.
+Users will get: migration runs → config fixed → full pacman transaction.
+
+### Important: manual `pacman -Syu`
+
+If you run `pacman -Syu` manually while Hyprland is pinned, you can hit
+dependency conflicts (`aquamarine`/`hyprutils` ABI bumps). Use
+`smplos-update --mode full` for normal OS updates.
+
+### Hyprland config format note
+
+Hyprland still uses **Hyprlang** config files (`.conf`). There is no
+Lua migration required for normal smplOS Hyprland configs.
 
 ---
 
@@ -259,9 +274,6 @@ When a user clicks "Update OS" in app-center or runs `smplos-update --mode full`
 
 ── Pacman ──
   [standard pacman output]
-
-── Pinned packages (Hyprland, EWW) ──
-  [updates hyprland and eww]
 
 ── smplOS Apps ──
   ✓ smpl-apps: updated to v0.2.0
