@@ -162,6 +162,11 @@ MIRRORS
         echo -e '\n[linux-surface]\nServer = https://pkg.surfacelinux.com/arch/' >> /etc/pacman.conf
     fi
 
+    # Sync databases now that linux-surface repo + key are both ready.
+    # Without this, the next `pacman -S` would error with:
+    #   "database file for 'linux-surface' does not exist (use '-Sy' to download)"
+    retry pacman --noconfirm -Sy
+
     # Install reflector first so we can find the fastest mirrors
     retry pacman --noconfirm -S reflector
 
