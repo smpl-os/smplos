@@ -96,4 +96,14 @@ XDG_SESSION_TYPE=wayland
 XDG_SESSION_DESKTOP=Hyprland
 ENVEOF
 
+# Hyprshell: skip the runtime plugin build. Since Hyprland 0.55, hyprshell's
+# plugin fails to compile against current headers, but hyprshell falls back to
+# default keybinds and works fine without it. This drop-in suppresses the noisy
+# "Unable to load hyprland plugin" notification on every boot/config reload.
+mkdir -p /etc/systemd/user/hyprshell.service.d
+cat > /etc/systemd/user/hyprshell.service.d/no-plugin.conf << 'EOF'
+[Service]
+Environment=HYPRSHELL_NO_USE_PLUGIN=1
+EOF
+
 echo "Hyprland configuration complete!"
