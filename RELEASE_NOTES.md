@@ -4,6 +4,28 @@ Full changelog for all smplOS releases. For the latest release, see the [README]
 
 ---
 
+## v0.7.12
+
+- **Hyprshell "Unable to load hyprland plugin" notification silenced.** Since
+  Hyprland 0.55, hyprshell's runtime plugin build fails because of
+  include-path mismatches in upstream Hyprland headers
+  (`color-management-v1.hpp` resolution). Hyprshell falls back to default
+  keybinds and Alt-Tab keeps working fine, but users saw a scary
+  notification on every boot and every config reload. Now ships a systemd
+  user drop-in (`/etc/systemd/user/hyprshell.service.d/no-plugin.conf`)
+  that sets `HYPRSHELL_NO_USE_PLUGIN=1` — the upstream-supported way to
+  skip the plugin attempt entirely. Fresh installs get it via
+  `postinstall.sh`; existing installs get it via migration
+  `20260613-100000-hyprshell-no-plugin.sh`.
+
+- **`smplos-update` no longer breaks on hyprland IgnorePkg conflicts.**
+  During a full update, the script now temporarily unpins
+  hyprland/eww so pacman can complete a single consistent transaction,
+  then restores `pacman.conf` afterward. Avoids the dependency-resolution
+  dead end that left systems in a half-updated state.
+
+---
+
 ## v0.7.2
 
 - **kb-sync simplified — settings app now owns layout validation.** Removed
