@@ -133,13 +133,6 @@ MIRRORS
         echo -e '\n[multilib]\nInclude = /etc/pacman.d/mirrorlist' >> /etc/pacman.conf
     fi
 
-    # Enable linux-surface repo for Surface device support
-    if ! grep -q '^\[linux-surface\]' /etc/pacman.conf; then
-        curl -s https://raw.githubusercontent.com/linux-surface/linux-surface/master/pkg/keys/surface.asc | pacman-key --add - 2>/dev/null || true
-        pacman-key --lsign-key 56C464BAAC421453 2>/dev/null || true
-        echo -e '\n[linux-surface]\nServer = https://pkg.surfacelinux.com/arch/' >> /etc/pacman.conf
-    fi
-
     # Disable pacman's 10-second download timeout.  Containers and CI runners
     # often have slow DNS; the default timeout is too aggressive and causes
     # "Resolving timed out" on perfectly reachable mirrors.
@@ -147,12 +140,27 @@ MIRRORS
         sed -i '/^\[options\]/a DisableDownloadTimeout' /etc/pacman.conf
     fi
 
-    # Initialize pacman keyring and populate trust database
+    # Initialize pacman keyring and populate trust database BEFORE adding any
+    # third-party repos. The [linux-surface] repo must NOT be in pacman.conf
+    # yet, or `pacman -Sy` below will try to sync its database and fail on
+    # "signature from \"linux-surface\" is unknown trust".
     pacman-key --init
     pacman-key --populate archlinux
     retry pacman --noconfirm -Sy --needed archlinux-keyring
     # Re-populate after update so newly-shipped keys are trusted
     pacman-key --populate archlinux
+
+    # Import + locally sign the linux-surface signing key. We do NOT suppress
+    # errors here: a missing key would silently break the build later with
+    # "signature from \"linux-surface\" is unknown trust".
+    curl -fsSL https://raw.githubusercontent.com/linux-surface/linux-surface/master/pkg/keys/surface.asc \
+        | pacman-key --add -
+    pacman-key --lsign-key 56C464BAAC421453
+
+    # NOW add the [linux-surface] repo line, after the key is trusted.
+    if ! grep -q '^\[linux-surface\]' /etc/pacman.conf; then
+        echo -e '\n[linux-surface]\nServer = https://pkg.surfacelinux.com/arch/' >> /etc/pacman.conf
+    fi
 
     # Install reflector first so we can find the fastest mirrors
     retry pacman --noconfirm -S reflector
