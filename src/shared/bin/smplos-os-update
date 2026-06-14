@@ -209,6 +209,48 @@ sync_configs() {
     fi
 }
 
+# ── Sync themes to ~/.local/share/smplos/themes/ ─────────────────────────────
+# Stock theme files (colors.toml, nemo.css, eww-colors.scss, etc.) are read by
+# theme-set from $STOCK_THEMES_PATH ($HOME/.local/share/smplos/themes). They are
+# stamped into the installed system from the ISO and otherwise never updated,
+# which means CSS fixes (e.g. nemo submenu rendering) shipped via the repo never
+# reach existing installs. User-overridden themes live in $USER_THEMES_PATH
+# ($HOME/.config/smplos/themes) and are NOT touched here.
+sync_themes() {
+    local themes_src="$SMPLOS_REPO/src/shared/themes"
+    local themes_dst="$HOME/.local/share/smplos/themes"
+    [[ -d "$themes_src" ]] || { warn "No themes directory found at $themes_src"; return; }
+
+    header ""
+    header "── Syncing themes ──"
+
+    mkdir -p "$themes_dst"
+
+    local n_updated=0 n_total=0
+    for theme_dir in "$themes_src"/*/; do
+        [[ -d "$theme_dir" ]] || continue
+        local theme_name
+        theme_name=$(basename "$theme_dir")
+        # Skip _templates and any other private dirs starting with _
+        [[ "$theme_name" == _* ]] && continue
+        ((n_total++)) || true
+
+        local dst="$themes_dst/$theme_name"
+        # rsync would be cleaner but is not always present in the live ISO
+        if [[ ! -d "$dst" ]] || ! diff -rq "$theme_dir" "$dst" &>/dev/null; then
+            mkdir -p "$dst"
+            cp -rT "$theme_dir" "$dst"
+            ((n_updated++)) || true
+        fi
+    done
+
+    if [[ $n_updated -gt 0 ]]; then
+        ok "$n_updated of $n_total themes updated"
+    else
+        ok "All $n_total themes are current"
+    fi
+}
+
 # ── Fetch + install latest smpl-apps binaries ────────────────────────────────
 sync_apps() {
     local fetch_script="$SMPLOS_REPO/src/fetch-apps.sh"
@@ -313,6 +355,7 @@ fi
 if [[ $SCRIPTS_ONLY -eq 0 ]]; then
     sync_scripts
     sync_configs
+    sync_themes
     sync_apps
     run_migrations
 
