@@ -18,8 +18,9 @@ lib32-openal
 lib32-libxcomposite
 lib32-libxinerama
 lib32-opencl-icd-loader
-lib32-gst-plugins-base
-lib32-gst-plugins-good
+# NOTE: lib32-gst-plugins-base / lib32-gst-plugins-good no longer exist in
+# Arch multilib (removed upstream). Wine functions fine without them; only
+# affects legacy GStreamer audio backends, which Wine has deprecated.
 
 # ── Audio production (JACK/low-latency for DAWs) ─────────────
 realtime-privileges
