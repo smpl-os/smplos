@@ -2,50 +2,121 @@
 # Auto-mount removable block devices (USB, CD, HDD)
 # Replaces udiskie with zero RAM overhead -- uses udisks2 directly
 # Runs as a long-lived process (started from Hyprland autostart)
+#
+# Why this is more than a one-liner:
+#   The udev `add` event fires the moment the kernel discovers a partition,
+#   but blkid (which identifies the filesystem type) runs asynchronously inside
+#   the udev rules and can finish AFTER our handler runs.  If we only react to
+#   `add`, we frequently see ID_FS_TYPE empty and bail out silently — the drive
+#   then shows up in nemo's sidebar (GVFS volume monitor sees the volume even
+#   unmounted) but isn't actually mounted, so other apps can't see its files
+#   until the user clicks it in nemo and GVFS calls udisks2.Mount() for them.
+#
+#   To fix this we also react to `change` events (fired after blkid completes
+#   with the populated ID_FS_* properties) and scan once at startup to pick up
+#   drives that were already plugged in when we launched.
+#
+# Logs to stderr (visible via `journalctl --user -t automount` if started via
+# systemd, otherwise via Hyprland's log).
+
+log() { echo "automount: $*" >&2; }
 
 emit_notify() {
-  local dev="$1" action="$2"
-  local label
-  label=$(lsblk -no LABEL "$dev" 2>/dev/null | head -1)
-  [[ -z "$label" ]] && label=$(basename "$dev")
-
+  local label="$1" action="$2"
   case "$action" in
-    mount)   notify-send -a "Drives" "Drive mounted" "$label" ;;
-    unmount) notify-send -a "Drives" "Drive removed" "$label" ;;
+    mount)   notify-send -a "Drives" "Drive mounted" "$label" 2>/dev/null ;;
+    unmount) notify-send -a "Drives" "Drive removed" "$label" 2>/dev/null ;;
   esac
 }
 
-# Mount a new block device
-try_mount() {
-  local devpath="$1"
-  local devname
-  devname=$(udevadm info -p /sys"$devpath" --query=property 2>/dev/null \
-    | awk -F= '/^DEVNAME=/{print $2}')
-  [[ -z "$devname" ]] && return
-
-  # Only mount partitions (not whole disks)
-  local devtype
-  devtype=$(udevadm info -p /sys"$devpath" --query=property 2>/dev/null \
-    | awk -F= '/^DEVTYPE=/{print $2}')
-  [[ "$devtype" != "partition" ]] && return
-
-  # Only mount if it has a filesystem
-  local fs
-  fs=$(lsblk -no FSTYPE "$devname" 2>/dev/null | head -1)
-  [[ -z "$fs" ]] && return
-
-  # Skip if already mounted
-  findmnt -rno SOURCE "$devname" &>/dev/null && return
-
-  udisksctl mount --block-device "$devname" --no-user-interaction &>/dev/null \
-    && emit_notify "$devname" mount
+# Read all udev properties for a device in one call (cheaper + avoids races
+# from sequential `udevadm info` invocations).
+read_props() {
+  local query="$1"          # -p /sys/... OR -n /dev/...
+  local arg="$2"
+  udevadm info "$query" "$arg" --query=property 2>/dev/null
 }
 
-# Watch for block device add/remove events
+# Mount a block device if it's a partition with a filesystem and not yet mounted.
+# Accepts either a sysfs path (from monitor events) or a /dev node (from scan).
+try_mount() {
+  local props devname devtype fs_usage fs_type label
+
+  if [[ "$1" == /sys/* ]] || [[ "$1" == /devices/* ]]; then
+    local sysarg="$1"
+    [[ "$sysarg" == /devices/* ]] && sysarg="/sys$sysarg"
+    props=$(read_props -p "$sysarg")
+  else
+    props=$(read_props -n "$1")
+  fi
+  [[ -z "$props" ]] && return
+
+  # Parse all properties we care about in one awk pass.
+  eval "$(awk -F= '
+    $1=="DEVNAME"      {printf "devname=%s\n",  $2}
+    $1=="DEVTYPE"      {printf "devtype=%s\n",  $2}
+    $1=="ID_FS_USAGE"  {printf "fs_usage=%s\n", $2}
+    $1=="ID_FS_TYPE"   {printf "fs_type=%s\n",  $2}
+    $1=="ID_FS_LABEL"  {printf "label=%q\n",    $2}
+  ' <<< "$props")"
+
+  [[ -z "$devname" ]] && return
+  [[ "$devtype" != "partition" ]] && return
+  # Only mount real filesystems (skip swap, crypto_LUKS, LVM members, etc.)
+  [[ "$fs_usage" != "filesystem" ]] && return
+  [[ -z "$fs_type" ]] && return
+
+  # Skip if already mounted
+  findmnt -rno SOURCE "$devname" >/dev/null 2>&1 && return
+
+  [[ -z "$label" ]] && label=$(basename "$devname")
+
+  local out
+  if out=$(udisksctl mount --block-device "$devname" --no-user-interaction 2>&1); then
+    log "mounted $devname ($fs_type) → ${out#Mounted *at }"
+    emit_notify "$label" mount
+  else
+    # AlreadyMounted is benign — happens when GVFS / nemo raced us.
+    if [[ "$out" == *AlreadyMounted* ]] || [[ "$out" == *"already mounted"* ]]; then
+      return
+    fi
+    log "FAILED to mount $devname ($fs_type): $out"
+  fi
+}
+
+# Emit removal notification (we only have the sysfs path, not the label, at
+# remove time because the device node is already gone).
+on_remove() {
+  local devpath="$1" label
+  label=$(basename "$devpath")
+  emit_notify "$label" unmount
+}
+
+# Initial scan: mount any already-present partitions.  Handles the case where
+# the user plugs a drive in before Hyprland (and therefore automount) starts.
+initial_scan() {
+  local dev
+  while read -r dev; do
+    [[ -b "$dev" ]] && try_mount "$dev"
+  done < <(lsblk -lnpo NAME,TYPE | awk '$2=="part"{print $1}')
+}
+
+initial_scan
+
+# Watch for block device add/change/remove events.
+#
+# We listen on BOTH `add` and `change` events:
+#   * `add`    — fires immediately when the kernel sees the device. ID_FS_TYPE
+#                may still be empty here because blkid runs asynchronously.
+#   * `change` — fires after udev rules (including blkid) complete, so the
+#                ID_FS_* properties are populated. This is the event that
+#                reliably triggers the mount.
+# try_mount() is idempotent (it skips already-mounted devices) so both firing
+# in quick succession is fine.
 stdbuf -oL -- udevadm monitor --udev --subsystem-match=block 2>/dev/null \
   | while read -r _ _ event devpath _; do
       case "$event" in
-        add)    try_mount "$devpath" ;;
-        remove) emit_notify "$devpath" unmount ;;
+        add|change) try_mount "$devpath" ;;
+        remove)     on_remove "$devpath" ;;
       esac
     done
