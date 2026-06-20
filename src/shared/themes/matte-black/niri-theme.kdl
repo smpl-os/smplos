@@ -1,0 +1,50 @@
+// smplOS niri theme — AUTO-GENERATED from colors.toml.
+// Edit src/shared/themes/_templates/niri-theme.kdl.tpl and run
+// `cd src && bash regen-all-themes.sh` to regenerate.
+//
+// This file is spliced into ~/.config/niri/config.kdl by theme-set / the
+// niri config deploy script. It contains ONLY theme-variable settings —
+// non-themed config (input, gestures, autostart, env) lives in config.kdl.
+
+layout {
+    gaps 4
+
+    focus-ring {
+        width 2
+        // Gradient from accent to accent_alt — same colors Hyprland uses
+        // for its `border_active = rgb(accent) rgb(accent_alt) 45deg` value.
+        active-gradient from="#e68e0d" to="#D35F5F" angle=45 in="oklch"
+        // Inactive uses muted at 67% opacity (matches Hyprland's "aa" alpha).
+        inactive-color "#8a8a8daa"
+    }
+
+    border {
+        // smplOS uses focus-ring exclusively (matches Hyprland's
+        // col.active_border on `general`, not group borders).
+        off
+    }
+
+    shadow {
+        on
+        softness 30
+        spread 4
+        offset x=0 y=4
+        color "#00000099"
+    }
+
+    insert-hint {
+        color "#e68e0d66"
+    }
+}
+
+// Rounded corners for all windows (Vista frosted-glass look)
+window-rule {
+    geometry-corner-radius 3
+    clip-to-geometry true
+}
+
+// EWW layers also rounded
+layer-rule {
+    match namespace="eww-.*"
+    geometry-corner-radius 3
+}

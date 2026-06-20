@@ -1,0 +1,45 @@
+# smplOS niri-specific Packages (Wayland)
+# Shared packages are in src/shared/packages.txt
+
+# ── Niri Core ────────────────────────────────────────────────
+niri
+
+# ── Wayland Essentials ───────────────────────────────────────
+wayland
+xorg-xwayland
+qt5-wayland
+qt6-wayland
+xdg-desktop-portal-gnome
+
+# ── XWayland integration (niri needs the satellite) ──────────
+# niri does NOT bundle XWayland — xwayland-satellite is a separate
+# Wayland client that proxies legacy X11 apps as Wayland windows.
+xwayland-satellite
+
+# ── Lock + Idle (Wayland-protocol, not Hyprland-specific) ────
+# Niri can't use hyprlock/hypridle reliably. swaylock-effects
+# supports blur/screenshots like hyprlock; swayidle replaces hypridle.
+swaylock
+swayidle
+
+# ── Wayland Screenshot / Clipboard ───────────────────────────
+# grim/slurp/wl-clipboard already in hyprland packages — re-listed
+# here so niri can be installed without the hyprland tree.
+grim
+slurp
+wl-clipboard
+
+# ── Wayland Input Simulation ─────────────────────────────────
+wtype
+
+# ── Wayland Display Utilities ────────────────────────────────
+wlr-randr
+
+# ── Wayland Wallpaper ────────────────────────────────────────
+swaybg
+
+# ── Wayland Launcher ──────────────────────────────────────────
+rofi-wayland
+
+# ── Wayland Image Viewer ─────────────────────────────────────
+imv

@@ -1,0 +1,79 @@
+#!/usr/bin/env bash
+# smplOS — assemble ~/.config/niri/config.kdl from its parts.
+#
+# niri has no `include`/`source` directive — its config must be a single
+# file. This script concatenates the smplOS niri config sections in the
+# correct order into ~/.config/niri/config.kdl, then asks niri to reload
+# (no-op if niri isn't running, e.g. inside the installer chroot).
+#
+# Sources (read from $SMPLOS_PATH/configs/niri, deployed there by the
+# build pipeline):
+#   base.kdl           — input, layout fallback, environment, autostart
+#   theme.kdl          — current theme's layout overrides + rounding
+#   binds.kdl          — translated from bindings.conf
+#   window-rules.kdl   — app-id positioning
+#   layer-rules.kdl    — EWW namespace blur
+#
+# Each part is wrapped in `// === BEGIN <name> ===` / `// === END <name> ===`
+# markers so a human can navigate the assembled file.
+#
+# Usage:
+#   deploy-niri-config              # assemble + reload
+#   deploy-niri-config --no-reload  # assemble only
+
+set -euo pipefail
+
+SMPLOS_PATH="${SMPLOS_PATH:-$HOME/.local/share/smplos}"
+NIRI_SRC="$SMPLOS_PATH/configs/niri"
+NIRI_DST="$HOME/.config/niri"
+OUT="$NIRI_DST/config.kdl"
+TMP="$NIRI_DST/config.kdl.tmp"
+
+RELOAD=true
+[[ "${1:-}" == "--no-reload" ]] && RELOAD=false
+
+mkdir -p "$NIRI_DST"
+
+if [[ ! -d "$NIRI_SRC" ]]; then
+  echo "deploy-niri-config: source dir not found: $NIRI_SRC" >&2
+  exit 1
+fi
+
+# Theme override lives in ~/.config/niri/theme.kdl (written by theme-set).
+# Falls back to the stock theme.kdl shipped in the build.
+THEME_KDL="$NIRI_DST/theme.kdl"
+[[ -f "$THEME_KDL" ]] || THEME_KDL="$NIRI_SRC/theme.kdl"
+
+# Concatenate parts in order. Order matters because niri's last-block-wins
+# behavior for duplicate top-level sections means theme.kdl can override
+# base.kdl's layout block.
+{
+  cat "$NIRI_SRC/base.kdl" 2>/dev/null || cat "$NIRI_SRC/config.kdl"
+
+  echo ""
+  echo "// === BEGIN theme.kdl ==="
+  cat "$THEME_KDL" 2>/dev/null || echo "// (no theme.kdl found — using base.kdl defaults)"
+  echo "// === END theme.kdl ==="
+
+  echo ""
+  echo "// === BEGIN binds.kdl ==="
+  cat "$NIRI_SRC/binds.kdl"
+  echo "// === END binds.kdl ==="
+
+  echo ""
+  echo "// === BEGIN window-rules.kdl ==="
+  cat "$NIRI_SRC/window-rules.kdl"
+  echo "// === END window-rules.kdl ==="
+
+  echo ""
+  echo "// === BEGIN layer-rules.kdl ==="
+  cat "$NIRI_SRC/layer-rules.kdl"
+  echo "// === END layer-rules.kdl ==="
+} > "$TMP"
+
+# Atomic swap so niri's file watcher never sees a truncated config.
+mv -f "$TMP" "$OUT"
+
+if $RELOAD && command -v niri >/dev/null 2>&1 && [[ -n "${NIRI_SOCKET:-}" ]]; then
+  niri msg action reload-config 2>/dev/null || true
+fi

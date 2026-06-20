@@ -1,0 +1,22 @@
+#!/bin/bash
+# smplOS niri session wrapper
+# Called by greetd (via smplos-start-session) as the initial_session command.
+#
+# Sets the same env shape Hyprland session gets, then execs niri.
+# niri's own start-niri is just `niri --session` (registers with systemd).
+#
+# Mirrors src/shared/bin/start-hyprland conventions.
+
+# Make sure smplos user scripts are on PATH for spawn-at-startup
+export PATH="$HOME/.local/share/smplos/bin:$PATH"
+
+# greetd may have stripped XDG vars — set them so xdg-desktop-portal-gnome
+# (which niri uses) can pick the right backend.
+export XDG_CURRENT_DESKTOP="niri"
+export XDG_SESSION_DESKTOP="niri"
+export XDG_SESSION_TYPE="wayland"
+
+# Hand off PID to greetd. niri --session integrates with the systemd user
+# session and provides graphical-session.target, which other smplOS user
+# services (eww, dunst) depend on.
+exec niri --session "$@"

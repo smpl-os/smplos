@@ -1,0 +1,52 @@
+// smplOS niri layer rules — EWW bar + popups blur/effects
+// Hand-written counterpart to src/compositors/hyprland/hypr/windows.conf
+// layerrule blocks. Each EWW window has an explicit `:namespace "eww-<name>"`
+// per smplOS conventions; layer-rule matches that namespace exactly.
+//
+// Niri layer-rules use background-effect blocks (since v26.04). xray is
+// NOT applicable here — niri's blur is wallpaper-only (xray-equivalent)
+// by default. Non-xray blur is experimental and ignored for now.
+
+layer-rule {
+    match namespace="eww-bar"
+    background-effect {
+        blur on
+        // Tune as needed. Saturation/noise come from theme.kdl.
+    }
+}
+
+layer-rule {
+    match namespace="eww-calendar-popup"
+    background-effect {
+        blur on
+    }
+}
+
+layer-rule {
+    match namespace="eww-quick-settings"
+    background-effect {
+        blur on
+    }
+}
+
+layer-rule {
+    match namespace="eww-notification-hub"
+    background-effect {
+        blur on
+    }
+}
+
+layer-rule {
+    match namespace="eww-usb-popup"
+    background-effect {
+        blur on
+    }
+}
+
+// rofi launcher (Wayland layer surface)
+layer-rule {
+    match namespace="rofi"
+    background-effect {
+        blur on
+    }
+}

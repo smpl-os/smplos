@@ -1,0 +1,168 @@
+#!/bin/bash
+# smplOS — switch active Wayland compositor (Hyprland ⇄ niri)
+#
+# Usage:
+#   switch-compositor              # toggle (hyprland <-> niri)
+#   switch-compositor hyprland     # switch to Hyprland
+#   switch-compositor niri         # switch to niri
+#   switch-compositor --status     # print current + next compositor
+#
+# IMPORTANT — what this CAN and CANNOT do:
+#
+#   CAN: change the compositor greetd will launch next time it logs you in,
+#        and (optionally) end the current session so greetd does that NOW.
+#
+#   CANNOT: hot-swap one Wayland compositor for another while you stay
+#           logged in. Both Hyprland and niri are display servers that
+#           own DRM master exclusively — Wayland has no "X-style restart
+#           the WM under the running session" model. Your apps WILL
+#           close when the session restarts.
+#
+# How it works:
+#   1. Writes ~/.config/smplos/compositor with the chosen value.
+#   2. Patches /etc/greetd/config.toml (with sudo) so initial_session
+#      runs the smplos-start-session wrapper, which reads that file.
+#      Only done once — subsequent switches are sudo-free.
+#   3. Tells the current compositor to exit (asks for confirmation).
+#      greetd auto-logs you in again, and the wrapper picks the chosen
+#      compositor.
+
+set -u
+
+MARKER_DIR="$HOME/.config/smplos"
+MARKER="$MARKER_DIR/compositor"
+GREETD_CONF="/etc/greetd/config.toml"
+WRAPPER_NAME="smplos-start-session"
+
+die()  { printf 'switch-compositor: %s\n' "$*" >&2; exit 1; }
+info() { printf '==> %s\n' "$*"; }
+
+current_compositor() {
+  compositor-name 2>/dev/null || echo unknown
+}
+
+next_compositor() {
+  if [[ -r "$MARKER" ]]; then
+    local v
+    v=$(head -n1 "$MARKER" 2>/dev/null | tr -d '[:space:]')
+    case "$v" in hyprland|niri) printf '%s' "$v"; return 0 ;; esac
+  fi
+  printf 'hyprland'
+}
+
+ensure_greetd_uses_wrapper() {
+  # Only modify if currently set to start-hyprland or start-niri directly.
+  # Leaves custom configs alone.
+  if [[ ! -f "$GREETD_CONF" ]]; then
+    info "Skipping greetd patch — $GREETD_CONF not found"
+    return 0
+  fi
+
+  # Already using the wrapper?
+  if grep -Eq "command\s*=\s*\"$WRAPPER_NAME\"" "$GREETD_CONF"; then
+    return 0
+  fi
+
+  # Only patch if the [initial_session] command is one of the known starters.
+  if ! grep -Eq "command\s*=\s*\"(start-hyprland|start-niri)\"" "$GREETD_CONF"; then
+    info "greetd config doesn't use start-hyprland/start-niri; not patching"
+    info "(you may need to manually set [initial_session] command = \"$WRAPPER_NAME\")"
+    return 0
+  fi
+
+  info "Patching greetd to use $WRAPPER_NAME (needs sudo, one-time)"
+  # Replace only the initial_session command; leave default_session alone.
+  # Use awk for stanza-aware replacement.
+  local tmp
+  tmp=$(mktemp)
+  sudo awk -v wrap="$WRAPPER_NAME" '
+    /^\s*\[/ { stanza = $0 }
+    stanza ~ /\[initial_session\]/ && /^\s*command\s*=/ {
+      sub(/=.*/, "= \"" wrap "\"")
+    }
+    { print }
+  ' "$GREETD_CONF" | sudo tee "$tmp" >/dev/null \
+    && sudo mv -f "$tmp" "$GREETD_CONF" \
+    || die "failed to patch $GREETD_CONF"
+}
+
+quit_current_session() {
+  case "$1" in
+    hyprland)
+      command -v hyprctl >/dev/null 2>&1 || return 1
+      hyprctl dispatch exit 2>/dev/null
+      ;;
+    niri)
+      command -v niri >/dev/null 2>&1 || return 1
+      niri msg action quit 2>/dev/null
+      ;;
+    *) return 1 ;;
+  esac
+}
+
+# ── arg parsing ────────────────────────────────────────────────────────────
+WANT=""
+CONFIRM=true
+case "${1:-}" in
+  --status)
+    printf 'current:  %s\n' "$(current_compositor)"
+    printf 'next:     %s\n' "$(next_compositor)"
+    printf 'marker:   %s\n' "$MARKER"
+    exit 0
+    ;;
+  --help|-h)
+    sed -n '2,30p' "$0"
+    exit 0
+    ;;
+  hyprland|niri) WANT="$1" ;;
+  "") ;;  # toggle
+  *)  die "unknown argument: $1  (use hyprland, niri, --status, or no arg to toggle)" ;;
+esac
+
+# Toggle if no explicit choice
+if [[ -z "$WANT" ]]; then
+  case "$(current_compositor)" in
+    hyprland) WANT=niri ;;
+    niri)     WANT=hyprland ;;
+    *)        WANT=$(next_compositor) ;;  # not in a known session, use marker
+  esac
+fi
+
+# ── write marker ───────────────────────────────────────────────────────────
+mkdir -p "$MARKER_DIR"
+printf '%s\n' "$WANT" > "$MARKER"
+info "Set next compositor to: $WANT"
+
+# ── ensure greetd uses our wrapper ─────────────────────────────────────────
+ensure_greetd_uses_wrapper
+
+# ── confirm + restart session ──────────────────────────────────────────────
+CUR=$(current_compositor)
+if [[ "$CUR" == "unknown" ]]; then
+  info "No active compositor detected — the change will take effect on next login."
+  exit 0
+fi
+
+if [[ "$CUR" == "$WANT" ]]; then
+  info "Already on $WANT — nothing to restart."
+  exit 0
+fi
+
+cat <<EOF
+
+About to end the current $CUR session.
+greetd will auto-log you back in and launch $WANT.
+
+ALL OPEN APPS WILL CLOSE. Unsaved work will be lost.
+
+EOF
+
+read -r -p "Continue? [y/N] " ans
+case "$ans" in
+  y|Y|yes|YES) ;;
+  *) info "Aborted. Change still queued for next login."; exit 0 ;;
+esac
+
+info "Quitting $CUR..."
+quit_current_session "$CUR" \
+  || die "failed to quit $CUR — try logging out manually"

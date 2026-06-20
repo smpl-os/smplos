@@ -1,0 +1,282 @@
+// smplOS niri window rules — hand-written port of
+// src/compositors/hyprland/hypr/windows.conf
+//
+// niri's window-rule syntax differs significantly from Hyprland:
+//   - Niri matches on `app-id` (Wayland app_id) and `title`, supports regex
+//     via the `app-id` / `title` string with embedded regex syntax.
+//   - Niri has NO equivalent for:
+//       * monitor_w-window_w-2 positional formulas (use default-window-position)
+//       * tag-based rules (Hyprland's `tag +messenger`)
+//       * per-window opacity (`opacity 0.85`) — niri has none
+//       * tag matchers (`match:tag chromium-based-browser`)
+//   - Niri DOES support: open-floating, default-column-width, draw-border-with-background,
+//     min-width/height, max-width/height, focus-ring/border/shadow/clip-to-geometry
+//     per-rule, default-window-position.
+//
+// Opacity model — DIVERGES FROM HYPRLAND:
+//   On Hyprland, theme opacity (windowrule = opacity ...) controls window
+//   transparency app-wide. On niri there is NO compositor-side opacity;
+//   only the app's own ARGB surface alpha applies. So:
+//     - Slint apps (self-managed-alpha) work the same — they own their alpha
+//     - st (ALPHA_PATCH) works the same — owns its alpha
+//     - Browsers/regular apps: opaque on niri (no compositor transparency)
+//   To get the "theme opacity for regular apps" effect on niri would require
+//   apps to opt into transparency themselves. Out of scope.
+
+// ── Default rule: all windows ────────────────────────────────────────────
+// Tone down focus ring intensity for non-focused windows.
+window-rule {
+    // No match block = applies to everything.
+    draw-border-with-background false
+}
+
+// ── smplOS Slint apps (self-managed-alpha) ────────────────────────────────
+// These render ARGB surfaces with their own background alpha read from the
+// theme's $theme-popup-opacity. They must float + center / dock to specific
+// positions to match the Hyprland experience.
+
+// Start Menu — bottom-left, above bar (~37px from bottom)
+window-rule {
+    match app-id="^start-menu$"
+    open-floating true
+    default-window-height { fixed 600; }
+    default-window-width { fixed 380; }
+    // Position: bottom-left corner. Niri's "position" is relative to the
+    // working area inside struts (we set top struts for the bar).
+    default-floating-position x=2 y=2 relative-to="bottom-left"
+    focus-ring { off; }
+    border { off; }
+    shadow { off; }
+}
+
+// Notification Center — bottom-right, above bar
+window-rule {
+    match app-id="^notif-center$"
+    open-floating true
+    default-window-width { fixed 400; }
+    default-window-height { fixed 600; }
+    default-floating-position x=2 y=2 relative-to="bottom-right"
+    focus-ring { off; }
+    border { off; }
+    shadow { off; }
+}
+
+// Settings — centered, larger
+window-rule {
+    match app-id="^settings$"
+    open-floating true
+    default-window-width { fixed 900; }
+    default-window-height { fixed 650; }
+    default-floating-position x=0 y=0 relative-to="center"
+    focus-ring { off; }
+    border { off; }
+    shadow { off; }
+}
+
+// App Center
+window-rule {
+    match app-id="^app-center$"
+    open-floating true
+    default-window-width { fixed 1000; }
+    default-window-height { fixed 700; }
+    default-floating-position x=0 y=0 relative-to="center"
+    focus-ring { off; }
+    border { off; }
+    shadow { off; }
+}
+
+// Webapp Center
+window-rule {
+    match app-id="^webapp-center$"
+    open-floating true
+    default-window-width { fixed 900; }
+    default-window-height { fixed 650; }
+    default-floating-position x=0 y=0 relative-to="center"
+    focus-ring { off; }
+    border { off; }
+    shadow { off; }
+}
+
+// Sync Center
+window-rule {
+    match app-id="^sync-center$"
+    open-floating true
+    default-window-width { fixed 900; }
+    default-window-height { fixed 650; }
+    default-floating-position x=0 y=0 relative-to="center"
+    focus-ring { off; }
+    border { off; }
+    shadow { off; }
+}
+
+// smpl Calendar — bottom-right (same anchor as notif-center, opens singly)
+window-rule {
+    match app-id="^smpl-calendar$"
+    open-floating true
+    default-window-width { fixed 400; }
+    default-window-height { fixed 500; }
+    default-floating-position x=2 y=2 relative-to="bottom-right"
+    focus-ring { off; }
+    border { off; }
+    shadow { off; }
+}
+
+// ── Fullscreen apps — always tiled fullscreen (niri respects fullscreen state) ─
+window-rule {
+    match app-id="^(mpv|imv|vlc|zoom|org\\.kde\\.kdenlive|com\\.obsproject\\.Studio|com\\.github\\.PintaProject\\.Pinta|org\\.gnome\\.NautilusPreviewer|steam|qemu)$"
+    // Niri honours fullscreen requests from these apps natively.
+    // open-fullscreen would be too aggressive — leave it to the app.
+}
+
+// ── Wine / Proton apps — always opaque, no transparency ──────────────────
+// On niri this is automatic (no compositor transparency), included for
+// parity with Hyprland file structure.
+
+// ── File picker / save dialogs — float centered ──────────────────────────
+window-rule {
+    match title="^(Open File|Save File|Select)"
+    open-floating true
+    default-floating-position x=0 y=0 relative-to="center"
+}
+
+// ── Calculator ───────────────────────────────────────────────────────────
+window-rule {
+    match app-id="^gnome-calculator$"
+    open-floating true
+    default-window-width { fixed 400; }
+    default-window-height { fixed 500; }
+    default-floating-position x=0 y=0 relative-to="center"
+}
+
+// ── Image viewer ─────────────────────────────────────────────────────────
+window-rule {
+    match app-id="^imv$"
+    open-floating true
+    default-floating-position x=0 y=0 relative-to="center"
+}
+
+// ── Audio mixer ──────────────────────────────────────────────────────────
+window-rule {
+    match app-id="^pavucontrol$"
+    open-floating true
+    default-window-width { fixed 800; }
+    default-window-height { fixed 600; }
+}
+
+// ── Network Manager / Polkit ─────────────────────────────────────────────
+window-rule {
+    match app-id="^nm-connection-editor$"
+    open-floating true
+}
+window-rule {
+    match app-id="^polkit-gnome-authentication-agent-1$"
+    open-floating true
+    default-floating-position x=0 y=0 relative-to="center"
+}
+
+// ── Floating terminal (theme picker, etc) ────────────────────────────────
+window-rule {
+    match app-id="^floating$"
+    open-floating true
+    default-window-width { fixed 500; }
+    default-window-height { fixed 600; }
+    default-floating-position x=0 y=0 relative-to="center"
+}
+
+// ── FL Studio blank XWayland surface (suppressed in Hyprland with opacity 0) ─
+// Niri can't make it invisible without closing; mark as floating + tiny to
+// minimise nuisance.
+window-rule {
+    match app-id="(?i)^fl64\\.exe$" title="^$"
+    open-floating true
+    min-width 1
+    min-height 1
+    max-width 1
+    max-height 1
+}
+
+// ============================================================================
+// Messengers — float + bottom-right at chat size
+// ============================================================================
+//
+// Hyprland positions them at (monitor_w-482, monitor_h-754) which is bottom-
+// right with a 2px margin from edges (since size is 480x720).
+// Niri: default-floating-position relative-to="bottom-right" gives same effect.
+
+// Signal
+window-rule {
+    match app-id="^signal$"
+    open-floating true
+    default-window-width { fixed 480; }
+    default-window-height { fixed 720; }
+    default-floating-position x=2 y=34 relative-to="bottom-right"
+}
+
+// Telegram
+window-rule {
+    match app-id="^(org\\.telegram\\.desktop|telegramdesktop)$"
+    open-floating true
+    default-window-width { fixed 480; }
+    default-window-height { fixed 720; }
+    default-floating-position x=2 y=34 relative-to="bottom-right"
+}
+
+// Slack
+window-rule {
+    match app-id="^(Slack|slack)$"
+    open-floating true
+    default-window-width { fixed 480; }
+    default-window-height { fixed 720; }
+    default-floating-position x=2 y=34 relative-to="bottom-right"
+}
+
+// Discord / Vesktop / WebCord
+window-rule {
+    match app-id="^(discord|WebCord|vesktop)$"
+    open-floating true
+    default-window-width { fixed 480; }
+    default-window-height { fixed 720; }
+    default-floating-position x=2 y=34 relative-to="bottom-right"
+}
+
+// Chromium --app webapps — messengers
+window-rule {
+    match app-id="^brave-discord"
+    open-floating true
+    default-window-width { fixed 480; }
+    default-window-height { fixed 720; }
+    default-floating-position x=2 y=34 relative-to="bottom-right"
+}
+
+window-rule {
+    match app-id="^brave-web\\.whatsapp"
+    open-floating true
+    default-window-width { fixed 480; }
+    default-window-height { fixed 720; }
+    default-floating-position x=2 y=34 relative-to="bottom-right"
+}
+
+window-rule {
+    match app-id="^brave-web\\.telegram"
+    open-floating true
+    default-window-width { fixed 480; }
+    default-window-height { fixed 720; }
+    default-floating-position x=2 y=34 relative-to="bottom-right"
+}
+
+window-rule {
+    match app-id="^brave-teams\\.microsoft\\.com"
+    open-floating true
+    default-window-width { fixed 480; }
+    default-window-height { fixed 720; }
+    default-floating-position x=2 y=34 relative-to="bottom-right"
+}
+
+// GitHub — full-window centered
+window-rule {
+    match app-id="^brave-github\\.com"
+    open-floating true
+    default-window-width { fixed 1200; }
+    default-window-height { fixed 800; }
+    default-floating-position x=0 y=0 relative-to="center"
+}

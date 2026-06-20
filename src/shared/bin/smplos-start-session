@@ -1,0 +1,31 @@
+#!/bin/bash
+# smplOS — compositor session dispatcher
+#
+# Used as greetd's [initial_session] command. Reads the user's preferred
+# compositor from ~/.config/smplos/compositor (single line: "hyprland"
+# or "niri") and exec's the matching start-* script.
+#
+# Defaults to hyprland if the marker file is absent or unreadable
+# (preserves existing installs that bypass this wrapper).
+#
+# See `switch-compositor` for the user-facing toggle that writes this file.
+
+MARKER="$HOME/.config/smplos/compositor"
+
+# Default: hyprland (preserves current default behaviour)
+choice="hyprland"
+if [[ -r "$MARKER" ]]; then
+  _v=$(head -n1 "$MARKER" 2>/dev/null | tr -d '[:space:]')
+  case "$_v" in
+    hyprland|niri) choice="$_v" ;;
+  esac
+fi
+
+case "$choice" in
+  niri)
+    exec start-niri "$@"
+    ;;
+  hyprland|*)
+    exec start-hyprland "$@"
+    ;;
+esac

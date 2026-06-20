@@ -1,0 +1,34 @@
+#!/bin/bash
+# smplOS — detect current compositor from environment
+#
+# Prints one of: hyprland | niri | unknown
+# Used by shared scripts to branch behaviour (theme reload, screenshots, etc).
+#
+# Detection order:
+#   1. $HYPRLAND_INSTANCE_SIGNATURE (set by hyprland in user env)
+#   2. $NIRI_SOCKET (set by niri in user env)
+#   3. running process name fallback (for scripts that don't inherit env)
+
+if [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]]; then
+  echo hyprland
+  exit 0
+fi
+
+if [[ -n "${NIRI_SOCKET:-}" ]]; then
+  echo niri
+  exit 0
+fi
+
+# Fallback: check running processes (covers sudo / cron contexts)
+if pgrep -x Hyprland >/dev/null 2>&1; then
+  echo hyprland
+  exit 0
+fi
+
+if pgrep -x niri >/dev/null 2>&1; then
+  echo niri
+  exit 0
+fi
+
+echo unknown
+exit 1

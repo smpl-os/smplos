@@ -91,6 +91,15 @@ if [[ -f "$CURRENT_THEME_PATH/hyprlock.conf" ]]; then
   cp "$CURRENT_THEME_PATH/hyprlock.conf" "$HOME/.config/hypr/hyprlock-theme.conf"
 fi
 
+# niri — write theme.kdl + reassemble config.kdl. niri's config file
+# watcher OR a manual `niri msg action reload-config` picks up the change
+# without restarting the compositor. deploy-niri-config handles both.
+if [[ -f "$CURRENT_THEME_PATH/niri-theme.kdl" ]]; then
+  mkdir -p "$HOME/.config/niri"
+  cp "$CURRENT_THEME_PATH/niri-theme.kdl" "$HOME/.config/niri/theme.kdl"
+  command -v deploy-niri-config &>/dev/null && deploy-niri-config 2>/dev/null || true
+fi
+
 # Dunst: compose dunstrc.base + theme colors into dunstrc (the path
 # dunst actually reads; -config flag is not used). dunstrc.base holds
 # the pristine core settings; if it doesn't exist yet (older install),
@@ -190,6 +199,13 @@ fi
 # Hyprland (reload config to pick up new border colors -- runtime only)
 if [[ -n "${WAYLAND_DISPLAY:-}" ]] && command -v hyprctl &>/dev/null; then
   hyprctl reload 2>/dev/null
+fi
+
+# niri (reload config to pick up new theme.kdl -- runtime only).
+# deploy-niri-config above already calls reload when NIRI_SOCKET is set,
+# but call it explicitly here as a backup so the order is obvious.
+if [[ -n "${NIRI_SOCKET:-}" ]] && command -v niri &>/dev/null; then
+  niri msg action reload-config 2>/dev/null || true
 fi
 
 # st / st-wl -- apply colors via OSC escape sequences to all running instances
