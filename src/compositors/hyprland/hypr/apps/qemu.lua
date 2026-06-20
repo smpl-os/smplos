@@ -1,0 +1,4 @@
+-- QEMU-specific tweaks.
+-- QEMU opacity override is centralized in windows.lua (compositor-opaque tag).
+-- This file is kept as a stub for parity with apps/qemu.conf so anyone
+-- looking for QEMU rules finds the pointer.

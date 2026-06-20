@@ -1,0 +1,219 @@
+-- bindings_loader.lua — parses hyprlang `bindXXX = …` files and emits the
+-- equivalent hl.bind() / hl.define_submap() calls.
+--
+-- Why we parse hyprlang from Lua:
+--   • src/shared/configs/smplos/bindings.conf is the **single source of truth**
+--     for keybindings. The DWM build (future) parses the same file into C
+--     structs, and src/shared/bin/keybind-help renders an EWW overlay from it.
+--     Keeping it hyprlang preserves that invariant.
+--   • messenger-bindings.conf is generated at runtime by
+--     `generate-messenger-bindings`. Same parser handles it.
+--
+-- Supported variants (the suffix letters control bind options):
+--   bindd     — description present
+--   bindeld   — desc + locked + repeating
+--   bindld    — desc + locked
+--   bindde    — desc + repeating
+--   bindmd    — desc + mouse
+--   bindr     — release (no description)
+--
+-- Submap blocks:
+--   submap = NAME   — start collecting binds into a submap
+--   submap = reset  — close the most recent submap (registered via
+--                     hl.define_submap so the binds activate only when the
+--                     submap is entered)
+
+local M = {}
+
+local function trim(s) return (s:gsub("^%s+", ""):gsub("%s+$", "")) end
+
+-- Split "a, b, c, d, ..." into a list of trimmed fields.
+local function split_csv(s)
+    local out = {}
+    -- gsub trick: append a sentinel comma so the loop captures the final field.
+    for field in (s .. ","):gmatch("([^,]*),") do
+        table.insert(out, trim(field))
+    end
+    return out
+end
+
+-- ── Combo builder ──────────────────────────────────────────────────────────
+-- Hyprland's Lua API expects "MOD + MOD + KEY" (or just "KEY" if no mods).
+local function build_combo(mods, key)
+    mods = trim(mods)
+    if mods == "" then return key end
+    local parts = {}
+    for tok in mods:gmatch("%S+") do table.insert(parts, tok) end
+    table.insert(parts, key)
+    return table.concat(parts, " + ")
+end
+
+-- ── Bind-option flags ──────────────────────────────────────────────────────
+-- The flag letters appear between literal "bind" and "=".
+local function parse_flags(prefix)
+    -- prefix like "bindeld" → after stripping "bind" → "eld"
+    local letters = prefix:sub(5)
+    local opts, has_desc = {}, false
+    for i = 1, #letters do
+        local c = letters:sub(i, i)
+        if     c == "d" then has_desc = true
+        elseif c == "e" then opts.repeating = true
+        elseif c == "l" then opts.locked    = true
+        elseif c == "m" then opts.mouse     = true
+        elseif c == "r" then opts.release   = true
+        -- Other Hyprland flags (n/non-consuming, p/no-screensaver, t/transparent,
+        -- s/separate, i/no-inhibit, c/click) — uncommon in our config; add here
+        -- if we ever use them.
+        end
+    end
+    return opts, has_desc
+end
+
+-- ── Dispatcher translation ────────────────────────────────────────────────
+-- Map common hyprlang dispatchers to native hl.dsp calls. Unknown / less
+-- common ones fall through to `hyprctl dispatch …` via hl.dsp.exec_cmd.
+local DIR = { l = "left", r = "right", u = "up", d = "down" }
+
+local function make_dispatcher(dispatcher, arg)
+    arg = arg or ""
+
+    if dispatcher == "exec" then
+        return hl.dsp.exec_cmd(arg)
+
+    elseif dispatcher == "killactive" then
+        return hl.dsp.window.close()
+
+    elseif dispatcher == "togglefloating" then
+        return hl.dsp.window.float({ action = "toggle" })
+
+    elseif dispatcher == "pseudo" then
+        return hl.dsp.window.pseudo()
+
+    elseif dispatcher == "fullscreen" then
+        return hl.dsp.window.fullscreen(tonumber(arg) or 0)
+
+    elseif dispatcher == "togglegroup" then
+        return hl.dsp.group.toggle()
+
+    elseif dispatcher == "togglespecialworkspace" then
+        return hl.dsp.workspace.toggle_special(arg)
+
+    elseif dispatcher == "movefocus" then
+        return hl.dsp.focus({ direction = DIR[arg] or arg })
+
+    elseif dispatcher == "movewindow" then
+        -- Mouse drag binding (movewindow with no arg = drag with mouse)
+        if arg == "" then return hl.dsp.window.drag() end
+        return hl.dsp.exec_cmd("hyprctl dispatch movewindow " .. arg)
+
+    elseif dispatcher == "resizewindow" then
+        if arg == "" then return hl.dsp.window.resize() end
+        return hl.dsp.exec_cmd("hyprctl dispatch resizewindow " .. arg)
+
+    elseif dispatcher == "submap" then
+        return hl.dsp.submap(arg)
+
+    elseif dispatcher == "exit" then
+        return hl.dsp.exit()
+    end
+
+    -- Fallback: shell out to hyprctl. Slightly slower per keypress (~few ms)
+    -- but always correct. Add more native mappings above as needed.
+    local cmd = "hyprctl dispatch " .. dispatcher
+    if arg ~= "" then cmd = cmd .. " " .. arg end
+    return hl.dsp.exec_cmd(cmd)
+end
+
+-- ── File loader ────────────────────────────────────────────────────────────
+
+function M.load(path)
+    local f = io.open(path, "r")
+    if not f then return end
+
+    -- Submap state: when current_submap is non-nil, binds accumulate into
+    -- submap_binds instead of being registered immediately. Closing the
+    -- submap (submap = reset) flushes them via hl.define_submap.
+    local current_submap = nil
+    local submap_binds = {}
+
+    local function emit_bind(keys, dispatcher, opts)
+        if current_submap then
+            table.insert(submap_binds, { keys = keys, dispatcher = dispatcher, opts = opts })
+        else
+            hl.bind(keys, dispatcher, opts)
+        end
+    end
+
+    local function close_submap()
+        if not current_submap then return end
+        local name  = current_submap
+        local binds = submap_binds
+        hl.define_submap(name, function()
+            for _, b in ipairs(binds) do
+                hl.bind(b.keys, b.dispatcher, b.opts)
+            end
+        end)
+        current_submap = nil
+        submap_binds   = {}
+    end
+
+    for raw in f:lines() do
+        local line = trim(raw)
+        if line ~= "" and not line:match("^#") then
+            -- submap = NAME  or  submap = reset
+            local submap_target = line:match("^submap%s*=%s*(.+)$")
+            if submap_target then
+                submap_target = trim(submap_target)
+                if submap_target == "reset" then
+                    close_submap()
+                else
+                    -- Closing the previous submap (if any) is defensive — bindings.conf
+                    -- always uses an explicit `submap = reset` before opening a new one.
+                    close_submap()
+                    current_submap = submap_target
+                    submap_binds   = {}
+                end
+            else
+                -- bindXXX = MODS, KEY, [DESC,] DISPATCHER[, ARG]
+                local prefix, rhs = line:match("^(bind[a-z]*)%s*=%s*(.+)$")
+                if prefix and rhs then
+                    local opts, has_desc = parse_flags(prefix)
+                    local fields         = split_csv(rhs)
+                    local mods, key      = fields[1], fields[2]
+                    local desc, disp, arg
+                    if has_desc then
+                        desc = fields[3]
+                        disp = fields[4]
+                        -- Arg may itself contain commas (e.g. exec with shell pipeline).
+                        -- Rejoin everything after the dispatcher field.
+                        if fields[5] then
+                            arg = table.concat({ table.unpack(fields, 5) }, ",")
+                            arg = trim(arg)
+                        else
+                            arg = ""
+                        end
+                    else
+                        disp = fields[3]
+                        if fields[4] then
+                            arg = table.concat({ table.unpack(fields, 4) }, ",")
+                            arg = trim(arg)
+                        else
+                            arg = ""
+                        end
+                    end
+                    if mods and key and disp then
+                        if desc and desc ~= "" then opts.description = desc end
+                        local combo      = build_combo(mods, key)
+                        local dispatcher = make_dispatcher(disp, arg)
+                        emit_bind(combo, dispatcher, opts)
+                    end
+                end
+            end
+        end
+    end
+
+    close_submap()  -- in case the file ends without an explicit reset
+    f:close()
+end
+
+return M
