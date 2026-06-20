@@ -124,6 +124,7 @@ emit_settings() {
   cat <<'EOF'
 App Center;toggle-app-center;settings;app-center
 Web App Center;webapp-center;settings;webapp-center
+Settings;settings;settings;preferences-system
 Appearance;smplos-settings appearance;settings;preferences-desktop-theme
 Display;smplos-settings display;settings;preferences-desktop-display
 Keyboard;smplos-settings keyboard;settings;preferences-desktop-keyboard
