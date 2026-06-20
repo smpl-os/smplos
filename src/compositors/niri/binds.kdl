@@ -105,7 +105,6 @@ binds {
     Mod+Shift+Space hotkey-overlay-title="Toggle bar" { spawn "sh" "-c" "bar-ctl toggle"; }
     Mod+Shift+t hotkey-overlay-title="Theme picker" { spawn "sh" "-c" "theme-picker"; }
     Mod+Shift+w hotkey-overlay-title="Next wallpaper" { spawn "sh" "-c" "theme-bg-next"; }
-    Mod+BackSpace hotkey-overlay-title="Toggle window transparency" { spawn "sh" "-c" "hyprctl dispatch setprop \"address:$(hyprctl activewindow -j | jq -r '.address')\" opaque toggle"; }
     Mod+comma hotkey-overlay-title="Dismiss last notification" { spawn "sh" "-c" "dunstctl close"; }
     Mod+Shift+comma hotkey-overlay-title="Dismiss all notifications" { spawn "sh" "-c" "dunstctl close-all"; }
     Mod+Alt+comma hotkey-overlay-title="Invoke last notification" { spawn "sh" "-c" "dunstctl action"; }

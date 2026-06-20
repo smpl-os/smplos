@@ -24,7 +24,7 @@
 set -euo pipefail
 
 SMPLOS_PATH="${SMPLOS_PATH:-$HOME/.local/share/smplos}"
-NIRI_SRC="$SMPLOS_PATH/configs/niri"
+NIRI_SRC="${NIRI_SRC:-$SMPLOS_PATH/configs/niri}"
 NIRI_DST="$HOME/.config/niri"
 OUT="$NIRI_DST/config.kdl"
 TMP="$NIRI_DST/config.kdl.tmp"

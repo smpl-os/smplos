@@ -1,52 +1,24 @@
-// smplOS niri layer rules — EWW bar + popups blur/effects
+// smplOS niri layer rules.
+//
 // Hand-written counterpart to src/compositors/hyprland/hypr/windows.conf
 // layerrule blocks. Each EWW window has an explicit `:namespace "eww-<name>"`
 // per smplOS conventions; layer-rule matches that namespace exactly.
 //
-// Niri layer-rules use background-effect blocks (since v26.04). xray is
-// NOT applicable here — niri's blur is wallpaper-only (xray-equivalent)
-// by default. Non-xray blur is experimental and ignored for now.
+// Limitations vs Hyprland:
+//   • niri has NO compositor-side window blur (Hyprland-style `blur on`
+//     does not exist as a layer-rule field). Translucency comes from each
+//     surface's own alpha — EWW uses `transparent` GTK windows + the
+//     theme's $theme-popup-opacity.
+//   • `place-within-backdrop true` shows the surface inside the workspace
+//     overview's blurred backdrop, but it's not always-on blur.
+//
+// What we CAN set per-layer in niri: opacity, geometry-corner-radius,
+// shadow, block-out-from, place-within-backdrop. Corner radius for
+// EWW popups follows theme.kdl's catch-all `eww-.*` rule.
 
-layer-rule {
-    match namespace="eww-bar"
-    background-effect {
-        blur on
-        // Tune as needed. Saturation/noise come from theme.kdl.
-    }
-}
-
-layer-rule {
-    match namespace="eww-calendar-popup"
-    background-effect {
-        blur on
-    }
-}
-
-layer-rule {
-    match namespace="eww-quick-settings"
-    background-effect {
-        blur on
-    }
-}
-
-layer-rule {
-    match namespace="eww-notification-hub"
-    background-effect {
-        blur on
-    }
-}
-
-layer-rule {
-    match namespace="eww-usb-popup"
-    background-effect {
-        blur on
-    }
-}
-
-// rofi launcher (Wayland layer surface)
 layer-rule {
     match namespace="rofi"
-    background-effect {
-        blur on
-    }
+    // rofi-wayland is a layer-shell launcher — round its corners to match
+    // the theme so it doesn't look out of place against rounded popups.
+    geometry-corner-radius 8
 }

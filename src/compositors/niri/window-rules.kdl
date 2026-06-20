@@ -40,7 +40,6 @@ window-rule {
     match app-id="^start-menu$"
     open-floating true
     default-window-height { fixed 600; }
-    default-window-width { fixed 380; }
     // Position: bottom-left corner. Niri's "position" is relative to the
     // working area inside struts (we set top struts for the bar).
     default-floating-position x=2 y=2 relative-to="bottom-left"
@@ -53,7 +52,6 @@ window-rule {
 window-rule {
     match app-id="^notif-center$"
     open-floating true
-    default-window-width { fixed 400; }
     default-window-height { fixed 600; }
     default-floating-position x=2 y=2 relative-to="bottom-right"
     focus-ring { off; }
@@ -65,9 +63,7 @@ window-rule {
 window-rule {
     match app-id="^settings$"
     open-floating true
-    default-window-width { fixed 900; }
     default-window-height { fixed 650; }
-    default-floating-position x=0 y=0 relative-to="center"
     focus-ring { off; }
     border { off; }
     shadow { off; }
@@ -77,9 +73,7 @@ window-rule {
 window-rule {
     match app-id="^app-center$"
     open-floating true
-    default-window-width { fixed 1000; }
     default-window-height { fixed 700; }
-    default-floating-position x=0 y=0 relative-to="center"
     focus-ring { off; }
     border { off; }
     shadow { off; }
@@ -89,9 +83,7 @@ window-rule {
 window-rule {
     match app-id="^webapp-center$"
     open-floating true
-    default-window-width { fixed 900; }
     default-window-height { fixed 650; }
-    default-floating-position x=0 y=0 relative-to="center"
     focus-ring { off; }
     border { off; }
     shadow { off; }
@@ -101,9 +93,7 @@ window-rule {
 window-rule {
     match app-id="^sync-center$"
     open-floating true
-    default-window-width { fixed 900; }
     default-window-height { fixed 650; }
-    default-floating-position x=0 y=0 relative-to="center"
     focus-ring { off; }
     border { off; }
     shadow { off; }
@@ -113,7 +103,6 @@ window-rule {
 window-rule {
     match app-id="^smpl-calendar$"
     open-floating true
-    default-window-width { fixed 400; }
     default-window-height { fixed 500; }
     default-floating-position x=2 y=2 relative-to="bottom-right"
     focus-ring { off; }
@@ -136,30 +125,25 @@ window-rule {
 window-rule {
     match title="^(Open File|Save File|Select)"
     open-floating true
-    default-floating-position x=0 y=0 relative-to="center"
 }
 
 // ── Calculator ───────────────────────────────────────────────────────────
 window-rule {
     match app-id="^gnome-calculator$"
     open-floating true
-    default-window-width { fixed 400; }
     default-window-height { fixed 500; }
-    default-floating-position x=0 y=0 relative-to="center"
 }
 
 // ── Image viewer ─────────────────────────────────────────────────────────
 window-rule {
     match app-id="^imv$"
     open-floating true
-    default-floating-position x=0 y=0 relative-to="center"
 }
 
 // ── Audio mixer ──────────────────────────────────────────────────────────
 window-rule {
     match app-id="^pavucontrol$"
     open-floating true
-    default-window-width { fixed 800; }
     default-window-height { fixed 600; }
 }
 
@@ -171,16 +155,13 @@ window-rule {
 window-rule {
     match app-id="^polkit-gnome-authentication-agent-1$"
     open-floating true
-    default-floating-position x=0 y=0 relative-to="center"
 }
 
 // ── Floating terminal (theme picker, etc) ────────────────────────────────
 window-rule {
     match app-id="^floating$"
     open-floating true
-    default-window-width { fixed 500; }
     default-window-height { fixed 600; }
-    default-floating-position x=0 y=0 relative-to="center"
 }
 
 // ── FL Studio blank XWayland surface (suppressed in Hyprland with opacity 0) ─
@@ -207,7 +188,6 @@ window-rule {
 window-rule {
     match app-id="^signal$"
     open-floating true
-    default-window-width { fixed 480; }
     default-window-height { fixed 720; }
     default-floating-position x=2 y=34 relative-to="bottom-right"
 }
@@ -216,7 +196,6 @@ window-rule {
 window-rule {
     match app-id="^(org\\.telegram\\.desktop|telegramdesktop)$"
     open-floating true
-    default-window-width { fixed 480; }
     default-window-height { fixed 720; }
     default-floating-position x=2 y=34 relative-to="bottom-right"
 }
@@ -225,7 +204,6 @@ window-rule {
 window-rule {
     match app-id="^(Slack|slack)$"
     open-floating true
-    default-window-width { fixed 480; }
     default-window-height { fixed 720; }
     default-floating-position x=2 y=34 relative-to="bottom-right"
 }
@@ -234,7 +212,6 @@ window-rule {
 window-rule {
     match app-id="^(discord|WebCord|vesktop)$"
     open-floating true
-    default-window-width { fixed 480; }
     default-window-height { fixed 720; }
     default-floating-position x=2 y=34 relative-to="bottom-right"
 }
@@ -243,7 +220,6 @@ window-rule {
 window-rule {
     match app-id="^brave-discord"
     open-floating true
-    default-window-width { fixed 480; }
     default-window-height { fixed 720; }
     default-floating-position x=2 y=34 relative-to="bottom-right"
 }
@@ -251,7 +227,6 @@ window-rule {
 window-rule {
     match app-id="^brave-web\\.whatsapp"
     open-floating true
-    default-window-width { fixed 480; }
     default-window-height { fixed 720; }
     default-floating-position x=2 y=34 relative-to="bottom-right"
 }
@@ -259,7 +234,6 @@ window-rule {
 window-rule {
     match app-id="^brave-web\\.telegram"
     open-floating true
-    default-window-width { fixed 480; }
     default-window-height { fixed 720; }
     default-floating-position x=2 y=34 relative-to="bottom-right"
 }
@@ -267,7 +241,6 @@ window-rule {
 window-rule {
     match app-id="^brave-teams\\.microsoft\\.com"
     open-floating true
-    default-window-width { fixed 480; }
     default-window-height { fixed 720; }
     default-floating-position x=2 y=34 relative-to="bottom-right"
 }
@@ -276,7 +249,5 @@ window-rule {
 window-rule {
     match app-id="^brave-github\\.com"
     open-floating true
-    default-window-width { fixed 1200; }
     default-window-height { fixed 800; }
-    default-floating-position x=0 y=0 relative-to="center"
 }

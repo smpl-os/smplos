@@ -103,67 +103,13 @@ hotkey-overlay {
 //
 // Auto-back-and-forth is set under input above.
 
-// ── Layout (gaps / borders / shadow are themed in theme.kdl) ─────────────
-layout {
-    // Negative pixel sizes are clamped to a sensible minimum.
-    // theme.kdl overrides gaps/border-width/etc — values here are FALLBACKS
-    // used only when no theme is loaded yet.
-    gaps 6
-
-    // Preset column widths cycled by `switch-preset-column-width`
-    // (bound to the old Hyprland Super+J "toggle split" key).
-    preset-column-widths {
-        proportion 0.33333
-        proportion 0.5
-        proportion 0.66667
-    }
-
-    default-column-width {
-        proportion 0.5
-    }
-
-    // Always show focused column fully on screen, never scroll partially.
-    // "never" leaves the column scrolled to its natural position.
-    center-focused-column "never"
-
-    // Tab indicator on stacked windows.
-    tab-indicator {
-        // off  // uncomment to disable
-        width 4
-        gap 4
-    }
-
-    // The actual focus-ring / border / shadow / insert-hint colours come
-    // from theme.kdl which is spliced in above the BEGIN/END markers.
-    // These fallbacks exist for the very first launch before theme-set runs.
-    focus-ring {
-        width 4
-        active-color "#89b4fa"
-        inactive-color "#585b70aa"
-    }
-    border {
-        off
-    }
-    shadow {
-        on
-        softness 30
-        spread 4
-        offset x=0 y=4
-        color "#00000088"
-    }
-    insert-hint {
-        color "#89b4fa50"
-    }
-
-    struts {
-        // Top gap for the EWW bar (matches reserve_in_top in waybar terms).
-        // Bar is ~34px tall on Hyprland — leave room.
-        top 34
-        bottom 0
-        left 0
-        right 0
-    }
-}
+// ── Layout ───────────────────────────────────────────────────────────────
+// niri requires a SINGLE top-level `layout` block. The full block lives
+// in src/shared/themes/<name>/niri-theme.kdl (which is spliced in by
+// deploy-niri-config). theme.kdl owns gaps, focus-ring, border, shadow,
+// insert-hint AND the structural fields (preset-column-widths,
+// default-column-width, center-focused-column, tab-indicator, struts).
+// Do NOT add a `layout {}` block here — niri will reject the duplicate.
 
 // ── Animations ───────────────────────────────────────────────────────────
 animations {
@@ -215,12 +161,9 @@ environment {
 spawn-at-startup "xwayland-satellite"
 
 // Pre-set DISPLAY for X11 apps (xwayland-satellite uses :0 by default)
-spawn-at-startup "sh" "-c" "swayidle -w \
-  timeout 300 'loginctl lock-session' \
-  timeout 330 'systemd-detect-virt -q || wlopm --off \\*' \
-  resume 'systemd-detect-virt -q || wlopm --on \\*' \
-  timeout 600 'systemd-detect-virt -q || systemctl suspend' \
-  before-sleep 'loginctl lock-session'"
+// swayidle command kept on a single line — KDL strings don't support
+// backslash line-continuation. \\* is a literal "\*" passed to wlopm.
+spawn-at-startup "sh" "-c" "swayidle -w timeout 300 'loginctl lock-session' timeout 330 'systemd-detect-virt -q || wlopm --off \\*' resume 'systemd-detect-virt -q || wlopm --on \\*' timeout 600 'systemd-detect-virt -q || systemctl suspend' before-sleep 'loginctl lock-session'"
 
 spawn-at-startup "dunst"
 spawn-at-startup "kb-sync"

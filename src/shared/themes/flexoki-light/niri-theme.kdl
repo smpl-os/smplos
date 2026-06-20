@@ -3,11 +3,34 @@
 // `cd src && bash regen-all-themes.sh` to regenerate.
 //
 // This file is spliced into ~/.config/niri/config.kdl by theme-set / the
-// niri config deploy script. It contains ONLY theme-variable settings —
-// non-themed config (input, gestures, autostart, env) lives in config.kdl.
+// niri config deploy script. niri requires a SINGLE `layout` block, so
+// this file owns it entirely (both themed values like gaps/focus-ring
+// colours AND structural values like preset-column-widths/struts) — the
+// base config.kdl must NOT define its own `layout` block.
 
 layout {
     gaps 4
+
+    // Preset column widths cycled by `switch-preset-column-width`
+    // (bound to Super+J — see binds.kdl).
+    preset-column-widths {
+        proportion 0.33333
+        proportion 0.5
+        proportion 0.66667
+    }
+
+    default-column-width {
+        proportion 0.5
+    }
+
+    // Don't autoscroll a partially-visible column into center.
+    center-focused-column "never"
+
+    // Tab indicator on stacked columns.
+    tab-indicator {
+        width 4
+        gap 4
+    }
 
     focus-ring {
         width 2
@@ -34,6 +57,15 @@ layout {
 
     insert-hint {
         color "#205EA666"
+    }
+
+    struts {
+        // Top gap for the EWW bar (matches reserve_in_top in waybar terms).
+        // Bar is ~34px tall on Hyprland — leave room.
+        top 34
+        bottom 0
+        left 0
+        right 0
     }
 }
 
