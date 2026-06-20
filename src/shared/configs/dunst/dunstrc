@@ -30,3 +30,20 @@
 
 [urgency_critical]
     timeout = 0
+
+# ── OSD-style notifications: show on screen, never enter history ─────────────
+# Volume and Brightness key presses fire notifications that act as on-screen
+# displays (slider with int:value hint). They should NOT pollute notification
+# history -- otherwise scrolling back through real notifications becomes
+# painful. `history_ignore = yes` makes dunst drop them on timeout instead
+# of archiving them. Matched by summary because notify-send doesn't let us
+# set a stable appname (it's always "notify-send").
+[osd_volume]
+    summary = "Volume"
+    history_ignore = yes
+    skip_display = no
+
+[osd_brightness]
+    summary = "Brightness"
+    history_ignore = yes
+    skip_display = no

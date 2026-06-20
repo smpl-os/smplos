@@ -7,6 +7,20 @@ value="${2:-5}"
 
 case "$action" in
     up|+)
+        # Volume-up while muted: unmute AND reset to 0% first, then ramp up.
+        # Rationale: mute is often engaged because the environment changed
+        # (meeting, sleeping partner, etc.) -- restoring the pre-mute level
+        # blindly risks blasting the room. Starting from 0 gives the user
+        # control over how loud to come back. If they actually wanted the
+        # previous level, mute-toggle (Super+Backspace) recovers it in one
+        # keypress.
+        if pamixer --get-mute 2>/dev/null | grep -q true \
+           || pactl get-sink-mute @DEFAULT_SINK@ 2>/dev/null | grep -q yes; then
+            pamixer -u --set-volume 0 2>/dev/null || {
+                pactl set-sink-mute @DEFAULT_SINK@ 0
+                pactl set-sink-volume @DEFAULT_SINK@ 0%
+            }
+        fi
         pamixer -i "$value" 2>/dev/null || pactl set-sink-volume @DEFAULT_SINK@ +${value}%
         ;;
     down|-)
@@ -47,3 +61,18 @@ case "$action" in
         exit 1
         ;;
 esac
+
+# OSD: show a progress-bar notification on every level/mute change.
+# `int:value:N` is the freedesktop hint that mako/notif-center render as a
+# bar. `synchronous:volume` makes successive notifications replace the
+# previous one instead of stacking, so rapid key-repeats show a smooth slider.
+# `boolean:transient:true` tells dunst to display the OSD but NOT store it in
+# history — otherwise every key tap pollutes the notification log and buries
+# real notifications. Mirrors brightness-ctl behaviour for consistency.
+muted=$(pamixer --get-mute 2>/dev/null || (pactl get-sink-mute @DEFAULT_SINK@ | grep -q yes && echo true || echo false))
+vol=$(pamixer --get-volume 2>/dev/null || pactl get-sink-volume @DEFAULT_SINK@ | grep -oP '\d+%' | head -1 | tr -d '%')
+if [[ "$muted" == "true" ]]; then
+    notify-send "Volume" "Muted" -h int:value:0 -h string:synchronous:volume -h boolean:transient:true -t 1000 -i audio-volume-muted
+else
+    notify-send "Volume" "${vol}%" -h int:value:$vol -h string:synchronous:volume -h boolean:transient:true -t 1000 -i audio-volume-high
+fi
