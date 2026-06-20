@@ -29,7 +29,9 @@ group="${1:-1}"
 max_group=10
 bar_conf="$HOME/.config/smplos/bar.conf"
 if [[ -f "$bar_conf" ]]; then
-    _ws=$(grep -m1 '^ws_count=' "$bar_conf" 2>/dev/null | cut -d= -f2)
+    # `|| true` so a missing ws_count= line (grep exit 1) doesn't trip
+    # set -euo pipefail and silently abort the whole script.
+    _ws=$(grep -m1 '^ws_count=' "$bar_conf" 2>/dev/null | cut -d= -f2 || true)
     [[ -n "$_ws" && "$_ws" =~ ^[0-9]+$ ]] && max_group=$_ws
 fi
 [[ $max_group -lt 1 ]] && max_group=1
