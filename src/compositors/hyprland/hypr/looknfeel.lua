@@ -55,10 +55,12 @@ hl.config({
 
     group = {
         col = {
-            border_active          = theme.activeBorderColor,
-            border_inactive        = theme.inactiveBorderColor,
-            border_locked_active   = -1,
-            border_locked_inactive = -1,
+            border_active   = theme.activeBorderColor,
+            border_inactive = theme.inactiveBorderColor,
+            -- border_locked_active / border_locked_inactive are intentionally
+            -- omitted: Hyprland's text parser accepts -1 as a sentinel meaning
+            -- "fall back to border_active/inactive", but the Lua API rejects -1
+            -- as an invalid color. Omitting yields the same fallback behaviour.
         },
 
         groupbar = {
@@ -88,7 +90,11 @@ hl.config({
     },
 
     dwindle = {
-        pseudotile     = true,  -- master switch for pseudotiling
+        -- pseudotile is intentionally omitted: the Lua schema doesn't expose
+        -- it (likely because we set layout = "master", so the dwindle layout
+        -- isn't loaded). Hyprland's text parser is lenient about settings for
+        -- unloaded layouts; the Lua API is not. Settings under dwindle have
+        -- no effect with the master layout anyway.
         preserve_split = true,
         force_split    = 2,     -- always split on the right
     },

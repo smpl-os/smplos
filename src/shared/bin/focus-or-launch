@@ -56,7 +56,9 @@ focus_existing() {
       # Group = ((workspace_id - 1) % 10) + 1
       local group=$(( (ws_id - 1) % 10 + 1 ))
       workspace-group "$group" 2>/dev/null || true
-      hyprctl dispatch focuswindow "class:(?i)${cls}" >/dev/null 2>&1
+      # Hyprland 0.55+ interprets `hyprctl dispatch` arguments as Lua code
+      # (the old text-based dispatch protocol is gone). Use the hl.dsp.* API.
+      hyprctl dispatch "hl.dsp.focus({window=\"class:(?i)${cls}\"})" >/dev/null 2>&1
       return 0
     fi
   fi
@@ -77,12 +79,11 @@ launch_app() {
   local name="$1"; shift  # remaining args = explicit command (classic mode)
 
   if [[ $# -gt 0 ]]; then
-    # Classic mode: explicit launch command given
-    if $IS_HYPRLAND; then
-      hyprctl dispatch exec -- "$@"
-    else
-      setsid "$@" &
-    fi
+    # Classic mode: explicit launch command given. Use setsid on both
+    # compositors -- on Hyprland 0.55+, `hyprctl dispatch exec` now treats
+    # its argument as Lua code, so the old text form is unusable. setsid
+    # also avoids depending on the compositor IPC at all.
+    setsid "$@" &
     return
   fi
 

@@ -33,7 +33,9 @@ if [[ -n "$cls" ]] && command -v hyprctl &>/dev/null \
   if [[ -n "$ws_id" && "$ws_id" =~ ^[0-9]+$ ]]; then
     group=$(( (ws_id - 1) % 10 + 1 ))
     workspace-group "$group" 2>/dev/null || true
-    hyprctl dispatch focuswindow "class:(?i)${cls}" >/dev/null 2>&1
+    # Hyprland 0.55+ interprets `hyprctl dispatch` arguments as Lua code
+    # (the old text-based dispatch protocol is gone). Use the hl.dsp.* API.
+    hyprctl dispatch "hl.dsp.focus({window=\"class:(?i)${cls}\"})" >/dev/null 2>&1
     exit 0
   fi
 fi
