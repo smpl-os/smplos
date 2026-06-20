@@ -91,14 +91,31 @@ if [[ -f "$CURRENT_THEME_PATH/hyprlock.conf" ]]; then
   cp "$CURRENT_THEME_PATH/hyprlock.conf" "$HOME/.config/hypr/hyprlock-theme.conf"
 fi
 
-# Link dunst theme (concatenate core + theme colors)
+# Dunst: compose dunstrc.base + theme colors into dunstrc (the path
+# dunst actually reads; -config flag is not used). dunstrc.base holds
+# the pristine core settings; if it doesn't exist yet (older install),
+# adopt the current dunstrc as the base before composing.
 if [[ -f "$CURRENT_THEME_PATH/dunstrc.theme" ]]; then
   mkdir -p "$HOME/.config/dunst"
-  if [[ -f "$HOME/.config/dunst/dunstrc" ]]; then
-    cat "$HOME/.config/dunst/dunstrc" "$CURRENT_THEME_PATH/dunstrc.theme" > "$HOME/.config/dunst/dunstrc.active"
-  else
-    cp "$CURRENT_THEME_PATH/dunstrc.theme" "$HOME/.config/dunst/dunstrc.active"
+  if [[ ! -f "$HOME/.config/dunst/dunstrc.base" ]]; then
+    if [[ -f "$HOME/.config/dunst/dunstrc" ]]; then
+      # Strip any previously-appended theme block before seeding the base
+      # (the "auto-generated" marker is emitted by dunstrc.theme.tpl).
+      sed '/^# dunst theme colors -- auto-generated/,$d' \
+        "$HOME/.config/dunst/dunstrc" > "$HOME/.config/dunst/dunstrc.base"
+    elif [[ -f /usr/share/smplos/configs/dunst/dunstrc ]]; then
+      cp /usr/share/smplos/configs/dunst/dunstrc "$HOME/.config/dunst/dunstrc.base"
+    fi
   fi
+  if [[ -f "$HOME/.config/dunst/dunstrc.base" ]]; then
+    cat "$HOME/.config/dunst/dunstrc.base" "$CURRENT_THEME_PATH/dunstrc.theme" \
+      > "$HOME/.config/dunst/dunstrc.tmp"
+    mv -f "$HOME/.config/dunst/dunstrc.tmp" "$HOME/.config/dunst/dunstrc"
+  else
+    cp "$CURRENT_THEME_PATH/dunstrc.theme" "$HOME/.config/dunst/dunstrc"
+  fi
+  # Stale path written by older theme-set versions — never read by dunst.
+  rm -f "$HOME/.config/dunst/dunstrc.active"
 fi
 
 # Link foot theme

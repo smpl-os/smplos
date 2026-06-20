@@ -1221,7 +1221,11 @@ DCONF_PROFILE
         fi
         if [[ -f "$dunst_core" ]]; then
             mkdir -p "$skel/.config/dunst"
-            cat "$dunst_core" "$theme_src/dunstrc.theme" > "$skel/.config/dunst/dunstrc.active"
+            # dunstrc.base = pristine core (what theme-set re-composes from
+            # when switching themes). dunstrc = composed (core + theme),
+            # which is the path dunst actually reads at startup.
+            cp "$dunst_core" "$skel/.config/dunst/dunstrc.base"
+            cat "$dunst_core" "$theme_src/dunstrc.theme" > "$skel/.config/dunst/dunstrc"
         fi
     fi
     
