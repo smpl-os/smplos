@@ -44,6 +44,12 @@ local mb = home .. "/.config/hypr/messenger-bindings.conf"
 local fm = io.open(mb, "r")
 if fm then fm:close(); bindings.load(mb) end
 
+-- Always-on click-outside-to-dismiss watcher for popup apps (start-menu,
+-- smpl-calendar). Must come AFTER bindings.load so the user-facing binds
+-- on mouse:272 (e.g. `bindmd = SUPER, mouse:272, ...`) are registered
+-- first; the non-consuming bind here coexists with them.
+require("popup_watchers")
+
 -- ── App-specific rules + autostart (last, so apps win opacity overrides) ──
 require("apps")
 require("autostart")

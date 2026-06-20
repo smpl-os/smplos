@@ -48,6 +48,30 @@ local function build_combo(mods, key)
     return table.concat(parts, " + ")
 end
 
+-- ── Key translation ────────────────────────────────────────────────────────
+-- The hyprlang config language accepts `code:NN` as a layout-agnostic keycode
+-- binding (e.g. `code:10` = physical "1" key on any layout). The Hyprland
+-- Lua API (`hl.bind`) does NOT understand this syntax — it only accepts
+-- keysym names. Passing `code:10` to hl.bind silently registers a bind with
+-- empty key + keycode=0, so the bind never fires.
+--
+-- We map the digit-row keycodes 10..19 to "1".."0" (US layout). This means
+-- non-US layouts where Shift+digit produces non-digits will type the wrong
+-- keysym on the digit row — accepted trade-off because smplOS ships US as
+-- the default and bindings.conf is the single source of truth for both
+-- compositors. If Hyprland ever exposes keycode binds via Lua, swap this
+-- table for the proper API call.
+local CODE_TO_KEYSYM = {
+    ["code:10"] = "1", ["code:11"] = "2", ["code:12"] = "3",
+    ["code:13"] = "4", ["code:14"] = "5", ["code:15"] = "6",
+    ["code:16"] = "7", ["code:17"] = "8", ["code:18"] = "9",
+    ["code:19"] = "0",
+}
+
+local function translate_key(key)
+    return CODE_TO_KEYSYM[key] or key
+end
+
 -- ── Bind-option flags ──────────────────────────────────────────────────────
 -- The flag letters appear between literal "bind" and "=".
 local function parse_flags(prefix)
@@ -203,7 +227,7 @@ function M.load(path)
                     end
                     if mods and key and disp then
                         if desc and desc ~= "" then opts.description = desc end
-                        local combo      = build_combo(mods, key)
+                        local combo      = build_combo(mods, translate_key(key))
                         local dispatcher = make_dispatcher(disp, arg)
                         emit_bind(combo, dispatcher, opts)
                     end

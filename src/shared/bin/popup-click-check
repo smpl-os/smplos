@@ -1,0 +1,18 @@
+#!/bin/sh
+# Called on every left click while Hyprland is running, via the always-on
+# non-consuming `, mouse:272` bind registered in hypr/popup_watchers.lua.
+#
+# This replaces the old runtime `hyprctl keyword bindn …` mechanism in
+# toggle-start-menu / toggle-calendar, which broke in Hyprland 0.55: that
+# version's non-legacy config parser refuses keyword IPC modifications
+# ("keyword can't work with non-legacy parsers. Use eval.") — so the
+# click-outside dismiss never worked. Putting one permanent bind in
+# hyprland.lua + dispatching here avoids any runtime keyword fiddling.
+#
+# Cost: an extra pgrep per left click when no popup is open (~1 ms).
+# When a popup IS open, each check does two hyprctl JSON queries.
+
+pgrep -x start-menu    >/dev/null 2>&1 && start-menu-click-check    &
+pgrep -x smpl-calendar >/dev/null 2>&1 && smpl-calendar-click-check &
+wait
+exit 0
