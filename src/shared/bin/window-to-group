@@ -66,9 +66,11 @@ done
 # Target workspace: group slot for this monitor
 ws=$(( group + monitor_index * 10 ))
 
-# Dispatch
+# Dispatch — Hyprland 0.55+ wraps `hyprctl dispatch` arguments through its
+# Lua parser, so the legacy text form `movetoworkspace 3` no longer works
+# ("')' expected near '3'"). Use the hl.dsp.window.move() API instead.
 if $silent; then
-    hyprctl dispatch movetoworkspacesilent "$ws"
+    hyprctl dispatch "hl.dsp.window.move({workspace=$ws, silent=true})" >/dev/null 2>&1
 else
-    hyprctl dispatch movetoworkspace "$ws"
+    hyprctl dispatch "hl.dsp.window.move({workspace=$ws})" >/dev/null 2>&1
 fi
