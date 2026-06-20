@@ -21,10 +21,8 @@
 ;; (defpoll disk :interval "30s" `sysinfo --disk`)
 ;; (defpoll temperature :interval "5s" `sysinfo --temp`)
 
-;; Battery (disabled -- not in tray)
-;; (defpoll battery :interval "30s" `sysinfo --battery`)
-;; (defpoll battery-status :interval "30s" `sysinfo --battery-status`)
-;; (defpoll battery-icon :interval "30s" `sysinfo --battery-icon`)
+;; Battery (event-driven via /sys polling; widget hidden when no battery present -- desktops)
+(deflisten battery-data :initial '{"present":"no","level":"0","status":"Unknown","icon":"","low":"no"}' `scripts/battery-listener.sh`)
 
 ;; Audio (event-driven via pactl subscribe)
 (deflisten volume-data :initial '{"level":"0","muted":"no","icon":""}' `scripts/volume-listener.sh`)
@@ -180,6 +178,18 @@
                     bt-data.powered == "on" ? "Bluetooth on" : "Bluetooth off"}
     (label :class "icon" :text {bt-data.icon})))
 
+;; Battery (only visible when a system battery is detected -- laptops only).
+;; Icon shape changes with level + charging state; .low adds a warning color
+;; so state is conveyed by shape AND color, never color alone.
+(defwidget tray-battery []
+  (button :class "tray-battery ${battery-data.low == 'yes' ? 'low' : ''} ${battery-data.status == 'Charging' ? 'charging' : ''}"
+          :onclick "popup-toggle quick-settings"
+          :tooltip "Battery ${battery-data.level}% -- ${battery-data.status}"
+          :visible {battery-data.present == "yes"}
+    (box :orientation "h" :space-evenly false :spacing 3
+      (label :class "icon" :text {battery-data.icon})
+      (label :class "value" :text "${battery-data.level}%"))))
+
 ;; Notifications bell (empty=none, filled=has notifications)
 (defwidget tray-notifications []
   (button :class "tray-notifications ${notif-data.count != '0' ? 'has-notifs' : ''}"
@@ -248,6 +258,7 @@
     (tray-wifi)
     (tray-internet)
     (tray-volume)
+    (tray-battery)
     (tray-clock)
     (tray-notifications)))
 

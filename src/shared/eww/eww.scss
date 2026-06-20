@@ -204,6 +204,7 @@ window {
 .tray-keyboard,
 .tray-dictation,
 .tray-sync,
+.tray-battery,
 .tray-clock {
   padding: 2px 6px;
   border-radius: 4px;
@@ -219,6 +220,7 @@ window {
 .tray-keyboard:hover,
 .tray-dictation:hover,
 .tray-sync:hover,
+.tray-battery:hover,
 .tray-clock:hover {
   background-color: $bg-light;
 }
@@ -275,6 +277,37 @@ window {
 }
 
 /* Notifications: shape conveys state (outline=empty, filled=has, slash=DND) */
+
+/* Battery: icon glyph itself changes shape with level + charging state
+   (bolt = charging, body fill steps = level, alert glyph = critical).
+   .low triggers warning color + subtle pulse so it is impossible to miss
+   even for users who cannot distinguish colors. .charging tints success. */
+.tray-battery .icon {
+  font-size: 14px;
+  color: $accent;
+}
+.tray-battery .value {
+  font-size: 10px;
+  font-weight: bold;
+  color: $fg-dim;
+  margin-left: 1px;
+}
+.tray-battery.charging .icon {
+  color: $success;
+}
+.tray-battery.low .icon,
+.tray-battery.low .value {
+  color: $danger;
+}
+.tray-battery.low {
+  animation: battery-pulse 1.6s ease-in-out infinite;
+  border-radius: 10px;
+}
+@keyframes battery-pulse {
+  0%   { background-color: rgba($danger, 0.10); }
+  50%  { background-color: rgba($danger, 0.30); }
+  100% { background-color: rgba($danger, 0.10); }
+}
 
 /* Clock in tray -- primary line bigger+bold, secondary line smaller */
 .tray-clock .clock-top {
