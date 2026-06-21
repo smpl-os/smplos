@@ -98,7 +98,10 @@ quit_current_session() {
   case "$1" in
     hyprland)
       command -v hyprctl >/dev/null 2>&1 || return 1
-      hyprctl dispatch exit 2>/dev/null
+      # Hyprland 0.55 migrated dispatchers to Lua. The legacy
+      # `hyprctl dispatch exit` fails with "expected a dispatcher" —
+      # use the Lua expression form.
+      hyprctl dispatch "hl.dsp.exit" 2>/dev/null
       ;;
     niri)
       command -v niri >/dev/null 2>&1 || return 1
