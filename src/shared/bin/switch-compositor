@@ -73,17 +73,25 @@ ensure_greetd_uses_wrapper() {
   info "Patching greetd to use $WRAPPER_NAME (needs sudo, one-time)"
   # Replace only the initial_session command; leave default_session alone.
   # Use awk for stanza-aware replacement.
-  local tmp
-  tmp=$(mktemp)
-  sudo awk -v wrap="$WRAPPER_NAME" '
-    /^\s*\[/ { stanza = $0 }
-    stanza ~ /\[initial_session\]/ && /^\s*command\s*=/ {
-      sub(/=.*/, "= \"" wrap "\"")
-    }
-    { print }
-  ' "$GREETD_CONF" | sudo tee "$tmp" >/dev/null \
-    && sudo mv -f "$tmp" "$GREETD_CONF" \
-    || die "failed to patch $GREETD_CONF"
+  #
+  # Written as a single `sudo bash -c` so the prompt happens once and the
+  # pipe runs entirely as root (avoids a class of fish/bash quirks where
+  # the second `sudo` in a pipeline could be denied a tty / fail to
+  # write to a /tmp file owned by the unprivileged caller).
+  if ! sudo bash -c "
+    set -e
+    tmp=\$(mktemp)
+    awk -v wrap='$WRAPPER_NAME' '
+      /^[[:space:]]*\\[/ { stanza = \$0 }
+      stanza ~ /\\[initial_session\\]/ && /^[[:space:]]*command[[:space:]]*=/ {
+        sub(/=.*/, \"= \\\"\" wrap \"\\\"\")
+      }
+      { print }
+    ' '$GREETD_CONF' > \"\$tmp\"
+    mv -f \"\$tmp\" '$GREETD_CONF'
+  "; then
+    die "failed to patch $GREETD_CONF"
+  fi
 }
 
 quit_current_session() {
