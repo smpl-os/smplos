@@ -82,6 +82,12 @@ if [[ -n "${NIRI_SOCKET:-}" ]] && command -v niri >/dev/null 2>&1; then
     else
         idx=${real_idx[$((count - 1))]}
     fi
+    # No-op when already focused on the target idx — niri's
+    # focus-workspace has built-in "back-and-forth" semantics that flip
+    # to the previously focused workspace when the target == current,
+    # which would otherwise turn Super+1 into a toggle.
+    focused_idx=$(echo "$ws_json" | jq -r 'first(.[] | select(.is_focused)) | .idx')
+    [[ "$idx" == "$focused_idx" ]] && exit 0
     niri msg action focus-workspace "$idx" >/dev/null 2>&1 || true
     exit 0
 fi
