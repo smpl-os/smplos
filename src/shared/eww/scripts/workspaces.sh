@@ -11,15 +11,14 @@ emit_hyprland() {
 }
 
 emit_niri() {
-  # On niri we predeclare workspaces "g1".."g10" (see compositors/niri/
-  # config.kdl). The bar shows a dot for any workspace that has windows.
-  # Filter to our predeclared "g<digit>" names, strip the prefix, return
-  # the sorted unique list. Anonymous/dynamic workspaces are ignored.
+  # niri is dynamic. Emit 1-based bar positions of non-scratchpad
+  # workspaces that have at least one window. Scratchpad is filtered out
+  # so toggle-messenger's stash never shows up as a dot.
   niri msg --json workspaces 2>/dev/null \
-    | jq -c '[.[]
-              | select(.active_window_id != null)
-              | (.name // "" | capture("^g(?<n>[0-9]+)$").n // empty)
-              | tonumber]
+    | jq -c '[.[] | select(.name != "scratchpad")]
+             | sort_by(.idx)
+             | to_entries
+             | map(select(.value.active_window_id != null) | .key + 1)
              | unique | sort' \
     || echo '[]'
 }

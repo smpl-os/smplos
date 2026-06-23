@@ -12,14 +12,15 @@ emit_hyprland() {
 }
 
 emit_niri() {
-  # Extract digit suffix from focused workspace's name (we predeclare
-  # "g1".."g10" in config.kdl). Fall back to 1 for anonymous workspaces.
-  name=$(niri msg --json workspaces 2>/dev/null \
-         | jq -r 'first(.[] | select(.is_focused == true) | .name) // ""')
-  case "$name" in
-    g[0-9]|g10) echo "${name#g}" ;;
-    *) echo "1" ;;
-  esac
+  # 1-based position of the focused workspace among non-scratchpad
+  # workspaces (sorted by idx). Matches the dot order emitted by
+  # workspaces.sh. Defaults to 1 if focused on scratchpad / nothing.
+  niri msg --json workspaces 2>/dev/null \
+    | jq -r '[.[] | select(.name != "scratchpad")]
+             | sort_by(.idx)
+             | (to_entries[] | select(.value.is_focused) | .key + 1)
+             // 1' \
+    || echo "1"
 }
 
 emit() {

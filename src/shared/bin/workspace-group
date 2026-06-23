@@ -35,11 +35,11 @@ fi
 # ---------------------------------------------------------------------------
 # niri short-circuit (Hyprland code below is unchanged).
 #
-# niri's workspaces are per-output. We predeclare 10 named "g1".."g10"
-# workspaces in config.kdl so they exist as fixed slots regardless of
-# what dynamic ones niri may have spun up. Pass the NAME (with "g"
-# prefix) so niri's reference parser doesn't interpret a bare digit as
-# an index.
+# niri is dynamic — it keeps N+1 workspaces per output (occupied + trailing
+# empty). We map "bar dot N" → the Nth non-scratchpad workspace by sorted
+# idx. This keeps the bar, the overview order, and Super+N in agreement
+# regardless of where the scratchpad sits (named workspaces drift on
+# config reload).
 #
 # Multi-monitor "switch all outputs together" parity with Hyprland would
 # need per-output focus-workspace invocations — TODO; for now we focus
@@ -47,11 +47,16 @@ fi
 # ---------------------------------------------------------------------------
 if [[ -n "${NIRI_SOCKET:-}" ]] && command -v niri >/dev/null 2>&1; then
     arg="${1:-1}"
-    # Resolve current group from the focused workspace's name (strip "g").
-    cur_name=$(niri msg --json workspaces 2>/dev/null \
-              | jq -r 'first(.[] | select(.is_focused == true) | .name) // ""')
-    current_group="${cur_name#g}"
-    [[ -z "$current_group" || ! "$current_group" =~ ^[0-9]+$ ]] && current_group=1
+    ws_json=$(niri msg --json workspaces 2>/dev/null) || ws_json='[]'
+    mapfile -t real_idx < <(echo "$ws_json" \
+        | jq -r '[.[] | select(.name != "scratchpad")] | sort_by(.idx) | .[].idx')
+    count=${#real_idx[@]}
+    [[ $count -eq 0 ]] && exit 0
+    # current group = 1-based position of focused workspace in the
+    # non-scratchpad list; default to 1 if focused on scratchpad.
+    current_group=$(echo "$ws_json" \
+        | jq -r '[.[] | select(.name != "scratchpad")] | sort_by(.idx)
+                 | (to_entries[] | select(.value.is_focused) | .key + 1) // 1')
     case "$arg" in
         +*) target=$(( current_group + ${arg:1} ))
             # Relative motion wraps (Super+Tab cycling feels right).
@@ -69,7 +74,15 @@ if [[ -n "${NIRI_SOCKET:-}" ]] && command -v niri >/dev/null 2>&1; then
             [[ $target -lt 1 || $target -gt $max_group ]] && exit 0
             ;;
     esac
-    niri msg action focus-workspace "g$target" >/dev/null 2>&1 || true
+    # Translate bar-dot position → niri workspace idx. If target exceeds
+    # the current workspace count, focus the last one (which is the
+    # trailing empty — niri will append a new empty after).
+    if [[ $target -le $count ]]; then
+        idx=${real_idx[$((target - 1))]}
+    else
+        idx=${real_idx[$((count - 1))]}
+    fi
+    niri msg action focus-workspace "$idx" >/dev/null 2>&1 || true
     exit 0
 fi
 

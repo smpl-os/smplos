@@ -135,31 +135,18 @@ animations {
     }
 }
 
-// ── Persistent workspaces (Hyprland-style fixed 1..10) ───────────────────
+// ── Workspaces ───────────────────────────────────────────────────────────
 //
-// By default niri is DYNAMIC: it always keeps N+1 workspaces (one trailing
-// empty one) per output, and `focus-workspace 3` when only 2 exist just
-// lands on the last available. smplOS users come from Hyprland/Windows
-// where workspaces are fixed slots — so we predeclare them.
+// niri is DYNAMIC: it always keeps N+1 workspaces (one trailing empty)
+// per output. We embrace this rather than fight it — Super+1..N maps to
+// the Nth visible workspace by position (see src/shared/bin/workspace-group
+// and the EWW bar listeners), so the bar dots, overview order, and Super+N
+// targets all agree.
 //
-// Names use a "g" prefix ("g1".. = group 1..) because niri's workspace
-// reference parser treats a pure-digit string as an INDEX first, not a
-// name. With non-numeric names, our scripts and binds can pass "g3"
-// unambiguously regardless of how many dynamic workspaces the user has
-// accumulated.
-//
-// We predeclare 4 by default — enough for typical use without cluttering
-// the bar / overview. Users who want more can raise `ws_count` in
-// ~/.config/smplos/bar.conf AND add more `workspace "gN"` lines here.
-// The Super+5..0 binds stay defined in bindings.conf but are no-ops when
-// the target group is above ws_count (workspace-group exits silently).
-//
-// The EWW bar listener (scripts/workspaces.sh + active-workspace.sh)
-// strips the "g" prefix so the dot rendering stays 1..N.
-workspace "g1"
-workspace "g2"
-workspace "g3"
-workspace "g4"
+// We previously predeclared named workspaces "g1".."g4" to mimic Hyprland's
+// fixed slots, but niri places named workspaces at the TOP of the output
+// on every config reload — which kept fighting the scratchpad and made the
+// bar / overview / binds disagree. Dropping them is the simpler fix.
 
 // Hidden scratchpad workspace used by toggle-messenger (Super+Shift+letter).
 // Niri has no "special workspaces" like Hyprland — instead we declare a

@@ -114,10 +114,11 @@ if [[ -n "${NIRI_SOCKET:-}" ]] && command -v niri >/dev/null 2>&1; then
       new_focused=$(niri msg --json workspaces | jq -c '.[] | select(.is_focused) | {id, name, idx}')
       new_focused_name=$(echo "$new_focused" | jq -r '.name // ""')
       if [[ "$new_focused_name" == "$NIRI_SCRATCH" ]]; then
+        # No named workspaces besides scratchpad — pick the first
+        # non-scratchpad workspace by idx instead.
         fallback=$(niri msg --json workspaces \
           | jq -r --arg s "$NIRI_SCRATCH" \
-            '.[] | select(.name != null and .name != "" and .name != $s) | .name' \
-          | head -n1)
+            'first(.[] | select(.name != $s) | .idx) // empty')
         if [[ -n "$fallback" ]]; then
           niri msg action focus-workspace "$fallback" >/dev/null 2>&1 || true
           sleep 0.05
