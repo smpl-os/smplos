@@ -60,9 +60,15 @@ layout {
     }
 
     struts {
-        // Top gap for the EWW bar (matches reserve_in_top in waybar terms).
-        // Bar is ~34px tall on Hyprland — leave room.
-        top 34
+        // The EWW bar is a wlr-layer-shell surface anchored to the BOTTOM
+        // with an exclusive zone, so niri already reserves the bottom strip
+        // from the working area automatically. We must NOT add an extra
+        // strut here — otherwise tiled windows get an invisible gap.
+        //
+        // (Previously this had `top 34` left over from a top-bar layout,
+        // which produced a ~34px logical gap at the top of every tiled
+        // window, looking like an invisible taskbar at the top.)
+        top 0
         bottom 0
         left 0
         right 0
