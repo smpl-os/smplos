@@ -39,7 +39,7 @@ input {
         xkb {
             layout "us"
             // Matches src/compositors/hyprland/hypr/input.conf
-            options "compose:caps,grp:alt_shift_toggle"
+            options "ctrl:nocaps,grp:alt_shift_toggle"
         }
         // Hyprland: repeat_rate=50 Hz, repeat_delay=300 ms.
         repeat-delay 300

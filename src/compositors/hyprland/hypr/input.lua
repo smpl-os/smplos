@@ -7,7 +7,7 @@ hl.config({
         kb_layout  = "us",
         kb_variant = "",
         kb_model   = "",
-        kb_options = "compose:caps",
+        kb_options = "ctrl:nocaps",
         kb_rules   = "evdev",
 
         -- Key repeat: 50 Hz (20ms interval), 300ms delay before repeat starts.

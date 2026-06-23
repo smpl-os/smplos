@@ -51,7 +51,7 @@ if [[ -n "$WAYLAND_DISPLAY" ]] || [[ -n "$HYPRLAND_INSTANCE_SIGNATURE" ]]; then
     done
 
     for attempt in {1..8}; do
-        hyprctl --batch "keyword input:kb_rules evdev ; keyword input:kb_options compose:caps,grp:alt_shift_toggle ; keyword input:kb_layout $layouts ; keyword input:kb_variant $variants" >/dev/null 2>&1
+        hyprctl --batch "keyword input:kb_rules evdev ; keyword input:kb_options ctrl:nocaps,grp:alt_shift_toggle ; keyword input:kb_layout $layouts ; keyword input:kb_variant $variants" >/dev/null 2>&1
         sleep 0.15
 
         main_kb=$(hyprctl -j devices 2>/dev/null | jq -r '.keyboards[] | select(.main == true) | .name' | head -n1)
