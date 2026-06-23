@@ -52,6 +52,9 @@ if [[ -n "${NIRI_SOCKET:-}" ]] && command -v niri >/dev/null 2>&1; then
         | jq -r '[.[] | select(.name != "scratchpad")] | sort_by(.idx) | .[].idx')
     count=${#real_idx[@]}
     [[ $count -eq 0 ]] && exit 0
+    # Under niri the slot count is dynamic — wrap/clamp against the live
+    # workspace count, NOT the static bar.conf ws_count.
+    niri_max=$count
     # current group = 1-based position of focused workspace in the
     # non-scratchpad list; default to 1 if focused on scratchpad.
     current_group=$(echo "$ws_json" \
@@ -60,18 +63,18 @@ if [[ -n "${NIRI_SOCKET:-}" ]] && command -v niri >/dev/null 2>&1; then
     case "$arg" in
         +*) target=$(( current_group + ${arg:1} ))
             # Relative motion wraps (Super+Tab cycling feels right).
-            while [[ $target -lt 1 ]];          do target=$(( target + max_group )); done
-            while [[ $target -gt $max_group ]]; do target=$(( target - max_group )); done
+            while [[ $target -lt 1 ]];         do target=$(( target + niri_max )); done
+            while [[ $target -gt $niri_max ]]; do target=$(( target - niri_max )); done
             ;;
         -*) target=$(( current_group - ${arg:1} ))
-            while [[ $target -lt 1 ]];          do target=$(( target + max_group )); done
-            while [[ $target -gt $max_group ]]; do target=$(( target - max_group )); done
+            while [[ $target -lt 1 ]];         do target=$(( target + niri_max )); done
+            while [[ $target -gt $niri_max ]]; do target=$(( target - niri_max )); done
             ;;
-        *)  # Absolute target. Reject out-of-range silently so Super+5..0
-            # don't surprise-teleport the user when ws_count < 10.
+        *)  # Absolute target. Allow any positive number — if it exceeds
+            # the live count we fall through to the trailing-empty
+            # workspace (niri then appends a new empty after).
             target="$arg"
-            [[ ! "$target" =~ ^[0-9]+$ ]] && exit 0
-            [[ $target -lt 1 || $target -gt $max_group ]] && exit 0
+            [[ ! "$target" =~ ^[0-9]+$ || $target -lt 1 ]] && exit 0
             ;;
     esac
     # Translate bar-dot position → niri workspace idx. If target exceeds

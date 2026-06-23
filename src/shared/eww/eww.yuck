@@ -55,6 +55,8 @@
 
 ;; Taskbar settings (written by settings app, read via bar-ctl apply)
 ;; ws-count    : how many workspace dots to show (1-10, default 4)
+;;               — STATIC under Hyprland (user-configurable in bar.conf).
+;;               — Ignored under niri (the bar follows ws-total live).
 ;; ws-position : "center" or "left" (adjacent to start button)
 ;; ws-spacing  : pixel gap between workspace dots (1-10, default 1)
 ;; ws-style    : "numbers" or "squares" (indicator style)
@@ -62,6 +64,12 @@
 (defvar ws-position "left")
 (defvar ws-spacing 1)
 (defvar ws-style "numbers")
+
+;; Live workspace slot count.
+;; — niri: tracks the dynamic number of non-scratchpad workspaces (which
+;;   always includes a trailing empty), so the bar grows/shrinks with niri.
+;; — Hyprland: mirrors ws-count from bar.conf (re-emitted on file change).
+(deflisten ws-total :initial "4" `scripts/workspace-count.sh`)
 
 ;; Keyboard layout (only visible when multiple layouts configured)
 (deflisten kb-data :initial '{"code":"","layout":"","xkb_layout":"","xkb_variant":"","visible":"no"}' `scripts/keyboard-listener.sh`)
@@ -84,7 +92,7 @@
 (defwidget workspaces-widget []
   (box :class "workspaces" :orientation "h" :space-evenly false
     (box :visible {ws-style == "numbers"} :orientation "h" :space-evenly false :spacing ws-spacing
-      (for entry in {jq("[1,2,3,4,5,6,7,8,9,10]", ".[0:${ws-count}]")}
+      (for entry in {jq("[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]", ".[0:${ws-total}]")}
         (workspace-dot :ws entry)))
     (box :visible {ws-style == "squares"}
       (workspace-grid))))
@@ -98,17 +106,17 @@
     (label :text {active-workspace == ws ? "●" : "${ws}"})))
 
 ;; Squares mode grid — balanced 2 rows (e.g. 7 → 4+3, 8 → 4+4)
-;; Split point = ceil(ws-count / 2): top row gets IDs 1..split, bottom gets split+1..ws-count.
+;; Split point = ceil(ws-total / 2): top row gets IDs 1..split, bottom gets split+1..ws-total.
 ;; Each ID appears in both rows; visibility picks the correct one.
 (defwidget workspace-grid []
   (box :orientation "v" :spacing ws-spacing
     ;; ── Top row ──
     (box :orientation "h" :spacing ws-spacing
-      (for id in {jq("[1,2,3,4,5,6,7,8,9,10]", ".[0:${ws-count}] | .[0:${ceil(ws-count / 2)}]")}
+      (for id in {jq("[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]", ".[0:${ws-total}] | .[0:${ceil(ws-total / 2)}]")}
         (workspace-sq :id id)))
-    ;; ── Bottom row (hidden when ws-count <= 1) ──
-    (box :visible {ws-count > 1} :orientation "h" :spacing ws-spacing
-      (for id in {jq("[1,2,3,4,5,6,7,8,9,10]", ".[0:${ws-count}] | .[${ceil(ws-count / 2)}:]")}
+    ;; ── Bottom row (hidden when ws-total <= 1) ──
+    (box :visible {ws-total > 1} :orientation "h" :spacing ws-spacing
+      (for id in {jq("[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20]", ".[0:${ws-total}] | .[${ceil(ws-total / 2)}:]")}
         (workspace-sq :id id)))))
 
 ;; Single square button for the grid

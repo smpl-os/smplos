@@ -37,8 +37,11 @@ fi
 [[ $max_group -lt 1 ]] && max_group=1
 [[ $max_group -gt 10 ]] && max_group=10
 
-# Refuse to move to a group beyond the limit
-[[ "$group" -gt $max_group ]] && exit 0
+# Refuse to move to a group beyond the limit — Hyprland only. Under niri the
+# slot count is dynamic and the niri branch below has its own range handling.
+if [[ -z "${NIRI_SOCKET:-}" ]]; then
+    [[ "$group" -gt $max_group ]] && exit 0
+fi
 
 # ---------------------------------------------------------------------------
 # niri short-circuit (Hyprland code below is unchanged).
@@ -48,6 +51,7 @@ fi
 # bar / overview order). See src/shared/bin/workspace-group for rationale.
 # ---------------------------------------------------------------------------
 if [[ -n "${NIRI_SOCKET:-}" ]] && command -v niri >/dev/null 2>&1; then
+    [[ ! "$group" =~ ^[0-9]+$ || $group -lt 1 ]] && exit 0
     mapfile -t real_idx < <(niri msg --json workspaces 2>/dev/null \
         | jq -r '[.[] | select(.name != "scratchpad")] | sort_by(.idx) | .[].idx')
     count=${#real_idx[@]}
