@@ -41,6 +41,23 @@ fi
 [[ "$group" -gt $max_group ]] && exit 0
 
 # ---------------------------------------------------------------------------
+# niri short-circuit (Hyprland code below is unchanged).
+#
+# On niri there is no "group" mechanic — workspaces are per-output. We
+# predeclare 10 named "g1".."g10" workspaces in config.kdl (see comment
+# block there). Pass the workspace name with "g" prefix so niri doesn't
+# interpret a bare digit as a positional index.
+# ---------------------------------------------------------------------------
+if [[ -n "${NIRI_SOCKET:-}" ]] && command -v niri >/dev/null 2>&1; then
+    if $silent; then
+        niri msg action move-column-to-workspace --focus false "g$group" >/dev/null 2>&1 || true
+    else
+        niri msg action move-column-to-workspace "g$group" >/dev/null 2>&1 || true
+    fi
+    exit 0
+fi
+
+# ---------------------------------------------------------------------------
 # Read monitors sorted rightmost-first (rightmost = primary, index 0)
 # ---------------------------------------------------------------------------
 readarray -t monitors < <(

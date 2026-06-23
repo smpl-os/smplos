@@ -1,16 +1,32 @@
 #!/bin/bash
-# EWW active workspace listener (Hyprland)
+# EWW active workspace listener (Hyprland + niri)
 # Reports the workspace GROUP number (1-10) of the focused workspace.
 # With grouped workspaces, each monitor has its own slot inside a group:
 #   right/primary  → workspace N      (N = 1-10)
 #   left/secondary → workspace N+10   (N = 11-20)
 # Both normalize to the same group number: ((id - 1) % 10) + 1
 
+emit_hyprland() {
+  id=$(hyprctl activeworkspace -j 2>/dev/null | jq -r '.id // 1')
+  echo $(( (id - 1) % 10 + 1 ))
+}
+
+emit_niri() {
+  # Extract digit suffix from focused workspace's name (we predeclare
+  # "g1".."g10" in config.kdl). Fall back to 1 for anonymous workspaces.
+  name=$(niri msg --json workspaces 2>/dev/null \
+         | jq -r 'first(.[] | select(.is_focused == true) | .name) // ""')
+  case "$name" in
+    g[0-9]|g10) echo "${name#g}" ;;
+    *) echo "1" ;;
+  esac
+}
+
 emit() {
-  if command -v hyprctl &>/dev/null && command -v jq &>/dev/null; then
-    id=$(hyprctl activeworkspace -j 2>/dev/null | jq -r '.id // 1')
-    # Normalize: ws 1→1, ws 11→1, ws 2→2, ws 12→2, ...
-    echo $(( (id - 1) % 10 + 1 ))
+  if [[ -n "$NIRI_SOCKET" ]] && command -v niri &>/dev/null; then
+    emit_niri
+  elif command -v hyprctl &>/dev/null && command -v jq &>/dev/null; then
+    emit_hyprland
   else
     echo "1"
   fi
@@ -18,13 +34,21 @@ emit() {
 
 emit
 
-sock="$XDG_RUNTIME_DIR/hypr/${HYPRLAND_INSTANCE_SIGNATURE}/.socket2.sock"
-if [[ -S "$sock" ]] && command -v socat &>/dev/null; then
-  socat -u UNIX-CONNECT:"$sock" - 2>/dev/null | while read -r line; do
+if [[ -n "$NIRI_SOCKET" ]] && command -v niri &>/dev/null; then
+  niri msg event-stream 2>/dev/null | while read -r line; do
     case "$line" in
-      workspace*|focusedmon*) emit ;;
+      "Workspaces changed:"*|"Workspace activated:"*|"Window focus changed:"*) emit ;;
     esac
   done
 else
-  while sleep 1; do emit; done
+  sock="$XDG_RUNTIME_DIR/hypr/${HYPRLAND_INSTANCE_SIGNATURE}/.socket2.sock"
+  if [[ -S "$sock" ]] && command -v socat &>/dev/null; then
+    socat -u UNIX-CONNECT:"$sock" - 2>/dev/null | while read -r line; do
+      case "$line" in
+        workspace*|focusedmon*) emit ;;
+      esac
+    done
+  else
+    while sleep 1; do emit; done
+  fi
 fi

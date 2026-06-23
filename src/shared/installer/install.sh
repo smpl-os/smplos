@@ -311,11 +311,11 @@ cat <<EOF | sudo tee /etc/greetd/config.toml
 vt = "next"
 
 [default_session]
-command = "tuigreet --remember-session --cmd start-hyprland"
+command = "tuigreet --remember-session --cmd smplos-start-session"
 user = "greeter"
 
 [initial_session]
-command = "start-hyprland"
+command = "smplos-start-session"
 user = "$USER"
 EOF
 

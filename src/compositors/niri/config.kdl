@@ -117,7 +117,56 @@ animations {
     // off
 
     slowdown 1.0
+
+    // Disable ONLY the workspace-switch animation.
+    //
+    // Why: niri's default behavior animates a vertical slide through
+    // every workspace between the source and destination. Jumping
+    // g4 → g10 visibly scrolls past g5, g6, g7, g8, g9 — six full
+    // workspaces flashing past in ~300ms. With per-workspace
+    // wallpapers or different window contents this is a strobing
+    // flash that is genuinely seizure-inducing for photo-sensitive
+    // users and disorienting for everyone else.
+    //
+    // Disabling only this animation keeps window-open/close,
+    // window-movement, horizontal-view-movement, etc. all animated.
+    workspace-switch {
+        off
+    }
 }
+
+// ── Persistent workspaces (Hyprland-style fixed 1..10) ───────────────────
+//
+// By default niri is DYNAMIC: it always keeps N+1 workspaces (one trailing
+// empty one) per output, and `focus-workspace 3` when only 2 exist just
+// lands on the last available. smplOS users come from Hyprland/Windows
+// where workspaces are fixed slots — so we predeclare them.
+//
+// Names use a "g" prefix ("g1".. = group 1..) because niri's workspace
+// reference parser treats a pure-digit string as an INDEX first, not a
+// name. With non-numeric names, our scripts and binds can pass "g3"
+// unambiguously regardless of how many dynamic workspaces the user has
+// accumulated.
+//
+// We predeclare 4 by default — enough for typical use without cluttering
+// the bar / overview. Users who want more can raise `ws_count` in
+// ~/.config/smplos/bar.conf AND add more `workspace "gN"` lines here.
+// The Super+5..0 binds stay defined in bindings.conf but are no-ops when
+// the target group is above ws_count (workspace-group exits silently).
+//
+// The EWW bar listener (scripts/workspaces.sh + active-workspace.sh)
+// strips the "g" prefix so the dot rendering stays 1..N.
+workspace "g1"
+workspace "g2"
+workspace "g3"
+workspace "g4"
+
+// Hidden scratchpad workspace used by toggle-messenger (Super+Shift+letter).
+// Niri has no "special workspaces" like Hyprland — instead we declare a
+// named workspace here and our toggle-messenger script moves windows to/
+// from it. It's still reachable via Mod+Tab cycling for users who want to
+// see what's stashed; that's intentional and not a bug.
+workspace "scratchpad"
 
 // ── Environment variables (matches src/compositors/hyprland/hypr/envs.conf) ─
 environment {
@@ -171,6 +220,11 @@ spawn-at-startup "generate-messenger-bindings"
 spawn-at-startup "sh" "-c" "theme-bg-init"
 spawn-at-startup "sh" "-c" "sleep 0.5 && bar-ctl start"
 spawn-at-startup "window-guard"
+// niri-only: close start-menu / smpl-calendar on focus loss (Windows-
+// style click-outside-to-dismiss). On Hyprland this is handled by the
+// mouse:272 bind in hypr/popup_watchers.lua — niri has no equivalent
+// so we watch its event stream instead.
+spawn-at-startup "niri-popup-watcher"
 spawn-at-startup "automount"
 spawn-at-startup "sh" "-c" "echo '' | gnome-keyring-daemon --start --unlock --components=secrets,pkcs11,ssh"
 spawn-at-startup "/usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1"

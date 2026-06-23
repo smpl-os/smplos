@@ -82,8 +82,10 @@ key_to_niri() {
     SUPER_L)   echo "" ;;
     # XF86 media/brightness keys pass through verbatim (same naming).
     XF86*)     echo "$k" ;;
-    # Pre-translated keysyms (already in correct form)
+    # Pre-translated keysyms (already in correct form).
+    # F13-F24 are commonly emitted by keyd remaps (e.g. Super-tap -> F13).
     F1|F2|F3|F4|F5|F6|F7|F8|F9|F10|F11|F12) echo "$k" ;;
+    F13|F14|F15|F16|F17|F18|F19|F20|F21|F22|F23|F24) echo "$k" ;;
     # Single ASCII letter / digit / printable — niri uses lowercase
     [a-zA-Z])  echo "${k,,}" ;;
     [0-9])     echo "$k" ;;

@@ -1,0 +1,68 @@
+#!/bin/bash
+# niri-popup-watcher — close smplOS popups on focus loss (niri only).
+#
+# On Hyprland, click-outside-to-dismiss is handled by a permanent non-
+# consuming `mouse:272` bind that fires popup-click-check (see
+# hypr/popup_watchers.lua). niri has no equivalent for binding raw mouse
+# clicks, so we use a different mechanism: niri's IPC event stream emits
+# `Window focus changed: …` whenever focus moves to a different window.
+# When focus moves AWAY from start-menu / smpl-calendar, we kill them.
+#
+# This matches standard Windows / KDE behavior: clicking off the start
+# menu (or focusing another window via Alt+Tab) closes it.
+#
+# Hyprland is completely untouched — this daemon refuses to run unless
+# $NIRI_SOCKET is set.
+
+set -u
+
+[[ -z "${NIRI_SOCKET:-}" ]] && exit 0
+command -v niri >/dev/null 2>&1 || exit 0
+command -v jq   >/dev/null 2>&1 || exit 0
+
+# Popup app_ids we manage. Each must self-launch via its own toggle script
+# so re-spawning isn't our concern — we only handle the close half.
+POPUPS=(start-menu smpl-calendar)
+
+is_popup_focused() {
+  local focused="$1" p
+  for p in "${POPUPS[@]}"; do
+    [[ "$focused" == "$p" ]] && return 0
+  done
+  return 1
+}
+
+close_other_popups() {
+  local keep="$1" p
+  for p in "${POPUPS[@]}"; do
+    [[ "$p" == "$keep" ]] && continue
+    pkill -x "$p" 2>/dev/null || true
+  done
+}
+
+close_all_popups() {
+  local p
+  for p in "${POPUPS[@]}"; do
+    pkill -x "$p" 2>/dev/null || true
+  done
+}
+
+# Consume niri's event stream. The stream uses Rust debug-print, not JSON,
+# so we just react to event-type prefixes; details come from a follow-up
+# `niri msg --json focused-window` call.
+niri msg event-stream 2>/dev/null | while read -r line; do
+  case "$line" in
+    "Window focus changed:"*)
+      focused=$(niri msg --json focused-window 2>/dev/null \
+                | jq -r '.app_id // ""')
+      if is_popup_focused "$focused"; then
+        # The focused window IS a popup — close any OTHER popups so we
+        # don't end up stacking start-menu over smpl-calendar.
+        close_other_popups "$focused"
+      else
+        # Focus moved to a non-popup window — close all popups.
+        close_all_popups
+      fi
+      ;;
+  esac
+done

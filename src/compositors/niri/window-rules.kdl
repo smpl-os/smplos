@@ -35,11 +35,18 @@ window-rule {
 // theme's $theme-popup-opacity. They must float + center / dock to specific
 // positions to match the Hyprland experience.
 
-// Start Menu — bottom-left, above bar (~37px from bottom)
+// Start Menu — bottom-left, just above the bar.
+//
+// IMPORTANT: do NOT set `default-window-height` here. The Slint app
+// reports its own fixed size (520x580). If we override with a different
+// number, niri positions the floating window assuming the rule's height,
+// then the app responds with its real size on first configure, and niri
+// re-positions the window — visible as a ~100px upward jump the user
+// notices on every click. Letting the app's natural size flow through
+// means niri positions correctly on the very first frame.
 window-rule {
     match app-id="^start-menu$"
     open-floating true
-    default-window-height { fixed 600; }
     // Position: bottom-left corner. Niri's "position" is relative to the
     // working area inside struts (we set top struts for the bar).
     default-floating-position x=2 y=2 relative-to="bottom-left"
@@ -48,22 +55,21 @@ window-rule {
     shadow { off; }
 }
 
-// Notification Center — bottom-right, above bar
+// Notification Center — bottom-right, above bar. Same no-default-height
+// rule as start-menu (see above).
 window-rule {
     match app-id="^notif-center$"
     open-floating true
-    default-window-height { fixed 600; }
     default-floating-position x=2 y=2 relative-to="bottom-right"
     focus-ring { off; }
     border { off; }
     shadow { off; }
 }
 
-// Settings — centered, larger
+// Settings — centered, larger. Slint reports preferred 900x560.
 window-rule {
     match app-id="^settings$"
     open-floating true
-    default-window-height { fixed 650; }
     focus-ring { off; }
     border { off; }
     shadow { off; }
@@ -73,7 +79,6 @@ window-rule {
 window-rule {
     match app-id="^app-center$"
     open-floating true
-    default-window-height { fixed 700; }
     focus-ring { off; }
     border { off; }
     shadow { off; }
@@ -83,7 +88,6 @@ window-rule {
 window-rule {
     match app-id="^webapp-center$"
     open-floating true
-    default-window-height { fixed 650; }
     focus-ring { off; }
     border { off; }
     shadow { off; }
@@ -93,7 +97,6 @@ window-rule {
 window-rule {
     match app-id="^sync-center$"
     open-floating true
-    default-window-height { fixed 650; }
     focus-ring { off; }
     border { off; }
     shadow { off; }
@@ -103,7 +106,6 @@ window-rule {
 window-rule {
     match app-id="^smpl-calendar$"
     open-floating true
-    default-window-height { fixed 500; }
     default-floating-position x=2 y=2 relative-to="bottom-right"
     focus-ring { off; }
     border { off; }
@@ -181,13 +183,22 @@ window-rule {
 // ============================================================================
 //
 // Hyprland positions them at (monitor_w-482, monitor_h-754) which is bottom-
-// right with a 2px margin from edges (since size is 480x720).
+// right with a 2px margin from edges (size 480x720).
 // Niri: default-floating-position relative-to="bottom-right" gives same effect.
+//
+// IMPORTANT: Electron apps (Signal, Discord, Slack, WhatsApp, Telegram web)
+// remember their last window size in user-data and ignore niri's `default-*`
+// hints if the saved size is bigger. To overcome this on the FIRST launch
+// after enabling these rules, briefly hard-clamp by also setting `max-width`/
+// `max-height` to 480/720, then reopen the app once. After Electron records
+// the new size, the clamps can be removed (which is the current state) so
+// the user can resize the window freely afterwards.
 
 // Signal
 window-rule {
     match app-id="^signal$"
     open-floating true
+    default-column-width { fixed 480; }
     default-window-height { fixed 720; }
     default-floating-position x=2 y=34 relative-to="bottom-right"
 }
@@ -196,6 +207,7 @@ window-rule {
 window-rule {
     match app-id="^(org\\.telegram\\.desktop|telegramdesktop)$"
     open-floating true
+    default-column-width { fixed 480; }
     default-window-height { fixed 720; }
     default-floating-position x=2 y=34 relative-to="bottom-right"
 }
@@ -204,6 +216,7 @@ window-rule {
 window-rule {
     match app-id="^(Slack|slack)$"
     open-floating true
+    default-column-width { fixed 480; }
     default-window-height { fixed 720; }
     default-floating-position x=2 y=34 relative-to="bottom-right"
 }
@@ -212,6 +225,7 @@ window-rule {
 window-rule {
     match app-id="^(discord|WebCord|vesktop)$"
     open-floating true
+    default-column-width { fixed 480; }
     default-window-height { fixed 720; }
     default-floating-position x=2 y=34 relative-to="bottom-right"
 }
@@ -220,6 +234,7 @@ window-rule {
 window-rule {
     match app-id="^brave-discord"
     open-floating true
+    default-column-width { fixed 480; }
     default-window-height { fixed 720; }
     default-floating-position x=2 y=34 relative-to="bottom-right"
 }
@@ -227,6 +242,7 @@ window-rule {
 window-rule {
     match app-id="^brave-web\\.whatsapp"
     open-floating true
+    default-column-width { fixed 480; }
     default-window-height { fixed 720; }
     default-floating-position x=2 y=34 relative-to="bottom-right"
 }
@@ -234,6 +250,7 @@ window-rule {
 window-rule {
     match app-id="^brave-web\\.telegram"
     open-floating true
+    default-column-width { fixed 480; }
     default-window-height { fixed 720; }
     default-floating-position x=2 y=34 relative-to="bottom-right"
 }
@@ -241,6 +258,7 @@ window-rule {
 window-rule {
     match app-id="^brave-teams\\.microsoft\\.com"
     open-floating true
+    default-column-width { fixed 480; }
     default-window-height { fixed 720; }
     default-floating-position x=2 y=34 relative-to="bottom-right"
 }

@@ -1,0 +1,19 @@
+#!/bin/bash
+# smplos-overview — bring up the 2D workspace overview.
+#
+# - niri: native `toggle-overview` action (zoomed-out 2D grid of all
+#   workspaces and the windows inside them).
+# - Hyprland: niri's overview has no direct equivalent. Fall back to the
+#   existing Mod+Tab behavior (cycle to the next workspace group) so the
+#   key keeps doing *something useful* on Hyprland without requiring the
+#   hyprexpo plugin. If/when we adopt hyprexpo this can become a real
+#   `hyprctl dispatch hyprexpo:expo toggle` call.
+
+set -euo pipefail
+
+if [[ -n "${NIRI_SOCKET:-}" ]] && command -v niri >/dev/null 2>&1; then
+    exec niri msg action toggle-overview
+fi
+
+# Hyprland fallback: preserve previous Mod+Tab semantics.
+exec workspace-group +1

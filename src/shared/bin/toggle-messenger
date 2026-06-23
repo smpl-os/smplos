@@ -27,6 +27,116 @@ HEIGHT=720
 MARGIN_RIGHT=2
 MARGIN_BOTTOM=34  # 30px bar + 2px offset + 2px gap (matches notif-center)
 
+# ============================================================================
+# niri branch — short-circuit when running under niri.
+#
+# niri has no "special workspaces" that auto-hide from overview/alt-tab; we
+# use a named workspace "scratchpad" (declared in config.kdl) purely as a
+# stash. The user should NEVER feel they're "on the scratchpad" — these
+# rules guarantee it:
+#
+#   1) Window on user's current REAL workspace → hide (move to scratchpad).
+#   2) Anywhere else (scratchpad OR other workspace,
+#      AND regardless of whether the user is currently focused on
+#      scratchpad) → bring window to a REAL workspace and focus there.
+#
+# Rule 2 has two sub-paths:
+#   - If user is currently focused on scratchpad (e.g. they alt-tabbed /
+#     overview-clicked into it), first jump to their previous real
+#     workspace (focus-workspace-previous), then move the window there.
+#   - Otherwise just move the window to their focused workspace.
+#
+# Result: a single press of Super+Shift+S always puts Signal where you are,
+# and a second press always tucks it away. You never get "stranded" on the
+# scratchpad.
+# ============================================================================
+if [[ -n "${NIRI_SOCKET:-}" ]] && command -v niri >/dev/null 2>&1; then
+  NIRI_SCRATCH="scratchpad"
+
+  # Find an open window whose app_id matches CLASS (case-insensitive substring).
+  win_json=$(niri msg --json windows 2>/dev/null \
+    | jq -e --arg c "$CLASS" \
+      '[.[] | select((.app_id // "") | ascii_downcase | contains($c | ascii_downcase))] | first // empty' \
+    2>/dev/null) || true
+
+  if [[ -z "$win_json" ]]; then
+    # Not running → launch it. niri window-rules apply on open.
+    if [[ ${#LAUNCH_CMD[@]} -gt 0 ]]; then
+      setsid -f "${LAUNCH_CMD[@]}" >/dev/null 2>&1
+    else
+      name="${CLASS%.desktop}"
+      launched=0
+      for dir in "$HOME/.local/share/applications" "/usr/local/share/applications" "/usr/share/applications"; do
+        if [[ -f "$dir/${name}.desktop" ]]; then
+          setsid -f gtk-launch "$name" >/dev/null 2>&1
+          launched=1
+          break
+        fi
+      done
+      [[ $launched -eq 0 ]] && setsid -f "$CLASS" >/dev/null 2>&1
+    fi
+    exit 0
+  fi
+
+  win_id=$(echo "$win_json" | jq -r '.id')
+  win_ws_id=$(echo "$win_json" | jq -r '.workspace_id')
+
+  win_ws_name=$(niri msg --json workspaces \
+    | jq -r --argjson i "$win_ws_id" '.[] | select(.id == $i) | .name // ""')
+
+  focused=$(niri msg --json workspaces | jq -c '.[] | select(.is_focused) | {id, name, idx}')
+  focused_ws_id=$(echo "$focused" | jq -r '.id')
+  focused_ws_name=$(echo "$focused" | jq -r '.name // ""')
+
+  # Helper: resolve a workspace ref (name preferred, idx fallback) for a
+  # given focused-json blob into a single token niri accepts.
+  _ws_target_from() {
+    local blob="$1"
+    local n
+    n=$(echo "$blob" | jq -r '.name // ""')
+    if [[ -n "$n" && "$n" != "null" ]]; then
+      printf '%s' "$n"
+    else
+      echo "$blob" | jq -r '.idx'
+    fi
+  }
+
+  if [[ "$win_ws_id" == "$focused_ws_id" && "$focused_ws_name" != "$NIRI_SCRATCH" ]]; then
+    # Rule 1: visible on user's current real workspace → hide.
+    niri msg action move-window-to-workspace --window-id "$win_id" --focus false "$NIRI_SCRATCH" >/dev/null 2>&1 || true
+  else
+    # Rule 2: bring window to a real workspace where the user is (or will be).
+    if [[ "$focused_ws_name" == "$NIRI_SCRATCH" ]]; then
+      # User is stranded on scratchpad — escape to previous real workspace first.
+      niri msg action focus-workspace-previous >/dev/null 2>&1 || true
+      sleep 0.05
+      # If history sent us back to scratchpad anyway, pick first non-scratchpad ws.
+      new_focused=$(niri msg --json workspaces | jq -c '.[] | select(.is_focused) | {id, name, idx}')
+      new_focused_name=$(echo "$new_focused" | jq -r '.name // ""')
+      if [[ "$new_focused_name" == "$NIRI_SCRATCH" ]]; then
+        fallback=$(niri msg --json workspaces \
+          | jq -r --arg s "$NIRI_SCRATCH" \
+            '.[] | select(.name != null and .name != "" and .name != $s) | .name' \
+          | head -n1)
+        if [[ -n "$fallback" ]]; then
+          niri msg action focus-workspace "$fallback" >/dev/null 2>&1 || true
+          sleep 0.05
+          new_focused=$(niri msg --json workspaces | jq -c '.[] | select(.is_focused) | {id, name, idx}')
+        fi
+      fi
+      target=$(_ws_target_from "$new_focused")
+    else
+      target=$(_ws_target_from "$focused")
+    fi
+    niri msg action move-window-to-workspace --window-id "$win_id" "$target" >/dev/null 2>&1 || true
+  fi
+  exit 0
+fi
+
+# ============================================================================
+# Hyprland branch (original implementation, unchanged below).
+# ============================================================================
+
 # Compute pixel position from active monitor
 # POS_X / POS_Y  = monitor-relative  (for exec [move ...] and windowrules)
 # ABS_X / ABS_Y  = compositor-absolute (for movewindowpixel exact)

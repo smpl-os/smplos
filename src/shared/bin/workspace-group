@@ -33,6 +33,47 @@ fi
 [[ $max_group -gt 10 ]] && max_group=10
 
 # ---------------------------------------------------------------------------
+# niri short-circuit (Hyprland code below is unchanged).
+#
+# niri's workspaces are per-output. We predeclare 10 named "g1".."g10"
+# workspaces in config.kdl so they exist as fixed slots regardless of
+# what dynamic ones niri may have spun up. Pass the NAME (with "g"
+# prefix) so niri's reference parser doesn't interpret a bare digit as
+# an index.
+#
+# Multi-monitor "switch all outputs together" parity with Hyprland would
+# need per-output focus-workspace invocations — TODO; for now we focus
+# the group on whichever output currently has focus.
+# ---------------------------------------------------------------------------
+if [[ -n "${NIRI_SOCKET:-}" ]] && command -v niri >/dev/null 2>&1; then
+    arg="${1:-1}"
+    # Resolve current group from the focused workspace's name (strip "g").
+    cur_name=$(niri msg --json workspaces 2>/dev/null \
+              | jq -r 'first(.[] | select(.is_focused == true) | .name) // ""')
+    current_group="${cur_name#g}"
+    [[ -z "$current_group" || ! "$current_group" =~ ^[0-9]+$ ]] && current_group=1
+    case "$arg" in
+        +*) target=$(( current_group + ${arg:1} ))
+            # Relative motion wraps (Super+Tab cycling feels right).
+            while [[ $target -lt 1 ]];          do target=$(( target + max_group )); done
+            while [[ $target -gt $max_group ]]; do target=$(( target - max_group )); done
+            ;;
+        -*) target=$(( current_group - ${arg:1} ))
+            while [[ $target -lt 1 ]];          do target=$(( target + max_group )); done
+            while [[ $target -gt $max_group ]]; do target=$(( target - max_group )); done
+            ;;
+        *)  # Absolute target. Reject out-of-range silently so Super+5..0
+            # don't surprise-teleport the user when ws_count < 10.
+            target="$arg"
+            [[ ! "$target" =~ ^[0-9]+$ ]] && exit 0
+            [[ $target -lt 1 || $target -gt $max_group ]] && exit 0
+            ;;
+    esac
+    niri msg action focus-workspace "g$target" >/dev/null 2>&1 || true
+    exit 0
+fi
+
+# ---------------------------------------------------------------------------
 # Read monitors sorted rightmost-first (rightmost = primary, index 0)
 # ---------------------------------------------------------------------------
 readarray -t monitors < <(

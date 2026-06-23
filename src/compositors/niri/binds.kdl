@@ -10,6 +10,8 @@ binds {
     Mod+Return hotkey-overlay-title="Terminal" { spawn "sh" "-c" "terminal"; }
     Mod+Space hotkey-overlay-title="Start Menu" { spawn "sh" "-c" "toggle-start-menu"; }
     // SKIP (untranslatable key 'SUPER_L'): bindr = SUPER, SUPER_L, exec, toggle-start-menu
+    XF86Tools hotkey-overlay-title="Start Menu (Super tap)" { spawn "sh" "-c" "toggle-start-menu"; }
+    F13 hotkey-overlay-title="Start Menu (Super tap alt)" { spawn "sh" "-c" "toggle-start-menu"; }
     Ctrl+Alt+Space hotkey-overlay-title="Start Menu (VM)" { spawn "sh" "-c" "toggle-start-menu"; }
     Mod+a hotkey-overlay-title="App Center" { spawn "sh" "-c" "toggle-app-center"; }
     Mod+Shift+f hotkey-overlay-title="File manager" { spawn "sh" "-c" "focus-or-launch nemo nemo"; }
@@ -61,9 +63,7 @@ binds {
     Mod+Shift+Alt+8 hotkey-overlay-title="Move window silently to workspace group 8" { spawn "sh" "-c" "window-to-group --silent 8"; }
     Mod+Shift+Alt+9 hotkey-overlay-title="Move window silently to workspace group 9" { spawn "sh" "-c" "window-to-group --silent 9"; }
     Mod+Shift+Alt+0 hotkey-overlay-title="Move window silently to workspace group 10" { spawn "sh" "-c" "window-to-group --silent 10"; }
-    // SKIP (no niri equivalent for 'togglespecialworkspace scratchpad'): bindd = SUPER, S, Toggle scratchpad, togglespecialworkspace, scratchpad
-    // SKIP (no niri equivalent for 'movetoworkspacesilent special:scratchpad'): bindd = SUPER ALT, S, Move window to scratchpad, movetoworkspacesilent, special:scratchpad
-    Mod+Tab hotkey-overlay-title="Next workspace group" { spawn "sh" "-c" "workspace-group +1"; }
+    Mod+Tab hotkey-overlay-title="Overview / Next workspace group" { spawn "sh" "-c" "smplos-overview"; }
     Mod+Shift+Tab hotkey-overlay-title="Previous workspace group" { spawn "sh" "-c" "workspace-group -1"; }
     Mod+Ctrl+Tab hotkey-overlay-title="Former workspace" { focus-workspace-previous; }
     Mod+Ctrl+Left hotkey-overlay-title="Move window to prev monitor" { spawn "sh" "-c" "window-to-monitor -1"; }
