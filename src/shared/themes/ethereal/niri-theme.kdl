@@ -14,13 +14,13 @@ layout {
     // Preset column widths cycled by `switch-preset-column-width`
     // (bound to Super+J — see binds.kdl).
     preset-column-widths {
-        proportion 0.33333
         proportion 0.5
         proportion 0.66667
+        proportion 0.9
     }
 
     default-column-width {
-        proportion 0.5
+        proportion 0.9
     }
 
     // Don't autoscroll a partially-visible column into center.
