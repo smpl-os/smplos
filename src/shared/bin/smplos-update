@@ -135,7 +135,7 @@ critical_bundle_prompt_and_apply() {
     echo "  Applying $bundle_id: $bundle_desc"
     echo "  Packages: ${bundle_packages[*]}"
     echo
-    if sudo pacman -S --noconfirm --needed "${bundle_packages[@]}"; then
+    if sudo_with_password pacman -S --noconfirm --needed "${bundle_packages[@]}"; then
         printf '%s\n' "$bundle_id" > "$APPLIED_BUNDLE_FILE"
         : > "$BUNDLE_SNAPSHOT_FILE"
         for spec in "${bundle_packages[@]}"; do
@@ -189,15 +189,33 @@ detect_network() {
     fi
 }
 
-# ── Pre-authenticate sudo once ────────────────────────────────────────────────
-# Asks for the password exactly once. A background loop refreshes the credential
-# every 30 seconds so no step (pacman, paru, makepkg, etc.) ever re-prompts.
-# Export SMPLOS_SUDO_READY so child scripts know not to prompt again.
-sudo -v || { echo "ERROR: sudo authentication failed"; read -rp "Press Enter to close..."; exit 1; }
-( while kill -0 $$ 2>/dev/null; do sudo -n -v; sleep 30; done ) &
-SUDO_KEEPALIVE_PID=$!
-trap 'kill $SUDO_KEEPALIVE_PID 2>/dev/null' EXIT
-export SMPLOS_SUDO_READY=1
+# ── Silent sudo via stdin (password passed from App Center UI) ────────────────
+# App Center prompts for password in the UI, then passes it via stdin to this script.
+# We read it once and store in a variable, then use it for all sudo commands.
+read -r SUDO_PASSWORD || SUDO_PASSWORD=""
+if [[ -z "$SUDO_PASSWORD" ]]; then
+    SUDO_PASSWORD=$(echo)  # Empty line if no stdin (backward compat for CLI)
+fi
+
+# Wrapper to run sudo with password from stdin (no interactive prompt)
+sudo_with_password() {
+    if [[ -n "$SUDO_PASSWORD" ]]; then
+        echo "$SUDO_PASSWORD" | sudo -S "$@"
+    else
+        sudo "$@"  # Fallback to normal sudo if no password available
+    fi
+}
+
+# Log all output to file for debugging
+LOG_DIR="$HOME/.local/state/smplos/update"
+LOG_FILE="$LOG_DIR/update-$(date +%Y%m%d-%H%M%S).log"
+mkdir -p "$LOG_DIR"
+
+# Redirect stdout and stderr to both terminal and log file
+exec 1> >(tee -a "$LOG_FILE")
+exec 2>&1
+echo "Update started at $(date)" >> "$LOG_FILE"
+
 load_critical_packages
 detect_network
 warn_if_critical_stack_drifted
@@ -232,14 +250,14 @@ if [[ "$UPDATE_MODE" == "apps" ]]; then
     echo "── Pacman (apps only) ──"
     if [[ "$NETWORK_OK" -eq 0 ]]; then
         echo "  Skipped: no internet connection"
-    elif ! sudo pacman -Syu --noconfirm --ignore "$APPS_MODE_IGNORE"; then
+    elif ! sudo_with_password pacman -Syu --noconfirm --ignore "$APPS_MODE_IGNORE"; then
         echo "  WARNING: pacman update failed (check internet/mirrors)"
     fi
 else
     echo "── Pacman (excluding critical stack) ──"
     if [[ "$NETWORK_OK" -eq 0 ]]; then
         echo "  Skipped: no internet connection"
-    elif ! sudo pacman -Syu --noconfirm --ignore "$CRITICAL_IGNORE"; then
+    elif ! sudo_with_password pacman -Syu --noconfirm --ignore "$CRITICAL_IGNORE"; then
         echo "  WARNING: pacman update failed (check internet/mirrors)"
     fi
 fi
@@ -321,9 +339,13 @@ fi
 
 echo "══════════════════════════════════════"
 echo "  Update complete!"
+echo "  Log: $LOG_FILE"
 echo "══════════════════════════════════════"
 echo
-read -rp "Press Enter to close..."
+
+# Auto-close terminal after 3 seconds (user can press Ctrl+C to keep it open)
+echo "Closing in 3 seconds... (Ctrl+C to cancel)"
+sleep 3
 
 # After the terminal closes, fire a reboot notification if needed.
 # Running in background so the terminal window can close first.
