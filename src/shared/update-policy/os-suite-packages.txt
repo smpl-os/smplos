@@ -1,0 +1,36 @@
+# smplOS suite package manifest
+#
+# These packages make up the smplOS suite. They are maintained by the OS update
+# process (smplos-update-apps / smplos-update) and are hidden from the App
+# Center "Installed" tab so users don't manage them manually.
+#
+# One package name per line. Lines starting with # and blanks are ignored.
+# Add a new suite app here and it is automatically excluded everywhere — no code
+# changes required.
+
+# Window manager / shell
+eww
+hyprland
+
+# Terminal
+st
+st-wl
+
+# File manager
+nemo
+nemo-smpl
+
+# Text editor
+micro
+micro-smpl
+
+# smpl-apps suite (binaries installed to /usr/local/bin, not pacman packages)
+app-center
+start-menu
+notif-center
+settings
+webapp-center
+sync-center-daemon
+sync-center-gui
+smpl-calendar
+smpl-calendar-alertd
