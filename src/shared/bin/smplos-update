@@ -32,9 +32,11 @@ fi
 UPDATE_SCRIPT=$(mktemp /tmp/smplos-update.XXXXXX.sh)
 
 # Write mode into the script (unquoted heredoc for variable substitution)
+# Password comes from environment variable SMPLOS_PASSWORD (passed by App Center)
 cat > "$UPDATE_SCRIPT" << PREAMBLE
 #!/bin/bash
 UPDATE_MODE="$UPDATE_MODE"
+SUDO_PASSWORD="${SMPLOS_PASSWORD:-}"
 PREAMBLE
 
 # Append the body (single-quoted: no substitution; uses UPDATE_MODE set above)
@@ -190,13 +192,7 @@ detect_network() {
 }
 
 # ── Silent sudo via stdin (password passed from App Center UI) ────────────────
-# App Center prompts for password in the UI, then passes it via stdin to this script.
-# We read it once and store in a variable, then use it for all sudo commands.
-read -r SUDO_PASSWORD || SUDO_PASSWORD=""
-if [[ -z "$SUDO_PASSWORD" ]]; then
-    SUDO_PASSWORD=$(echo)  # Empty line if no stdin (backward compat for CLI)
-fi
-
+# Password already read in outer wrapper and embedded as SUDO_PASSWORD variable above.
 # Wrapper to run sudo with password from stdin (no interactive prompt)
 sudo_with_password() {
     if [[ -n "$SUDO_PASSWORD" ]]; then
@@ -211,10 +207,13 @@ LOG_DIR="$HOME/.local/state/smplos/update"
 LOG_FILE="$LOG_DIR/update-$(date +%Y%m%d-%H%M%S).log"
 mkdir -p "$LOG_DIR"
 
-# Redirect stdout and stderr to both terminal and log file
-exec 1> >(tee -a "$LOG_FILE")
-exec 2>&1
-echo "Update started at $(date)" >> "$LOG_FILE"
+# Create a simple wrapper that tees to both terminal and log
+{
+    echo "════════════════════════════════════════"
+    echo "  smplOS System Update"
+    echo "  $(date)"
+    echo "════════════════════════════════════════"
+    echo
 
 load_critical_packages
 detect_network
@@ -353,6 +352,7 @@ if [[ -f "$STATE_DIR/reboot-pending" ]] && command -v smplos-reboot-notify &>/de
     ( sleep 1; smplos-reboot-notify ) &
     disown
 fi
+} 2>&1 | tee -a "$LOG_FILE"
 EOF
 chmod +x "$UPDATE_SCRIPT"
 
