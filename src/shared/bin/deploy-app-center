@@ -1,0 +1,77 @@
+#!/bin/bash
+# deploy-app-center — Deploy app-center binary to all required locations
+# Usage: deploy-app-center [--verify]
+
+set -euo pipefail
+
+REPO_ROOT="/home/blin/Documents/source/smpl-os/smpl-apps"
+SOURCE_BIN="$REPO_ROOT/target/release/app-center"
+DEPLOYMENT_PATHS=(
+    "$REPO_ROOT/dist/app-center"
+    "$HOME/.local/share/smplos/bin/app-center"
+    "$HOME/Documents/source/smpl-os/smplos/.cache/app-binaries/app-center"
+    "$HOME/.local/share/smplos/repo/.cache/app-binaries/app-center"
+)
+# This path requires root and is what toggle-app-center launches FIRST.
+SYSTEM_BIN="/usr/local/bin/app-center"
+
+# Verify source binary exists
+if [[ ! -f "$SOURCE_BIN" ]]; then
+    echo "❌ Source binary not found: $SOURCE_BIN"
+    echo "Run 'cargo build --release -p app-center' first"
+    exit 1
+fi
+
+# Get version from source binary
+VERSION=$("$SOURCE_BIN" --version 2>/dev/null | awk '{print $2}' || echo "unknown")
+SOURCE_SIZE=$(ls -lh "$SOURCE_BIN" | awk '{print $5}')
+
+echo "📦 Deploying app-center $VERSION ($SOURCE_SIZE)"
+echo "From: $SOURCE_BIN"
+echo ""
+
+# Deploy to all locations
+for path in "${DEPLOYMENT_PATHS[@]}"; do
+    if cp -f "$SOURCE_BIN" "$path" 2>/dev/null; then
+        echo "✅ $path"
+    else
+        echo "⚠️  Failed: $path (directory may not exist)"
+    fi
+done
+
+# Deploy to /usr/local/bin (requires root — toggle-app-center launches this FIRST)
+if sudo install -m755 "$SOURCE_BIN" "$SYSTEM_BIN" 2>/dev/null; then
+    echo "✅ $SYSTEM_BIN (root)"
+else
+    echo "⚠️  Failed: $SYSTEM_BIN (run with sudo access — this is what start-menu launches!)"
+fi
+
+echo ""
+
+# Verify deployment if requested
+if [[ "${1:-}" == "--verify" ]]; then
+    echo "Verifying deployments:"
+    all_match=true
+    for path in "${DEPLOYMENT_PATHS[@]}" "$SYSTEM_BIN"; do
+        if [[ -f "$path" ]]; then
+            path_version=$("$path" --version 2>/dev/null | awk '{print $2}' || echo "unknown")
+            if [[ "$path_version" == "$VERSION" ]]; then
+                echo "✅ $path ($path_version)"
+            else
+                echo "❌ $path ($path_version) - mismatch!"
+                all_match=false
+            fi
+        fi
+    done
+    
+    if $all_match; then
+        echo ""
+        echo "🎉 All deployments verified successfully!"
+    else
+        echo ""
+        echo "⚠️  Some deployments have mismatched versions"
+        exit 1
+    fi
+fi
+
+echo "✅ Deployment complete"
