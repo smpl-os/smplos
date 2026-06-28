@@ -131,36 +131,29 @@ critical_bundle_prompt_and_apply() {
     read -r -a bundle_packages <<< "$bundle_packages_raw"
     [[ ${#bundle_packages[@]} -gt 0 ]] || return 0
 
-    echo "── Critical bundle available ──"
-    echo "  ID: $bundle_id"
-    echo "  $bundle_desc"
+    echo "── Critical bundle ──"
+    echo "  Applying $bundle_id: $bundle_desc"
     echo "  Packages: ${bundle_packages[*]}"
-    if [[ "$bundle_reboot" == "1" ]]; then
-        echo "  Reboot required after install."
+    echo
+    if sudo pacman -S --noconfirm --needed "${bundle_packages[@]}"; then
+        printf '%s\n' "$bundle_id" > "$APPLIED_BUNDLE_FILE"
+        : > "$BUNDLE_SNAPSHOT_FILE"
+        for spec in "${bundle_packages[@]}"; do
+            pkg_name="${spec%%=*}"
+            pacman -Q "$pkg_name" 2>/dev/null >> "$BUNDLE_SNAPSHOT_FILE" || true
+        done
+        echo "  ✓ Critical bundle applied: $bundle_id"
+        if [[ "$bundle_reboot" == "1" ]]; then
+            # Write reboot-pending marker (boot_id so it self-expires on reboot)
+            mkdir -p "$(dirname "$STATE_DIR")/smplos"
+            cat /proc/sys/kernel/random/boot_id 2>/dev/null | tr -d '-' \
+                > "$STATE_DIR/reboot-pending" || true
+            echo "  Reboot required — you will be reminded when you close this window."
+        fi
+    else
+        echo "  WARNING: critical bundle install failed (safe to retry)"
     fi
     echo
-    read -r -p "Apply critical bundle now? [y/N]: " answer
-    case "$answer" in
-        y|Y|yes|YES)
-            echo "  Installing critical bundle..."
-            if sudo pacman -S --noconfirm --needed "${bundle_packages[@]}"; then
-                printf '%s\n' "$bundle_id" > "$APPLIED_BUNDLE_FILE"
-                : > "$BUNDLE_SNAPSHOT_FILE"
-                for spec in "${bundle_packages[@]}"; do
-                    pkg_name="${spec%%=*}"
-                    pacman -Q "$pkg_name" 2>/dev/null >> "$BUNDLE_SNAPSHOT_FILE" || true
-                done
-                echo "  Critical bundle applied: $bundle_id"
-            else
-                echo "  WARNING: critical bundle install failed"
-            fi
-            echo
-            ;;
-        *)
-            echo "  Skipped critical bundle ($bundle_id)"
-            echo
-            ;;
-    esac
 }
 
 warn_if_critical_stack_drifted() {
@@ -328,10 +321,16 @@ fi
 
 echo "══════════════════════════════════════"
 echo "  Update complete!"
-echo "  Reboot recommended after critical updates."
 echo "══════════════════════════════════════"
 echo
 read -rp "Press Enter to close..."
+
+# After the terminal closes, fire a reboot notification if needed.
+# Running in background so the terminal window can close first.
+if [[ -f "$STATE_DIR/reboot-pending" ]] && command -v smplos-reboot-notify &>/dev/null; then
+    ( sleep 1; smplos-reboot-notify ) &
+    disown
+fi
 EOF
 chmod +x "$UPDATE_SCRIPT"
 

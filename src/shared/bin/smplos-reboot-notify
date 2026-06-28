@@ -1,0 +1,54 @@
+#!/bin/bash
+# smplos-reboot-notify — Show a reboot-required notification after an update
+#
+# Called from two places:
+#   1. smplos-update at the end of a run that applied a critical bundle
+#   2. Hyprland autostart on every login (to re-notify if reboot is still pending)
+#
+# Marker: ~/.local/state/smplos/reboot-pending
+# Format: single line containing the boot_id that was current when the update ran.
+# If the current boot_id differs, the machine has already been rebooted and the
+# marker is stale — clear it silently.
+
+MARKER="$HOME/.local/state/smplos/reboot-pending"
+
+# ── Check if a reboot is actually pending ────────────────────────────────────
+[[ -f "$MARKER" ]] || exit 0
+
+saved_boot_id=$(cat "$MARKER" 2>/dev/null)
+current_boot_id=$(cat /proc/sys/kernel/random/boot_id 2>/dev/null | tr -d '-')
+
+if [[ -n "$saved_boot_id" && "$saved_boot_id" != "$current_boot_id" ]]; then
+    # Already rebooted — clear the stale marker and exit
+    rm -f "$MARKER"
+    exit 0
+fi
+
+# ── Notify with action buttons ────────────────────────────────────────────────
+# Uses dunstify so we get action callbacks. Falls back to notify-send if dunst
+# is not running.
+if command -v dunstify &>/dev/null && pgrep -x dunst &>/dev/null; then
+    action=$(dunstify \
+        -t 0 \
+        -u critical \
+        -i system-reboot \
+        -A "reboot,Restart Now" \
+        -A "later,Remind me later" \
+        "smplOS: Reboot required" \
+        "A system update was applied. Restart to activate the new kernel and drivers.")
+
+    case "$action" in
+        reboot)
+            # Give the user a moment to save work, then reboot
+            sleep 2
+            systemctl reboot
+            ;;
+        later|*)
+            # User dismissed or clicked later — notification will reappear on next login
+            ;;
+    esac
+elif command -v notify-send &>/dev/null; then
+    notify-send -u critical -i system-reboot \
+        "smplOS: Reboot required" \
+        "A system update was applied. Restart to activate the new kernel and drivers."
+fi
