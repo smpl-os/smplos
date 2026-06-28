@@ -4,15 +4,15 @@
 # Opens in the user's default terminal.
 #
 # Update order (full mode):
-#   1. smplos-os-update  — git pull smplOS repo, sync scripts, run migrations
-#   2. pacman -Syu       — system packages (including Hyprland/EWW in one transaction)
-#      (smplos-update temporarily removes Hyprland/EWW from IgnorePkg, then restores it)
-#   4. smplos-update-apps — forked apps from GitHub (smpl-apps, st-smpl, nemo-smpl, micro)
-#   5. paru -Sua         — AUR packages
-#   6. flatpak update    — Flatpak apps
+#   1. smplos-os-update   — git pull smplOS repo, sync scripts, run migrations
+#   2. pacman -Syu        — general system packages, excluding critical stack
+#   3. smplos-update-apps — forked apps from GitHub (smpl-apps, st-smpl, nemo-smpl, micro)
+#   4. paru -Sua          — AUR packages, excluding critical stack
+#   5. flatpak update     — Flatpak apps
+#   6. critical bundle    — optional, explicit kernel/driver/compositor bundle
 #
-# In apps mode, steps 1 and 3 are skipped, and kernel/driver packages are
-# excluded from pacman to keep the system stable.
+# Critical stack policy is source-controlled in the smplOS repo so App Center
+# and CLI both follow the same behavior.
 
 # Parse --mode flag: 'apps' skips kernel/drivers; 'full' is a complete system update
 UPDATE_MODE="full"
@@ -40,43 +40,160 @@ PREAMBLE
 # Append the body (single-quoted: no substitution; uses UPDATE_MODE set above)
 cat >> "$UPDATE_SCRIPT" << 'EOF'
 
-# Packages to preserve in apps-only mode: kernel, drivers, bootloader, AND pacman itself
-# (pacman update bumps libalpm which breaks paru -- only update these via Update OS)
-KERNEL_IGNORE="linux,linux-lts,linux-zen,linux-hardened,linux-headers,linux-lts-headers,linux-zen-headers,linux-hardened-headers,nvidia,nvidia-lts,nvidia-dkms,nvidia-utils,lib32-nvidia-utils,mesa,lib32-mesa,vulkan-radeon,lib32-vulkan-radeon,amdvlk,lib32-amdvlk,xf86-video-amdgpu,xf86-video-intel,xf86-video-nouveau,amd-ucode,intel-ucode,grub,mkinitcpio,mkinitcpio-busybox,pacman,libalpm"
+SMPLOS_PATH="${SMPLOS_PATH:-$HOME/.local/share/smplos}"
+POLICY_DIR="$SMPLOS_PATH/repo/src/shared/update-policy"
+CRITICAL_LIST_FILE="$POLICY_DIR/critical-packages.txt"
+CRITICAL_BUNDLE_FILE="$POLICY_DIR/critical-bundle.conf"
+STATE_DIR="$HOME/.local/state/smplos/update"
+APPLIED_BUNDLE_FILE="$STATE_DIR/critical-bundle-applied"
+BUNDLE_SNAPSHOT_FILE="$STATE_DIR/critical-bundle-versions"
 
-PACMAN_CONF_BACKUP=""
-restore_pacman_conf() {
-    [[ -n "$PACMAN_CONF_BACKUP" && -f "$PACMAN_CONF_BACKUP" ]] || return 0
-    sudo cp "$PACMAN_CONF_BACKUP" /etc/pacman.conf
-    rm -f "$PACMAN_CONF_BACKUP"
-    PACMAN_CONF_BACKUP=""
+DEFAULT_CRITICAL_PACKAGES=(
+    linux linux-lts linux-zen linux-hardened
+    linux-headers linux-lts-headers linux-zen-headers linux-hardened-headers
+    nvidia nvidia-lts nvidia-dkms nvidia-utils lib32-nvidia-utils
+    mesa lib32-mesa vulkan-radeon lib32-vulkan-radeon amdvlk lib32-amdvlk
+    xf86-video-amdgpu xf86-video-intel xf86-video-nouveau
+    amd-ucode intel-ucode
+    grub mkinitcpio mkinitcpio-busybox
+    hyprland eww xdg-desktop-portal xdg-desktop-portal-hyprland
+    hyprpaper hypridle hyprlock hyprsunset hyprpicker
+)
+
+APPS_EXTRA_IGNORE=(pacman libalpm)
+CRITICAL_PACKAGES=()
+CRITICAL_IGNORE=""
+APPS_MODE_IGNORE=""
+NETWORK_OK=1
+
+csv_join() {
+    local IFS=,
+    echo "$*"
 }
 
-temporarily_unpin_for_full_update() {
+load_critical_packages() {
+    CRITICAL_PACKAGES=("${DEFAULT_CRITICAL_PACKAGES[@]}")
+
+    if [[ -f "$CRITICAL_LIST_FILE" ]]; then
+        mapfile -t CRITICAL_PACKAGES < <(
+            awk '
+                /^[[:space:]]*#/ { next }
+                /^[[:space:]]*$/ { next }
+                { gsub(/^[[:space:]]+|[[:space:]]+$/, "", $0); print $0 }
+            ' "$CRITICAL_LIST_FILE"
+        )
+    fi
+
+    if [[ ${#CRITICAL_PACKAGES[@]} -eq 0 ]]; then
+        CRITICAL_PACKAGES=("${DEFAULT_CRITICAL_PACKAGES[@]}")
+    fi
+
+    CRITICAL_IGNORE=$(csv_join "${CRITICAL_PACKAGES[@]}")
+    APPS_MODE_IGNORE=$(csv_join "${CRITICAL_PACKAGES[@]}" "${APPS_EXTRA_IGNORE[@]}")
+}
+
+critical_bundle_prompt_and_apply() {
     [[ "$UPDATE_MODE" == "full" ]] || return 0
-    PACMAN_CONF_BACKUP=$(mktemp /tmp/pacman.conf.smplos-update.XXXXXX)
-    sudo cp /etc/pacman.conf "$PACMAN_CONF_BACKUP"
-    sudo awk '
-    /^[[:space:]]*IgnorePkg[[:space:]]*=/ {
-        raw = $0
-        sub(/^[[:space:]]*IgnorePkg[[:space:]]*=[[:space:]]*/, "", raw)
-        n = split(raw, a, /[[:space:]]+/)
-        out = ""
-        for (i = 1; i <= n; i++) {
-            if (a[i] == "" || a[i] == "hyprland" || a[i] == "eww") {
-                continue
-            }
-            out = out (out ? " " : "") a[i]
-        }
-        if (out != "") {
-            print "IgnorePkg   = " out
-        } else {
-            print "# IgnorePkg removed by smplos-update (hyprland/eww transaction)"
-        }
-        next
+    [[ -f "$CRITICAL_BUNDLE_FILE" ]] || return 0
+    if [[ "$NETWORK_OK" -eq 0 ]]; then
+        echo "── Critical bundle ──"
+        echo "  Skipped: no internet connection"
+        echo
+        return 0
+    fi
+
+    # shellcheck disable=SC1090
+    source "$CRITICAL_BUNDLE_FILE" 2>/dev/null || {
+        echo "── Critical bundle ──"
+        echo "  WARNING: could not parse critical-bundle.conf"
+        echo
+        return 0
     }
-    { print }
-    ' /etc/pacman.conf | sudo tee /etc/pacman.conf >/dev/null
+
+    local bundle_id="${BUNDLE_ID:-}"
+    local bundle_desc="${DESCRIPTION:-Critical stack update}"
+    local bundle_reboot="${REBOOT_REQUIRED:-1}"
+    local bundle_packages_raw="${PACKAGES:-}"
+
+    [[ -n "$bundle_id" && -n "$bundle_packages_raw" ]] || return 0
+
+    mkdir -p "$STATE_DIR"
+    local applied_id=""
+    [[ -f "$APPLIED_BUNDLE_FILE" ]] && applied_id=$(<"$APPLIED_BUNDLE_FILE")
+
+    if [[ "$applied_id" == "$bundle_id" ]]; then
+        return 0
+    fi
+
+    # Split PACKAGES into an array. Elements can be plain package names or
+    # pinned specs like "nvidia=570.153.02-1".
+    local bundle_packages=()
+    read -r -a bundle_packages <<< "$bundle_packages_raw"
+    [[ ${#bundle_packages[@]} -gt 0 ]] || return 0
+
+    echo "── Critical bundle available ──"
+    echo "  ID: $bundle_id"
+    echo "  $bundle_desc"
+    echo "  Packages: ${bundle_packages[*]}"
+    if [[ "$bundle_reboot" == "1" ]]; then
+        echo "  Reboot required after install."
+    fi
+    echo
+    read -r -p "Apply critical bundle now? [y/N]: " answer
+    case "$answer" in
+        y|Y|yes|YES)
+            echo "  Installing critical bundle..."
+            if sudo pacman -S --noconfirm --needed "${bundle_packages[@]}"; then
+                printf '%s\n' "$bundle_id" > "$APPLIED_BUNDLE_FILE"
+                : > "$BUNDLE_SNAPSHOT_FILE"
+                for spec in "${bundle_packages[@]}"; do
+                    pkg_name="${spec%%=*}"
+                    pacman -Q "$pkg_name" 2>/dev/null >> "$BUNDLE_SNAPSHOT_FILE" || true
+                done
+                echo "  Critical bundle applied: $bundle_id"
+            else
+                echo "  WARNING: critical bundle install failed"
+            fi
+            echo
+            ;;
+        *)
+            echo "  Skipped critical bundle ($bundle_id)"
+            echo
+            ;;
+    esac
+}
+
+warn_if_critical_stack_drifted() {
+    [[ -f "$BUNDLE_SNAPSHOT_FILE" ]] || return 0
+
+    local drifted=0
+    while read -r pkg ver; do
+        [[ -n "$pkg" && -n "$ver" ]] || continue
+        current=$(pacman -Q "$pkg" 2>/dev/null | awk '{print $2}')
+        [[ -n "$current" ]] || continue
+        if [[ "$current" != "$ver" ]]; then
+            if [[ $drifted -eq 0 ]]; then
+                echo "── Critical stack drift detected ──"
+                echo "  Critical packages changed outside the managed bundle path:"
+            fi
+            drifted=1
+            echo "  - $pkg: $ver -> $current"
+        fi
+    done < "$BUNDLE_SNAPSHOT_FILE"
+
+    if [[ $drifted -eq 1 ]]; then
+        echo "  A new critical bundle should be applied to restore a known-good stack."
+        echo
+    fi
+}
+
+detect_network() {
+    # Best-effort connectivity probe so offline runs skip network steps cleanly.
+    if curl -fsSL --connect-timeout 5 --max-time 8 https://archlinux.org >/dev/null 2>&1; then
+        NETWORK_OK=1
+    else
+        NETWORK_OK=0
+    fi
 }
 
 # ── Pre-authenticate sudo once ────────────────────────────────────────────────
@@ -86,17 +203,25 @@ temporarily_unpin_for_full_update() {
 sudo -v || { echo "ERROR: sudo authentication failed"; read -rp "Press Enter to close..."; exit 1; }
 ( while kill -0 $$ 2>/dev/null; do sudo -n -v; sleep 30; done ) &
 SUDO_KEEPALIVE_PID=$!
-trap 'restore_pacman_conf; kill $SUDO_KEEPALIVE_PID 2>/dev/null' EXIT
+trap 'kill $SUDO_KEEPALIVE_PID 2>/dev/null' EXIT
 export SMPLOS_SUDO_READY=1
+load_critical_packages
+detect_network
+warn_if_critical_stack_drifted
 if [[ "$UPDATE_MODE" == "apps" ]]; then
     echo "══════════════════════════════════════"
     echo "  smplOS App Update"
-    echo "  (kernel & drivers preserved)"
+    echo "  (critical stack preserved)"
     echo "══════════════════════════════════════"
 else
     echo "══════════════════════════════════════"
     echo "  smplOS Full System Update"
+    echo "  (critical stack via explicit bundle)"
     echo "══════════════════════════════════════"
+fi
+if [[ "$NETWORK_OK" -eq 0 ]]; then
+    echo "  Network check: offline"
+    echo "  Network-dependent steps will be skipped with warnings."
 fi
 echo
 
@@ -112,18 +237,29 @@ fi
 # ── Step 2: Official repos ───────────────────────────────────────────────────
 if [[ "$UPDATE_MODE" == "apps" ]]; then
     echo "── Pacman (apps only) ──"
-    sudo pacman -Syu --noconfirm --ignore "$KERNEL_IGNORE"
+    if [[ "$NETWORK_OK" -eq 0 ]]; then
+        echo "  Skipped: no internet connection"
+    elif ! sudo pacman -Syu --noconfirm --ignore "$APPS_MODE_IGNORE"; then
+        echo "  WARNING: pacman update failed (check internet/mirrors)"
+    fi
 else
-    echo "── Pacman ──"
-    temporarily_unpin_for_full_update
-    sudo pacman -Syu --noconfirm
+    echo "── Pacman (excluding critical stack) ──"
+    if [[ "$NETWORK_OK" -eq 0 ]]; then
+        echo "  Skipped: no internet connection"
+    elif ! sudo pacman -Syu --noconfirm --ignore "$CRITICAL_IGNORE"; then
+        echo "  WARNING: pacman update failed (check internet/mirrors)"
+    fi
 fi
 echo
 
 # ── Step 4: Forked smplOS apps (GitHub releases) ────────────────────────────
 if command -v smplos-update-apps &>/dev/null; then
     echo "── smplOS Apps ──"
-    smplos-update-apps 2>&1 || echo "    WARNING: smplOS app update failed"
+    if [[ "$NETWORK_OK" -eq 0 ]]; then
+        echo "    Skipped: no internet connection"
+    else
+        smplos-update-apps 2>&1 || echo "    WARNING: smplOS app update failed"
+    fi
     echo
 fi
 
@@ -135,12 +271,31 @@ if command -v paru &>/dev/null && ! paru_ok; then
     echo
 fi
 if paru_ok; then
+    # Run paru at background CPU/IO priority so AUR compilation (e.g. webkit2gtk,
+    # edk2) never starves Hyprland and causes input event drops / apparent
+    # keybinding failures. nice -n 10 keeps compile threads below interactive
+    # priority; ionice -c 3 (idle) ensures disk I/O doesn't block the compositor.
+    _paru_run() {
+        if command -v ionice &>/dev/null; then
+            nice -n 10 ionice -c 3 paru "$@"
+        else
+            nice -n 10 paru "$@"
+        fi
+    }
     if [[ "$UPDATE_MODE" == "apps" ]]; then
-        echo "── AUR (apps only) ──"
-        paru -Sua --noconfirm --sudoloop --ignore "$KERNEL_IGNORE"
+        echo "── AUR (apps only, background priority) ──"
+        if [[ "$NETWORK_OK" -eq 0 ]]; then
+            echo "  Skipped: no internet connection"
+        elif ! _paru_run -Sua --noconfirm --sudoloop --ignore "$APPS_MODE_IGNORE"; then
+            echo "  WARNING: AUR update failed (check internet/mirrors)"
+        fi
     else
-        echo "── AUR ──"
-        paru -Sua --noconfirm --sudoloop
+        echo "── AUR (excluding critical stack, background priority) ──"
+        if [[ "$NETWORK_OK" -eq 0 ]]; then
+            echo "  Skipped: no internet connection"
+        elif ! _paru_run -Sua --noconfirm --sudoloop --ignore "$CRITICAL_IGNORE"; then
+            echo "  WARNING: AUR update failed (check internet/mirrors)"
+        fi
     fi
     echo
 fi
@@ -150,16 +305,30 @@ if command -v flatpak &>/dev/null; then
     installed=$(flatpak list --app 2>/dev/null | wc -l)
     if [[ "$installed" -gt 0 ]]; then
         echo "── Flatpak ──"
-        flatpak update -y --noninteractive
+        if [[ "$NETWORK_OK" -eq 0 ]]; then
+            echo "  Skipped: no internet connection"
+        elif ! flatpak update -y --noninteractive; then
+            echo "  WARNING: flatpak update failed (check internet/remotes)"
+        fi
         echo
     fi
 fi
 
+# ── Step 6: Critical bundle (explicit opt-in) ───────────────────────────────
+critical_bundle_prompt_and_apply
+
+# ── Final Hyprland reload ─────────────────────────────────────────────────────
+# Reload config after all compilation is done so any state lost during heavy
+# CPU load (e.g. paru building webkit2gtk) is cleanly restored.
+if [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]] && command -v hyprctl &>/dev/null; then
+    echo "── Reloading Hyprland ──"
+    hyprctl reload 2>/dev/null && echo "  Config reloaded" || echo "  Reload failed (safe to ignore)"
+    echo
+fi
+
 echo "══════════════════════════════════════"
 echo "  Update complete!"
-if [[ "$UPDATE_MODE" == "full" ]]; then
-    echo "  Reboot recommended to apply kernel/driver changes."
-fi
+echo "  Reboot recommended after critical updates."
 echo "══════════════════════════════════════"
 echo
 read -rp "Press Enter to close..."
