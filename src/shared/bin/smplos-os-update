@@ -321,6 +321,48 @@ sync_version() {
     fi
 }
 
+# ── Restore missing Hyprland config files ────────────────────────────────────
+# Checks every file that hyprland.conf sources. If any are missing (e.g. deleted
+# by a failed sync or rsync --delete), copies the repo default back so Hyprland
+# can reload cleanly. Never overwrites files that already exist.
+restore_hypr_missing() {
+    local hypr_repo="$SMPLOS_REPO/src/compositors/hyprland/hypr"
+    local hypr_dst="$HOME/.config/hypr"
+    [[ -d "$hypr_repo" ]] || return 0
+
+    # Files that hyprland.conf sources — if any are absent the whole config fails.
+    # emergency.conf is always restored from repo so recovery bindings are present.
+    local sourced_files=(
+        envs.conf input.conf looknfeel.conf windows.conf
+        apps.conf autostart.conf emergency.conf
+    )
+
+    local n_restored=0
+    for f in "${sourced_files[@]}"; do
+        local dst="$hypr_dst/$f"
+        local src="$hypr_repo/$f"
+        if [[ ! -f "$dst" && -f "$src" ]]; then
+            mkdir -p "$hypr_dst"
+            cp "$src" "$dst"
+            warn "Restored missing $f from repo defaults"
+            ((n_restored++)) || true
+        fi
+    done
+
+    # emergency.conf: always overwrite so it stays current (it's not user-editable)
+    local emg_src="$hypr_repo/emergency.conf"
+    local emg_dst="$hypr_dst/emergency.conf"
+    if [[ -f "$emg_src" ]]; then
+        if [[ ! -f "$emg_dst" ]] || ! cmp -s "$emg_src" "$emg_dst"; then
+            cp "$emg_src" "$emg_dst"
+            ((n_restored++)) || true
+            [[ $QUIET -eq 0 ]] && ok "emergency.conf synced (recovery bindings up to date)"
+        fi
+    fi
+
+    [[ $n_restored -gt 0 ]] && ok "$n_restored missing Hyprland config(s) restored" || true
+}
+
 # ── Post-deploy hooks ─────────────────────────────────────────────────────────
 post_deploy() {
     sync_version
@@ -357,6 +399,7 @@ if [[ $SCRIPTS_ONLY -eq 0 ]]; then
     sync_configs
     sync_themes
     sync_apps
+    restore_hypr_missing
     run_migrations
 
     if [[ $had_updates -eq 1 ]]; then
