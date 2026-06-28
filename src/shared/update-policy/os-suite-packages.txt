@@ -34,3 +34,6 @@ sync-center-daemon
 sync-center-gui
 smpl-calendar
 smpl-calendar-alertd
+
+# System components (ship a .desktop but are not user-managed apps)
+xorg-xwayland

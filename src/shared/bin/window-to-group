@@ -95,11 +95,11 @@ done
 # Target workspace: group slot for this monitor
 ws=$(( group + monitor_index * 10 ))
 
-# Dispatch — Hyprland 0.55+ wraps `hyprctl dispatch` arguments through its
-# Lua parser, so the legacy text form `movetoworkspace 3` no longer works
-# ("')' expected near '3'"). Use the hl.dsp.window.move() API instead.
+# Dispatch — use the legacy text form, which is valid on Hyprland 0.54.x.
+# (The hl.dsp.window.move() Lua API is a 0.55+ addition and returns
+# "Invalid dispatcher" on 0.54.2, which silently broke window-to-group.)
 if $silent; then
-    hyprctl dispatch "hl.dsp.window.move({workspace=$ws, silent=true})" >/dev/null 2>&1
+    hyprctl dispatch movetoworkspacesilent "$ws" >/dev/null 2>&1
 else
-    hyprctl dispatch "hl.dsp.window.move({workspace=$ws})" >/dev/null 2>&1
+    hyprctl dispatch movetoworkspace "$ws" >/dev/null 2>&1
 fi
