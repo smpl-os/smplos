@@ -1,0 +1,22 @@
+[Unit]
+Description=VITURE XR glasses auto-launch watcher (xr-workspace)
+Documentation=https://github.com/smpl-os/xr-workspace
+# Run inside the graphical user session so it can reach the compositor sockets.
+PartOf=graphical-session.target
+After=graphical-session.target
+# Stay inert (and out of the Restart= loop) until the renderer is installed.
+# The condition is re-checked on every start, so once smplos-update-apps drops
+# the binary in place the watcher activates on the next start/login.
+ConditionPathExists=/usr/local/bin/xr-glasses-hotplugd
+
+[Service]
+Type=simple
+# smplOS installs renderer + helpers under /usr/local/bin (not /usr/bin).
+ExecStart=/usr/local/bin/xr-glasses-hotplugd
+Restart=always
+RestartSec=2
+# The watcher is idle until glasses appear; keep it lightweight.
+Nice=5
+
+[Install]
+WantedBy=graphical-session.target
