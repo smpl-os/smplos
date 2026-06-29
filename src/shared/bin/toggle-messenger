@@ -146,8 +146,12 @@ POS_Y=0
 ABS_X=0
 ABS_Y=0
 calc_position() {
-  local mon_json
-  mon_json=$(hyprctl -j monitors 2>/dev/null | jq -e '.[] | select(.focused)' 2>/dev/null) || {
+  local mon_json cpos cx cy
+  cpos=$(hyprctl cursorpos 2>/dev/null); cx=${cpos%,*}; cy=${cpos#*, }
+  # Monitor under the cursor (so the window lands on the screen you're using);
+  # fall back to the focused monitor, then a 1080p default.
+  mon_json=$(hyprctl -j monitors 2>/dev/null | jq -e --argjson cx "${cx:-0}" --argjson cy "${cy:-0}" 'first(.[] | select($cx>=.x and $cx<(.x+.width) and $cy>=.y and $cy<(.y+.height)))' 2>/dev/null) \
+    || mon_json=$(hyprctl -j monitors 2>/dev/null | jq -e '.[] | select(.focused)' 2>/dev/null) || {
     # Fallback: assume 1920x1080 at origin
     POS_X=$(( 1920 - WIDTH - MARGIN_RIGHT ))
     POS_Y=$(( 1080 - HEIGHT - MARGIN_BOTTOM ))
@@ -165,6 +169,9 @@ calc_position() {
   local eff_w eff_h
   eff_w=$(awk "BEGIN { printf \"%d\", ${mon_w}/${scale} }")
   eff_h=$(awk "BEGIN { printf \"%d\", ${mon_h}/${scale} }")
+  # Clamp height to fit the monitor (bar gap + 2px top margin); never exceed it.
+  local max_h=$(( eff_h - MARGIN_BOTTOM - 2 ))
+  (( HEIGHT > max_h )) && HEIGHT=$max_h
   # Monitor-relative position (for exec [move ...] which is relative to the
   # window's monitor).
   POS_X=$(( eff_w - WIDTH - MARGIN_RIGHT ))
@@ -185,7 +192,7 @@ if [[ -n "$window_json" ]]; then
   ws_name=$(echo "$window_json" | jq -r '.workspace.name')
 
   if [[ "$ws_name" == special:* ]]; then
-    # Hidden → bring back to current workspace
+    # Hidden → bring back to the workspace under the cursor, bottom-right
     calc_position
     hyprctl --batch "\
       dispatch movetoworkspace e+0,address:${addr};\

@@ -1,0 +1,18 @@
+#!/bin/bash
+# rescue-windows — pull every window onto the current workspace, on-screen.
+#
+# Safety net: if monitors are swapped/unplugged and windows end up off-screen
+# or on an unreachable workspace, this gathers them all to the focused
+# workspace and re-centers floating ones. Bound to Super+Shift+R.
+set -euo pipefail
+
+cur=$(hyprctl activeworkspace -j 2>/dev/null | jq -r '.id')
+[[ -z "$cur" || "$cur" == "null" ]] && exit 0
+
+hyprctl clients -j 2>/dev/null | jq -r '.[] | select(.workspace.id > 0) | .address' \
+  | while read -r addr; do
+        hyprctl dispatch movetoworkspacesilent "$cur,address:$addr" >/dev/null 2>&1 || true
+        hyprctl dispatch centerwindow "address:$addr" >/dev/null 2>&1 || true
+    done
+
+notify-send "Windows rescued" "All windows gathered to workspace $cur" 2>/dev/null || true

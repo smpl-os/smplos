@@ -1,0 +1,43 @@
+# ============================================================================
+# WORKSPACE GROUP BINDINGS (smplOS Windows-style virtual desktops) — ARCHIVED
+# ============================================================================
+# Restore by replacing the WORKSPACES section in bindings.conf with this.
+# workspace-group switches ALL monitors simultaneously; right/primary -> N,
+# left/secondary -> N+10. Brittle on monitor swap (pins by sorted-X); stock
+# behavior is used by default instead.
+
+bindd = SUPER, 1, Switch to workspace group 1, exec, workspace-group 1
+bindd = SUPER, 2, Switch to workspace group 2, exec, workspace-group 2
+bindd = SUPER, 3, Switch to workspace group 3, exec, workspace-group 3
+bindd = SUPER, 4, Switch to workspace group 4, exec, workspace-group 4
+bindd = SUPER, 5, Switch to workspace group 5, exec, workspace-group 5
+bindd = SUPER, 6, Switch to workspace group 6, exec, workspace-group 6
+bindd = SUPER, 7, Switch to workspace group 7, exec, workspace-group 7
+bindd = SUPER, 8, Switch to workspace group 8, exec, workspace-group 8
+bindd = SUPER, 9, Switch to workspace group 9, exec, workspace-group 9
+bindd = SUPER, 0, Switch to workspace group 10, exec, workspace-group 10
+
+bindd = SUPER SHIFT, 1, Move window to workspace group 1, exec, window-to-group 1
+bindd = SUPER SHIFT, 2, Move window to workspace group 2, exec, window-to-group 2
+bindd = SUPER SHIFT, 3, Move window to workspace group 3, exec, window-to-group 3
+bindd = SUPER SHIFT, 4, Move window to workspace group 4, exec, window-to-group 4
+bindd = SUPER SHIFT, 5, Move window to workspace group 5, exec, window-to-group 5
+bindd = SUPER SHIFT, 6, Move window to workspace group 6, exec, window-to-group 6
+bindd = SUPER SHIFT, 7, Move window to workspace group 7, exec, window-to-group 7
+bindd = SUPER SHIFT, 8, Move window to workspace group 8, exec, window-to-group 8
+bindd = SUPER SHIFT, 9, Move window to workspace group 9, exec, window-to-group 9
+bindd = SUPER SHIFT, 0, Move window to workspace group 10, exec, window-to-group 10
+
+bindd = SUPER SHIFT ALT, 1, Move window silently to workspace group 1, exec, window-to-group --silent 1
+bindd = SUPER SHIFT ALT, 2, Move window silently to workspace group 2, exec, window-to-group --silent 2
+bindd = SUPER SHIFT ALT, 3, Move window silently to workspace group 3, exec, window-to-group --silent 3
+bindd = SUPER SHIFT ALT, 4, Move window silently to workspace group 4, exec, window-to-group --silent 4
+bindd = SUPER SHIFT ALT, 5, Move window silently to workspace group 5, exec, window-to-group --silent 5
+bindd = SUPER SHIFT ALT, 6, Move window silently to workspace group 6, exec, window-to-group --silent 6
+bindd = SUPER SHIFT ALT, 7, Move window silently to workspace group 7, exec, window-to-group --silent 7
+bindd = SUPER SHIFT ALT, 8, Move window silently to workspace group 8, exec, window-to-group --silent 8
+bindd = SUPER SHIFT ALT, 9, Move window silently to workspace group 9, exec, window-to-group --silent 9
+bindd = SUPER SHIFT ALT, 0, Move window silently to workspace group 10, exec, window-to-group --silent 10
+
+bindd = SUPER, TAB, Next workspace group, exec, workspace-group +1
+bindd = SUPER SHIFT, TAB, Previous workspace group, exec, workspace-group -1
