@@ -3,6 +3,8 @@
 #
 # Downloads the latest versions of forked/custom apps:
 #   - smpl-apps (start-menu, notif-center, settings, app-center, webapp-center, etc.)
+#     plus the bundled XR glasses module (xr-workspace, xrctl, xr-game,
+#     xr-glasses-hotplugd) which CI folds into the smpl-apps release tarball.
 #   - st-smpl (st-wl terminal)
 #   - nemo-smpl (file manager)
 #   - micro-smpl (text editor with dynamic config reloading)
@@ -147,6 +149,34 @@ update_smpl_apps() {
             esac
         fi
     done
+
+    # XR glasses module — the renderer + helpers are bundled into the smpl-apps
+    # release tarball (CI pulls them from the private xr-workspace repo, so the
+    # secret never touches customer machines and they ride this one public feed).
+    # Install whatever xr binaries are present; absence is never an error.
+    local xr_installed=0 xrbin
+    for xrbin in xr-workspace xrctl xr-game xr-glasses-hotplugd; do
+        [[ -f "$tmpdir/$xrbin" ]] || continue
+        sudo install -m755 "$tmpdir/$xrbin" "/usr/local/bin/$xrbin"
+        install -m755 "$tmpdir/$xrbin" "$SMPLOS_BIN/$xrbin"
+        xr_installed=1
+    done
+    if [[ $xr_installed -eq 1 ]]; then
+        log "XR module: binaries updated"
+        # Nudge the watcher service so the new build takes effect without a
+        # re-login (the unit is config/migration owned; Restart=always covers
+        # the rest once ConditionPathExists is satisfied).
+        if command -v systemctl &>/dev/null; then
+            systemctl --user daemon-reload 2>/dev/null || true
+            systemctl --user try-restart xr-glasses.service 2>/dev/null || true
+        fi
+        # If the renderer is live, swap it for the new build.
+        if pgrep -x xr-workspace &>/dev/null; then
+            pkill -x xr-workspace 2>/dev/null || true
+            command -v xr-glasses-hotplugd &>/dev/null && \
+                (xr-glasses-hotplugd --once 2>/dev/null || true)
+        fi
+    fi
 
     echo "$remote_ver" > "$STATE_DIR/smpl-apps"
     ok "smpl-apps: updated to $remote_ver"

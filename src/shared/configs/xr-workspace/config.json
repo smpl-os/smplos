@@ -1,0 +1,44 @@
+{
+  "output": "",
+  "fov_deg": 46.0,
+  "pose_source": "breezy_shm",
+  "smoothing": 0.0,
+  "control_socket": "",
+  "layout": { "mode": "arc", "radius": 2.0 },
+  "monitors": [
+    { "id": "left",   "source": "HEADLESS-1", "width": 1920, "height": 1080, "angle_deg": -45, "size_m": 1.0, "color": "#283c78" },
+    { "id": "center", "source": "HEADLESS-2", "width": 2560, "height": 1440, "angle_deg":   0, "size_m": 1.2, "color": "#1e5a1e" },
+    { "id": "right",  "source": "HEADLESS-3", "width": 1920, "height": 1080, "angle_deg":  45, "size_m": 1.0, "color": "#5a2828" }
+  ],
+
+  "head_tracking": {
+    "enabled": false,
+    "protocol": "opentrack",
+    "host": "127.0.0.1",
+    "port": 4242,
+    "rate_hz": 120,
+    "yaw_scale": 1.0,
+    "pitch_scale": 1.0,
+    "roll_scale": 1.0,
+    "invert_yaw": false,
+    "invert_pitch": false,
+    "invert_roll": false,
+    "deadzone_deg": 0.0
+  },
+
+  "active_profile": "",
+  "profiles": {
+    "elite-dangerous": {
+      "enabled": true,
+      "yaw_scale": 1.3,
+      "pitch_scale": 1.1,
+      "roll_scale": 0.0
+    },
+    "dcs": {
+      "enabled": true,
+      "yaw_scale": 1.0,
+      "pitch_scale": 1.0,
+      "roll_scale": 1.0
+    }
+  }
+}

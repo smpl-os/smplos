@@ -901,7 +901,68 @@ install_prebuilt_apps() {
         log_warn "micro: not found in $bin_dir (will fall back to upstream pacman package)"
     fi
 
+    # ── xr-workspace (VITURE XR virtual monitors) ──
+    if [[ -f "$bin_dir/xr-workspace" ]]; then
+        install -Dm755 "$bin_dir/xr-workspace"        "$airootfs/usr/local/bin/xr-workspace"
+        install -Dm755 "$bin_dir/xr-workspace"        "$airootfs/root/smplos/bin/xr-workspace"
+        [[ -f "$bin_dir/xrctl" ]]               && install -Dm755 "$bin_dir/xrctl"               "$airootfs/usr/local/bin/xrctl"
+        [[ -f "$bin_dir/xr-game" ]]             && install -Dm755 "$bin_dir/xr-game"             "$airootfs/usr/local/bin/xr-game"
+        [[ -f "$bin_dir/xr-glasses-hotplugd" ]] && install -Dm755 "$bin_dir/xr-glasses-hotplugd" "$airootfs/usr/local/bin/xr-glasses-hotplugd"
+        install_xr_packaging "$airootfs"
+        log_info "xr-workspace: installed (auto-launches on VITURE glasses connect)"
+    else
+        log_warn "xr-workspace: not found in $bin_dir (build with: build-apps.sh xr)"
+    fi
+
     log_info "All pre-built apps installed"
+}
+
+###############################################################################
+# install_xr_packaging — deploy xr-workspace's udev rule, systemd user service,
+# Hyprland snippet and default config.
+#
+# Source of truth is the smplOS repo itself (NOT the xr-workspace build output),
+# so the exact same files reach existing installs via smplos-os-update
+# (sync_configs / sync_hypr_configs + the xr-glasses migration). This guarantees
+# the ISO and the update path never drift. The xr-workspace repo's own
+# packaging/ dir remains the upstream reference for standalone installs.
+###############################################################################
+install_xr_packaging() {
+    local airootfs="$1"
+    local udev_src="$SRC_DIR/shared/system/udev/99-viture-xr.rules"
+    local unit_src="$SRC_DIR/shared/configs/systemd/user/xr-glasses.service"
+    local hypr_src="$SRC_DIR/compositors/hyprland/hypr/xr-workspace.conf"
+    local cfg_src="$SRC_DIR/shared/configs/xr-workspace/config.json"
+
+    # udev rule — IMU uaccess + hotplug tag. Also deployed by the generic udev
+    # loop later, but install it here too so it is present even if that runs first.
+    if [[ -f "$udev_src" ]]; then
+        install -Dm644 "$udev_src" "$airootfs/etc/udev/rules.d/99-viture-xr.rules"
+        install -Dm644 "$udev_src" "$airootfs/root/smplos/system/udev/99-viture-xr.rules"
+    fi
+
+    # systemd user service — auto-enabled for every user via skel. The unit file
+    # itself is also copied by the generic configs→skel step; the symlink below
+    # is what actually enables it on first login.
+    local user_dir="$airootfs/etc/skel/.config/systemd/user"
+    mkdir -p "$user_dir/default.target.wants"
+    if [[ -f "$unit_src" ]]; then
+        install -Dm644 "$unit_src" "$user_dir/xr-glasses.service"
+        # graphical-session.target is pulled in by the session; default.target
+        # wants gives us auto-start on login across compositors.
+        ln -sf ../xr-glasses.service "$user_dir/default.target.wants/xr-glasses.service" 2>/dev/null || true
+    fi
+
+    # Hyprland snippet — also deployed by the compositor-config step; keep here
+    # so it lands even when xr is built standalone.
+    if [[ -f "$hypr_src" ]]; then
+        install -Dm644 "$hypr_src" "$airootfs/etc/skel/.config/hypr/xr-workspace.conf"
+    fi
+
+    # Default renderer config — also deployed by configs→skel; harmless to repeat.
+    if [[ -f "$cfg_src" ]]; then
+        install -Dm644 "$cfg_src" "$airootfs/etc/skel/.config/xr-workspace/config.json"
+    fi
 }
 
 ###############################################################################

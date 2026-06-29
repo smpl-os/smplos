@@ -6,12 +6,15 @@ set -euo pipefail
 # Usage:  ./build-apps.sh                    # fetch latest smpl-apps + incremental st/micro
 #         ./build-apps.sh st                  # build st-wl terminal only
 #         ./build-apps.sh micro               # build micro editor only
-#         ./build-apps.sh all                 # fetch apps + build st-wl + micro
-#         ./build-apps.sh --clean             # force re-fetch apps, clean rebuild st/micro
+#         ./build-apps.sh xr                  # build xr-workspace XR renderer only
+#         ./build-apps.sh all                 # fetch apps + build st-wl + micro + xr-workspace
+#         ./build-apps.sh --clean             # force re-fetch apps, clean rebuild st/micro/xr
 #
 # Rust GUI apps (start-menu, settings, etc.) are fetched from GitHub Releases
 # via fetch-apps.sh — no container or local Rust toolchain needed for them.
-# Only st-wl and micro are built locally in a container (they have no CI release).
+# Only st-wl, micro and xr-workspace are built locally in a container (native
+# C/C++/Go apps). xr-workspace source is an independent repo auto-detected as a
+# sibling of smpl-os (override with XR_WORKSPACE_REPO=/path/to/xr-workspace).
 #
 # Outputs binaries to: .cache/app-binaries/
 # Build cache persists at .cache/build-cache/ (make/cargo incremental for st/micro).
@@ -51,6 +54,7 @@ detect_runtime() {
 # ── Parse arguments ──
 BUILD_ST=false
 BUILD_MICRO=false
+BUILD_XR=false
 CLEAN_BUILD=false
 
 for arg in "$@"; do
@@ -58,7 +62,8 @@ for arg in "$@"; do
         --clean) CLEAN_BUILD=true ;;
         st|st-wl) BUILD_ST=true ;;
         micro) BUILD_MICRO=true ;;
-        all) BUILD_ST=true; BUILD_MICRO=true ;;
+        xr|xr-workspace) BUILD_XR=true ;;
+        all) BUILD_ST=true; BUILD_MICRO=true; BUILD_XR=true ;;
         *) ;; # Individual app args ignored — workspace builds everything
     esac
 done
@@ -83,6 +88,21 @@ git_tree_hash() {
 # Exit 0 if the working tree is clean for the given repo-relative path.
 git_tree_clean() {
     git -C "$PROJECT_ROOT" diff --quiet HEAD -- "$1" 2>/dev/null
+}
+
+# Locate the xr-workspace source repo. Override with XR_WORKSPACE_REPO, else try
+# the usual sibling locations (sibling of smpl-os, or inside it).
+find_xr_repo() {
+    local candidates=(
+        "${XR_WORKSPACE_REPO:-}"
+        "$PROJECT_ROOT/../../xr-workspace"   # sibling of smpl-os meta-dir
+        "$PROJECT_ROOT/../xr-workspace"       # inside smpl-os meta-dir
+    )
+    local c
+    for c in "${candidates[@]}"; do
+        [[ -n "$c" && -f "$c/CMakeLists.txt" ]] && { (cd "$c" && pwd); return 0; }
+    done
+    echo ""
 }
 
 # ── Fetch Rust app binaries from GitHub ──────────────────────────────────────
@@ -119,10 +139,29 @@ if [[ "$CLEAN_BUILD" == "false" ]]; then
             fi
         fi
     fi
+
+    # xr-workspace: VITURE XR virtual-monitor renderer (C++/CMake). Its source
+    # is an independent repo; we auto-detect it as a sibling of smpl-os (or of
+    # smplos) and use its git HEAD for staleness, exactly like micro.
+    if [[ "$BUILD_XR" == "true" ]]; then
+        XR_REPO="$(find_xr_repo)"
+        if [[ -n "$XR_REPO" && -d "$XR_REPO/.git" ]]; then
+            xr_current=$(git -C "$XR_REPO" rev-parse HEAD 2>/dev/null || echo "")
+            xr_stored=$(cat "$BIN_OUTPUT/xr-workspace.built-at" 2>/dev/null || echo "")
+            if [[ -f "$BIN_OUTPUT/xr-workspace" && -n "$xr_current" \
+                  && "$xr_current" == "$xr_stored" ]]; then
+                log "xr-workspace: up to date"
+                BUILD_XR=false
+            fi
+        elif [[ -z "$XR_REPO" ]]; then
+            warn "xr-workspace: source repo not found (set XR_WORKSPACE_REPO) — skipping"
+            BUILD_XR=false
+        fi
+    fi
 fi
 
-if [[ "$BUILD_ST" == "false" && "$BUILD_MICRO" == "false" ]]; then
-    log "st-wl and micro are up to date — container not needed"
+if [[ "$BUILD_ST" == "false" && "$BUILD_MICRO" == "false" && "$BUILD_XR" == "false" ]]; then
+    log "st-wl, micro and xr-workspace are up to date — container not needed"
     log "${BOLD}Binaries ready:${NC}"
     ls -lh "$BIN_OUTPUT/"
     exit 0
@@ -146,6 +185,9 @@ pacman -Sy --noconfirm --needed \
     fontconfig freetype2 harfbuzz imlib2 \
     libxkbcommon wayland wayland-protocols pixman \
     libglvnd mesa openssl go 2>/dev/null
+
+# (xr-workspace shares these deps: wayland + wayland-protocols provide
+#  wayland-scanner; mesa provides EGL/GLES/GBM; cmake/pkgconf cover the rest.)
 
 # Build st-wl if requested
 if [[ "$BUILD_ST" == "true" ]]; then
@@ -195,6 +237,44 @@ if [[ "$BUILD_MICRO" == "true" ]]; then
     fi
 fi
 
+# Build xr-workspace (VITURE XR virtual-monitor renderer) if requested
+if [[ "$BUILD_XR" == "true" ]]; then
+    echo "[build] Building xr-workspace..."
+    XR_SRC="/build/xr-src"
+    XR_BUILD="$CACHE_DIR/xr-build"
+    if [[ -f "$XR_SRC/CMakeLists.txt" ]]; then
+        mkdir -p "$XR_BUILD"
+        rsync -a --delete --exclude build/ "$XR_SRC/" "$XR_BUILD/"
+        cd "$XR_BUILD"
+        [[ "$CLEAN_BUILD" == "true" ]] && rm -rf build
+        cmake -B build -DCMAKE_BUILD_TYPE=Release
+        cmake --build build -j"$(nproc)"
+        if [[ -f "$XR_BUILD/build/xr-workspace" ]]; then
+            strip "$XR_BUILD/build/xr-workspace" || true
+            cp "$XR_BUILD/build/xr-workspace" "$OUT_DIR/xr-workspace"
+            # Control clients + hotplug launcher.
+            cp "$XR_BUILD/xrctl" "$OUT_DIR/xrctl"
+            cp "$XR_BUILD/xr-game" "$OUT_DIR/xr-game"
+            cp "$XR_BUILD/packaging/hotplug/xr-glasses-hotplugd" "$OUT_DIR/xr-glasses-hotplugd"
+            # Stage packaging artifacts (udev/systemd/hypr/config) for the ISO
+            # builder to install — keeps xr-workspace the single source of truth.
+            rm -rf "$OUT_DIR/xr-packaging"
+            mkdir -p "$OUT_DIR/xr-packaging"
+            cp -r "$XR_BUILD/packaging/udev"    "$OUT_DIR/xr-packaging/"
+            cp -r "$XR_BUILD/packaging/systemd" "$OUT_DIR/xr-packaging/"
+            cp -r "$XR_BUILD/packaging/hypr"    "$OUT_DIR/xr-packaging/"
+            cp "$XR_BUILD/config.example.json"  "$OUT_DIR/xr-packaging/config.example.json" 2>/dev/null || true
+            chmod +x "$OUT_DIR/xrctl" "$OUT_DIR/xr-game" "$OUT_DIR/xr-glasses-hotplugd"
+            echo "[build] xr-workspace: OK ($(du -h "$OUT_DIR/xr-workspace" | cut -f1))"
+        else
+            echo "[build] xr-workspace: FAILED"
+            exit 1
+        fi
+    else
+        echo "[build] xr-workspace: source not found at $XR_SRC (skipping)"
+    fi
+fi
+
 echo ""
 echo "[build] Done! Binaries in /build/out/:"
 ls -lh "$OUT_DIR/"
@@ -216,11 +296,18 @@ if [[ "$BUILD_MICRO" == "true" && -d "$MICRO_REPO" ]]; then
     run_args+=(-v "$(cd "$MICRO_REPO" && pwd):/build/micro-src:ro")
 fi
 
+# Mount the xr-workspace source repo (independent repo) if building it
+XR_REPO="$(find_xr_repo)"
+if [[ "$BUILD_XR" == "true" && -n "$XR_REPO" ]]; then
+    run_args+=(-v "$XR_REPO:/build/xr-src:ro")
+fi
+
 run_args+=(-e "BUILD_ST=$BUILD_ST")
 run_args+=(-e "BUILD_MICRO=$BUILD_MICRO")
+run_args+=(-e "BUILD_XR=$BUILD_XR")
 run_args+=(-e "CLEAN_BUILD=$CLEAN_BUILD")
 
-log "Building:${BUILD_ST:+ st-wl}${BUILD_MICRO:+ micro}${CLEAN_BUILD:+ (clean)}"
+log "Building:${BUILD_ST:+ st-wl}${BUILD_MICRO:+ micro}${BUILD_XR:+ xr-workspace}${CLEAN_BUILD:+ (clean)}"
 log "Container: archlinux:latest via ${CTR}"
 log "Cache:     $BUILD_CACHE/"
 log "Output:    $BIN_OUTPUT/"
@@ -245,6 +332,12 @@ if [[ "$BUILD_MICRO" == "true" && -f "$BIN_OUTPUT/micro" ]]; then
     MICRO_REPO="$PROJECT_ROOT/../micro"
     if [[ -d "$MICRO_REPO/.git" ]]; then
         git -C "$MICRO_REPO" rev-parse HEAD > "$BIN_OUTPUT/micro.built-at" 2>/dev/null || true
+    fi
+fi
+if [[ "$BUILD_XR" == "true" && -f "$BIN_OUTPUT/xr-workspace" ]]; then
+    XR_REPO="$(find_xr_repo)"
+    if [[ -n "$XR_REPO" && -d "$XR_REPO/.git" ]]; then
+        git -C "$XR_REPO" rev-parse HEAD > "$BIN_OUTPUT/xr-workspace.built-at" 2>/dev/null || true
     fi
 fi
 

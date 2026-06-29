@@ -1,0 +1,23 @@
+# VITURE XR glasses — grant the logged-in user access to the IMU/control
+# HID interfaces so xr-workspace (and the Breezy IMU driver) can read head
+# pose without root.
+#
+# Detected on reference hardware:
+#   VITURE Pro XR Glasses — idVendor=35ca idProduct=101d
+#
+# VITURE ships several models that share the 35ca vendor id. We match the
+# vendor for the uaccess grant (covers One / Pro / Lite) and tag the device
+# so the hotplug launcher can react to add/remove events.
+#
+# Canonical copy lives in the smplOS repo (deployed by build.sh on the ISO and
+# by the xr-glasses migration on existing installs). After editing:
+#   sudo udevadm control --reload-rules && sudo udevadm trigger
+
+# uaccess on the USB device + its HID children for the current seat's user.
+SUBSYSTEM=="usb", ATTRS{idVendor}=="35ca", TAG+="uaccess", TAG+="viture_xr"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="35ca", TAG+="uaccess", TAG+="viture_xr"
+
+# Wake the per-user hotplug watcher when a VITURE device appears/disappears.
+# (The watcher itself keys off the Wayland/Hyprland display-output event; this
+#  is a belt-and-suspenders nudge for the USB side / IMU availability.)
+ACTION=="add",    SUBSYSTEM=="usb", ATTRS{idVendor}=="35ca", TAG+="systemd", ENV{SYSTEMD_USER_WANTS}+="xr-glasses-imu.target"
