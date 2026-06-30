@@ -635,11 +635,26 @@ process_aur_packages() {
         # Deduplicate
         aur_deps=($(printf '%s\n' "${aur_deps[@]}" | sort -u))
         log_info "Downloading ${#aur_deps[@]} dependencies of AUR packages..."
-        # Download deps (skips already-cached ones); ignore errors for
-        # deps that are already satisfied by packages in the mirror
-        pacman --noconfirm -Syw "${aur_deps[@]}" \
-            --cachedir "$OFFLINE_MIRROR_DIR/" \
-            --dbpath /tmp/offlinedb 2>&1 || true
+        # Try a single batch download first (fast path).  pacman -Syw is
+        # transactional: if ANY name is unresolvable (e.g. an AUR-only or
+        # virtual dep that is satisfied by a 'provides' in the mirror, like
+        # 'nemo' supplied by nemo-smpl), the WHOLE batch aborts and downloads
+        # nothing -- leaving the offline mirror missing every other dep too.
+        # So if the batch fails, fall back to downloading each dependency
+        # individually so one unresolvable name can't sink all the rest.
+        if ! pacman --noconfirm -Syw "${aur_deps[@]}" \
+                --cachedir "$OFFLINE_MIRROR_DIR/" \
+                --dbpath /tmp/offlinedb 2>&1; then
+            log_warn "Batch dependency download failed -- retrying each dependency individually"
+            local _dep
+            for _dep in "${aur_deps[@]}"; do
+                if ! pacman --noconfirm -Syw "$_dep" \
+                        --cachedir "$OFFLINE_MIRROR_DIR/" \
+                        --dbpath /tmp/offlinedb 2>&1; then
+                    log_warn "  Skipping unresolvable dependency '$_dep' (likely satisfied by a provides/replaces already in the mirror)"
+                fi
+            done
+        fi
         
         # Remove any .sig files from the new downloads
         find "$OFFLINE_MIRROR_DIR" -name '*.sig' -delete 2>/dev/null || true
