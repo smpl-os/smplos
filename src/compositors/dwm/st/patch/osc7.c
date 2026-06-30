@@ -69,6 +69,11 @@ osc7parsecwd(const char *uri)
 	    !(hostlen == strlen(thishost) && strncmp(host, thishost, hostlen) == 0)) {
 		return 0;
 	}
-	memcpy(term.cwd, path, decodedlen - (path - decoded) + 1);
+	size_t pathlen = decodedlen - (path - decoded) + 1;
+	if (pathlen > PATH_MAX) {
+		fprintf(stderr, "erresc (OSC 7): path is too long\n");
+		return 0;
+	}
+	memcpy(term.cwd, path, pathlen);
 	return 1;
 }
