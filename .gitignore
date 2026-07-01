@@ -69,3 +69,7 @@ compile_commands.json
 Thumbs.db
 Screenshot_*.png
 *.iso.sha256
+
+# Embedded upstream clones for local study (not tracked)
+research/scroll-study/hyprscroller/
+research/scroll-study/scroll/
