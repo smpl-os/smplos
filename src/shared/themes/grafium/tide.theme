@@ -1,0 +1,42 @@
+# Tide prompt colors for grafium (graphite silver-grey on black)
+# Applied by theme-set -- overrides Tide rainbow defaults
+
+# Core prompt segments
+set -U tide_pwd_bg_color AEB9C4
+set -U tide_pwd_color_anchors 000000
+set -U tide_pwd_color_dirs 000000
+set -U tide_pwd_color_truncated_dirs 000000
+
+set -U tide_git_bg_color 8A929B
+set -U tide_git_bg_color_unstable CBB98C
+set -U tide_git_bg_color_urgent CE8181
+set -U tide_git_color_branch 000000
+set -U tide_git_color_conflicted 000000
+set -U tide_git_color_dirty 000000
+set -U tide_git_color_operation 000000
+set -U tide_git_color_staged 000000
+set -U tide_git_color_stash 000000
+set -U tide_git_color_untracked 000000
+set -U tide_git_color_upstream 000000
+
+set -U tide_character_color AEB9C4
+set -U tide_character_color_failure CE8181
+
+set -U tide_cmd_duration_bg_color CBB98C
+set -U tide_cmd_duration_color 000000
+
+set -U tide_status_bg_color 141519
+set -U tide_status_bg_color_failure CE8181
+set -U tide_status_color C8CCD2
+set -U tide_status_color_failure CBB98C
+
+set -U tide_prompt_color_frame_and_connection 4C5158
+set -U tide_prompt_color_separator_same_color 4C5158
+
+set -U tide_context_bg_color 141519
+set -U tide_context_color_default C8CCD2
+set -U tide_context_color_root CBB98C
+set -U tide_context_color_ssh C8CCD2
+
+set -U tide_jobs_bg_color 0d0e10
+set -U tide_jobs_color 787D85

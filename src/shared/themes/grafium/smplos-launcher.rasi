@@ -1,0 +1,277 @@
+/* smplOS launcher theme -- auto-generated from colors.toml */
+/* Faithful adaptation of adi1090x type-1/style-15 */
+/* Do not edit; re-run generate-theme-configs.sh to regenerate */
+
+/*****----- Configuration -----*****/
+configuration {
+    modi:                        "multimedia:rofi-apps-multimedia-src,development:rofi-apps-development-src,graphics:rofi-apps-graphics-src,internet:rofi-apps-internet-src,office:rofi-apps-office-src,apps:rofi-apps-apps-src,settings:rofi-settings-src";
+    show-icons:                  true;
+    display-multimedia:          "Multimedia";
+    display-development:         "Development";
+    display-graphics:            "Graphics";
+    display-internet:            "Internet";
+    display-office:              "Office";
+    display-apps:                "Apps";
+    display-settings:            " <u>S</u>ettings";
+}
+
+/*****----- Global Properties -----*****/
+* {
+    font:                        "JetBrainsMono Nerd Font 10";
+    background:                  rgba(0,0,0,1.0);
+    background-alt:              rgba(0,0,0,1.0);
+    background-solid:            #000000;
+    foreground:                  #C8CCD2;
+    foreground-dim:              #787D85;
+    selected:                    #AEB9C4;
+    active:                      #AEB9C4;
+    urgent:                      #CE8181;
+    border-rad:                  4px;
+    background-color:            transparent;
+    text-color:                  @foreground;
+
+    /* Layout tuning */
+    box-spacing:                 10px;
+    list-padding:                4px;
+    element-padding:             12px;
+    element-radius:              8px;
+    element-spacing:             8px;
+}
+
+/*****----- Main Window -----*****/
+window {
+    transparency:                "real";
+    location:                    south west;
+    anchor:                      south west;
+    fullscreen:                  false;
+    width:                       500px;
+    height:                      600px;
+    x-offset:                    4px;
+    y-offset:                    -5px;
+    enabled:                     true;
+    margin:                      0px;
+    padding:                     0px;
+    border:                      2px solid;
+    border-radius:               @border-rad;
+    border-color:                @selected;
+    cursor:                      "default";
+    background-color:            @background;
+}
+
+/*****----- Main Box -----*****/
+mainbox {
+    enabled:                     true;
+    spacing:                     @box-spacing;
+    margin:                      0px;
+    padding:                     12px;
+    border:                      0px solid;
+    border-radius:               0px;
+    background-color:            transparent;
+    children:                    [ "inputbar", "message", "listview", "mode-switcher" ];
+}
+
+/*****----- Inputbar -----*****/
+inputbar {
+    enabled:                     true;
+    spacing:                     0px;
+    margin:                      0px;
+    padding:                     0px;
+    border:                      0px solid;
+    border-radius:               @element-radius;
+    background-color:            transparent;
+    text-color:                  @foreground;
+    children:                    [ "textbox-prompt-colon", "entry" ];
+}
+
+prompt {
+    enabled:                     true;
+    padding:                     @element-padding;
+    background-color:            inherit;
+    text-color:                  inherit;
+}
+
+textbox-prompt-colon {
+    enabled:                     true;
+    expand:                      false;
+    str:                         "";
+    padding:                     @element-padding;
+    border:                      0px solid;
+    border-radius:               @element-radius;
+    background-color:            @background-alt;
+    text-color:                  @selected;
+}
+
+entry {
+    enabled:                     true;
+    expand:                      true;
+    padding:                     @element-padding;
+    border-radius:               0px 8px 8px 0px;
+    background-color:            @background-alt;
+    text-color:                  @foreground;
+    cursor:                      text;
+    cursor-width:                2px;
+    placeholder:                 "Search...";
+    placeholder-color:           @foreground-dim;
+}
+
+/*****----- Mode Switcher (bottom tab bar) -----*****/
+mode-switcher {
+    enabled:                     true;
+    orientation:                 horizontal;
+    spacing:                     @box-spacing;
+    margin:                      0px;
+    padding:                     0px;
+    border:                      0px solid;
+    border-radius:               0px;
+    background-color:            transparent;
+    text-color:                  @foreground;
+}
+
+button {
+    padding:                     10px;
+    border:                      0px solid;
+    border-radius:               @element-radius;
+    background-color:            @background-alt;
+    text-color:                  inherit;
+    cursor:                      pointer;
+    markup:                      true;
+}
+
+button selected {
+    background-color:            @selected;
+    text-color:                  @background-solid;
+}
+
+/*****----- Listview -----*****/
+listview {
+    enabled:                     true;
+    columns:                     1;
+    lines:                       10;
+    cycle:                       true;
+    dynamic:                     true;
+    scrollbar:                   true;
+    layout:                      vertical;
+    reverse:                     false;
+    fixed-height:                true;
+    fixed-columns:               true;
+    spacing:                     2px;
+    margin:                      0px;
+    padding:                     0px;
+    border:                      0px solid;
+    border-radius:               0px;
+    background-color:            transparent;
+    text-color:                  @foreground;
+    cursor:                      "default";
+}
+
+scrollbar {
+    handle-width:                8px;
+    handle-color:                @selected;
+    border-radius:               @element-radius;
+    background-color:            @background-alt;
+}
+
+/*****----- Elements -----*****/
+element {
+    enabled:                     true;
+    spacing:                     @element-spacing;
+    margin:                      0px;
+    padding:                     @list-padding;
+    border:                      0px solid;
+    border-radius:               @element-radius;
+    background-color:            transparent;
+    text-color:                  @foreground;
+    cursor:                      pointer;
+}
+
+element normal.normal {
+    background-color:            inherit;
+    text-color:                  inherit;
+}
+
+element normal.urgent {
+    background-color:            @urgent;
+    text-color:                  @background-solid;
+}
+
+element normal.active {
+    background-color:            @active;
+    text-color:                  @background-solid;
+}
+
+element selected.normal {
+    background-color:            @selected;
+    text-color:                  @background-solid;
+}
+
+element selected.urgent {
+    background-color:            @active;
+    text-color:                  @background-solid;
+}
+
+element selected.active {
+    background-color:            @urgent;
+    text-color:                  @background-solid;
+}
+
+element alternate.normal {
+    background-color:            inherit;
+    text-color:                  inherit;
+}
+
+element alternate.urgent {
+    background-color:            @urgent;
+    text-color:                  @background-solid;
+}
+
+element alternate.active {
+    background-color:            @active;
+    text-color:                  @background-solid;
+}
+
+element-icon {
+    background-color:            transparent;
+    text-color:                  inherit;
+    size:                        20px;
+    cursor:                      inherit;
+}
+
+element-text {
+    background-color:            transparent;
+    text-color:                  inherit;
+    cursor:                      inherit;
+    vertical-align:              0.5;
+    horizontal-align:            0.0;
+    highlight:                   bold underline;
+}
+
+/*****----- Message -----*****/
+message {
+    enabled:                     true;
+    margin:                      0px;
+    padding:                     0px;
+    border:                      0px solid;
+    border-radius:               0px;
+    background-color:            transparent;
+    text-color:                  @foreground;
+}
+
+textbox {
+    padding:                     @element-padding;
+    border:                      0px solid;
+    border-radius:               @element-radius;
+    background-color:            @background-alt;
+    text-color:                  @foreground-dim;
+    vertical-align:              0.5;
+    horizontal-align:            0.0;
+    highlight:                   none;
+    markup:                      true;
+}
+
+error-message {
+    padding:                     @element-padding;
+    border:                      0px solid;
+    border-radius:               0px;
+    background-color:            @background;
+    text-color:                  @foreground;
+}

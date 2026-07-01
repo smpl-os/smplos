@@ -1,0 +1,62 @@
+# Grafium — sleek graphite: cool silver-grey on OLED black with a subtle steel accent.
+# Same OLED-black structure as Matrix/Amber, in a neutral graphite palette.
+
+# -- Backgrounds --
+background = "#000000"
+bg_light = "#141519"
+bg_lighter = "#232529"
+surface = "#000000"
+
+# -- Foregrounds --
+foreground = "#C8CCD2"
+fg_dim = "#E4E7EC"
+fg_alt = "#C8CCD2"
+muted = "#787D85"
+autosuggestion = "#5C616A"
+
+# -- Interactive --
+accent = "#AEB9C4"
+accent_alt = "#7E97A8"
+cursor = "#E4E7EC"
+selection_foreground = "#000000"
+selection_background = "#AEB9C4"
+
+# -- Status --
+danger = "#CE8181"
+success = "#9FB79A"
+warning = "#CBB98C"
+info = "#93AEBE"
+
+# -- Bright Variants (terminal palette + btop gradients) --
+danger_bright = "#DDA0A0"
+success_bright = "#BBCDB4"
+warning_bright = "#DBCDA8"
+accent_bright = "#CDD4DC"
+accent_alt_bright = "#9FB4C2"
+info_bright = "#B2C6D2"
+
+# -- Terminal Palette Overrides --
+# term_4 differs from accent for this theme
+term_4 = "#8A929B"
+
+# -- Decoration --
+rounding = "4"
+blur_size = "0"
+blur_passes = "0"
+opacity_active = "1.0"
+opacity_inactive = "1.0"
+term_opacity_active = "1.0"
+term_opacity_inactive = "1.0"
+popup_opacity = "1.0"
+messenger_opacity = "1.0"
+browser_opacity = "1.0"
+
+# -- Layout --
+gaps_in = "1"
+gaps_out = "2"
+border_size = "1"
+
+# -- App Theme Selectors --
+app_theme_nvim = "grafium"
+app_theme_vscode = "grafium"
+app_theme_logseq = "grafium"

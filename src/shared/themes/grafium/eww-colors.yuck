@@ -1,0 +1,8 @@
+;; smplOS EWW Theme Colors (yuck) -- auto-generated from colors.toml
+;; Used for :fill-svg and other properties that need raw hex colors
+(defvar theme-fg "#C8CCD2")
+(defvar theme-fg-dim "#E4E7EC")
+(defvar theme-accent "#AEB9C4")
+(defvar theme-accent-alt "#7E97A8")
+(defvar theme-success "#9FB79A")
+(defvar theme-danger "#CE8181")
