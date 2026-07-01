@@ -21,7 +21,7 @@ focus_window() {
   ' 2>/dev/null)
 
   if [[ -n "$addr" ]]; then
-    hyprctl dispatch focuswindow "address:$addr" &>/dev/null
+    hyprctl dispatch "hl.dsp.focus({window='address:$addr'})" &>/dev/null
     return 0
   fi
   return 1

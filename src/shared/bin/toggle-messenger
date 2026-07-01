@@ -192,38 +192,39 @@ if [[ -n "$window_json" ]]; then
   ws_name=$(echo "$window_json" | jq -r '.workspace.name')
 
   if [[ "$ws_name" == special:* ]]; then
-    # Hidden → bring back to the workspace under the cursor, bottom-right
+    # Hidden → bring back to the current workspace, floating, bottom-right.
+    # Hyprland 0.55 lua mode rejects legacy `hyprctl dispatch` from the CLI;
+    # drive the window via the hl.dsp.* lua dispatchers instead.
     calc_position
-    hyprctl --batch "\
-      dispatch movetoworkspace e+0,address:${addr};\
-      dispatch focuswindow address:${addr};\
-      dispatch setfloating address:${addr};\
-      dispatch resizewindowpixel exact ${WIDTH} ${HEIGHT},address:${addr};\
-      dispatch movewindowpixel exact ${ABS_X} ${ABS_Y},address:${addr}" \
-      >/dev/null 2>&1
+    cur_ws=$(hyprctl activeworkspace -j 2>/dev/null | jq -r '.id')
+    hyprctl dispatch "hl.dsp.window.move({window='address:${addr}', workspace='${cur_ws}', silent=false})" >/dev/null 2>&1
+    hyprctl dispatch "hl.dsp.window.float({window='address:${addr}', action='enable'})"                    >/dev/null 2>&1
+    hyprctl dispatch "hl.dsp.window.resize({window='address:${addr}', x=${WIDTH}, y=${HEIGHT}, exact=true})" >/dev/null 2>&1
+    hyprctl dispatch "hl.dsp.window.move({window='address:${addr}', x=${ABS_X}, y=${ABS_Y}})"              >/dev/null 2>&1
+    hyprctl dispatch "hl.dsp.focus({window='address:${addr}'})"                                            >/dev/null 2>&1
   else
     # Visible → hide to special workspace
-    hyprctl dispatch movetoworkspacesilent "special:${WS_NAME},address:${addr}" \
+    hyprctl dispatch "hl.dsp.window.move({window='address:${addr}', workspace='special:${WS_NAME}', silent=true})" \
       >/dev/null 2>&1
   fi
 else
   # Not running → launch with float rules
   calc_position
   if [[ ${#LAUNCH_CMD[@]} -gt 0 ]]; then
-    hyprctl dispatch exec "[float; size ${WIDTH} ${HEIGHT}; move ${POS_X} ${POS_Y}]" "${LAUNCH_CMD[*]}" \
+    hyprctl dispatch "hl.dsp.exec_cmd([[${LAUNCH_CMD[*]}]], {float=true, size='${WIDTH} ${HEIGHT}', move='${POS_X} ${POS_Y}'})" \
       >/dev/null 2>&1
   else
     # Try to launch via .desktop file (single-arg mode like focus-or-launch)
     name="${CLASS%.desktop}"
     for dir in "$HOME/.local/share/applications" "/usr/local/share/applications" "/usr/share/applications"; do
       if [[ -f "$dir/${name}.desktop" ]]; then
-        hyprctl dispatch exec "[float; size ${WIDTH} ${HEIGHT}; move ${POS_X} ${POS_Y}]" "gtk-launch ${name}" \
+        hyprctl dispatch "hl.dsp.exec_cmd([[gtk-launch ${name}]], {float=true, size='${WIDTH} ${HEIGHT}', move='${POS_X} ${POS_Y}'})" \
           >/dev/null 2>&1
         exit 0
       fi
     done
     # Last resort: run directly
-    hyprctl dispatch exec "[float; size ${WIDTH} ${HEIGHT}; move ${POS_X} ${POS_Y}]" "$CLASS" \
+    hyprctl dispatch "hl.dsp.exec_cmd([[${CLASS}]], {float=true, size='${WIDTH} ${HEIGHT}', move='${POS_X} ${POS_Y}'})" \
       >/dev/null 2>&1
   fi
 fi

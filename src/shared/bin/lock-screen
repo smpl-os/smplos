@@ -4,7 +4,7 @@
 
 if [[ -n "$WAYLAND_DISPLAY" ]]; then
     # Turn screen on first so the user sees the lock dialog
-    hyprctl dispatch dpms on 2>/dev/null
+    hyprctl dispatch "hl.dsp.dpms({state='on'})" 2>/dev/null
     # Launch hyprlock (skip if already running)
     if ! pidof hyprlock &>/dev/null; then
         hyprlock

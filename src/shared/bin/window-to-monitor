@@ -76,9 +76,10 @@ target_idx=$(( (cur_idx + delta % n + n) % n ))
 target_ws=$(( group + target_idx * 10 ))
 target_mon="${monitors[$target_idx]}"
 
-# Ensure Hyprland knows which monitor owns that workspace (idempotent)
-hyprctl keyword workspace "$target_ws, monitor:$target_mon" >/dev/null 2>&1
-
-# Move window silently (don't auto-jump), then focus the target monitor
-hyprctl dispatch movetoworkspacesilent "$target_ws" >/dev/null 2>&1
-hyprctl dispatch focusmonitor "$target_mon" >/dev/null 2>&1
+# In the workspace-group model workspaces aren't statically pinned to a
+# monitor, so the old `hyprctl keyword workspace` bind is unnecessary (and
+# rejected by the 0.55 lua parser). Move the focused window to the target
+# group slot silently, then focus that workspace (which pulls focus to the
+# monitor now showing it).
+hyprctl dispatch "hl.dsp.window.move({workspace='$target_ws', silent=true})" >/dev/null 2>&1
+hyprctl dispatch "hl.dsp.focus({workspace='$target_ws'})" >/dev/null 2>&1

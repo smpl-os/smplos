@@ -99,7 +99,7 @@ ws=$(( group + monitor_index * 10 ))
 # (The hl.dsp.window.move() Lua API is a 0.55+ addition and returns
 # "Invalid dispatcher" on 0.54.2, which silently broke window-to-group.)
 if $silent; then
-    hyprctl dispatch movetoworkspacesilent "$ws" >/dev/null 2>&1
+    hyprctl dispatch "hl.dsp.window.move({workspace='$ws', silent=true})" >/dev/null 2>&1
 else
-    hyprctl dispatch movetoworkspace "$ws" >/dev/null 2>&1
+    hyprctl dispatch "hl.dsp.window.move({workspace='$ws'})" >/dev/null 2>&1
 fi

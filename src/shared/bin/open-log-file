@@ -15,10 +15,12 @@ if [[ -f "$HOME/.config/hypr/envs.conf" ]]; then
   done < "$HOME/.config/hypr/envs.conf"
 fi
 
-# Use hyprctl dispatch exec for proper Hyprland window placement (centered float).
-# This avoids the window being placed behind notif-center or on another workspace.
+# Launch via hl.dsp.exec_cmd with float rules for proper Hyprland window
+# placement (centered float). Legacy `hyprctl dispatch exec` is rejected by
+# the 0.55 lua parser. This avoids the window being placed behind
+# notif-center or on another workspace.
 if command -v hyprctl &>/dev/null && [[ -n "$WAYLAND_DISPLAY" ]]; then
-  hyprctl dispatch exec "[float;size 900 600;center]" "terminal -e micro '$file'" \
+  hyprctl dispatch "hl.dsp.exec_cmd([[terminal -e micro '$file']], {float=true, size='900 600', center=true})" \
     >/dev/null 2>&1
   exit 0
 fi

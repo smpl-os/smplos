@@ -31,7 +31,7 @@ case "$choice" in
         ;;
     *Logout*)
         if [[ -n "$WAYLAND_DISPLAY" ]]; then
-            hyprctl dispatch exit 2>/dev/null || loginctl terminate-user "$USER"
+            hyprctl dispatch "hl.dsp.exit()" 2>/dev/null || loginctl terminate-user "$USER"
         else
             pkill -KILL -u "$USER"
         fi

@@ -115,7 +115,7 @@ snap_window() {
   fi
 
   if [[ "$needs_move" == "true" ]]; then
-    hyprctl dispatch movewindowpixel "exact ${new_x} ${new_y},address:${addr}" \
+    hyprctl dispatch "hl.dsp.window.move({window='address:$addr', x=$new_x, y=$new_y})" \
       >/dev/null 2>&1
   fi
 }

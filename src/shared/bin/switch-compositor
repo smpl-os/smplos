@@ -98,7 +98,7 @@ quit_current_session() {
   case "$1" in
     hyprland)
       command -v hyprctl >/dev/null 2>&1 || return 1
-      hyprctl dispatch exit 2>/dev/null
+      hyprctl dispatch "hl.dsp.exit()" 2>/dev/null
       ;;
     niri)
       command -v niri >/dev/null 2>&1 || return 1

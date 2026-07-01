@@ -7,8 +7,19 @@ BIN_PATH="/usr/local/bin/$APP_NAME"
 [[ -f "$BIN_PATH" ]] || BIN_PATH="$HOME/Documents/source/smpl-os/smpl-apps/target/release/$APP_NAME"
 
 if pkill -x "$APP_NAME" 2>/dev/null; then
-    # Force wl_pointer.enter re-synthesis on bar after window unmaps
-    { sleep 0.1; p=$(hyprctl cursorpos 2>/dev/null) && hyprctl dispatch movecursor ${p%,*} ${p#*, } 2>/dev/null; } &
+    # Force wl_pointer.enter re-synthesis on bar after window unmaps.
+    # A 1px warp-and-back generates motion; the legacy `dispatch movecursor`
+    # is rejected by the 0.55 lua parser, so use hl.dsp.cursor.move.
+    {
+        sleep 0.1
+        p=$(hyprctl cursorpos 2>/dev/null)
+        x=${p%,*}; y=${p#*, }
+        x=${x//[[:space:]]/}; y=${y//[[:space:]]/}
+        if [[ -n $x && -n $y ]]; then
+            hyprctl dispatch "hl.dsp.cursor.move({x=$((x + 1)), y=$y})" >/dev/null 2>&1
+            hyprctl dispatch "hl.dsp.cursor.move({x=$x, y=$y})"         >/dev/null 2>&1
+        fi
+    } &
 else
     "$BIN_PATH" &
     disown

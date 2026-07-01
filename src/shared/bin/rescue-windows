@@ -11,8 +11,8 @@ cur=$(hyprctl activeworkspace -j 2>/dev/null | jq -r '.id')
 
 hyprctl clients -j 2>/dev/null | jq -r '.[] | select(.workspace.id > 0) | .address' \
   | while read -r addr; do
-        hyprctl dispatch movetoworkspacesilent "$cur,address:$addr" >/dev/null 2>&1 || true
-        hyprctl dispatch centerwindow "address:$addr" >/dev/null 2>&1 || true
+        hyprctl dispatch "hl.dsp.window.move({window='address:$addr', workspace='$cur', silent=true})" >/dev/null 2>&1 || true
+        hyprctl dispatch "hl.dsp.window.center({window='address:$addr'})" >/dev/null 2>&1 || true
     done
 
 notify-send "Windows rescued" "All windows gathered to workspace $cur" 2>/dev/null || true

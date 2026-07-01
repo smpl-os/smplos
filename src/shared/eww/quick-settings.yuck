@@ -165,7 +165,7 @@
       (image :path "icons/status/settings.svg"
              :image-width 16 :image-height 16))
     (button :class "qs-action-btn logout"
-            :onclick "popup-toggle --close && (hyprctl dispatch exit 2>/dev/null || loginctl terminate-user $USER)"
+            :onclick "popup-toggle --close && (hyprctl dispatch 'hl.dsp.exit()' 2>/dev/null || loginctl terminate-user $USER)"
             :tooltip "Log out"
       (label :text "󰍃"))
     (button :class "qs-action-btn qs-power"

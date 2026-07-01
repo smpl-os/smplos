@@ -17,8 +17,12 @@ POPUPS=(calendar-popup quick-settings notification-hub usb-popup)
 # Warping to the current position (no visible change) forces the re-enter.
 _reenter() {
   sleep 0.1
-  local p; p=$(hyprctl cursorpos 2>/dev/null) || return 0
-  hyprctl dispatch movecursor ${p%,*} ${p#*, } 2>/dev/null || true
+  local p x y; p=$(hyprctl cursorpos 2>/dev/null) || return 0
+  x=${p%,*}; y=${p#*, }
+  x=${x//[[:space:]]/}; y=${y//[[:space:]]/}
+  [[ -n $x && -n $y ]] || return 0
+  hyprctl dispatch "hl.dsp.cursor.move({x=$((x + 1)), y=$y})" >/dev/null 2>&1 || true
+  hyprctl dispatch "hl.dsp.cursor.move({x=$x, y=$y})" >/dev/null 2>&1 || true
 }
 
 # eww active-windows outputs "id: name" per line
