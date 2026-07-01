@@ -1,0 +1,62 @@
+# Amber — Deus Ex-inspired monochrome amber/orange on pure black.
+# Same OLED-black structure as the Matrix theme, hue-shifted green -> amber.
+
+# -- Backgrounds --
+background = "#000000"
+bg_light = "#1A0F03"
+bg_lighter = "#2E1D0A"
+surface = "#000000"
+
+# -- Foregrounds --
+foreground = "#FFA033"
+fg_dim = "#FFC266"
+fg_alt = "#FFA033"
+muted = "#C77F33"
+autosuggestion = "#D9933D"
+
+# -- Interactive --
+accent = "#FFA033"
+accent_alt = "#FFD24D"
+cursor = "#FFC266"
+selection_foreground = "#000000"
+selection_background = "#FFC266"
+
+# -- Status --
+danger = "#FF5A2C"
+success = "#FFB000"
+warning = "#FFCC33"
+info = "#FFBB4D"
+
+# -- Bright Variants (terminal palette + btop gradients) --
+danger_bright = "#FF7A44"
+success_bright = "#FFC266"
+warning_bright = "#FFEE66"
+accent_bright = "#FFC266"
+accent_alt_bright = "#FFDA66"
+info_bright = "#FFD699"
+
+# -- Terminal Palette Overrides --
+# term_4 differs from accent for this theme
+term_4 = "#CC7A2C"
+
+# -- Decoration --
+rounding = "4"
+blur_size = "0"
+blur_passes = "0"
+opacity_active = "1.0"
+opacity_inactive = "1.0"
+term_opacity_active = "1.0"
+term_opacity_inactive = "1.0"
+popup_opacity = "1.0"
+messenger_opacity = "1.0"
+browser_opacity = "1.0"
+
+# -- Layout --
+gaps_in = "1"
+gaps_out = "2"
+border_size = "1"
+
+# -- App Theme Selectors --
+app_theme_nvim = "amber"
+app_theme_vscode = "amber"
+app_theme_logseq = "amber"

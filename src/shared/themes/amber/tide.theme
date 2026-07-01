@@ -1,0 +1,42 @@
+# Tide prompt colors for amber (Deus Ex-style amber on black)
+# Applied by theme-set -- overrides Tide rainbow defaults
+
+# Core prompt segments
+set -U tide_pwd_bg_color FFA033
+set -U tide_pwd_color_anchors 000000
+set -U tide_pwd_color_dirs 000000
+set -U tide_pwd_color_truncated_dirs 000000
+
+set -U tide_git_bg_color CC7A2C
+set -U tide_git_bg_color_unstable FFCC33
+set -U tide_git_bg_color_urgent FF5A2C
+set -U tide_git_color_branch 000000
+set -U tide_git_color_conflicted 000000
+set -U tide_git_color_dirty 000000
+set -U tide_git_color_operation 000000
+set -U tide_git_color_staged 000000
+set -U tide_git_color_stash 000000
+set -U tide_git_color_untracked 000000
+set -U tide_git_color_upstream 000000
+
+set -U tide_character_color FFA033
+set -U tide_character_color_failure FF5A2C
+
+set -U tide_cmd_duration_bg_color FFD24D
+set -U tide_cmd_duration_color 000000
+
+set -U tide_status_bg_color 1A0F03
+set -U tide_status_bg_color_failure FF5A2C
+set -U tide_status_color FFA033
+set -U tide_status_color_failure FFCC33
+
+set -U tide_prompt_color_frame_and_connection 996022
+set -U tide_prompt_color_separator_same_color 996022
+
+set -U tide_context_bg_color 1A0F03
+set -U tide_context_color_default FFA033
+set -U tide_context_color_root FFCC33
+set -U tide_context_color_ssh FFA033
+
+set -U tide_jobs_bg_color 0f0a05
+set -U tide_jobs_color C77F33
