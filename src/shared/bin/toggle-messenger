@@ -203,9 +203,17 @@ if [[ -n "$window_json" ]]; then
     hyprctl dispatch "hl.dsp.window.move({window='address:${addr}', x=${ABS_X}, y=${ABS_Y}})"              >/dev/null 2>&1
     hyprctl dispatch "hl.dsp.focus({window='address:${addr}'})"                                            >/dev/null 2>&1
   else
-    # Visible → hide to special workspace
+    # Visible → hide to special workspace.
+    # In Hyprland 0.55 lua mode, moving a window into a special workspace
+    # auto-reveals that special workspace on its monitor (the `silent` flag
+    # no longer suppresses the reveal). If it got revealed, toggle it back
+    # off so the window is actually hidden.
     hyprctl dispatch "hl.dsp.window.move({window='address:${addr}', workspace='special:${WS_NAME}', silent=true})" \
       >/dev/null 2>&1
+    if hyprctl -j monitors 2>/dev/null \
+      | jq -e --arg w "special:${WS_NAME}" 'any(.[]; .specialWorkspace.name == $w)' >/dev/null 2>&1; then
+      hyprctl dispatch "hl.dsp.workspace.toggle_special('${WS_NAME}')" >/dev/null 2>&1
+    fi
   fi
 else
   # Not running → launch with float rules
