@@ -29,3 +29,10 @@ hl.window_rule({ match = { tag = "pop" }, rounding = 8 })
 
 -- Prevent idle while open
 hl.window_rule({ match = { tag = "noidle" }, idle_inhibit = "always" })
+
+-- Chromium/Electron apps (Brave, Chrome, Signal, Discord, messenger PWAs, etc.)
+-- hold a persistent Wayland idle-inhibitor even when nothing is playing, which
+-- stops hypridle from ever locking/blanking/suspending the screen. Restrict their
+-- idle inhibition to fullscreen only (genuine video playback) -- same approach as
+-- the Steam rule in steam.lua.
+hl.window_rule({ match = { class = "([bB]rave-.*|(google-)?[cC]hrom(e|ium).*|[mM]icrosoft-edge.*|[vV]ivaldi.*|helium|[sS]ignal.*|[dD]iscord.*|[sS]lack.*|[tT]elegram.*|[wW]hats[aA]pp.*|[eE]lement.*|[fF]erdium.*|[rR]ambox.*)" }, idle_inhibit = "fullscreen" })

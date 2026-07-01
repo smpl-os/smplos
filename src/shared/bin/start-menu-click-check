@@ -11,6 +11,21 @@ read -r cx cy <<< "$CURSOR"
 
 if (( cx < wx || cx > wx + ww || cy < wy || cy > wy + wh )); then
     pkill -x start-menu
-    # Force wl_pointer.enter re-synthesis on bar after window unmaps
-    { sleep 0.1; p=$(hyprctl cursorpos 2>/dev/null) && hyprctl dispatch movecursor ${p%,*} ${p#*, } 2>/dev/null; } &
+    # Force a fresh wl_pointer.enter on the bar after the window unmaps.
+    # Hyprland 0.55 does not resend enter to the layer surface under a
+    # stationary cursor when a toplevel unmaps, so eww-bar buttons go dead
+    # until the pointer moves (every Nth click on the start button did
+    # nothing). A 1px warp-and-back generates the motion that forces enter.
+    # The legacy `dispatch movecursor` used before is silently rejected by
+    # the 0.55 lua parser ("... Use eval."); use hl.dsp.cursor.move instead.
+    {
+        sleep 0.1
+        p=$(hyprctl cursorpos 2>/dev/null)
+        x=${p%,*}; y=${p#*, }
+        x=${x//[[:space:]]/}; y=${y//[[:space:]]/}
+        if [[ -n $x && -n $y ]]; then
+            hyprctl dispatch "hl.dsp.cursor.move({x=$((x + 1)), y=$y})" >/dev/null 2>&1
+            hyprctl dispatch "hl.dsp.cursor.move({x=$x, y=$y})"         >/dev/null 2>&1
+        fi
+    } &
 fi

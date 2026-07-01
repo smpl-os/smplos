@@ -1,13 +1,19 @@
 #!/bin/bash
 # EWW active workspace listener (Hyprland + niri)
-# Reports the workspace GROUP number (1-10) of the focused workspace.
-# With grouped workspaces, each monitor has its own slot inside a group:
-#   right/primary  → workspace N      (N = 1-10)
-#   left/secondary → workspace N+10   (N = 11-20)
-# Both normalize to the same group number: ((id - 1) % 10) + 1
+# Reports the workspace number (1-10) that the bar should highlight.
+#
+# Highlight follows the focused WINDOW, not the focused MONITOR. The eww bar
+# is a :focusable false layer surface: clicking a workspace button moves
+# Hyprland's active monitor to the bar's monitor (following the cursor) but
+# leaves keyboard focus on the window you were using. So `activeworkspace`
+# (monitor/cursor based) would wrongly report the bar's monitor, while
+# `activewindow` (keyboard based) reports the workspace you actually switched
+# to on the other monitor. Fall back to the focused monitor's workspace only
+# when nothing is focused (e.g. switching to an empty workspace).
 
 emit_hyprland() {
-  id=$(hyprctl activeworkspace -j 2>/dev/null | jq -r '.id // 1')
+  id=$(hyprctl activewindow -j 2>/dev/null | jq -r '.workspace.id // empty')
+  [[ -z "$id" ]] && id=$(hyprctl activeworkspace -j 2>/dev/null | jq -r '.id // 1')
   echo $(( (id - 1) % 10 + 1 ))
 }
 
@@ -46,7 +52,7 @@ else
   if [[ -S "$sock" ]] && command -v socat &>/dev/null; then
     socat -u UNIX-CONNECT:"$sock" - 2>/dev/null | while read -r line; do
       case "$line" in
-        workspace*|focusedmon*) emit ;;
+        workspace*|focusedmon*|activewindow*) emit ;;
       esac
     done
   else

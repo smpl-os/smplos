@@ -39,4 +39,33 @@ M.themePopupOpacity        = M.themePopupOpacity        or "0.60"
 M.themeMessengerOpacity    = M.themeMessengerOpacity    or "0.85"
 M.themeBrowserOpacity      = M.themeBrowserOpacity      or "1.0"
 
+-- Convert a hyprlang color/gradient string into the value the Hyprland Lua
+-- config API (hl.config) expects.
+--
+-- The hyprlang text parser accepts a multi-stop gradient as one string, e.g.
+--   "rgb(89b4fa) rgb(a6e3a1) 45deg"
+-- but the Lua gradient parser runs parseColor() on the whole string and rejects
+-- it ("invalid color"). Under Lua a gradient must be a table:
+--   { colors = { "rgb(89b4fa)", "rgb(a6e3a1)" }, angle = 45 }
+-- A single color is still passed through as a plain string.
+function M.color(value)
+    if type(value) ~= "string" then return value end
+
+    local tokens = {}
+    for tok in value:gmatch("%S+") do tokens[#tokens + 1] = tok end
+    if #tokens <= 1 then return value end  -- single color: pass through
+
+    -- A trailing "<n>deg" token is the gradient angle, not a color.
+    local angle
+    local deg = tokens[#tokens]:match("^(%-?%d+)deg$")
+    if deg then
+        angle = tonumber(deg)
+        tokens[#tokens] = nil
+    end
+
+    if #tokens == 1 and angle == nil then return tokens[1] end
+
+    return { colors = tokens, angle = angle or 0 }
+end
+
 return M

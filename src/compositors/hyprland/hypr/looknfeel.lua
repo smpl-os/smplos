@@ -11,13 +11,14 @@ hl.config({
         border_size = n(theme.themeBorderSize),
 
         col = {
-            active_border   = theme.activeBorderColor,
-            inactive_border = theme.inactiveBorderColor,
+            active_border   = theme.color(theme.activeBorderColor),
+            inactive_border = theme.color(theme.inactiveBorderColor),
         },
 
         resize_on_border = true,
         allow_tearing    = false,
-        layout           = "master",
+        -- SMPLSCROLL DISABLED 2026-06-30 (paused for Hyprland 0.55+ upgrade) -- was: layout = "scroll"
+        layout           = "dwindle",
     },
 
     decoration = {
@@ -55,8 +56,8 @@ hl.config({
 
     group = {
         col = {
-            border_active   = theme.activeBorderColor,
-            border_inactive = theme.inactiveBorderColor,
+            border_active   = theme.color(theme.activeBorderColor),
+            border_inactive = theme.color(theme.inactiveBorderColor),
             -- border_locked_active / border_locked_inactive are intentionally
             -- omitted: Hyprland's text parser accepts -1 as a sentinel meaning
             -- "fall back to border_active/inactive", but the Lua API rejects -1
@@ -90,11 +91,8 @@ hl.config({
     },
 
     dwindle = {
-        -- pseudotile is intentionally omitted: the Lua schema doesn't expose
-        -- it (likely because we set layout = "master", so the dwindle layout
-        -- isn't loaded). Hyprland's text parser is lenient about settings for
-        -- unloaded layouts; the Lua API is not. Settings under dwindle have
-        -- no effect with the master layout anyway.
+        -- pseudotile (true in looknfeel.conf) is omitted: the Lua schema doesn't
+        -- expose dwindle:pseudotile. It defaults off here; toggle with SUPER+P.
         preserve_split = true,
         force_split    = 2,     -- always split on the right
     },

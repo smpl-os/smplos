@@ -2,6 +2,11 @@
 -- Mirrors src/compositors/hyprland/hypr/autostart.conf.
 
 hl.on("hyprland.start", function()
+    -- Scrolling layout plugin (niri/PaperWM) -- load before windows tile.
+    -- SMPLSCROLL DISABLED 2026-06-30 (paused for Hyprland 0.55+ upgrade). Re-enable:
+    -- uncomment the line below + set looknfeel.lua layout = "scroll".
+    -- hl.exec_cmd("hyprctl plugin load /usr/local/lib/smplos/smplscroll.so")
+
     -- Core services
     hl.exec_cmd("hypridle")
     hl.exec_cmd("dunst")
@@ -44,6 +49,9 @@ hl.on("hyprland.start", function()
 
     -- Welcome notification with essential keybindings (first boot only)
     hl.exec_cmd("smplos-first-run")
+
+    -- Remind user to reboot if a critical update is pending (self-clears after reboot)
+    hl.exec_cmd("bash -c 'sleep 3 && smplos-reboot-notify'")
 
     -- Setup AppImage desktop entries (offline, first boot)
     hl.exec_cmd("smplos-appimage-setup")

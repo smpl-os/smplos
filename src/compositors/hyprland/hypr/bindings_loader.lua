@@ -83,20 +83,32 @@ local function parse_flags(prefix)
         if     c == "d" then has_desc = true
         elseif c == "e" then opts.repeating = true
         elseif c == "l" then opts.locked    = true
-        elseif c == "m" then opts.mouse     = true
-        elseif c == "r" then opts.release   = true
-        -- Other Hyprland flags (n/non-consuming, p/no-screensaver, t/transparent,
-        -- s/separate, i/no-inhibit, c/click) — uncommon in our config; add here
-        -- if we ever use them.
+        elseif c == "m" then opts.mouse       = true
+        elseif c == "r" then opts.release     = true
+        elseif c == "i" then opts.ignore_mods = true
+        -- Other Hyprland flags (n/non-consuming, p/dont-inhibit, t/transparent,
+        -- s/multi-key, c/click) — uncommon in our config; add here if we ever
+        -- use them.
         end
     end
     return opts, has_desc
 end
 
 -- ── Dispatcher translation ────────────────────────────────────────────────
--- Map common hyprlang dispatchers to native hl.dsp calls. Unknown / less
--- common ones fall through to `hyprctl dispatch …` via hl.dsp.exec_cmd.
+-- Map hyprlang dispatchers to native hl.dsp calls.
+--
+-- IMPORTANT: in Hyprland 0.55 lua-config mode there is NO working fallback to
+-- `hyprctl dispatch <name> <arg>` — hyprctl reinterprets its argument as Lua
+-- (`hl.dispatch(...)`), so legacy dispatcher names fail silently ("ok" but no
+-- effect). Every dispatcher used by bindings.conf MUST therefore have an
+-- explicit native mapping below; unknown ones bind to a logged no-op.
 local DIR = { l = "left", r = "right", u = "up", d = "down" }
+
+-- Workspace selector: numeric → number; otherwise pass the hyprland selector
+-- string verbatim (e+1, e-1, previous, special:scratchpad, …).
+local function ws_arg(arg)
+    return tonumber(arg) or arg
+end
 
 local function make_dispatcher(dispatcher, arg)
     arg = arg or ""
@@ -113,26 +125,81 @@ local function make_dispatcher(dispatcher, arg)
     elseif dispatcher == "pseudo" then
         return hl.dsp.window.pseudo()
 
+    elseif dispatcher == "pin" then
+        return hl.dsp.window.pin()
+
     elseif dispatcher == "fullscreen" then
         return hl.dsp.window.fullscreen(tonumber(arg) or 0)
+
+    elseif dispatcher == "fullscreenstate" then
+        -- arg: "<internal> <client>" (e.g. "0 2")
+        local a, b = arg:match("^(%-?%d+)%s+(%-?%d+)$")
+        return hl.dsp.window.fullscreen_state({
+            internal = tonumber(a) or -1,
+            client   = tonumber(b) or -1,
+        })
 
     elseif dispatcher == "togglegroup" then
         return hl.dsp.group.toggle()
 
+    elseif dispatcher == "changegroupactive" then
+        -- f = forward (next window in group), b = back (previous)
+        if arg == "b" then return hl.dsp.group.prev() end
+        return hl.dsp.group.next()
+
+    elseif dispatcher == "moveintogroup" then
+        return hl.dsp.group.move_window({ direction = DIR[arg] or arg })
+
+    elseif dispatcher == "moveoutofgroup" then
+        return hl.dsp.group.move_window()
+
     elseif dispatcher == "togglespecialworkspace" then
         return hl.dsp.workspace.toggle_special(arg)
+
+    elseif dispatcher == "togglesplit" then
+        return hl.dsp.layout("togglesplit")
+
+    elseif dispatcher == "workspace" then
+        return hl.dsp.focus({ workspace = ws_arg(arg) })
+
+    elseif dispatcher == "movetoworkspace" then
+        return hl.dsp.window.move({ workspace = ws_arg(arg) })
+
+    elseif dispatcher == "movetoworkspacesilent" then
+        return hl.dsp.window.move({ workspace = ws_arg(arg), silent = true })
+
+    elseif dispatcher == "movecurrentworkspacetomonitor" then
+        return hl.dsp.workspace.move({ monitor = DIR[arg] or arg })
 
     elseif dispatcher == "movefocus" then
         return hl.dsp.focus({ direction = DIR[arg] or arg })
 
+    elseif dispatcher == "swapwindow" then
+        return hl.dsp.window.swap({ direction = DIR[arg] or arg })
+
+    elseif dispatcher == "resizeactive" then
+        -- arg: "<dx> <dy>" relative pixels (e.g. "-20 0")
+        local dx, dy = arg:match("^(%-?%d+)%s+(%-?%d+)$")
+        return hl.dsp.window.resize({
+            x = tonumber(dx) or 0,
+            y = tonumber(dy) or 0,
+            relative = true,
+        })
+
     elseif dispatcher == "movewindow" then
-        -- Mouse drag binding (movewindow with no arg = drag with mouse)
-        if arg == "" then return hl.dsp.window.drag() end
-        return hl.dsp.exec_cmd("hyprctl dispatch movewindow " .. arg)
+        if arg == "" then return hl.dsp.window.drag() end            -- mouse drag
+        local mon = arg:match("^mon:(.+)$")
+        if mon then return hl.dsp.window.move({ monitor = DIR[mon] or mon }) end
+        return hl.dsp.window.move({ direction = DIR[arg] or arg })
 
     elseif dispatcher == "resizewindow" then
-        if arg == "" then return hl.dsp.window.resize() end
-        return hl.dsp.exec_cmd("hyprctl dispatch resizewindow " .. arg)
+        if arg == "" then return hl.dsp.window.resize() end          -- mouse resize
+        local dx, dy = arg:match("^(%-?%d+)%s+(%-?%d+)$")
+        return hl.dsp.window.resize({
+            x = tonumber(dx) or 0,
+            y = tonumber(dy) or 0,
+            relative = true,
+        })
 
     elseif dispatcher == "submap" then
         return hl.dsp.submap(arg)
@@ -141,11 +208,14 @@ local function make_dispatcher(dispatcher, arg)
         return hl.dsp.exit()
     end
 
-    -- Fallback: shell out to hyprctl. Slightly slower per keypress (~few ms)
-    -- but always correct. Add more native mappings above as needed.
-    local cmd = "hyprctl dispatch " .. dispatcher
-    if arg ~= "" then cmd = cmd .. " " .. arg end
-    return hl.dsp.exec_cmd(cmd)
+    -- Unknown dispatcher: there is no working shell fallback in lua mode, so
+    -- log it (visible in the Hyprland log) and bind a no-op so the rest of
+    -- the config still loads. Add a native mapping above if a new dispatcher
+    -- starts being used in bindings.conf.
+    io.stderr:write(string.format(
+        "[bindings_loader] unmapped dispatcher '%s' (arg='%s') — bound as no-op\n",
+        dispatcher, arg))
+    return hl.dsp.no_op()
 end
 
 -- ── File loader ────────────────────────────────────────────────────────────

@@ -490,12 +490,14 @@ main_partition_size=$((disk_size_in_mib - main_partition_start - gpt_backup_rese
 kernel_choice="linux-lts"
 
 # Build package list dynamically from packages.txt
-# These are ISO-only packages that should NOT go to the installed system
+# These are ISO-only packages that should NOT go to the installed system.
+# NOTE: CPU microcode (intel-ucode/amd-ucode) is intentionally NOT listed here —
+# it MUST be installed on the target system. Without it, first-gen AMD Zen /
+# Threadripper CPUs can hang or lock up early in boot.
 iso_only_packages=(
   syslinux mtools
   memtest86+ memtest86+-efi
   limine edk2-shell
-  intel-ucode amd-ucode
   archinstall
   openssl
 )

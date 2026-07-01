@@ -204,6 +204,7 @@ hl.window_rule({
     move = "(monitor_w-window_w-2) (monitor_h-window_h-34)",
     no_shadow = true,
     animation = "slide",
+    stay_focused = true,
 })
 
 -- ============================================================================

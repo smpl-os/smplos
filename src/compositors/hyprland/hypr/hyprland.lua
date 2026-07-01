@@ -44,6 +44,18 @@ local mb = home .. "/.config/hypr/messenger-bindings.conf"
 local fm = io.open(mb, "r")
 if fm then fm:close(); bindings.load(mb) end
 
+-- VITURE XR glasses — recenter/toggle keybinds (inert until glasses connected).
+-- bindings_loader translates the hyprlang `bind =` directives in this file.
+local xr = home .. "/.config/hypr/xr-workspace.conf"
+local fx = io.open(xr, "r")
+if fx then fx:close(); bindings.load(xr) end
+
+-- Emergency recovery bindings — always loaded last (Ctrl+Alt+T/U/R/A), restored
+-- by smplos-os-update when missing. Last-resort path if bindings.conf is broken.
+local emergency = home .. "/.config/hypr/emergency.conf"
+local fe = io.open(emergency, "r")
+if fe then fe:close(); bindings.load(emergency) end
+
 -- Always-on click-outside-to-dismiss watcher for popup apps (start-menu,
 -- smpl-calendar). Must come AFTER bindings.load so the user-facing binds
 -- on mouse:272 (e.g. `bindmd = SUPER, mouse:272, ...`) are registered

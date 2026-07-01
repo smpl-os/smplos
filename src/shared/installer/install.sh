@@ -357,8 +357,15 @@ EOF
     current_cmdline=$(echo "$current_cmdline" | sed -E 's/(^|[[:space:]])rd\.udev\.log_level=[^[:space:]]+([[:space:]]|$)/ /g')
     current_cmdline=$(echo "$current_cmdline" | sed -E 's/(^|[[:space:]])systemd\.log_level=[^[:space:]]+([[:space:]]|$)/ /g')
 
-    # Force a quiet Plymouth→greeter transition
-    for arg in quiet splash plymouth.nolog loglevel=3 rd.udev.log_level=3 rd.systemd.show_status=false systemd.show_status=false vt.global_cursor_default=0 console=tty1 mce=dont_log_ce; do
+    # Force a quiet Plymouth→greeter transition.
+    # pcie_aspm=off fixes the *cause* of a flood of harmless "PCIe Bus Error:
+    # severity=Correctable" AER messages (buggy PCIe link power-management,
+    # common with Intel Wi-Fi on AMD boards e.g. Threadripper X399). Left
+    # unchecked the flood spams the console and buries the LUKS passphrase
+    # prompt, making boot look hung. We deliberately do NOT add pci=noaer:
+    # disabling ASPM removes the errors at the source, so AER reporting stays
+    # on and genuine PCIe/NVMe failures remain visible on every machine.
+    for arg in quiet splash plymouth.nolog loglevel=3 rd.udev.log_level=3 rd.systemd.show_status=false systemd.show_status=false vt.global_cursor_default=0 console=tty1 mce=dont_log_ce pcie_aspm=off; do
       [[ " $current_cmdline " == *" $arg "* ]] || current_cmdline+=" $arg"
     done
     current_cmdline=$(echo "$current_cmdline" | xargs)
@@ -366,11 +373,24 @@ EOF
 
     sudo sed -i 's/^GRUB_DISTRIBUTOR=.*/GRUB_DISTRIBUTOR="smplOS"/' /etc/default/grub
 
-    # Set GRUB to auto-detect resolution and use a HiDPI-friendly font
+    # Pin the GRUB menu to 1080p instead of native resolution. 'auto' picks the
+    # panel's native mode, which renders the menu microscopically on 4K displays.
+    # A fixed 1920x1080 keeps the themed menu readable on every panel.
     if ! grep -q '^GRUB_GFXMODE=' /etc/default/grub; then
-      echo 'GRUB_GFXMODE=auto' | sudo tee -a /etc/default/grub >/dev/null
+      echo 'GRUB_GFXMODE=1920x1080,auto' | sudo tee -a /etc/default/grub >/dev/null
     else
-      sudo sed -i 's/^GRUB_GFXMODE=.*/GRUB_GFXMODE=auto/' /etc/default/grub
+      sudo sed -i 's/^GRUB_GFXMODE=.*/GRUB_GFXMODE=1920x1080,auto/' /etc/default/grub
+    fi
+
+    # Hand the kernel a plain text console instead of inheriting GRUB's graphical
+    # framebuffer. The graphical handoff hangs at "Loading initial ramdisk" on
+    # some firmware/GPUs (notably first-gen Zen / Threadripper X399). Plymouth/KMS
+    # takes over a moment later, so this is purely a reliability win with no
+    # functional loss. See: GRUB graphical-payload boot-hang reports.
+    if ! grep -q '^GRUB_GFXPAYLOAD_LINUX=' /etc/default/grub; then
+      echo 'GRUB_GFXPAYLOAD_LINUX=text' | sudo tee -a /etc/default/grub >/dev/null
+    else
+      sudo sed -i 's/^GRUB_GFXPAYLOAD_LINUX=.*/GRUB_GFXPAYLOAD_LINUX=text/' /etc/default/grub
     fi
 
     # Generate a 32px GRUB font for HiDPI displays
@@ -469,9 +489,11 @@ Include = /etc/pacman.d/mirrorlist
 Include = /etc/pacman.d/mirrorlist
 PACMANEOF
 
-# Initialize mirrorlist with reliable defaults
+# Initialize mirrorlist with reliable defaults so the *installed* system can
+# reach the official repos whenever the user later chooses to go online.
+# We only WRITE this file here — installation itself stays fully offline.
 if [[ ! -s /etc/pacman.d/mirrorlist ]] || grep -q 'file://' /etc/pacman.d/mirrorlist; then
-  echo "==> Setting up mirrors..."
+  echo "==> Writing default mirrorlist (no network access)..."
   sudo tee /etc/pacman.d/mirrorlist > /dev/null << 'MIRROREOF'
 Server = https://geo.mirror.pkgbuild.com/$repo/os/$arch
 Server = https://mirror.rackspace.com/archlinux/$repo/os/$arch
@@ -479,42 +501,22 @@ Server = https://mirrors.kernel.org/archlinux/$repo/os/$arch
 MIRROREOF
 fi
 
-# Run reflector to find the fastest mirrors for this user's location.
-# Non-blocking: falls back to the defaults above if no internet or reflector fails.
-if command -v reflector &>/dev/null; then
-  echo "==> Finding fastest mirrors with reflector..."
-  if timeout 30 sudo reflector \
-      --protocol https \
-      --age 6 \
-      --latest 20 \
-      --sort age \
-      --save /etc/pacman.d/mirrorlist 2>/dev/null; then
-    echo "    $(grep -c '^Server' /etc/pacman.d/mirrorlist) mirrors selected"
-  else
-    echo "    Reflector failed or timed out, using default mirrors"
-  fi
-fi
-
-# Sync package databases now that online repos are configured.
-# The offline [offline] repo had its own db; core/extra/multilib dbs don't
-# exist yet -- without this, every `pacman -S` after install fails with
-# "database file does not exist".
-echo "==> Syncing package databases..."
-sudo pacman -Sy --noconfirm 2>/dev/null || echo "    WARNING: pacman -Sy failed (no internet?), users can run 'sudo pacman -Sy' later"
+# smplOS installs completely offline. We deliberately skip `reflector` and
+# `pacman -Sy` here — both require internet and contradict the offline-install
+# design. The core/extra/multilib databases sync automatically the first time
+# the user runs `sudo pacman -Sy` (or installs a package) once the system is
+# online. No package databases are downloaded during setup.
 
 if [[ "$(cat /sys/devices/virtual/dmi/id/sys_vendor 2>/dev/null)" == "Microsoft Corporation" ]] \
   && [[ "$(cat /sys/devices/virtual/dmi/id/product_name 2>/dev/null)" == Surface* ]]; then
   echo "==> Surface device detected, setting up Surface-optimized kernel..."
 
-  # Always configure the linux-surface repo + key, even if we can't install
-  # right now. This way the user can install later with just `pacman -Sy`.
-  if ! grep -q '^\[linux-surface\]' /etc/pacman.conf; then
-    curl -s https://raw.githubusercontent.com/linux-surface/linux-surface/master/pkg/keys/surface.asc \
-      | sudo pacman-key --add - 2>/dev/null || true
-    sudo pacman-key --lsign-key 56C464BAAC421453 2>/dev/null || true
-    echo -e '\n[linux-surface]\nServer = https://pkg.surfacelinux.com/arch/' \
-      | sudo tee -a /etc/pacman.conf > /dev/null
-  fi
+  # The linux-surface kernel + iptsd are already pacstrapped from the offline
+  # repo, so Surface support works out of the box with NO network access.
+  # The [linux-surface] repo (only needed for future *online* kernel updates)
+  # is intentionally NOT configured here, because adding it requires fetching
+  # the signing key over the internet — which would break the offline install.
+  # Users can enable it later if they want online surface-kernel updates.
 
   # Surface packages are now included in the ISO and offline repo. 
   # They are pacstrapped automatically. We just need to enable services and set default kernel.
@@ -529,21 +531,11 @@ if [[ "$(cat /sys/devices/virtual/dmi/id/sys_vendor 2>/dev/null)" == "Microsoft 
   echo "    Surface support enabled (linux-surface kernel + iptsd)."
 fi
 
-# Set up smplOS repo clone for future updates (git-based update system)
-# After install, smplos-os-update will `git pull` this to get new scripts,
-# configs, themes, and migrations.
-echo "==> Setting up smplOS update repo..."
-SMPLOS_REPO_URL="https://github.com/smpl-os/smplos.git"
-if command -v git &>/dev/null; then
-  if git clone --depth=1 "$SMPLOS_REPO_URL" "$SMPLOS_PATH/repo" 2>/dev/null; then
-    echo "    Update repo ready at $SMPLOS_PATH/repo"
-  else
-    echo "    WARNING: Could not clone update repo (no internet?)"
-    echo "    Updates will clone on first run of smplos-os-update"
-  fi
-else
-  echo "    WARNING: git not available, skipping repo clone"
-fi
+# The git-based update repo is cloned lazily on the FIRST run of
+# `smplos-os-update` (see src/shared/bin/smplos-os-update), NOT during
+# installation. This keeps setup fully offline — no network access is required
+# to install smplOS.
+echo "==> Update repo will initialize on first 'smplos-os-update' run (offline install)."
 
 # Clean up offline mirror cache
 sudo rm -rf /var/cache/smplos/mirror 2>/dev/null || true

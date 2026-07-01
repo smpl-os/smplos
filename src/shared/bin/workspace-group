@@ -1,20 +1,19 @@
 #!/bin/bash
-# workspace-group — switch ALL monitors to a workspace group simultaneously.
+# workspace-group — bring a workspace onto the focused monitor.
 #
-# This gives Windows-style virtual desktops: pressing Super+2 moves every
-# monitor to "group 2" at once, rather than changing only the focused monitor.
-#
-# Layout (monitors sorted by X descending, rightmost = primary):
-#   right/primary  (index 0) → workspace N
-#   left/secondary (index 1) → workspace N + 10
-#   third          (index 2) → workspace N + 20   (etc.)
+# Single-workspace feel on multi-monitor: clicking bar button N (or
+# scrolling) always lands you ON workspace N on the screen you're using:
+#   - N already on this monitor   -> nothing to do
+#   - N visible on another monitor-> swap the two monitors' workspaces
+#     (pulls N here, pushes this monitor's workspace over there)
+#   - N hidden (on no monitor)    -> plain focus brings it here
+# The name is kept for compatibility with the eww-bar onclick and the
+# Super+scroll binds that call it.
 #
 # Usage:
-#   workspace-group N      absolute group (1-10)
-#   workspace-group +N     relative forward
-#   workspace-group -N     relative backward
-#
-# Groups wrap around: group 11 → 1, group 0 → 10.
+#   workspace-group N      absolute workspace (1..ws_count)
+#   workspace-group +N     relative forward  (wraps within 1..ws_count)
+#   workspace-group -N     relative backward (wraps within 1..ws_count)
 
 set -euo pipefail
 
@@ -96,81 +95,57 @@ if [[ -n "${NIRI_SOCKET:-}" ]] && command -v niri >/dev/null 2>&1; then
 fi
 
 # ---------------------------------------------------------------------------
-# Read monitors sorted rightmost-first (rightmost = primary, index 0)
+# Hyprland 0.55 runs in Lua-config mode, where the legacy CLI forms
+# `hyprctl dispatch workspace N` and `hyprctl keyword workspace ...` are
+# reinterpreted by the Lua parser and silently no-op. Use the native Lua
+# dispatchers instead.
 # ---------------------------------------------------------------------------
-readarray -t monitors < <(
-    hyprctl monitors -j 2>/dev/null \
-        | jq -r 'sort_by(.x) | reverse | .[].name'
-)
-n=${#monitors[@]}
-[[ $n -eq 0 ]] && exit 1
+# hypr_bring $1 = workspace id
+# Bring workspace $1 onto the CURRENTLY FOCUSED monitor and focus it.
+hypr_bring() {
+    local target="$1" cur_mon cur_ws other_mon
+    cur_mon=$(hyprctl activeworkspace -j 2>/dev/null | jq -r '.monitor')
+    cur_ws=$(hyprctl activeworkspace -j 2>/dev/null | jq -r '.id')
+    if [[ "$cur_ws" == "$target" ]]; then
+        return 0                       # already showing it on this screen
+    fi
+    # Is the target currently visible on a DIFFERENT monitor?
+    other_mon=$(hyprctl monitors -j 2>/dev/null \
+        | jq -r --argjson t "$target" --arg cur "$cur_mon" \
+          'first(.[] | select(.activeWorkspace.id == $t and .name != $cur) | .name) // empty')
+    if [[ -n "$other_mon" ]]; then
+        # Swap the two monitors' workspaces: target comes here, ours goes there.
+        hyprctl dispatch \
+            "hl.dsp.workspace.swap_monitors({monitor1='$cur_mon', monitor2='$other_mon'})" \
+            >/dev/null 2>&1
+    else
+        # Hidden on no monitor — plain focus pulls it onto this monitor.
+        hyprctl dispatch "hl.dsp.focus({workspace=$target})" >/dev/null 2>&1
+    fi
+}
 
 arg="${1:-1}"
 
 # ---------------------------------------------------------------------------
-# Single-monitor fast path — just use plain Hyprland workspace dispatch
-# ---------------------------------------------------------------------------
-if [[ $n -eq 1 ]]; then
-    # Single-monitor: dispatch workspace directly. hyprctl dispatch workspace N
-    # is valid on both Hyprland 0.54 and 0.55+.
-    case "$arg" in
-        +*)
-            new_ws=$(( $(hyprctl activeworkspace -j 2>/dev/null | jq '.id') + ${arg:1} ))
-            new_group=$(( (new_ws - 1) % 10 + 1 ))
-            [[ $new_group -gt $max_group ]] && new_ws=1
-            [[ $new_group -lt 1 ]] && new_ws=$max_group
-            hyprctl dispatch workspace "$new_ws" >/dev/null 2>&1 ;;
-        -*)
-            new_ws=$(( $(hyprctl activeworkspace -j 2>/dev/null | jq '.id') - ${arg:1} ))
-            new_group=$(( (new_ws - 1) % 10 + 1 ))
-            [[ $new_group -lt 1 || $new_ws -lt 1 ]] && new_ws=$max_group
-            [[ $new_group -gt $max_group ]] && new_ws=$max_group
-            hyprctl dispatch workspace "$new_ws" >/dev/null 2>&1 ;;
-        *)
-            [[ "$arg" -gt $max_group ]] && exit 0
-            hyprctl dispatch workspace "$arg" >/dev/null 2>&1 ;;
-    esac
-    exit 0
-fi
-
-# ---------------------------------------------------------------------------
-# Determine current group from primary monitor's active workspace
-# ---------------------------------------------------------------------------
-primary_ws=$(
-    hyprctl monitors -j 2>/dev/null \
-        | jq -r 'sort_by(.x) | reverse | .[0].activeWorkspace.id'
-)
-current_group=$(( (primary_ws - 1) % 10 + 1 ))
-
-# ---------------------------------------------------------------------------
-# Parse target group
+# Bring the target workspace onto the focused monitor (see hypr_bring).
+# Relative +N/-N (used by the Super+scroll binds) wraps within 1..max_group
+# and is resolved to an absolute workspace before being brought over.
 # ---------------------------------------------------------------------------
 case "$arg" in
-    +*) target=$(( current_group + ${arg:1} )) ;;
-    -*) target=$(( current_group - ${arg:1} )) ;;
-    *)  target="$arg" ;;
+    +*)
+        new_ws=$(( $(hyprctl activeworkspace -j 2>/dev/null | jq '.id') + ${arg:1} ))
+        new_group=$(( (new_ws - 1) % 10 + 1 ))
+        [[ $new_group -gt $max_group ]] && new_ws=1
+        [[ $new_group -lt 1 ]] && new_ws=$max_group
+        hypr_bring "$new_ws" ;;
+    -*)
+        new_ws=$(( $(hyprctl activeworkspace -j 2>/dev/null | jq '.id') - ${arg:1} ))
+        new_group=$(( (new_ws - 1) % 10 + 1 ))
+        [[ $new_group -lt 1 || $new_ws -lt 1 ]] && new_ws=$max_group
+        [[ $new_group -gt $max_group ]] && new_ws=$max_group
+        hypr_bring "$new_ws" ;;
+    *)
+        [[ "$arg" -gt $max_group ]] && exit 0
+        hypr_bring "$arg" ;;
 esac
-
-# Wrap to 1-max_group
-while [[ $target -lt 1 ]];          do target=$(( target + max_group )); done
-while [[ $target -gt $max_group ]]; do target=$(( target - max_group )); done
-
-# ---------------------------------------------------------------------------
-# Switch all monitors — no focusmonitor needed.
-#
-# Two-step per monitor:
-#   1. hyprctl keyword workspace "N, monitor:MON"
-#      → registers a persistent workspace rule that always routes workspace N
-#        to MON.  Works even for workspaces that have never been visited before.
-#   2. hyprctl dispatch workspace N
-#      → switches MON to show workspace N (routes to MON because of the rule).
-#
-# This avoids all focusmonitor race conditions and viewport-snap-back bugs.
-# Focus is never disturbed so the user's cursor/window focus is preserved.
-# ---------------------------------------------------------------------------
-for i in "${!monitors[@]}"; do
-    ws=$(( target + i * 10 ))
-    mon="${monitors[$i]}"
-    hyprctl keyword workspace "$ws, monitor:$mon" >/dev/null 2>&1
-    hyprctl dispatch workspace "$ws" >/dev/null 2>&1
-done
+exit 0
