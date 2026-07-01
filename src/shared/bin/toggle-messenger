@@ -149,8 +149,17 @@ calc_position() {
   local mon_json cpos cx cy
   cpos=$(hyprctl cursorpos 2>/dev/null); cx=${cpos%,*}; cy=${cpos#*, }
   # Monitor under the cursor (so the window lands on the screen you're using);
-  # fall back to the focused monitor, then a 1080p default.
-  mon_json=$(hyprctl -j monitors 2>/dev/null | jq -e --argjson cx "${cx:-0}" --argjson cy "${cy:-0}" 'first(.[] | select($cx>=.x and $cx<(.x+.width) and $cy>=.y and $cy<(.y+.height)))' 2>/dev/null) \
+  # fall back to the focused monitor, then a 1080p default. The hit-test must
+  # use each monitor's LOGICAL extent (physical size / scale, with the axes
+  # swapped for 90°/270° transforms) — using the raw pixel .width/.height would
+  # mis-size scaled or rotated monitors and pick the wrong screen. This works
+  # for any monitor count/arrangement because each screen is tested on its own.
+  mon_json=$(hyprctl -j monitors 2>/dev/null | jq -e --argjson cx "${cx:-0}" --argjson cy "${cy:-0}" '
+    first(.[]
+      | (if (.transform % 2 == 1) then .height else .width end) as $pw
+      | (if (.transform % 2 == 1) then .width else .height end) as $ph
+      | select($cx >= .x and $cx < (.x + ($pw / .scale))
+           and $cy >= .y and $cy < (.y + ($ph / .scale))))' 2>/dev/null) \
     || mon_json=$(hyprctl -j monitors 2>/dev/null | jq -e '.[] | select(.focused)' 2>/dev/null) || {
     # Fallback: assume 1920x1080 at origin
     POS_X=$(( 1920 - WIDTH - MARGIN_RIGHT ))
@@ -159,12 +168,20 @@ calc_position() {
     ABS_Y=$POS_Y
     return 0
   }
-  local mon_w mon_h mon_x mon_y scale
+  local mon_w mon_h mon_x mon_y scale transform
   mon_w=$(echo "$mon_json" | jq -r '.width')
   mon_h=$(echo "$mon_json" | jq -r '.height')
   mon_x=$(echo "$mon_json" | jq -r '.x')
   mon_y=$(echo "$mon_json" | jq -r '.y')
   scale=$(echo "$mon_json" | jq -r '.scale')
+  transform=$(echo "$mon_json" | jq -r '.transform')
+  # Rotated monitors (transform 1/3/5/7 = 90°/270°) report their physical mode
+  # in .width/.height, but the on-screen logical extent has the axes swapped.
+  # Without this, a portrait (rotated) monitor gets width/height mixed up and
+  # the window lands off-screen — it "flies by and disappears".
+  if (( transform % 2 == 1 )); then
+    local _swap=$mon_w; mon_w=$mon_h; mon_h=$_swap
+  fi
   # Effective resolution accounts for scaling
   local eff_w eff_h
   eff_w=$(awk "BEGIN { printf \"%d\", ${mon_w}/${scale} }")
