@@ -181,6 +181,13 @@ calc_position() {
   ABS_Y=$(( mon_y + POS_Y ))
 }
 
+# Serialize invocations. A single Super+Shift+S can emit the exec more than
+# once (key mechanics / rapid taps); without a lock two runs race — one shows
+# the window while the other, seeing it visible, hides it again (the window
+# "flashes" then vanishes). flock -n makes any overlapping run a no-op.
+exec 9>"${XDG_RUNTIME_DIR:-/tmp}/toggle-messenger-${WS_NAME}.lock"
+flock -n 9 || exit 0
+
 # --- Query window state ---
 window_json=$(hyprctl -j clients 2>/dev/null \
   | jq -e --arg c "$CLASS" \
@@ -210,10 +217,16 @@ if [[ -n "$window_json" ]]; then
     # off so the window is actually hidden.
     hyprctl dispatch "hl.dsp.window.move({window='address:${addr}', workspace='special:${WS_NAME}', silent=true})" \
       >/dev/null 2>&1
-    if hyprctl -j monitors 2>/dev/null \
-      | jq -e --arg w "special:${WS_NAME}" 'any(.[]; .specialWorkspace.name == $w)' >/dev/null 2>&1; then
-      hyprctl dispatch "hl.dsp.workspace.toggle_special('${WS_NAME}')" >/dev/null 2>&1
-    fi
+    # The reveal is applied asynchronously; retry the check briefly so we don't
+    # miss it (which would leave the window on-screen).
+    for _ in 1 2 3 4; do
+      if hyprctl -j monitors 2>/dev/null \
+        | jq -e --arg w "special:${WS_NAME}" 'any(.[]; .specialWorkspace.name == $w)' >/dev/null 2>&1; then
+        hyprctl dispatch "hl.dsp.workspace.toggle_special('${WS_NAME}')" >/dev/null 2>&1
+        break
+      fi
+      sleep 0.05
+    done
   fi
 else
   # Not running → launch with float rules
