@@ -2,6 +2,3 @@
 
 # Knowledge management / note-taking (pre-compiled binary from GitHub releases)
 logseq-desktop-bin
-
-# Block-based note-taking with bidirectional links, SQL queries, and offline-first sync
-siyuan-note-bin
