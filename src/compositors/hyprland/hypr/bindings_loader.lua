@@ -86,9 +86,14 @@ local function parse_flags(prefix)
         elseif c == "m" then opts.mouse       = true
         elseif c == "r" then opts.release     = true
         elseif c == "i" then opts.ignore_mods = true
-        -- Other Hyprland flags (n/non-consuming, p/dont-inhibit, t/transparent,
-        -- s/multi-key, c/click) — uncommon in our config; add here if we ever
-        -- use them.
+        elseif c == "n" then opts.non_consuming = true
+        -- `n` (non-consuming) MUST be handled: without it a `bindn = , mouse:272,
+        -- exec, …` directive registers as a *consuming* bind and swallows every
+        -- left-click compositor-wide (cursor moves, right-click works, left-click
+        -- dead). See the popup-click-check click-outside watcher.
+        --
+        -- Other Hyprland flags (p/dont-inhibit, t/transparent, s/multi-key,
+        -- c/click) — uncommon in our config; add here if we ever use them.
         end
     end
     return opts, has_desc
