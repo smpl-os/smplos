@@ -327,23 +327,52 @@ fi
 # VS Code / Codium / Cursor — set workbench.colorTheme from selected preset
 VSCODE_THEME_PATH="$(resolve_theme_path "$VSCODE_PRESET" 2>/dev/null || true)"
 if [[ -n "${VSCODE_THEME_PATH:-}" && -f "$VSCODE_THEME_PATH/vscode.json" ]]; then
+  # Reload a running editor window via Hyprland + wtype.
+  # Only needed right after a *newly* installed theme extension: a running
+  # window won't load a CLI-installed extension until it reloads. Switching
+  # between already-installed themes applies live via settings.json (no reload).
+  # $1 is a case-insensitive regex matched against the window class/app_id.
+  _reload_editor_window() {
+    local match="$1"
+    command -v hyprctl &>/dev/null && command -v wtype &>/dev/null && command -v jq &>/dev/null || return 0
+    # Discover the actual running window class (Wayland app_id is lowercase, e.g. "code")
+    local wclass
+    wclass=$(hyprctl clients -j 2>/dev/null \
+      | jq -r --arg m "$match" '.[] | select((.class|ascii_downcase) | test($m)) | .class' | head -1)
+    [[ -n "$wclass" ]] || return 0
+    hyprctl dispatch focuswindow "class:^${wclass}$" >/dev/null 2>&1 || return 0
+    sleep 0.35
+    # Command Palette -> "Reload Window" -> Enter
+    wtype -M ctrl -M shift -k p -m shift -m ctrl
+    sleep 0.2
+    wtype -- "Reload Window"
+    sleep 0.2
+    wtype -k Return
+  }
+
   _set_vscode_theme() {
-    local cmd="$1" settings="$2"
+    local cmd="$1" settings="$2" wclass="$3"
     command -v "$cmd" &>/dev/null || return 0
 
-    local theme_name extension vsix
+    local theme_name extension vsix newly_installed=0
     theme_name=$(jq -r '.name' "$VSCODE_THEME_PATH/vscode.json")
     extension=$(jq -r '.extension // empty' "$VSCODE_THEME_PATH/vscode.json")
     vsix=$(jq -r '.vsix // empty' "$VSCODE_THEME_PATH/vscode.json")
 
-    # Install extension: from bundled .vsix or marketplace
+    # Install extension: from bundled .vsix or marketplace.
+    # Detect whether this run *newly* added an extension (running window needs a reload).
     if [[ -n "$vsix" && -f "$VSCODE_THEME_PATH/$vsix" ]]; then
+      local _before _after
+      _before=$("$cmd" --list-extensions 2>/dev/null | sort)
       "$cmd" --install-extension "$VSCODE_THEME_PATH/$vsix" --force >/dev/null 2>&1 || true
+      _after=$("$cmd" --list-extensions 2>/dev/null | sort)
+      [[ -n "$(comm -13 <(printf '%s' "$_before") <(printf '%s' "$_after"))" ]] && newly_installed=1
     elif [[ -n "$extension" ]] && ! "$cmd" --list-extensions 2>/dev/null | grep -Fxq "$extension"; then
       "$cmd" --install-extension "$extension" >/dev/null 2>&1 || true
+      newly_installed=1
     fi
 
-    # Update settings.json
+    # Update settings.json (applies live for already-loaded themes)
     mkdir -p "$(dirname "$settings")"
     [[ -f "$settings" ]] || printf '{\n}\n' > "$settings"
 
@@ -351,11 +380,15 @@ if [[ -n "${VSCODE_THEME_PATH:-}" && -f "$VSCODE_THEME_PATH/vscode.json" ]]; the
       sed -i -E '0,/\{/{s/\{/{ "workbench.colorTheme": "",/}' "$settings"
     fi
     sed -i -E "s/(\"workbench.colorTheme\"[[:space:]]*:[[:space:]]*\")[^\"]*(\")/\1$theme_name\2/" "$settings"
+
+    # A freshly installed extension isn't loaded in the running window until it
+    # reloads; do it automatically so the new theme actually renders.
+    [[ "$newly_installed" -eq 1 ]] && _reload_editor_window "$wclass"
   }
 
-  _set_vscode_theme "code" "$HOME/.config/Code/User/settings.json"
-  _set_vscode_theme "codium" "$HOME/.config/VSCodium/User/settings.json"
-  _set_vscode_theme "cursor" "$HOME/.config/Cursor/User/settings.json"
+  _set_vscode_theme "code"   "$HOME/.config/Code/User/settings.json"     "^code$"
+  _set_vscode_theme "codium" "$HOME/.config/VSCodium/User/settings.json" "codium"
+  _set_vscode_theme "cursor" "$HOME/.config/Cursor/User/settings.json"   "cursor"
 fi
 
 # Logseq — switch theme via preferences.json + custom.css
