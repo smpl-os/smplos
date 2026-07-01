@@ -111,10 +111,10 @@ fi
 echo "$$" > "$_lockfile"
 trap 'rm -f "$_lockfile"' EXIT
 
-# Hyprland UX: open many webapps centered + floating so small web UIs don't appear
-# as awkward tiled full-screen windows. Discord is better as a normal tiled window.
-# Recursion guard avoids infinite relaunch.
-should_float="${WEBAPP_FLOAT:-1}"
+# Hyprland UX: webapps open as normal tiled windows by default. Floating is
+# opt-in per app via `--float` (or WEBAPP_FLOAT=1); `--no-float` / Discord force
+# tiled. Recursion guard avoids infinite relaunch.
+should_float="${WEBAPP_FLOAT:-0}"
 if [[ "$window_float_mode" == "off" ]]; then
   should_float="0"
 elif [[ "$window_float_mode" == "on" ]]; then
