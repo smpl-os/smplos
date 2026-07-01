@@ -1647,6 +1647,18 @@ LOG="$HOME/.cache/smplos/flatpak-setup.log"
 mkdir -p "$(dirname "$LOG")"
 exec &> >(tee -a "$LOG")
 
+# Let sandboxed Flatpak apps read removable drives. Flatpak gives each app its
+# own mount namespace with a private /run, so USB sticks that udisks mounts
+# under /run/media are invisible inside the sandbox (they look empty) unless we
+# explicitly bind the removable-media tree in. Applies globally to every
+# Flatpak (idempotent), and runs on every login so it also covers apps the user
+# installs later. Note: an app already running when a drive is plugged in must
+# still be relaunched to pick up the new mount (sandbox mount snapshot).
+if command -v flatpak &>/dev/null; then
+    flatpak override --user --filesystem=/run/media 2>/dev/null || true
+    flatpak override --user --filesystem=/media 2>/dev/null || true
+fi
+
 [[ -f "$MARKER" ]] && { echo "Flatpak setup already done"; exit 0; }
 [[ -f "$FLATPAK_LIST" ]] || { echo "No flatpak list at $FLATPAK_LIST"; exit 0; }
 

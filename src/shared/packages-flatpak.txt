@@ -5,6 +5,9 @@
 # Knowledge management
 com.logseq.Logseq
 
+# Security / Password managers
+org.keepassxc.KeePassXC
+
 # Browsers
 # com.google.Chrome
 # org.mozilla.firefox
