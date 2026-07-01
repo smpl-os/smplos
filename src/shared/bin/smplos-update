@@ -24,15 +24,52 @@ for arg in "$@"; do
     esac
 done
 
-if ! command -v terminal &>/dev/null; then
-    notify-send "smplOS Update" "No terminal emulator found"
-    exit 1
+# ── Notification helper ──────────────────────────────────────────────────────
+# Never emit the "Cannot autolaunch D-Bus without X11 $DISPLAY" noise when
+# there's no session bus (e.g. after pkexec re-execs us as root); always echo
+# to stderr too so the message isn't lost.
+notify() {
+    if command -v notify-send &>/dev/null \
+       && [[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" || -n "${WAYLAND_DISPLAY:-}" || -n "${DISPLAY:-}" ]]; then
+        notify-send "$1" "${2:-}" 2>/dev/null || true
+    fi
+    echo "smplOS Update: $1${2:+ — $2}" >&2
+}
+
+# Resolve our own absolute path — pkexec requires one — regardless of how we
+# were invoked (`smplos-update`, `bash smplos-update`, a relative path, …).
+SELF="$(readlink -f "$0")"
+
+# ── Presentation mode ────────────────────────────────────────────────────────
+# Interactive terminal (CLI: `smplos-update`) → run the update inline, right
+#   here in the current terminal (no new window, no D-Bus, no `terminal` binary).
+# GUI launch (App Center, no controlling tty) → open a terminal window.
+# `[[ -t 1 ]]` still holds after the pkexec re-exec when launched from a tty.
+INLINE=0
+if [[ -t 1 ]]; then INLINE=1; fi
+
+# GUI mode needs a terminal emulator. Resolve it *before* pkexec — root's PATH
+# can't see ~/.local/share/smplos/bin — and carry the path across the sanitized
+# environment via SMPLOS_TERMINAL.
+TERM_BIN="${SMPLOS_TERMINAL:-}"
+if [[ $INLINE -eq 0 && -z "$TERM_BIN" ]]; then
+    TERM_BIN="$(command -v terminal 2>/dev/null || true)"
+    if [[ -z "$TERM_BIN" ]]; then
+        for cand in ghostty foot alacritty kitty wezterm st xterm; do
+            command -v "$cand" &>/dev/null && { TERM_BIN="$(command -v "$cand")"; break; }
+        done
+    fi
+    if [[ -z "$TERM_BIN" ]]; then
+        notify "smplOS Update" "No terminal emulator found"
+        exit 1
+    fi
 fi
 
-# Elevate to root using pkexec (shows system password dialog)
-# pkexec will handle authentication — no password passing needed
+# ── Elevate to root — pkexec prompts on the TTY or via a graphical agent ──────
+# pkexec sanitizes the environment, so carry the resolved terminal path across
+# it with `env`. No password passing needed; pkexec handles authentication.
 if [[ $EUID -ne 0 ]]; then
-    exec pkexec "$0" "$@"
+    exec pkexec /usr/bin/env "SMPLOS_TERMINAL=$TERM_BIN" bash "$SELF" "$@"
 fi
 
 UPDATE_SCRIPT=$(mktemp /tmp/smplos-update.XXXXXX.sh)
@@ -352,4 +389,9 @@ fi
 EOF
 chmod +x "$UPDATE_SCRIPT"
 
-exec terminal -e "$UPDATE_SCRIPT"
+# CLI invocation → run inline in the current terminal; GUI → open a window.
+if [[ $INLINE -eq 1 ]]; then
+    exec bash "$UPDATE_SCRIPT"
+else
+    exec "$TERM_BIN" -e "$UPDATE_SCRIPT"
+fi
