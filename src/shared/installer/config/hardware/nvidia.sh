@@ -55,11 +55,20 @@ fi
 echo "  [GPU] Installing: $KERNEL_HEADERS ${PACKAGES[*]}"
 sudo pacman -S --noconfirm --needed "$KERNEL_HEADERS" "${PACKAGES[@]}"
 
-# Configure modprobe for early KMS — required by Hyprland's DRM backend
+# Configure modprobe for early KMS — required by Hyprland's DRM backend.
+# fbdev=1 gives a proper nvidia framebuffer console (smoother handoff, avoids
+# "backlight on / screen black" during DPMS and VT transitions).
+# NVreg_PreserveVideoMemoryAllocations=1 preserves VRAM across suspend/resume
+# and DPMS so the display comes back instead of a black screen on wake.
 sudo mkdir -p /etc/modprobe.d
 sudo tee /etc/modprobe.d/nvidia.conf >/dev/null << 'EOF'
-options nvidia_drm modeset=1
+options nvidia_drm modeset=1 fbdev=1
+options nvidia NVreg_PreserveVideoMemoryAllocations=1
 EOF
+
+# Enable NVIDIA's suspend/resume/hibernate helper services. Without these the
+# GPU loses its VRAM contents on sleep and wakes to a black screen.
+sudo systemctl enable nvidia-suspend.service nvidia-resume.service nvidia-hibernate.service 2>/dev/null || true
 
 # Configure mkinitcpio for early NVIDIA module loading
 # (Plymouth's mkinitcpio -P at the end of install.sh will pick this up)
