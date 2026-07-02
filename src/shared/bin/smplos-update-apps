@@ -8,6 +8,8 @@
 #   - st-smpl (st-wl terminal)
 #   - nemo-smpl (file manager)
 #   - micro-smpl (text editor with dynamic config reloading)
+#   - grafium (knowledge graph / notes GUI — repackaged from upstream .deb into
+#     a native pacman package via the OS PKGBUILD, since it's not in the AUR yet)
 #
 # Each app is only downloaded if a newer version exists on GitHub.
 # Version state is tracked in ~/.local/state/smplos/app-versions/
@@ -382,13 +384,83 @@ update_micro_smpl() {
     fi
 }
 
-# ── Main ──────────────────────────────────────────────────────────────────────
+# ── grafium ─────────────────────────────────────────────────────────────────
+# Grafium (knowledge graph / note-taking GUI) is not in the AUR yet, so smplOS
+# repackages its upstream .deb release asset into a native pacman package
+# on-device via a PKGBUILD in the OS repo — pacman-tracked and upgradable, just
+# like an AUR "-bin" package. Provides the app-menu entry + icons natively.
+update_grafium() {
+    local cached_ver remote_ver
+    cached_ver=$(_cached_ver grafium)
+
+    if ! _gh_api "https://api.github.com/repos/KonTy/grafium/releases/latest"; then
+        warn "grafium: GitHub unreachable"
+        return
+    fi
+
+    remote_ver=$(echo "$_gh_json" | grep -oP '"tag_name"\s*:\s*"\K[^"]+' || true)
+    [[ -z "$remote_ver" ]] && { warn "grafium: could not parse version"; return; }
+
+    if [[ -n "$cached_ver" ]] && ! _version_gt "$remote_ver" "$cached_ver"; then
+        ok "grafium: up to date ($cached_ver)"
+        return
+    fi
+
+    if [[ $CHECK_ONLY -eq 1 ]]; then
+        log "grafium: update available ${cached_ver:-none} -> $remote_ver"
+        return
+    fi
+
+    local pkgbuild_src="$SMPLOS_PATH/repo/src/shared/packaging/grafium-bin/PKGBUILD"
+    if [[ ! -f "$pkgbuild_src" ]]; then
+        warn "grafium: PKGBUILD not found ($pkgbuild_src)"
+        return
+    fi
+    if ! command -v makepkg &>/dev/null; then
+        warn "grafium: makepkg unavailable (base-devel not installed)"
+        return
+    fi
+
+    log "grafium: updating ${cached_ver:-none} -> $remote_ver"
+
+    local builddir
+    builddir=$(mktemp -d /tmp/grafium-bin.XXXXXX)
+    trap "rm -rf '$builddir'" RETURN
+    cp "$pkgbuild_src" "$builddir/PKGBUILD"
+    # Pin pkgver to the latest release tag (strip leading 'v')
+    sed -i -E "s/^pkgver=.*/pkgver=${remote_ver#v}/" "$builddir/PKGBUILD"
+
+    local was_running=0
+    pgrep -x grafium &>/dev/null && was_running=1
+
+    # makepkg must run as the user (never root); its -i step uses the cached
+    # sudo credentials to pacman -U the freshly built package.
+    if ( cd "$builddir" && makepkg -sic --noconfirm ); then
+        echo "$remote_ver" > "$STATE_DIR/grafium"
+        ok "grafium: updated to $remote_ver"
+        ((n_updated++)) || true
+
+        if [[ $was_running -eq 1 ]]; then
+            pkill -x grafium 2>/dev/null || true
+            sleep 0.5
+            pkill -9 -x grafium 2>/dev/null || true
+            nohup grafium &>/dev/null &
+            disown
+            log "  grafium restarted"
+        fi
+    else
+        warn "grafium: build/install failed"
+    fi
+}
+
+# ── Main ─────────────────────────────────────────────────────────────
 [[ $QUIET -eq 0 ]] && echo "── smplOS App Updates ──"
 
 update_smpl_apps
 update_st_smpl
 update_nemo_smpl
 update_micro_smpl
+update_grafium
 
 if [[ $CHECK_ONLY -eq 0 && $n_updated -gt 0 ]]; then
     ok "$n_updated app(s) updated"
