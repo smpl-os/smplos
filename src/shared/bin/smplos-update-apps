@@ -411,7 +411,7 @@ update_grafium() {
         return
     fi
 
-    local pkgbuild_src="$SMPLOS_PATH/repo/src/shared/packaging/grafium-bin/PKGBUILD"
+    local pkgbuild_src="$SMPLOS_PATH/repo/src/shared/pkgbuilds/grafium-bin/PKGBUILD"
     if [[ ! -f "$pkgbuild_src" ]]; then
         warn "grafium: PKGBUILD not found ($pkgbuild_src)"
         return
@@ -427,15 +427,14 @@ update_grafium() {
     builddir=$(mktemp -d /tmp/grafium-bin.XXXXXX)
     trap "rm -rf '$builddir'" RETURN
     cp "$pkgbuild_src" "$builddir/PKGBUILD"
-    # Pin pkgver to the latest release tag (strip leading 'v')
-    sed -i -E "s/^pkgver=.*/pkgver=${remote_ver#v}/" "$builddir/PKGBUILD"
-
+    # Lock the build to the release we just resolved (prepare() honours this,
+    # avoiding a race if a new release lands mid-build). Strip leading 'v'.
     local was_running=0
     pgrep -x grafium &>/dev/null && was_running=1
 
     # makepkg must run as the user (never root); its -i step uses the cached
     # sudo credentials to pacman -U the freshly built package.
-    if ( cd "$builddir" && makepkg -sic --noconfirm ); then
+    if ( cd "$builddir" && PKGVER_OVERRIDE="${remote_ver#v}" makepkg -sic --noconfirm ); then
         echo "$remote_ver" > "$STATE_DIR/grafium"
         ok "grafium: updated to $remote_ver"
         ((n_updated++)) || true
