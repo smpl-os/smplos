@@ -47,10 +47,53 @@ eww_start() {
 
     echo "$(date '+%H:%M:%S') Active windows:" >> "$LOG"
     eww --config "$EWW_CONFIG" active-windows >> "$LOG" 2>&1
+
+    # Start the geometry watcher so the bar recomputes its width whenever the
+    # monitor scale/resolution changes (Settings -> Display, hot-plug, etc.).
+    if ! pgrep -f "bar-ctl watch" >/dev/null 2>&1; then
+        setsid "$0" watch "$BAR_NAME" >/dev/null 2>&1 &
+    fi
+
+    # One-shot recompute shortly after boot: the bar may open before the final
+    # monitor scale is applied, leaving it centred/too-narrow.  Redrawing once
+    # the layout has settled snaps it back to the correct full width.
+    ( sleep 2; "$0" redraw "$BAR_NAME" ) >/dev/null 2>&1 &
+
     echo "$(date '+%H:%M:%S') bar-ctl start complete" >> "$LOG"
 }
 eww_stop() {
     eww --config "$EWW_CONFIG" close "$BAR_NAME" 2>/dev/null
+}
+
+# Force the bar to recompute its geometry (percentage widths are resolved
+# against the monitor only at open time, so a close+reopen is the reliable
+# way to pick up a new scale/resolution).
+eww_redraw() {
+    eww --config "$EWW_CONFIG" close "$BAR_NAME" 2>/dev/null
+    sleep 0.3
+    eww --config "$EWW_CONFIG" open "$BAR_NAME" >> "$LOG" 2>&1
+    eww_apply
+    echo "$(date '+%H:%M:%S') bar-ctl redraw complete" >> "$LOG"
+}
+
+# Background daemon: listen on Hyprland's IPC socket2 and redraw the bar on any
+# event that can change the monitor geometry (scale change via config reload,
+# monitor hot-plug/unplug).  A short settle delay lets Hyprland finish applying
+# the new layout before we recompute.
+eww_watch() {
+    local sock="${XDG_RUNTIME_DIR}/hypr/${HYPRLAND_INSTANCE_SIGNATURE}/.socket2.sock"
+    [[ -S "$sock" ]] || return 0
+    command -v socat &>/dev/null || return 0
+    echo "$(date '+%H:%M:%S') bar-ctl watch started" >> "$LOG"
+    socat -u "UNIX-CONNECT:$sock" - 2>/dev/null \
+    | while IFS= read -r line; do
+        case "${line%%>>*}" in
+            monitoradded|monitoraddedv2|monitorremoved|configreloaded)
+                sleep 1
+                eww_redraw
+                ;;
+        esac
+    done
 }
 eww_toggle() {
     eww --config "$EWW_CONFIG" open --toggle "$BAR_NAME"
@@ -99,9 +142,11 @@ case "$action" in
     stop|close)   eww_stop ;;
     toggle)       eww_toggle ;;
     reload)       eww_reload ;;
+    redraw)       eww_redraw ;;
+    watch)        eww_watch ;;
     apply)        eww_apply ;;
     *)
-        echo "Usage: bar-ctl [start|stop|toggle|reload|apply] [bar]"
+        echo "Usage: bar-ctl [start|stop|toggle|reload|redraw|watch|apply] [bar]"
         exit 1
         ;;
 esac
