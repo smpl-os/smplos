@@ -96,14 +96,12 @@ XDG_SESSION_TYPE=wayland
 XDG_SESSION_DESKTOP=Hyprland
 ENVEOF
 
-# Hyprshell: skip the runtime plugin build. Since Hyprland 0.55, hyprshell's
-# plugin fails to compile against current headers, but hyprshell falls back to
-# default keybinds and works fine without it. This drop-in suppresses the noisy
-# "Unable to load hyprland plugin" notification on every boot/config reload.
-mkdir -p /etc/systemd/user/hyprshell.service.d
-cat > /etc/systemd/user/hyprshell.service.d/no-plugin.conf << 'EOF'
-[Service]
-Environment=HYPRSHELL_NO_USE_PLUGIN=1
-EOF
+# Hyprshell is intentionally NOT used. It was previously the Alt+Tab switcher,
+# but its GTK grid stack-overflows and crashes when rendering many window
+# previews (20+), so Alt+Tab is handled natively in bindings.conf/bindings_loader
+# (the `windowcycle` dispatcher) instead. Disable the daemon so it never starts,
+# grabs the Alt+Tab keybind, or crash-loops under systemd. The package's systemd
+# preset ships it enabled, so we explicitly disable it here.
+systemctl --global disable hyprshell.service 2>/dev/null || true
 
 echo "Hyprland configuration complete!"

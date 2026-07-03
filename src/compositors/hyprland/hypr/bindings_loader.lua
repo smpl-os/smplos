@@ -216,6 +216,40 @@ local function make_dispatcher(dispatcher, arg)
     elseif dispatcher == "submap" then
         return hl.dsp.submap(arg)
 
+    elseif dispatcher == "windowcycle" then
+        -- Alt+Tab: cycle focus through every "normal" window across ALL
+        -- workspaces in a stable order. This is a native, crash-proof
+        -- replacement for the hyprshell GUI switcher, which stack-overflows
+        -- when rendering many window previews (20+). arg "prev" reverses.
+        --
+        -- Returned as a per-press closure (hl.bind accepts a function) so the
+        -- window list is recomputed on every keypress. Special/scratchpad and
+        -- hidden windows are skipped. Ordering is by stable_id so repeated
+        -- presses advance predictably through the whole set (and reach all
+        -- windows), rather than toggling between the two most-recent.
+        local reverse = (arg == "prev")
+        return function()
+            local wins = {}
+            for _, w in ipairs(hl.get_windows()) do
+                local ws = w.workspace
+                if w.mapped ~= false and not w.hidden
+                   and not (ws and ws.special) then
+                    wins[#wins + 1] = w
+                end
+            end
+            if #wins < 2 then return end
+            table.sort(wins, function(a, b)
+                return (a.stable_id or 0) < (b.stable_id or 0)
+            end)
+            local cur = 1
+            for i, w in ipairs(wins) do
+                if w.focus_history_id == 0 then cur = i; break end
+            end
+            local nxt = reverse and (cur - 1) or (cur + 1)
+            if nxt < 1 then nxt = #wins elseif nxt > #wins then nxt = 1 end
+            hl.dispatch(hl.dsp.focus({ window = wins[nxt] }))
+        end
+
     elseif dispatcher == "exit" then
         return hl.dsp.exit()
     end
