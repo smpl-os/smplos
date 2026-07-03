@@ -799,6 +799,17 @@ update_package_list() {
         printf '%s\n' "${AUR_PACKAGES[@]}" >> "$PROFILE_DIR/packages.x86_64"
     fi
     
+    # Default the live ISO to the LTS kernel. The bleeding-edge `linux` package
+    # (inherited from the releng base packages.x86_64) has caused suspend/resume
+    # regressions on some machines. linux-lts is more stable and also matches the
+    # kernel the installer lays down on disk (see installer configurator).
+    if grep -qx 'linux' "$PROFILE_DIR/packages.x86_64"; then
+        sed -i 's/^linux$/linux-lts/' "$PROFILE_DIR/packages.x86_64"
+        log_info "Live ISO kernel: linux -> linux-lts"
+    fi
+    # Guarantee linux-lts is present even if the releng base ever drops `linux`.
+    grep -qx 'linux-lts' "$PROFILE_DIR/packages.x86_64" || echo 'linux-lts' >> "$PROFILE_DIR/packages.x86_64"
+
     # Remove duplicates while preserving order
     local temp_file=$(mktemp)
     awk '!seen[$0]++' "$PROFILE_DIR/packages.x86_64" > "$temp_file"
@@ -978,6 +989,65 @@ install_xr_packaging() {
     if [[ -f "$cfg_src" ]]; then
         install -Dm644 "$cfg_src" "$airootfs/etc/skel/.config/xr-workspace/config.json"
     fi
+}
+
+###############################################################################
+# Build the hyprtasking overview plugin (Hyprland only)
+#
+# hyprtasking is a niri-style workspace-overview plugin (Super+Tab). Hyprland
+# plugins are ABI-locked to the exact hyprland version they were built against,
+# and smplOS holds hyprland as a critical package — so we build the .so HERE,
+# inside the ISO container against the very hyprland the ISO ships, guaranteeing
+# the ABI matches on the installed system. The result is dropped at
+# /usr/local/lib/smplos/libhyprtasking.so and loaded by autostart.{conf,lua}.
+#
+# Best effort: any failure only logs a warning and skips the plugin. The
+# Hyprland config guards every hyprtasking call with pcall + is_active(), so a
+# missing .so degrades to "Super+Tab does nothing" — it never breaks the build.
+###############################################################################
+HYPRTASKING_REPO="${HYPRTASKING_REPO:-https://github.com/raybbian/hyprtasking.git}"
+
+build_hyprtasking_plugin() {
+    [[ "$COMPOSITOR" == "hyprland" ]] || return 0
+    log_step "Building hyprtasking overview plugin"
+
+    local airootfs="$PROFILE_DIR/airootfs"
+
+    # Build deps are container-only. hyprland provides the pkg-config + headers
+    # the plugin links against; the plugin's runtime deps (pixman, libdrm,
+    # pango, cairo, libinput, wayland, xkbcommon) are all hyprland deps that
+    # already ship in the ISO, so nothing extra lands on the installed system.
+    if ! pacman -S --needed --noconfirm \
+            git meson ninja gcc pkgconf hyprland \
+            pixman libdrm pango cairo libinput systemd-libs wayland libxkbcommon \
+            >/dev/null 2>&1; then
+        log_warn "hyprtasking: could not install build deps — skipping plugin"
+        return 0
+    fi
+
+    local ht_hl_ver ht_tmp
+    ht_hl_ver="$(pacman -Q hyprland 2>/dev/null | awk '{print $2}')"
+    ht_tmp="$(mktemp -d)"
+
+    if ! git clone --depth 1 "$HYPRTASKING_REPO" "$ht_tmp/hyprtasking" >/dev/null 2>&1; then
+        log_warn "hyprtasking: git clone failed — skipping plugin"
+        rm -rf "$ht_tmp"
+        return 0
+    fi
+
+    # meson + ninja, exactly as the plugin's hyprpm.toml specifies.
+    if ( cd "$ht_tmp/hyprtasking" \
+            && meson setup build --buildtype=debug \
+            && meson compile -C build ) >/dev/null 2>&1 \
+            && [[ -f "$ht_tmp/hyprtasking/build/libhyprtasking.so" ]]; then
+        install -Dm755 "$ht_tmp/hyprtasking/build/libhyprtasking.so" \
+            "$airootfs/usr/local/lib/smplos/libhyprtasking.so"
+        log_info "hyprtasking: built against hyprland $ht_hl_ver → /usr/local/lib/smplos/libhyprtasking.so"
+    else
+        log_warn "hyprtasking: meson build failed (likely a hyprland $ht_hl_ver API mismatch) — skipping plugin"
+    fi
+
+    rm -rf "$ht_tmp"
 }
 
 ###############################################################################
@@ -1889,8 +1959,8 @@ timeout_style=menu
 
 menuentry "smplOS (%ARCH%, ${archiso_platform})" --class arch --class gnu-linux --class gnu --class os --id 'smplos' {
     set gfxpayload=keep
-    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% console=tty0 console=ttyS0,115200
-    initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-lts archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% console=tty0 console=ttyS0,115200
+    initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-lts.img
 }
 
 menuentry "smplOS Surface Laptop (%ARCH%, ${archiso_platform})" --class arch --class gnu-linux --class gnu --class os --id 'smplos-surface' {
@@ -1901,8 +1971,8 @@ menuentry "smplOS Surface Laptop (%ARCH%, ${archiso_platform})" --class arch --c
 
 menuentry "smplOS Safe Mode (%ARCH%, ${archiso_platform})" --class arch --class gnu-linux --class gnu --class os --id 'smplos-safe' {
     set gfxpayload=keep
-    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% nomodeset nouveau.modeset=0 mce=off console=tty0 console=ttyS0,115200
-    initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-lts archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% nomodeset nouveau.modeset=0 mce=off console=tty0 console=ttyS0,115200
+    initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-lts.img
 }
 GRUBCFG
 
@@ -1934,8 +2004,8 @@ timeout_style=menu
 
 menuentry "smplOS (%ARCH%, ${archiso_platform})" --class arch --class gnu-linux --class gnu --class os --id 'smplos' {
     set gfxpayload=keep
-    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" console=tty0 console=ttyS0,115200
-    initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-lts archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" console=tty0 console=ttyS0,115200
+    initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-lts.img
 }
 
 menuentry "smplOS Surface Laptop (%ARCH%, ${archiso_platform})" --class arch --class gnu-linux --class gnu --class os --id 'smplos-surface' {
@@ -1946,8 +2016,8 @@ menuentry "smplOS Surface Laptop (%ARCH%, ${archiso_platform})" --class arch --c
 
 menuentry "smplOS Safe Mode (%ARCH%, ${archiso_platform})" --class arch --class gnu-linux --class gnu --class os --id 'smplos-safe' {
     set gfxpayload=keep
-    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" nomodeset nouveau.modeset=0 mce=off console=tty0 console=ttyS0,115200
-    initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
+    linux /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-lts archisobasedir=%INSTALL_DIR% img_dev=UUID=${archiso_img_dev_uuid} img_loop="${iso_path}" nomodeset nouveau.modeset=0 mce=off console=tty0 console=ttyS0,115200
+    initrd /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-lts.img
 }
 LOOPBACKCFG
 
@@ -2027,8 +2097,8 @@ TEXT HELP
 Boot smplOS live / install medium on BIOS.
 ENDTEXT
 MENU LABEL smplOS (%ARCH%, BIOS)
-LINUX /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux
-INITRD /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
+LINUX /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-lts
+INITRD /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-lts.img
 APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID%
 
 LABEL arch_surface
@@ -2045,8 +2115,8 @@ TEXT HELP
 Boot smplOS in Safe Mode (nomodeset, MCE off) on BIOS.
 ENDTEXT
 MENU LABEL smplOS Safe Mode (%ARCH%, BIOS)
-LINUX /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux
-INITRD /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux.img
+LINUX /%INSTALL_DIR%/boot/%ARCH%/vmlinuz-linux-lts
+INITRD /%INSTALL_DIR%/boot/%ARCH%/initramfs-linux-lts.img
 APPEND archisobasedir=%INSTALL_DIR% archisosearchuuid=%ARCHISO_UUID% nomodeset nouveau.modeset=0 mce=off
 ARCHISOSYSLINUX
 
@@ -2166,6 +2236,7 @@ main() {
     update_profiledef
     setup_airootfs
     install_prebuilt_apps
+    build_hyprtasking_plugin
     setup_boot
     build_iso
     

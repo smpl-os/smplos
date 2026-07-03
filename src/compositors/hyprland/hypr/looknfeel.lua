@@ -17,8 +17,9 @@ hl.config({
 
         resize_on_border = true,
         allow_tearing    = false,
-        -- SMPLSCROLL DISABLED 2026-06-30 (paused for Hyprland 0.55+ upgrade) -- was: layout = "scroll"
-        layout           = "dwindle",
+        -- Native scrolling layout (Hyprland 0.55+). Replaces the old custom
+        -- smplscroll plugin, which the 0.55 layout-API rewrite obsoleted.
+        layout           = "scrolling",
     },
 
     decoration = {
@@ -101,6 +102,27 @@ hl.config({
         new_status = "slave",
     },
 
+    -- Scrolling (niri/PaperWM-style) layout tuning.
+    -- Goal: never resize a window when another opens. Every column is a fixed
+    -- 95% of the screen, so an app like Blender keeps its exact aspect ratio for
+    -- its whole lifetime. Opening a second window slides it in flush to the
+    -- right edge, leaving a thin sliver of the previous window on the left.
+    scrolling = {
+        -- ON: a lone window fills the whole work area (no dead space on the
+        -- sides). When a second window opens, the first snaps to column_width
+        -- (a small 5% adjustment at 0.95) so the newcomer can slide in.
+        fullscreen_on_one_column = true,
+        -- Fixed width for every column once there is more than one. 0.95 = 95%
+        -- of the work area, so the remaining 5% shows the neighbouring window's
+        -- sliver as the tape scrolls.
+        column_width             = 0.95,
+        -- 1 = fit the focused column flush into view (touches an edge) rather
+        -- than centering it, so the newest window sits against the right edge.
+        focus_fit_method         = 1,
+        -- Auto-scroll so the focused window is brought into view.
+        follow_focus             = true,
+    },
+
     misc = {
         disable_hyprland_logo    = true,
         disable_splash_rendering = true,
@@ -157,3 +179,66 @@ hl.env("GUM_CONFIRM_SELECTED_FOREGROUND",   "0")  -- black
 hl.env("GUM_CONFIRM_SELECTED_BACKGROUND",   "2")  -- green
 hl.env("GUM_CONFIRM_UNSELECTED_FOREGROUND", "0")  -- black
 hl.env("GUM_CONFIRM_UNSELECTED_BACKGROUND", "8")  -- dark grey
+
+-- ── Hyprtasking overview plugin (niri-style workspace overview) ─────────────
+-- Styling for the workspace overview (Super+Tab). Wrapped in pcall so that if
+-- the plugin is not loaded yet at parse time the rest of the config is safe.
+--   layout=grid, cols=1  -> workspaces stack vertically as rows, each row's
+--                           windows appear as columns (niri-like).
+--   bg_color 0xff000000  -> opaque black backdrop (matrix theme; avoids the
+--                           plugin's default blue).
+--   select_button 0x110  -> LEFT mouse click enters a workspace (navigate).
+--   drag_button   0x117  -> VIEW-ONLY: pointed at BTN_TASK, an unused button
+--                           on ordinary mice, so left/right drag no longer
+--                           grabs and rearranges windows. The overview stays a
+--                           navigation surface — click a workspace to enter it.
+pcall(function()
+    hl.config({
+        plugin = {
+            hyprtasking = {
+                layout          = "grid",
+                bg_color        = 0xff000000,
+                gap_size        = 8,
+                border_size     = 2,
+                exit_on_hovered = true,
+                drag_button     = 0x117,  -- BTN_TASK (unused) → disables drag-rearrange
+                select_button   = 0x110,  -- left mouse: enter workspace
+                grid = {
+                    rows = 3,
+                    cols = 1,
+                },
+            },
+        },
+    })
+end)
+
+-- Scroll wheel navigates workspace rows while the overview is open.
+-- The grid layout ignores the mouse wheel (only the linear layout pans on
+-- scroll), so without this the wheel falls through to the window content under
+-- the cursor. These binds are NON-CONSUMING and gated on is_active(): when the
+-- overview is closed they do nothing and normal scrolling in apps is untouched;
+-- when it's open, wheel-down/up step to the workspace row below/above.
+pcall(function()
+    local function ht_scroll(dir)
+        return function()
+            if hl.plugin.hyprtasking.is_active() then
+                hl.plugin.hyprtasking.move(dir)
+            end
+        end
+    end
+    hl.bind("mouse_down", ht_scroll("down"), { non_consuming = true })
+    hl.bind("mouse_up",   ht_scroll("up"),   { non_consuming = true })
+    -- Ctrl+wheel pans the scrolling-layout column tape (the windows) side to
+    -- side while the overview is open. hyprtasking's grid is workspace-level
+    -- only, so "windows horizontally" maps to the scrolling layout, not to
+    -- grid columns (which would just show empty phantom workspaces).
+    local function ht_col(msg)
+        return function()
+            if hl.plugin.hyprtasking.is_active() then
+                hl.dsp.layout(msg)
+            end
+        end
+    end
+    hl.bind("CTRL + mouse_down", ht_col("move +col"), { non_consuming = true })
+    hl.bind("CTRL + mouse_up",   ht_col("move -col"), { non_consuming = true })
+end)
