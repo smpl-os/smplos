@@ -43,6 +43,7 @@ release/vmshare/
 # ── Build outputs (written outside src/ to keep source tree clean) ────────
 build/
 *.iso
+build-iso-*.log
 
 # ── Caches ──────────────────────────────────────────────────
 .cache/
