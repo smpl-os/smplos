@@ -40,36 +40,43 @@ notify() {
 # were invoked (`smplos-update`, `bash smplos-update`, a relative path, …).
 SELF="$(readlink -f "$0")"
 
-# ── Presentation mode ────────────────────────────────────────────────────────
-# Interactive terminal (CLI: `smplos-update`) → run the update inline, right
-#   here in the current terminal (no new window, no D-Bus, no `terminal` binary).
-# GUI launch (App Center, no controlling tty) → open a terminal window.
-# `[[ -t 1 ]]` still holds after the pkexec re-exec when launched from a tty.
-INLINE=0
-if [[ -t 1 ]]; then INLINE=1; fi
-
-# GUI mode needs a terminal emulator. Resolve it *before* pkexec — root's PATH
-# can't see ~/.local/share/smplos/bin — and carry the path across the sanitized
-# environment via SMPLOS_TERMINAL.
-TERM_BIN="${SMPLOS_TERMINAL:-}"
-if [[ $INLINE -eq 0 && -z "$TERM_BIN" ]]; then
-    TERM_BIN="$(command -v terminal 2>/dev/null || true)"
+# ── Presentation ─────────────────────────────────────────────────────────────
+# The update must show its progress in a terminal window. Crucially, we do NOT
+# open that window as root: pkexec sanitizes the environment (drops
+# WAYLAND_DISPLAY, XDG_RUNTIME_DIR, DISPLAY, DBUS_SESSION_BUS_ADDRESS), so a
+# root-owned terminal has no compositor to connect to and silently fails — the
+# App Center just asks for a password and then nothing appears. Instead we open
+# the terminal as the *user* (who can see the compositor) first, then elevate
+# with pkexec inline on that terminal's tty.
+#
+# `[[ -t 1 ]]` is true when we already have a terminal: a real CLI invocation,
+# or the child we re-spawn inside a fresh terminal window just below.
+if [[ ! -t 1 && $EUID -ne 0 ]]; then
+    # GUI launch (App Center) — no controlling terminal. Resolve a terminal
+    # emulator as the user and re-run ourselves inside it. The child gets a tty
+    # and falls through to the inline elevation below.
+    TERM_BIN="${SMPLOS_TERMINAL:-}"
     if [[ -z "$TERM_BIN" ]]; then
-        for cand in ghostty foot alacritty kitty wezterm st xterm; do
-            command -v "$cand" &>/dev/null && { TERM_BIN="$(command -v "$cand")"; break; }
-        done
+        TERM_BIN="$(command -v terminal 2>/dev/null || true)"
+        if [[ -z "$TERM_BIN" ]]; then
+            for cand in ghostty foot alacritty kitty wezterm st-wl st xterm; do
+                command -v "$cand" &>/dev/null && { TERM_BIN="$(command -v "$cand")"; break; }
+            done
+        fi
     fi
     if [[ -z "$TERM_BIN" ]]; then
         notify "smplOS Update" "No terminal emulator found"
         exit 1
     fi
+    exec "$TERM_BIN" -e bash "$SELF" "$@"
 fi
 
-# ── Elevate to root — pkexec prompts on the TTY or via a graphical agent ──────
-# pkexec sanitizes the environment, so carry the resolved terminal path across
-# it with `env`. No password passing needed; pkexec handles authentication.
+# ── Elevate to root — inline, on the current terminal ────────────────────────
+# We now have a tty (a real CLI, or the window we opened as the user above), so
+# pkexec prompts right here and all update output stays in this terminal. No
+# environment needs to survive pkexec: we're already displaying in a terminal.
 if [[ $EUID -ne 0 ]]; then
-    exec pkexec /usr/bin/env "SMPLOS_TERMINAL=$TERM_BIN" bash "$SELF" "$@"
+    exec pkexec bash "$SELF" "$@"
 fi
 
 UPDATE_SCRIPT=$(mktemp /tmp/smplos-update.XXXXXX.sh)
@@ -389,9 +396,6 @@ fi
 EOF
 chmod +x "$UPDATE_SCRIPT"
 
-# CLI invocation → run inline in the current terminal; GUI → open a window.
-if [[ $INLINE -eq 1 ]]; then
-    exec bash "$UPDATE_SCRIPT"
-else
-    exec "$TERM_BIN" -e "$UPDATE_SCRIPT"
-fi
+# We are always root on a real terminal here (a CLI invocation, or the window we
+# opened as the user before elevating), so run the update inline.
+exec bash "$UPDATE_SCRIPT"
