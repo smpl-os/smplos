@@ -56,10 +56,9 @@ api() { curl -fsSL -H "Accept: application/vnd.github+json" "$@"; }
 # ── Is this asset ELF? ────────────────────────────────────────────────────────
 is_elf() { head -c4 "$1" 2>/dev/null | grep -q $'\x7fELF'; }
 
-# ── Classify + stage a single downloaded file by its basename ─────────────────
+# ── Classify + stage a single downloaded file under its real asset name ───────
 stage_file() {
-    local f="$1" name
-    name="$(basename "$f")"
+    local f="$1" name="$2"
     case "$name" in
         *.so|*.so.[0-9]*)
             install -Dm755 "$f" "$LIB_STAGE/$name"
@@ -113,7 +112,7 @@ handle_asset() {
         warn "  download failed: $name"; rm -f "$tmp"; return
     fi
     case "$name" in
-        *.so|*.so.[0-9]*) stage_file "$tmp" ;;
+        *.so|*.so.[0-9]*) stage_file "$tmp" "$name" ;;
         *)                stage_bundle "$tmp" ;;
     esac
     rm -f "$tmp"
