@@ -181,6 +181,20 @@ hl.env("GUM_CONFIRM_UNSELECTED_FOREGROUND", "0")  -- black
 hl.env("GUM_CONFIRM_UNSELECTED_BACKGROUND", "8")  -- dark grey
 
 -- ── Hyprtasking overview plugin (niri-style workspace overview) ─────────────
+-- Only configure the plugin when its shared object is actually installed.
+-- Hyprland records `plugin.hyprtasking.*` as *config errors* (not Lua
+-- exceptions) when the plugin isn't loaded, so pcall can't suppress the error
+-- banner — a presence check on the canonical install path is what gates it.
+-- The binary is delivered by the smpl-os org fetcher (src/fetch-org.sh) and
+-- loaded from this path by autostart.
+local function file_exists(path)
+    local f = io.open(path, "r")
+    if f then f:close(); return true end
+    return false
+end
+local hyprtasking_available = file_exists("/usr/local/lib/smplos/libhyprtasking.so")
+
+if hyprtasking_available then
 -- Styling for the workspace overview (Super+Tab). Wrapped in pcall so that if
 -- the plugin is not loaded yet at parse time the rest of the config is safe.
 --   layout=grid, cols=1  -> workspaces stack vertically as rows, each row's
@@ -242,3 +256,4 @@ pcall(function()
     hl.bind("CTRL + mouse_down", ht_col("move +col"), { non_consuming = true })
     hl.bind("CTRL + mouse_up",   ht_col("move -col"), { non_consuming = true })
 end)
+end  -- hyprtasking_available

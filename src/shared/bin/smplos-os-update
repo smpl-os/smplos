@@ -251,40 +251,69 @@ sync_themes() {
     fi
 }
 
-# ── Fetch + install latest smpl-apps binaries ────────────────────────────────
+# ── Fetch + install latest binaries from every smpl-os org repo ──────────────
 sync_apps() {
-    local fetch_script="$SMPLOS_REPO/src/fetch-apps.sh"
-    [[ -f "$fetch_script" ]] || { warn "fetch-apps.sh not found"; return; }
+    local fetch_script="$SMPLOS_REPO/src/fetch-org.sh"
+    [[ -f "$fetch_script" ]] || { warn "fetch-org.sh not found"; return; }
 
     header ""
-    header "── Updating smpl-apps ──"
+    header "── Updating smpl-os apps & plugins ──"
 
     bash "$fetch_script"
 
-    # Install fetched binaries to /usr/local/bin/
-    local bin_dir="$SMPLOS_REPO/.cache/app-binaries"
-    local n_updated=0
-    for bin in start-menu notif-center settings app-center webapp-center \
-               sync-center-gui sync-center-daemon smpl-calendar smpl-calendar-alertd; do
-        local src="$bin_dir/$bin"
-        [[ -x "$src" ]] || continue
-        local dest="/usr/local/bin/$bin"
-        if [[ ! -f "$dest" ]] || ! cmp -s "$src" "$dest"; then
-            if sudo install -m755 "$src" "$dest" 2>/dev/null; then
-                ((n_updated++)) || true
-            else
-                warn "Failed to install $bin"
-            fi
-        fi
-    done
+    local stage="$SMPLOS_REPO/.cache/org-binaries"
+    local n_bin=0 n_lib=0
 
-    if [[ $n_updated -gt 0 ]]; then
-        ok "$n_updated smpl-apps binary/binaries updated"
-        # Rebuild app cache so search keywords reflect the new build
-        rebuild-app-cache 2>/dev/null && ok "App cache rebuilt" || true
-    else
-        ok "smpl-apps already current"
+    # Executables → /usr/local/bin/
+    if [[ -d "$stage/bin" ]]; then
+        local src dest name
+        for src in "$stage"/bin/*; do
+            [[ -f "$src" ]] || continue
+            name="$(basename "$src")"
+            dest="/usr/local/bin/$name"
+            if [[ ! -f "$dest" ]] || ! cmp -s "$src" "$dest"; then
+                if sudo install -m755 "$src" "$dest" 2>/dev/null; then
+                    ((n_bin++)) || true
+                else
+                    warn "Failed to install $name"
+                fi
+            fi
+        done
     fi
+
+    # Shared-object plugins → /usr/local/lib/smplos/
+    if [[ -d "$stage/lib" ]]; then
+        local src dest name
+        for src in "$stage"/lib/*; do
+            [[ -f "$src" ]] || continue
+            name="$(basename "$src")"
+            dest="/usr/local/lib/smplos/$name"
+            if [[ ! -f "$dest" ]] || ! cmp -s "$src" "$dest"; then
+                if sudo install -Dm755 "$src" "$dest" 2>/dev/null; then
+                    ((n_lib++)) || true
+                else
+                    warn "Failed to install $name"
+                fi
+            fi
+        done
+    fi
+
+    if [[ $n_bin -gt 0 ]]; then
+        ok "$n_bin app binary/binaries updated"
+        rebuild-app-cache 2>/dev/null && ok "App cache rebuilt" || true
+    fi
+    if [[ $n_lib -gt 0 ]]; then
+        ok "$n_lib plugin(s) updated"
+        # Load the workspace-overview plugin into a live session if not already.
+        if [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]] \
+            && [[ -f /usr/local/lib/smplos/libhyprtasking.so ]] \
+            && ! hyprctl plugin list 2>/dev/null | grep -qi hyprtasking; then
+            hyprctl plugin load /usr/local/lib/smplos/libhyprtasking.so >/dev/null 2>&1 \
+                && hyprctl reload >/dev/null 2>&1 \
+                && ok "Loaded hyprtasking plugin" || true
+        fi
+    fi
+    [[ $n_bin -eq 0 && $n_lib -eq 0 ]] && ok "smpl-os apps & plugins already current"
 }
 
 # ── Run migrations ────────────────────────────────────────────────────────────
