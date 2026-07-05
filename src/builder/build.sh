@@ -1043,6 +1043,16 @@ build_hyprtasking_plugin() {
         install -Dm755 "$ht_tmp/hyprtasking/build/libhyprtasking.so" \
             "$airootfs/usr/local/lib/smplos/libhyprtasking.so"
         log_info "hyprtasking: built against hyprland $ht_hl_ver → /usr/local/lib/smplos/libhyprtasking.so"
+
+        # Also export the ABI-correct .so to the host-visible release dir so it
+        # can be published as a compositor-plugin release asset (see
+        # src/builder/publish-plugins.sh). This is the SAME binary the ISO ships,
+        # so it is guaranteed to match the pinned hyprland the fleet runs. The
+        # hyprland version is recorded alongside for traceability.
+        install -Dm755 "$ht_tmp/hyprtasking/build/libhyprtasking.so" \
+            "$RELEASE_DIR/plugins/libhyprtasking.so"
+        printf '%s\n' "$ht_hl_ver" > "$RELEASE_DIR/plugins/HYPRLAND_VERSION"
+        log_info "hyprtasking: exported to $RELEASE_DIR/plugins/ for release publishing"
     else
         log_warn "hyprtasking: meson build failed (likely a hyprland $ht_hl_ver API mismatch) — skipping plugin"
     fi

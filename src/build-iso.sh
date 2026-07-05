@@ -109,6 +109,9 @@ Options:
     --clean-apps            Wipe app build cache before compiling (full rebuild)
     --download-apps         Download app binaries from GitHub releases (default)
     --build-apps            Compile app binaries locally via build-apps.sh
+    --publish-plugins       After a successful build, upload the ABI-matched
+                            compositor plugin(s) to their GitHub release so the
+                            fleet installs them on the next update (needs gh auth)
     -h, --help              Show this help
 
 Examples:
@@ -135,6 +138,7 @@ SKIP_FLATPAK=""
 SKIP_APPIMAGE=""
 CLEAN_APPS=""
 DOWNLOAD_APPS="1"   # Default: download pre-built binaries from GitHub releases
+PUBLISH_PLUGINS="" # Opt-in: publish compositor plugin .so to its release after build
 
 parse_args() {
     while [[ $# -gt 0 ]]; do
@@ -155,6 +159,7 @@ parse_args() {
             --clean-apps)       CLEAN_APPS="1"; shift ;;
             --download-apps)    DOWNLOAD_APPS="1"; shift ;;
             --build-apps)       DOWNLOAD_APPS=""; shift ;;
+            --publish-plugins)  PUBLISH_PLUGINS="1"; shift ;;
             -h|--help)          show_help; exit 0 ;;
             *) die "Unknown option: $1 (see --help)" ;;
         esac
@@ -1028,6 +1033,19 @@ main() {
 
     run_build
     print_build_summary
+
+    # Opt-in: ship the ABI-matched compositor plugin(s) the build just exported
+    # to release/plugins/ up to their GitHub release, so already-running
+    # machines install them on the next full 'smplos-update'. Best-effort.
+    if [[ -n "$PUBLISH_PLUGINS" ]]; then
+        if [[ -d "$PROJECT_ROOT/release/plugins" ]]; then
+            log_info "Publishing compositor plugin(s) to their GitHub release..."
+            "$SCRIPT_DIR/builder/publish-plugins.sh" \
+                || log_warn "Plugin publish failed (build still succeeded)"
+        else
+            log_warn "--publish-plugins set but release/plugins/ is empty (plugin build skipped?)"
+        fi
+    fi
 }
 
 main "$@"
