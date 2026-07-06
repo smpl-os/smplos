@@ -10,9 +10,9 @@ set -euo pipefail
 # Hyprland plugins are ABI-locked to the exact hyprland they were built against.
 # build.sh compiles them inside the ISO container against the *pinned* hyprland
 # and exports the resulting *.so to  release/plugins/  (host-visible). This
-# script uploads those exact binaries to a release on the org's dormant
-# `smplscroll` repo — which fetch-org.sh already scans for *.so assets — so no
-# smplOS update code needs to change. The plugin lands in /usr/local/lib/smplos/
+# script uploads those exact binaries to the plugin's own `hyprtasking` repo
+# release — which fetch-org.sh already scans for *.so assets — so no smplOS
+# update code needs to change. The plugin lands in /usr/local/lib/smplos/
 # via the existing critical-bundle → install_compositor_plugins path.
 #
 # AUTH
@@ -30,8 +30,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
-REPO="smpl-os/smplscroll"
-TAG="compositor-plugins"
+REPO="smpl-os/hyprtasking"
+TAG="smplos-build"
 PLUGINS_DIR="$PROJECT_ROOT/release/plugins"
 DRY_RUN=false
 
