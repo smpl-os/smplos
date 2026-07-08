@@ -1,0 +1,165 @@
+#!/bin/bash
+# smplos-check-shadows — Enforce the single-copy invariant for smplOS binaries.
+#
+# The rule: every binary and script we install lives at exactly ONE canonical
+# path — /usr/local/bin/<name>. Any file with the same basename in a shadow
+# dir that appears earlier on $PATH silently overrides the canonical copy the
+# instant PATH resolution runs, and every subsequent invocation of that name
+# (from Eww, keybindings, tray toggles, systemd --user, another script) hits
+# the shadow and drifts from the canonical version.
+#
+# This is the root cause of the entire "I updated but the fix did not take"
+# family of bugs — the update deploys to /usr/local/bin, the shadow at
+# ~/.local/share/smplos/bin still holds the pre-update copy, PATH prefers
+# the shadow, users keep seeing the old code, and nothing indicates why.
+#
+# Enforcement is a single sweep of the three shadow-prone user dirs:
+#   1. $HOME/.local/share/smplos/bin  (envs.conf prepends this to PATH)
+#   2. $HOME/.local/bin               (systemd user profile default)
+#   3. $HOME/bin                      (traditional convention)
+#
+# For every entry found in a shadow dir whose basename also lives at
+# /usr/local/bin/<name>, we EITHER audit (default, exit 1 if any found) OR
+# clean (rm the shadow). Symlinks in shadow dirs are always removed regardless
+# of target — they route PATH away from /usr/local/bin and there is no
+# legitimate reason for them to exist.
+#
+# Modes:
+#   --audit   Report duplicates, exit non-zero if any found (default).
+#   --clean   Remove duplicates, exit 0.
+#   --quiet   Suppress per-file output; only print summary.
+#
+# The invocation contract is intentionally trivial so every install path
+# (deploy-local.sh, smplos-update-apps, smplos-os-update) can end with:
+#     smplos-check-shadows --clean --quiet || true
+
+set -euo pipefail
+
+MODE=audit
+QUIET=0
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --audit) MODE=audit ;;
+        --clean) MODE=clean ;;
+        --quiet) QUIET=1 ;;
+        -h|--help)
+            sed -n '/^# smplos-check-shadows/,/^set -euo/p' "$0" \
+                | sed '$d' | sed 's/^# \?//'
+            exit 0 ;;
+        *) echo "Unknown option: $1" >&2; exit 2 ;;
+    esac
+    shift
+done
+
+# Detect the invoker even under sudo/pkexec so we scan the right $HOME.
+if [[ $EUID -eq 0 && -z "${SMPLOS_INVOKER_HOME:-}" ]]; then
+    _uid="${PKEXEC_UID:-${SUDO_UID:-}}"
+    if [[ -n "${_uid:-}" && "$_uid" != "0" ]]; then
+        SMPLOS_INVOKER_HOME="$(getent passwd "$_uid" | cut -d: -f6)"
+    fi
+    unset _uid
+fi
+SCAN_HOME="${SMPLOS_INVOKER_HOME:-$HOME}"
+
+SHADOW_DIRS=(
+    "$SCAN_HOME/.local/share/smplos/bin"
+    "$SCAN_HOME/.local/bin"
+    "$SCAN_HOME/bin"
+)
+CANONICAL_DIR=/usr/local/bin
+
+log()  { [[ $QUIET -eq 0 ]] && echo "$@" || true; }
+warn() { echo "  ⚠ $*" >&2; }
+
+n_dup=0        # shadows that match a canonical binary
+n_link=0       # shadows that are symlinks (always bad)
+n_removed=0    # removals that succeeded (clean mode)
+n_external=0  # /usr/bin/<name> vs /usr/local/bin/<name> (informational)
+
+shopt -s nullglob dotglob
+
+for dir in "${SHADOW_DIRS[@]}"; do
+    [[ -d "$dir" ]] || continue
+    for entry in "$dir"/*; do
+        # Subdirectories are not shadows — only top-level executables count.
+        [[ -d "$entry" && ! -L "$entry" ]] && continue
+
+        name=$(basename "$entry")
+        canonical="$CANONICAL_DIR/$name"
+
+        if [[ -L "$entry" ]]; then
+            # A symlink in a shadow dir is only a "shadow" when it duplicates
+            # or routes around a canonical binary at /usr/local/bin/<name>. A
+            # symlink whose basename does NOT exist under /usr/local/bin is a
+            # legitimate user-installed tool (uv installing aider, pipx tools,
+            # codefoundry-server, etc.) and must NEVER be removed by us. This
+            # is the invariant that prevents a shadow-scrub pass from
+            # nuking third-party user PATH entries.
+            target=$(readlink -f "$entry" 2>/dev/null || echo "?")
+            if [[ ! -f "$canonical" ]]; then
+                # No canonical → not our business.
+                continue
+            fi
+            n_link=$((n_link + 1))
+            if [[ "$MODE" == "clean" ]]; then
+                if rm -f "$entry" 2>/dev/null; then
+                    log "  removed symlink shadow: $entry -> $target"
+                    n_removed=$((n_removed + 1))
+                fi
+            else
+                log "  SHADOW SYMLINK: $entry -> $target"
+            fi
+            continue
+        fi
+
+        # Regular file. Only a duplicate if canonical exists.
+        if [[ -f "$canonical" ]]; then
+            n_dup=$((n_dup + 1))
+            if [[ "$MODE" == "clean" ]]; then
+                if rm -f "$entry" 2>/dev/null; then
+                    if cmp -s "$entry" "$canonical" 2>/dev/null; then
+                        log "  removed duplicate: $entry (matched $canonical)"
+                    else
+                        warn "  removed STALE shadow: $entry (differed from $canonical)"
+                    fi
+                    n_removed=$((n_removed + 1))
+                fi
+            else
+                if cmp -s "$entry" "$canonical" 2>/dev/null; then
+                    log "  SHADOW (duplicate): $entry"
+                else
+                    warn "  SHADOW (STALE, differs from canonical): $entry"
+                fi
+            fi
+        fi
+        # No canonical for this basename → probably a legit user-scoped tool.
+        # We do not touch it.
+    done
+done
+
+shopt -u nullglob dotglob
+
+# Informational: same-name binaries between /usr/bin and /usr/local/bin. These
+# aren't shadows under our control (system package vs our fork), but they
+# create the same "which one runs?" ambiguity for anyone reading tickets.
+# We report but never touch them.
+if [[ -d /usr/bin && -d /usr/local/bin ]]; then
+    for f in /usr/local/bin/*; do
+        [[ -f "$f" ]] || continue
+        b=$(basename "$f")
+        if [[ -f "/usr/bin/$b" ]]; then
+            n_external=$((n_external + 1))
+            log "  SYSTEM DUPLICATE (informational): /usr/bin/$b vs /usr/local/bin/$b"
+        fi
+    done
+fi
+
+total=$((n_dup + n_link))
+if [[ "$MODE" == "clean" ]]; then
+    log "── smplos-check-shadows: cleaned $n_removed of $total shadow entries ──"
+    exit 0
+else
+    log "── smplos-check-shadows: $total shadow entries found ($n_dup dup, $n_link symlink) ──"
+    [[ $n_external -gt 0 ]] && log "── ($n_external external /usr/bin duplicates — informational) ──"
+    exit $((total > 0 ? 1 : 0))
+fi

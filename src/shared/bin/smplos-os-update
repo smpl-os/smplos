@@ -602,82 +602,25 @@ sync_hypr_configs() {
 }
 
 # ── Cleanup shadow binaries on PATH ───────────────────────────────────────────
-# Blanket sweep of the three legacy user-writable PATH dirs that show up ahead
-# of /usr/local/bin in envs.conf. For every entry we find, if the same basename
-# exists in /usr/local/bin, the shadow is unconditionally removed — the entire
-# reason we're here is that "shadow wins on PATH" turned every partial install
-# into a permanent stale-binary trap (Eww's smpl-calendar pinned at v0.7.4
-# while /usr/local/bin/smpl-calendar was v0.8.11 is the canonical example).
-#
-# Policy:
-#   * symlink under a shadow dir       -> delete (it's routing PATH to somewhere
-#                                          we don't control; noisy report)
-#   * regular file, canonical exists   -> delete (canonical is authoritative
-#                                          regardless of whether content matches)
-#   * regular file, no canonical       -> keep (it's a user script we didn't
-#                                          put there and don't manage)
-#
-# This runs on every update, unconditionally — a few hundred stat calls per
-# run is a rounding error compared to the pacman transaction, and doing it
-# every time is what makes the invariant self-healing.
+# Delegates to the standalone smplos-check-shadows script so exactly one
+# enforcement implementation lives in the tree — deploy-local.sh, this
+# update pass, and any future install path all invoke the same audit +
+# clean logic.
 cleanup_shadow_bins() {
     header ""
     header "── Scrubbing shadow \$PATH binaries ──"
 
-    local shadow_dirs=(
-        "$HOME/.local/share/smplos/bin"
-        "$HOME/.local/bin"
-        "$HOME/bin"
-    )
-
-    local n_removed=0 n_kept=0
-    local dir entry name canonical target
-    for dir in "${shadow_dirs[@]}"; do
-        [[ -d "$dir" ]] || continue
-        # Include hidden files defensively, but there shouldn't be any.
-        shopt -s nullglob dotglob
-        for entry in "$dir"/*; do
-            # Skip subdirectories — we only manage executables at the top level.
-            [[ -d "$entry" && ! -L "$entry" ]] && continue
-
-            name=$(basename "$entry")
-            canonical="/usr/local/bin/$name"
-
-            if [[ -L "$entry" ]]; then
-                target=$(readlink -f "$entry" 2>/dev/null || echo "?")
-                if rm -f "$entry" 2>/dev/null; then
-                    warn "  removed symlink shadow: $entry -> $target"
-                    ((n_removed++)) || true
-                fi
-                continue
-            fi
-
-            if [[ -f "$canonical" ]]; then
-                # Canonical exists — shadow is by definition unwanted.
-                if cmp -s "$entry" "$canonical" 2>/dev/null; then
-                    if rm -f "$entry" 2>/dev/null; then
-                        log "  removed duplicate: $entry (matches canonical)"
-                        ((n_removed++)) || true
-                    fi
-                else
-                    if rm -f "$entry" 2>/dev/null; then
-                        warn "  removed STALE shadow: $entry (was overriding $canonical on \$PATH)"
-                        ((n_removed++)) || true
-                    fi
-                fi
-            else
-                # No canonical /usr/local/bin/<name> — this is a user script
-                # or something we didn't install. Leave it alone.
-                ((n_kept++)) || true
-            fi
-        done
-        shopt -u nullglob dotglob
-    done
-
-    if [[ $n_removed -gt 0 ]]; then
-        ok "Removed $n_removed shadow entrie(s); left $n_kept unmanaged entry(ies) alone"
+    if command -v smplos-check-shadows &>/dev/null; then
+        # --clean removes duplicates; the subsequent --audit exits non-zero
+        # if anything slipped past cleanup (permission denied, race, etc.)
+        # so we surface it as a warning rather than silently pretending
+        # everything is fine.
+        smplos-check-shadows --clean
+        if ! smplos-check-shadows --audit --quiet; then
+            warn "Shadow duplicates persist after clean — check manually with smplos-check-shadows"
+        fi
     else
-        ok "No shadow binaries found (kept $n_kept unmanaged entry(ies))"
+        warn "smplos-check-shadows not installed; skipping shadow enforcement"
     fi
 }
 
@@ -780,6 +723,17 @@ if pull_updates; then
     had_updates=1
 fi
 
+# Snapshot the canonical smplos-os-update BEFORE sync_scripts overwrites it.
+# We compare hashes after the sync to decide whether to re-exec into the
+# fresh copy. The previous cmp-based check compared SELF_PATH to
+# SELF_CANONICAL directly, which is broken when the script is invoked as
+# /usr/local/bin/smplos-os-update — both paths point at the same file, so
+# `cmp` always returned equal and the re-exec NEVER fired for the common
+# case. Hash-before-vs-after is the only way to detect an in-place replace.
+_pre_sync_hash=""
+[[ -f "$SELF_CANONICAL" ]] && \
+    _pre_sync_hash=$(sha256sum "$SELF_CANONICAL" 2>/dev/null | cut -d' ' -f1)
+
 if [[ $SCRIPTS_ONLY -eq 0 ]]; then
     sync_scripts
 
@@ -787,11 +741,20 @@ if [[ $SCRIPTS_ONLY -eq 0 ]]; then
     # If we were launched from the old /usr/local/bin/smplos-os-update and
     # sync_scripts just installed a newer copy on top, keep running the OLD
     # in-memory logic would defeat the point — every subsequent sync_apps,
-    # sync_hypr_configs, restart_updated_apps improvement would only take
-    # effect on the NEXT invocation. Detect the version drift, then re-exec
-    # into the fresh copy with a sentinel env var so we don't loop.
+    # sync_hypr_configs, cleanup_shadow_bins improvement would only take
+    # effect on the NEXT invocation, and this is exactly how buggy older
+    # code (e.g. a cleanup pass that used to nuke user symlinks
+    # unconditionally) kept running against a supposedly-updated system.
+    # We use a hash-before/after check because when SELF_PATH ==
+    # SELF_CANONICAL (script invoked via the canonical path), cmp on the
+    # same path is always trivially equal.
+    _post_sync_hash=""
+    [[ -f "$SELF_CANONICAL" ]] && \
+        _post_sync_hash=$(sha256sum "$SELF_CANONICAL" 2>/dev/null | cut -d' ' -f1)
+
     if [[ "$SELF_UPDATED" != "1" ]] && [[ -x "$SELF_CANONICAL" ]] \
-        && ! cmp -s "$SELF_PATH" "$SELF_CANONICAL" 2>/dev/null; then
+        && [[ -n "$_pre_sync_hash" && -n "$_post_sync_hash" ]] \
+        && [[ "$_pre_sync_hash" != "$_post_sync_hash" ]]; then
         header ""
         warn "smplos-os-update itself was refreshed — re-executing to pick up new logic"
         # Preserve --quiet/--scripts intent so behavior is identical to the
