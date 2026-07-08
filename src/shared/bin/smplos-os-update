@@ -19,8 +19,21 @@ SMPLOS_PATH="${SMPLOS_PATH:-$HOME/.local/share/smplos}"
 SMPLOS_REPO="$SMPLOS_PATH/repo"
 SMPLOS_REPO_URL="https://github.com/smpl-os/smplos.git"
 
+# Resolve our own path so we can re-exec into the freshly-installed copy after
+# sync_scripts, breaking the bootstrap chicken-and-egg where a run started
+# from the OLD /usr/local/bin/smplos-os-update would keep executing the old
+# in-memory code even after installing its own replacement. Without this,
+# users always needed to run smplos-os-update TWICE to actually benefit from
+# any fix to smplos-os-update itself — a chronic source of "the fix does not
+# take" reports.
+SELF_PATH="$(readlink -f "$0" 2>/dev/null || echo "$0")"
+SELF_CANONICAL="/usr/local/bin/smplos-os-update"
+
 # ── Argument parsing ──────────────────────────────────────────────────────────
 CHECK_ONLY=0; QUIET=0; SCRIPTS_ONLY=0; MIGRATE_ONLY=0
+# Internal flag: set by self-reexec to prevent infinite loops if the newly
+# installed script somehow still detects itself as outdated.
+SELF_UPDATED="${SMPLOS_OS_UPDATE_RESUMED:-0}"
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --check)     CHECK_ONLY=1 ;;
@@ -359,24 +372,33 @@ sync_apps() {
             # ── Single-copy invariant ────────────────────────────────────
             # Guarantee ONE canonical binary on the system: /usr/local/bin/$name.
             # Any file at a PATH location that comes BEFORE /usr/local/bin on
-            # the default shell PATH will silently override it — Eww, tray
+            # the effective shell PATH will silently override it — Eww, tray
             # buttons, keybindings, and toggle-scripts using bare `$name` all
             # then launch the OLD binary and the "I updated but nothing changed"
-            # trap fires again. This is exactly what bit us with
-            # ~/.local/bin/smpl-calendar shadowing /usr/local/bin/smpl-calendar.
+            # trap fires again.
+            #
+            # We MUST also scrub ~/.local/share/smplos/bin/, even though that
+            # dir is normally meant to hold sync_scripts output (bash scripts).
+            # Eww inherits its PATH from smplos-start-session, which prepends
+            # ~/.local/share/smplos/bin, so any binary that landed there via a
+            # historical `deploy-local.sh` cp (or manual copy) silently takes
+            # priority over every sync_apps install to /usr/local/bin. This is
+            # exactly how ~/.local/share/smplos/bin/smpl-calendar ended up
+            # stuck at v0.7.4 while /usr/local/bin was at v0.8.11 — Eww
+            # launched the March binary and users saw "the fix did not take".
             #
             # Policy: if a shadow exists and differs, delete it. If it exists
-            # and is identical, leave it alone (it's harmless). This is
-            # non-destructive for developers: `deploy-local.sh` should install
-            # to /usr/local/bin (which needs sudo but is unambiguous) rather
-            # than dropping into ~/.local/bin.
+            # and is identical, leave it alone. Non-destructive for devs:
+            # deploy-local.sh should install to /usr/local/bin (via sudo)
+            # rather than dropping into user-writable PATH dirs.
             local shadow
-            for shadow in "$HOME/.local/bin/$name" "$HOME/bin/$name"; do
+            for shadow in \
+                "$HOME/.local/share/smplos/bin/$name" \
+                "$HOME/.local/bin/$name" \
+                "$HOME/bin/$name"
+            do
                 [[ -e "$shadow" || -L "$shadow" ]] || continue
                 if [[ -L "$shadow" ]]; then
-                    # A symlink — resolve. If it already points at our
-                    # canonical dest, leave it. Otherwise it's a stale link
-                    # to some other binary; remove.
                     local target
                     target=$(readlink -f "$shadow" 2>/dev/null || echo "")
                     if [[ "$target" == "$dest" ]]; then
@@ -385,8 +407,6 @@ sync_apps() {
                     rm -f "$shadow" 2>/dev/null && \
                         warn "  removed stale symlink shadow: $shadow -> $target"
                 elif cmp -s "$shadow" "$dest" 2>/dev/null; then
-                    # Byte-identical — no shadow problem in practice, but
-                    # collapse to the canonical to prevent future divergence.
                     continue
                 else
                     rm -f "$shadow" 2>/dev/null && \
@@ -631,6 +651,27 @@ fi
 
 if [[ $SCRIPTS_ONLY -eq 0 ]]; then
     sync_scripts
+
+    # ── Self-reexec if this script just got updated ──────────────────────
+    # If we were launched from the old /usr/local/bin/smplos-os-update and
+    # sync_scripts just installed a newer copy on top, keep running the OLD
+    # in-memory logic would defeat the point — every subsequent sync_apps,
+    # sync_hypr_configs, restart_updated_apps improvement would only take
+    # effect on the NEXT invocation. Detect the version drift, then re-exec
+    # into the fresh copy with a sentinel env var so we don't loop.
+    if [[ "$SELF_UPDATED" != "1" ]] && [[ -x "$SELF_CANONICAL" ]] \
+        && ! cmp -s "$SELF_PATH" "$SELF_CANONICAL" 2>/dev/null; then
+        header ""
+        warn "smplos-os-update itself was refreshed — re-executing to pick up new logic"
+        # Preserve --quiet/--scripts intent so behavior is identical to the
+        # original invocation. --scripts already returned above so we only
+        # forward --quiet here.
+        reexec_args=()
+        [[ $QUIET -eq 1 ]] && reexec_args+=(--quiet)
+        export SMPLOS_OS_UPDATE_RESUMED=1
+        exec "$SELF_CANONICAL" "${local_args[@]}"
+    fi
+
     sync_configs
     sync_themes
     sync_apps
