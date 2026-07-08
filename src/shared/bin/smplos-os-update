@@ -53,53 +53,123 @@ ensure_repo() {
 }
 
 # ── Git pull ──────────────────────────────────────────────────────────────────
+# Bulletproof repo sync. The old implementation silently swallowed errors with
+# `2>/dev/null` on every git command; we saw repos drift 25 commits behind
+# origin because a single failed rebase (dirty tree, detached HEAD, wrong
+# branch, network blip) would go completely unnoticed. Every subsequent
+# update would then report "Already up to date" against a stale local HEAD.
+#
+# Invariants this function guarantees on success:
+#   1. Working tree exists and is a git repo pointing at the smplos remote.
+#   2. HEAD is on branch `main` (never detached; auto-recovers if it was).
+#   3. Local main is exactly equal to origin/main after the call.
+#   4. All error output from git is surfaced to the log — no silent failures.
+#
+# Any deviation from those invariants that cannot be recovered from is a
+# hard `die` — we refuse to silently deploy from a stale checkout.
 pull_updates() {
     header "── smplOS System Files ──"
 
     ensure_repo
 
-    local before after
-    before=$(git -C "$SMPLOS_REPO" rev-parse HEAD 2>/dev/null || echo "unknown")
+    local repo="$SMPLOS_REPO"
+    local before after remote_head branch
 
-    log "Checking for updates..."
-    if ! git -C "$SMPLOS_REPO" pull --autostash --rebase 2>/dev/null; then
-        warn "Git pull failed, attempting reset..."
-        git -C "$SMPLOS_REPO" reset --hard origin/main 2>/dev/null \
-            || git -C "$SMPLOS_REPO" reset --hard origin/master 2>/dev/null \
-            || die "Git pull and reset both failed"
+    before=$(git -C "$repo" rev-parse HEAD 2>/dev/null || echo "unknown")
+
+    # 1) Refuse to run against a repo that isn't ours. Prevents a misconfigured
+    #    SMPLOS_REPO from pulling arbitrary upstream code onto the system.
+    local remote_url
+    remote_url=$(git -C "$repo" remote get-url origin 2>/dev/null || echo "")
+    if [[ "$remote_url" != *"smpl-os/smplos"* ]]; then
+        die "SMPLOS_REPO ($repo) origin is '$remote_url', expected smpl-os/smplos"
     fi
 
-    after=$(git -C "$SMPLOS_REPO" rev-parse HEAD 2>/dev/null || echo "unknown")
-
-    if [[ "$before" == "$after" ]]; then
-        ok "Already up to date"
-        return 1  # no updates
+    # 2) Move HEAD to `main` if it drifted (detached HEAD from a manual
+    #    checkout, dev experimenting on a feature branch, prior interrupted
+    #    rebase leaving REBASE_HEAD around, etc.). Without this, `git pull`
+    #    silently does nothing useful on a detached HEAD and we'd never catch
+    #    up. Any in-flight rebase is aborted before we try.
+    if [[ -d "$repo/.git/rebase-merge" || -d "$repo/.git/rebase-apply" ]]; then
+        warn "Aborting stale rebase state in $repo"
+        git -C "$repo" rebase --abort 2>&1 | while read -r l; do log "  $l"; done || true
+    fi
+    branch=$(git -C "$repo" symbolic-ref --short HEAD 2>/dev/null || echo "")
+    if [[ "$branch" != "main" ]]; then
+        warn "Repo was on '$branch' (or detached), checking out main"
+        git -C "$repo" checkout -B main 2>&1 | while read -r l; do log "  $l"; done \
+            || die "Cannot switch $repo to branch main"
     fi
 
-    # Show what changed
+    # 3) Fetch. Any network/auth error here MUST surface — this is the single
+    #    most common silent-failure point that leaves us stuck on a stale HEAD.
+    log "Fetching origin/main..."
+    if ! git -C "$repo" fetch --prune origin main 2>&1 | while read -r l; do log "  $l"; done; then
+        die "git fetch failed for $repo (network? auth? disk?)"
+    fi
+
+    remote_head=$(git -C "$repo" rev-parse origin/main 2>/dev/null || echo "")
+    [[ -n "$remote_head" ]] || die "origin/main missing in $repo after fetch"
+
+    # 4) Already at tip? Great, done.
+    if [[ "$before" == "$remote_head" ]]; then
+        ok "Already up to date ($(git -C "$repo" describe --tags --always 2>/dev/null || echo "$before"))"
+        return 1
+    fi
+
+    # 5) Try ff-only first — this is the safest path when local main hasn't
+    #    diverged. If we can fast-forward, do so; no rebase, no merge, no
+    #    surprises. Local changes to tracked files are auto-stashed and
+    #    popped so a dev poking at looknfeel.lua doesn't block the update.
+    log "Local: $(git -C "$repo" rev-parse --short HEAD)  Remote: $(git -C "$repo" rev-parse --short origin/main)"
+    if ! git -C "$repo" pull --ff-only --autostash 2>&1 | while read -r l; do log "  $l"; done; then
+        # 6) FF failed → local main has diverged. Rather than silently
+        #    creating a merge or dropping user commits, we hard-reset to
+        #    origin/main. This mirrors the old behavior's intent but with
+        #    LOUD logging so the drift is visible in support tickets.
+        warn "Fast-forward failed; local main has diverged from origin/main."
+        warn "Hard-resetting to origin/main (any local commits on $repo main will be discarded)."
+        git -C "$repo" reset --hard "origin/main" 2>&1 | while read -r l; do log "  $l"; done \
+            || die "Hard-reset to origin/main failed — repo is in an inconsistent state"
+    fi
+
+    after=$(git -C "$repo" rev-parse HEAD 2>/dev/null || echo "unknown")
+
+    # 7) Final invariant check: HEAD MUST equal origin/main. If not, refuse
+    #    to continue — deploying from a still-stale checkout is exactly the
+    #    "update did nothing" bug we're trying to eliminate.
+    if [[ "$after" != "$remote_head" ]]; then
+        die "Post-pull HEAD ($after) != origin/main ($remote_head) — refusing to deploy stale checkout"
+    fi
+
     local n_changes
-    n_changes=$(git -C "$SMPLOS_REPO" diff --stat "$before" "$after" 2>/dev/null \
-        | tail -1 || echo "")
+    n_changes=$(git -C "$repo" diff --stat "$before" "$after" 2>/dev/null | tail -1 || echo "")
     [[ -n "$n_changes" ]] && log "$n_changes"
-    return 0  # had updates
+    ok "Advanced $before → $after"
+    return 0
 }
 
 # ── Check only ────────────────────────────────────────────────────────────────
 check_updates() {
     ensure_repo
 
-    git -C "$SMPLOS_REPO" fetch --quiet 2>/dev/null || { warn "Cannot reach GitHub"; exit 1; }
+    # Same discipline as pull_updates: don't swallow errors, and ensure we
+    # compare against the actual current origin/main rather than a stale
+    # remote-tracking ref that hasn't been fetched since last week.
+    if ! git -C "$SMPLOS_REPO" fetch --prune origin main 2>&1 | while read -r l; do log "  $l"; done; then
+        warn "Cannot reach GitHub"; exit 1
+    fi
 
     local local_head remote_head
     local_head=$(git -C "$SMPLOS_REPO" rev-parse HEAD)
-    remote_head=$(git -C "$SMPLOS_REPO" rev-parse @{u} 2>/dev/null || echo "")
+    remote_head=$(git -C "$SMPLOS_REPO" rev-parse origin/main 2>/dev/null || echo "")
 
     if [[ -z "$remote_head" || "$local_head" == "$remote_head" ]]; then
         echo "  smplOS is up to date"
         exit 1
     else
         local behind
-        behind=$(git -C "$SMPLOS_REPO" rev-list --count HEAD..@{u} 2>/dev/null || echo "?")
+        behind=$(git -C "$SMPLOS_REPO" rev-list --count "HEAD..origin/main" 2>/dev/null || echo "?")
         echo "  smplOS update available ($behind new commits)"
         exit 0
     fi
