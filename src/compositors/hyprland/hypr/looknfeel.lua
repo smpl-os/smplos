@@ -103,18 +103,22 @@ hl.config({
     },
 
     -- Scrolling (niri/PaperWM-style) layout tuning.
-    -- Goal: never resize a window when another opens. Every column is a fixed
-    -- 95% of the screen, so an app like Blender keeps its exact aspect ratio for
-    -- its whole lifetime. Opening a second window slides it in flush to the
-    -- right edge, leaving a thin sliver of the previous window on the left.
+    -- Invariant: opening a new window MUST NOT resize any window already on
+    -- screen. Windows carry their aspect ratio for their whole lifetime.
+    -- fullscreen_on_one_column is therefore OFF — a lone window opens at
+    -- column_width and stays at that width when a companion slides in from
+    -- the right. column_width here is the compile-time fallback; the runtime
+    -- value is set per monitor by aspect_column.lua (0.5 on ultrawides so
+    -- two windows split roughly in half, 0.95 on normal/portrait so the
+    -- newest window flushes right with a thin sliver of the neighbor showing).
     scrolling = {
-        -- ON: a lone window fills the whole work area (no dead space on the
-        -- sides). When a second window opens, the first snaps to column_width
-        -- (a small 5% adjustment at 0.95) so the newcomer can slide in.
-        fullscreen_on_one_column = true,
-        -- Fixed width for every column once there is more than one. 0.95 = 95%
-        -- of the work area, so the remaining 5% shows the neighbouring window's
-        -- sliver as the tape scrolls.
+        -- OFF: no window is ever resized to accommodate another. A lone
+        -- window shows column_width worth of screen and leaves the rest as
+        -- background — accepted trade-off in exchange for the never-resize
+        -- guarantee.
+        fullscreen_on_one_column = false,
+        -- Fallback column width. aspect_column.lua overrides this live once
+        -- Hyprland is up and whenever monitor focus changes.
         column_width             = 0.95,
         -- 1 = fit the focused column flush into view (touches an edge) rather
         -- than centering it, so the newest window sits against the right edge.

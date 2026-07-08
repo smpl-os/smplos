@@ -24,6 +24,9 @@ require("envs")
 require("input")
 require("looknfeel")
 require("windows")
+-- Scrolling column_width is a global; this hook rewrites it live per focused
+-- monitor so ultrawides get a 50/50 split while 16:9/portrait keep the sliver.
+require("aspect_column")
 
 -- ── Keybindings ────────────────────────────────────────────────────────────
 -- bindings.conf is the cross-compositor source of truth; the loader translates
