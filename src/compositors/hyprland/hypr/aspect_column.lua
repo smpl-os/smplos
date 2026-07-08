@@ -8,7 +8,7 @@
 -- scrolling:column_width live so the geometry is aspect-appropriate:
 --
 --     aspect >= 2.8   (super-ultrawide, 32:9)   → 0.50   true 50/50 split
---     aspect >= 2.0   (ultrawide, 21:9)         → 0.55   dominant + companion
+--     aspect >= 2.0   (ultrawide, 21:9)         → 0.65   big single + peek
 --     otherwise       (16:9, portrait, square)  → 0.95   sliver hint (default)
 --
 -- Existing columns keep whatever width they were opened at (scrolling stores a
@@ -35,7 +35,7 @@ end
 
 local function width_for_aspect(aspect)
     if aspect >= 2.8 then return 0.50 end
-    if aspect >= 2.0 then return 0.55 end
+    if aspect >= 2.0 then return 0.65 end
     return 0.95
 end
 
