@@ -263,6 +263,12 @@ sync_apps() {
 
     local stage="$SMPLOS_REPO/.cache/org-binaries"
     local n_bin=0
+    # Names of binaries we just updated. Reused in post_deploy to restart any
+    # running instances so users don't keep seeing the OLD binary that was
+    # already resident in memory when the update ran. Without this, every
+    # update would leave the user "not seeing the fix" until the next reboot
+    # or manual pkill — a chronic support issue.
+    UPDATED_APP_BINS=()
 
     # Executables → /usr/local/bin/
     if [[ -d "$stage/bin" ]]; then
@@ -274,6 +280,7 @@ sync_apps() {
             if [[ ! -f "$dest" ]] || ! cmp -s "$src" "$dest"; then
                 if sudo install -m755 "$src" "$dest" 2>/dev/null; then
                     ((n_bin++)) || true
+                    UPDATED_APP_BINS+=("$name")
                 else
                     warn "Failed to install $name"
                 fi
@@ -291,6 +298,9 @@ sync_apps() {
 
     if [[ $n_bin -gt 0 ]]; then
         ok "$n_bin app binary/binaries updated"
+        # Signal post_deploy so it runs restart_updated_apps even when git
+        # pull was a no-op (org repos update independently from smplos).
+        APPS_CHANGED=1
         rebuild-app-cache 2>/dev/null && ok "App cache rebuilt" || true
     else
         ok "smpl-os apps already current"
@@ -413,6 +423,63 @@ sync_hypr_configs() {
 }
 
 # ── Post-deploy hooks ─────────────────────────────────────────────────────────
+
+# Kill any running instance of a smpl-os app whose binary we just replaced,
+# so the user's NEXT interaction (tray click, keybinding) respawns from the
+# fresh binary. Without this, popup apps that were already running when the
+# update installed a new binary keep serving stale UI/logic from the resident
+# copy in memory — the "I updated but the fix didn't take" trap that's bitten
+# us on every release. SIGTERM is safe: these are ephemeral popups; if the
+# binary was launched from a stale shadow path (e.g. ~/.local/bin) we surface
+# that too so the user knows why the update wouldn't stick.
+restart_updated_apps() {
+    [[ ${#UPDATED_APP_BINS[@]} -eq 0 ]] && return 0
+
+    local name canonical shadow shadow_paths=("$HOME/.local/bin" "$HOME/bin")
+    local killed=0 shadowed=()
+
+    for name in "${UPDATED_APP_BINS[@]}"; do
+        canonical="/usr/local/bin/$name"
+
+        # Warn about shadow copies BEFORE killing — restarting a shadowed app
+        # would just relaunch the stale binary and the user would still not
+        # see the fix. This is the dev-machine "deploy-local.sh installed to
+        # ~/.local/bin and now $PATH prefers it forever" trap.
+        for sp in "${shadow_paths[@]}"; do
+            shadow="$sp/$name"
+            if [[ -f "$shadow" ]] && ! cmp -s "$canonical" "$shadow" 2>/dev/null; then
+                shadowed+=("$shadow")
+            fi
+        done
+
+        # Match the exact resolved binary path, not just process name — a
+        # random script called "smpl-calendar" shouldn't get killed. -f/-a
+        # matches the full command line; we scope it to /usr/local/bin/NAME
+        # and any known shadow paths so we catch every instance of the app
+        # that we actually shipped.
+        local pids
+        pids=$(pgrep -f "(/usr/local/bin/${name}|/\.local/bin/${name}|/home/[^ /]+/bin/${name})( |$)" 2>/dev/null || true)
+        if [[ -n "$pids" ]]; then
+            # shellcheck disable=SC2086
+            kill -TERM $pids 2>/dev/null || true
+            ((killed++)) || true
+            log "  restarted: $name (pid $(echo "$pids" | tr '\n' ' '))"
+        fi
+    done
+
+    if [[ $killed -gt 0 ]]; then
+        ok "$killed running app(s) sent SIGTERM — next launch uses the new binary"
+    fi
+
+    if [[ ${#shadowed[@]} -gt 0 ]]; then
+        warn "Shadow binaries detected (these override /usr/local/bin on \$PATH):"
+        for shadow in "${shadowed[@]}"; do
+            warn "  $shadow  <- will keep serving OLD code until you delete or refresh it"
+        done
+        warn "  Fix: rm the shadow copies, or run deploy-local.sh to rebuild them from source."
+    fi
+}
+
 post_deploy() {
     sync_version
 
@@ -420,6 +487,11 @@ post_deploy() {
     current_theme=$(theme-current 2>/dev/null || echo "catppuccin")
     log "Reapplying theme ($current_theme)..."
     theme-set "$current_theme" 2>/dev/null || warn "theme-set failed"
+
+    # Restart updated app binaries BEFORE reloading Hyprland — if any restarted
+    # app also had a windowrule change, the reload below picks that up too and
+    # the app's next spawn gets the fresh rules from the start.
+    restart_updated_apps
 
     if hyprctl version &>/dev/null 2>&1; then
         log "Reloading Hyprland config..."
@@ -440,6 +512,11 @@ fi
 
 had_updates=0
 HYPR_CONFIGS_CHANGED=0
+APPS_CHANGED=0
+# Populated by sync_apps with the basename of every binary it just replaced,
+# consumed by restart_updated_apps in post_deploy. Declared here so nounset
+# doesn't trip when sync_apps is skipped (e.g. --scripts) or is a no-op.
+UPDATED_APP_BINS=()
 if pull_updates; then
     had_updates=1
 fi
@@ -458,7 +535,9 @@ if [[ $SCRIPTS_ONLY -eq 0 ]]; then
     # previous run interrupted before reload). Without this, users would need
     # to manually `hyprctl reload` after certain updates — and we've promised
     # them the process is self-contained.
-    if [[ $had_updates -eq 1 || $HYPR_CONFIGS_CHANGED -eq 1 ]]; then
+    # Also runs on APPS_CHANGED so restart_updated_apps fires even when only
+    # an org-repo binary changed (no smplos commits, no config diff).
+    if [[ $had_updates -eq 1 || $HYPR_CONFIGS_CHANGED -eq 1 || $APPS_CHANGED -eq 1 ]]; then
         header ""
         header "── Post-deploy ──"
         post_deploy
