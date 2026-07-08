@@ -79,6 +79,35 @@ if [[ $EUID -ne 0 ]]; then
     exec pkexec bash "$SELF" "$@"
 fi
 
+# ── Restore invoker context after pkexec ─────────────────────────────────────
+# pkexec strips the environment, so once we re-enter as root, $HOME is /root
+# and $USER is root. But every smplOS path — SMPLOS_PATH, the git repo,
+# migration markers, update log dir, hypr configs — is anchored on the
+# INVOKING user's $HOME. Without this block, the entire update silently
+# no-ops against /root/.local/share/smplos/repo (which does not exist), and
+# nothing ever lands on disk. This bug ("I press Update OS but nothing
+# happens") was invisible because git errors were being swallowed downstream.
+#
+# We derive the invoker from PKEXEC_UID (set by pkexec) or SUDO_UID (set by
+# sudo), resolve /etc/passwd, then rewrite HOME/USER/LOGNAME. Also expose
+# SMPLOS_INVOKER_* so nested scripts (smplos-os-update, smplos-migrate) can
+# runuser back to the invoker for user-owned file operations.
+if [[ $EUID -eq 0 ]]; then
+    _invoker_uid="${PKEXEC_UID:-${SUDO_UID:-}}"
+    if [[ -n "${_invoker_uid:-}" && "$_invoker_uid" != "0" ]]; then
+        _invoker_ent="$(getent passwd "$_invoker_uid" 2>/dev/null || true)"
+        if [[ -n "$_invoker_ent" ]]; then
+            export SMPLOS_INVOKER_UID="$_invoker_uid"
+            export SMPLOS_INVOKER_USER="$(cut -d: -f1 <<<"$_invoker_ent")"
+            export SMPLOS_INVOKER_HOME="$(cut -d: -f6 <<<"$_invoker_ent")"
+            export HOME="$SMPLOS_INVOKER_HOME"
+            export USER="$SMPLOS_INVOKER_USER"
+            export LOGNAME="$SMPLOS_INVOKER_USER"
+        fi
+    fi
+    unset _invoker_uid _invoker_ent
+fi
+
 UPDATE_SCRIPT=$(mktemp /tmp/smplos-update.XXXXXX.sh)
 
 # Write mode into the script (unquoted heredoc for variable substitution)

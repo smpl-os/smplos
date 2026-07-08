@@ -15,9 +15,48 @@
 
 set -euo pipefail
 
+# ── Restore invoker context if running under pkexec/sudo ─────────────────────
+# Under pkexec, $HOME is /root and every $HOME-relative path (SMPLOS_PATH,
+# migration markers, ~/.config/hypr, ~/.local/share/smplos/repo) points at
+# an empty dir — the git pull silently no-ops and the whole update evaporates.
+# Restore invoker context so paths resolve to the actual user's home.
+# The wrapper (smplos-update) sets SMPLOS_INVOKER_* for us; when this script
+# is invoked directly under sudo/pkexec, we derive them here as a fallback.
+if [[ $EUID -eq 0 && -z "${SMPLOS_INVOKER_HOME:-}" ]]; then
+    _invoker_uid="${PKEXEC_UID:-${SUDO_UID:-}}"
+    if [[ -n "${_invoker_uid:-}" && "$_invoker_uid" != "0" ]]; then
+        _invoker_ent="$(getent passwd "$_invoker_uid" 2>/dev/null || true)"
+        if [[ -n "$_invoker_ent" ]]; then
+            export SMPLOS_INVOKER_UID="$_invoker_uid"
+            export SMPLOS_INVOKER_USER="$(cut -d: -f1 <<<"$_invoker_ent")"
+            export SMPLOS_INVOKER_HOME="$(cut -d: -f6 <<<"$_invoker_ent")"
+            export HOME="$SMPLOS_INVOKER_HOME"
+            export USER="$SMPLOS_INVOKER_USER"
+            export LOGNAME="$SMPLOS_INVOKER_USER"
+        fi
+    fi
+    unset _invoker_uid _invoker_ent
+fi
+
 SMPLOS_PATH="${SMPLOS_PATH:-$HOME/.local/share/smplos}"
 SMPLOS_REPO="$SMPLOS_PATH/repo"
 SMPLOS_REPO_URL="https://github.com/smpl-os/smplos.git"
+
+# ── Run a command as the invoking user when we're root ───────────────────────
+# git operations against the user-owned smplOS repo must NOT run as root:
+# (a) git 2.35.2+ rejects with "unsafe repository" for cross-uid access, and
+# (b) any file git writes as root breaks the user's future `git pull` attempts.
+# smplos-migrate similarly writes marker files under $HOME/.local/state/smplos
+# that must stay user-owned so the user can clear them without sudo.
+# Use runuser (util-linux, always present on Arch) which cleanly drops privs
+# without a password prompt.
+as_invoker() {
+    if [[ $EUID -eq 0 && -n "${SMPLOS_INVOKER_USER:-}" ]]; then
+        runuser -u "$SMPLOS_INVOKER_USER" -- "$@"
+    else
+        "$@"
+    fi
+}
 
 # Resolve our own path so we can re-exec into the freshly-installed copy after
 # sync_scripts, breaking the bootstrap chicken-and-egg where a run started
@@ -59,7 +98,9 @@ die()    { echo "ERROR: $*" >&2; exit 1; }
 ensure_repo() {
     if [[ ! -d "$SMPLOS_REPO/.git" ]]; then
         log "First run: cloning smplOS repo..."
-        git clone --depth=1 "$SMPLOS_REPO_URL" "$SMPLOS_REPO" 2>/dev/null \
+        # Clone as the invoker so the repo stays user-owned (see as_invoker).
+        as_invoker mkdir -p "$(dirname "$SMPLOS_REPO")"
+        as_invoker git clone --depth=1 "$SMPLOS_REPO_URL" "$SMPLOS_REPO" 2>/dev/null \
             || die "Failed to clone smplOS repo"
         ok "Repo cloned to $SMPLOS_REPO"
     fi
@@ -88,12 +129,12 @@ pull_updates() {
     local repo="$SMPLOS_REPO"
     local before after remote_head branch
 
-    before=$(git -C "$repo" rev-parse HEAD 2>/dev/null || echo "unknown")
+    before=$(as_invoker git -C "$repo" rev-parse HEAD 2>/dev/null || echo "unknown")
 
     # 1) Refuse to run against a repo that isn't ours. Prevents a misconfigured
     #    SMPLOS_REPO from pulling arbitrary upstream code onto the system.
     local remote_url
-    remote_url=$(git -C "$repo" remote get-url origin 2>/dev/null || echo "")
+    remote_url=$(as_invoker git -C "$repo" remote get-url origin 2>/dev/null || echo "")
     if [[ "$remote_url" != *"smpl-os/smplos"* ]]; then
         die "SMPLOS_REPO ($repo) origin is '$remote_url', expected smpl-os/smplos"
     fi
@@ -105,28 +146,28 @@ pull_updates() {
     #    up. Any in-flight rebase is aborted before we try.
     if [[ -d "$repo/.git/rebase-merge" || -d "$repo/.git/rebase-apply" ]]; then
         warn "Aborting stale rebase state in $repo"
-        git -C "$repo" rebase --abort 2>&1 | while read -r l; do log "  $l"; done || true
+        as_invoker git -C "$repo" rebase --abort 2>&1 | while read -r l; do log "  $l"; done || true
     fi
-    branch=$(git -C "$repo" symbolic-ref --short HEAD 2>/dev/null || echo "")
+    branch=$(as_invoker git -C "$repo" symbolic-ref --short HEAD 2>/dev/null || echo "")
     if [[ "$branch" != "main" ]]; then
         warn "Repo was on '$branch' (or detached), checking out main"
-        git -C "$repo" checkout -B main 2>&1 | while read -r l; do log "  $l"; done \
+        as_invoker git -C "$repo" checkout -B main 2>&1 | while read -r l; do log "  $l"; done \
             || die "Cannot switch $repo to branch main"
     fi
 
     # 3) Fetch. Any network/auth error here MUST surface — this is the single
     #    most common silent-failure point that leaves us stuck on a stale HEAD.
     log "Fetching origin/main..."
-    if ! git -C "$repo" fetch --prune origin main 2>&1 | while read -r l; do log "  $l"; done; then
+    if ! as_invoker git -C "$repo" fetch --prune origin main 2>&1 | while read -r l; do log "  $l"; done; then
         die "git fetch failed for $repo (network? auth? disk?)"
     fi
 
-    remote_head=$(git -C "$repo" rev-parse origin/main 2>/dev/null || echo "")
+    remote_head=$(as_invoker git -C "$repo" rev-parse origin/main 2>/dev/null || echo "")
     [[ -n "$remote_head" ]] || die "origin/main missing in $repo after fetch"
 
     # 4) Already at tip? Great, done.
     if [[ "$before" == "$remote_head" ]]; then
-        ok "Already up to date ($(git -C "$repo" describe --tags --always 2>/dev/null || echo "$before"))"
+        ok "Already up to date ($(as_invoker git -C "$repo" describe --tags --always 2>/dev/null || echo "$before"))"
         return 1
     fi
 
@@ -134,19 +175,19 @@ pull_updates() {
     #    diverged. If we can fast-forward, do so; no rebase, no merge, no
     #    surprises. Local changes to tracked files are auto-stashed and
     #    popped so a dev poking at looknfeel.lua doesn't block the update.
-    log "Local: $(git -C "$repo" rev-parse --short HEAD)  Remote: $(git -C "$repo" rev-parse --short origin/main)"
-    if ! git -C "$repo" pull --ff-only --autostash 2>&1 | while read -r l; do log "  $l"; done; then
+    log "Local: $(as_invoker git -C "$repo" rev-parse --short HEAD)  Remote: $(as_invoker git -C "$repo" rev-parse --short origin/main)"
+    if ! as_invoker git -C "$repo" pull --ff-only --autostash 2>&1 | while read -r l; do log "  $l"; done; then
         # 6) FF failed → local main has diverged. Rather than silently
         #    creating a merge or dropping user commits, we hard-reset to
         #    origin/main. This mirrors the old behavior's intent but with
         #    LOUD logging so the drift is visible in support tickets.
         warn "Fast-forward failed; local main has diverged from origin/main."
         warn "Hard-resetting to origin/main (any local commits on $repo main will be discarded)."
-        git -C "$repo" reset --hard "origin/main" 2>&1 | while read -r l; do log "  $l"; done \
+        as_invoker git -C "$repo" reset --hard "origin/main" 2>&1 | while read -r l; do log "  $l"; done \
             || die "Hard-reset to origin/main failed — repo is in an inconsistent state"
     fi
 
-    after=$(git -C "$repo" rev-parse HEAD 2>/dev/null || echo "unknown")
+    after=$(as_invoker git -C "$repo" rev-parse HEAD 2>/dev/null || echo "unknown")
 
     # 7) Final invariant check: HEAD MUST equal origin/main. If not, refuse
     #    to continue — deploying from a still-stale checkout is exactly the
@@ -156,7 +197,7 @@ pull_updates() {
     fi
 
     local n_changes
-    n_changes=$(git -C "$repo" diff --stat "$before" "$after" 2>/dev/null | tail -1 || echo "")
+    n_changes=$(as_invoker git -C "$repo" diff --stat "$before" "$after" 2>/dev/null | tail -1 || echo "")
     [[ -n "$n_changes" ]] && log "$n_changes"
     ok "Advanced $before → $after"
     return 0
@@ -169,20 +210,20 @@ check_updates() {
     # Same discipline as pull_updates: don't swallow errors, and ensure we
     # compare against the actual current origin/main rather than a stale
     # remote-tracking ref that hasn't been fetched since last week.
-    if ! git -C "$SMPLOS_REPO" fetch --prune origin main 2>&1 | while read -r l; do log "  $l"; done; then
+    if ! as_invoker git -C "$SMPLOS_REPO" fetch --prune origin main 2>&1 | while read -r l; do log "  $l"; done; then
         warn "Cannot reach GitHub"; exit 1
     fi
 
     local local_head remote_head
-    local_head=$(git -C "$SMPLOS_REPO" rev-parse HEAD)
-    remote_head=$(git -C "$SMPLOS_REPO" rev-parse origin/main 2>/dev/null || echo "")
+    local_head=$(as_invoker git -C "$SMPLOS_REPO" rev-parse HEAD)
+    remote_head=$(as_invoker git -C "$SMPLOS_REPO" rev-parse origin/main 2>/dev/null || echo "")
 
     if [[ -z "$remote_head" || "$local_head" == "$remote_head" ]]; then
         echo "  smplOS is up to date"
         exit 1
     else
         local behind
-        behind=$(git -C "$SMPLOS_REPO" rev-list --count "HEAD..origin/main" 2>/dev/null || echo "?")
+        behind=$(as_invoker git -C "$SMPLOS_REPO" rev-list --count "HEAD..origin/main" 2>/dev/null || echo "?")
         echo "  smplOS update available ($behind new commits)"
         exit 0
     fi
@@ -439,7 +480,18 @@ run_migrations() {
     if command -v smplos-migrate &>/dev/null; then
         header ""
         header "── Migrations ──"
-        SMPLOS_PATH="$SMPLOS_PATH" smplos-migrate
+        # Run as the invoker so:
+        #  (a) migration marker files under ~/.local/state/smplos/migrations/
+        #      stay user-owned (else the user can never clear them without sudo),
+        #  (b) migrations touching ~/.config/*, WAYLAND_DISPLAY-scoped tools
+        #      (hyprctl, systemctl --user), and other user-context work run
+        #      in the right context.
+        # Migrations that legitimately need root should `sudo` internally.
+        if [[ $EUID -eq 0 && -n "${SMPLOS_INVOKER_USER:-}" ]]; then
+            runuser -u "$SMPLOS_INVOKER_USER" -- env SMPLOS_PATH="$SMPLOS_PATH" smplos-migrate
+        else
+            SMPLOS_PATH="$SMPLOS_PATH" smplos-migrate
+        fi
     fi
 }
 
