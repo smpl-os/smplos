@@ -355,6 +355,44 @@ sync_apps() {
                     warn "Failed to install $name"
                 fi
             fi
+
+            # ── Single-copy invariant ────────────────────────────────────
+            # Guarantee ONE canonical binary on the system: /usr/local/bin/$name.
+            # Any file at a PATH location that comes BEFORE /usr/local/bin on
+            # the default shell PATH will silently override it — Eww, tray
+            # buttons, keybindings, and toggle-scripts using bare `$name` all
+            # then launch the OLD binary and the "I updated but nothing changed"
+            # trap fires again. This is exactly what bit us with
+            # ~/.local/bin/smpl-calendar shadowing /usr/local/bin/smpl-calendar.
+            #
+            # Policy: if a shadow exists and differs, delete it. If it exists
+            # and is identical, leave it alone (it's harmless). This is
+            # non-destructive for developers: `deploy-local.sh` should install
+            # to /usr/local/bin (which needs sudo but is unambiguous) rather
+            # than dropping into ~/.local/bin.
+            local shadow
+            for shadow in "$HOME/.local/bin/$name" "$HOME/bin/$name"; do
+                [[ -e "$shadow" || -L "$shadow" ]] || continue
+                if [[ -L "$shadow" ]]; then
+                    # A symlink — resolve. If it already points at our
+                    # canonical dest, leave it. Otherwise it's a stale link
+                    # to some other binary; remove.
+                    local target
+                    target=$(readlink -f "$shadow" 2>/dev/null || echo "")
+                    if [[ "$target" == "$dest" ]]; then
+                        continue
+                    fi
+                    rm -f "$shadow" 2>/dev/null && \
+                        warn "  removed stale symlink shadow: $shadow -> $target"
+                elif cmp -s "$shadow" "$dest" 2>/dev/null; then
+                    # Byte-identical — no shadow problem in practice, but
+                    # collapse to the canonical to prevent future divergence.
+                    continue
+                else
+                    rm -f "$shadow" 2>/dev/null && \
+                        warn "  removed stale shadow binary: $shadow (was overriding $dest on \$PATH)"
+                fi
+            done
         done
     fi
 

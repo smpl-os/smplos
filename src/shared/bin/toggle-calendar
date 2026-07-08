@@ -8,11 +8,30 @@
 # failure that left the calendar only dismissable via Esc.
 
 APP_NAME="smpl-calendar"
-BIN_PATH="/usr/local/bin/$APP_NAME"
-[[ -f "$BIN_PATH" ]] || BIN_PATH="$HOME/Documents/sources/smplos/src/shared/apps/target/release/$APP_NAME"
-[[ -f "$BIN_PATH" ]] || BIN_PATH="$HOME/Documents/sources/smplos/src/shared/apps/target/debug/$APP_NAME"
 
-if pkill -x "$APP_NAME" 2>/dev/null; then
+# Resolve the binary via PATH first, then fall back to well-known install
+# locations. This is critical for dev machines: `deploy-local.sh` installs
+# a fresh build to ~/.local/bin, which sits ahead of /usr/local/bin on the
+# default PATH. Hardcoding /usr/local/bin here (the previous behaviour) meant
+# Eww's tray button kept launching the STALE system binary every time, while
+# any direct terminal invocation of `smpl-calendar` correctly picked up the
+# fresh dev build — the "I installed the fix, tested it in a terminal, but the
+# tray icon still runs the old code" trap that just cost us multiple hours.
+#
+# Order of preference:
+#   1. Whatever PATH resolves to (respects deploy-local.sh's ~/.local/bin).
+#   2. /usr/local/bin (canonical system install from sync_apps).
+#   3. The dev-checkout release build.
+BIN_PATH=$(command -v "$APP_NAME" 2>/dev/null || true)
+[[ -z "$BIN_PATH" || ! -x "$BIN_PATH" ]] && BIN_PATH="/usr/local/bin/$APP_NAME"
+[[ -x "$BIN_PATH" ]] || BIN_PATH="$HOME/.local/bin/$APP_NAME"
+[[ -x "$BIN_PATH" ]] || BIN_PATH="$HOME/Documents/source/smpl-os/smpl-apps/target/release/$APP_NAME"
+[[ -x "$BIN_PATH" ]] || BIN_PATH="$HOME/Documents/source/smpl-os/smpl-apps/target/debug/$APP_NAME"
+
+# Only match the compact popup, NOT the standalone details window (which
+# runs the same binary but with --details and has app_id smpl-calendar-details).
+# Without --full pgrep+pkill scoping we'd tear down the details window too.
+if pkill -f "^${BIN_PATH}$" 2>/dev/null; then
     : # was running, now closed
 else
     "$BIN_PATH" &
