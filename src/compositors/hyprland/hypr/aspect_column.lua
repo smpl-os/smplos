@@ -40,7 +40,7 @@ local function width_for_aspect(aspect)
 end
 
 -- Cache the last applied value so a stream of monitor.focused events (e.g.
--- cursor drifting between two identical 16:9 panels) doesn't spam hyprctl.
+-- cursor drifting between two identical 16:9 panels) doesn't spam the setter.
 local last_applied
 
 local function apply(mon)
@@ -48,7 +48,12 @@ local function apply(mon)
     local width = width_for_aspect(visible_aspect(mon))
     if last_applied == width then return end
     last_applied = width
-    hl.exec_cmd(string.format("hyprctl keyword scrolling:column_width %.2f", width))
+    -- Set the option in-process via the Lua API. We cannot shell out to
+    -- `hyprctl keyword` from here: Hyprland 0.55+ refuses that command when
+    -- the active config parser is Lua ("keyword can't work with non-legacy
+    -- parsers. Use eval."). hl.config() accepts a partial config table and
+    -- applies it live, which is the supported path.
+    hl.config({ scrolling = { column_width = width } })
 end
 
 local function apply_active()
@@ -67,8 +72,11 @@ hl.on("monitor.focused", function(mon)
 end)
 
 -- Monitors aren't guaranteed to be enumerable before hyprland.start fires,
--- and layout_changed covers live rotation/scale updates from Settings.
+-- layout_changed covers live rotation/scale updates from Settings, and
+-- config.reloaded fires on `hyprctl reload` so the width is re-asserted
+-- after any config re-parse.
 hl.on("hyprland.start",         apply_active)
+hl.on("config.reloaded",        apply_active)
 hl.on("monitor.added",          apply_active)
 hl.on("monitor.layout_changed", apply_active)
 

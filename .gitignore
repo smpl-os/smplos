@@ -74,3 +74,4 @@ Screenshot_*.png
 # Embedded upstream clones for local study (not tracked)
 research/scroll-study/hyprscroller/
 research/scroll-study/scroll/
+tools/smplos-scrolling-debug-*.log
