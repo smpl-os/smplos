@@ -281,106 +281,19 @@ sync_apps() {
         done
     fi
 
-    # NOTE: compositor plugins (*.so, e.g. libhyprtasking.so) are intentionally
-    # NOT installed here. They are ABI-locked to the exact hyprland version,
-    # which is frozen by the critical-package hold and only moves via a critical
-    # bundle. Installing the latest plugin build here — while hyprland stays
-    # pinned to an older version — would break the plugin (ABI mismatch). The
+    # NOTE: compositor plugins (*.so) are intentionally NOT installed here.
+    # They are ABI-locked to the exact hyprland version, which is frozen by the
+    # critical-package hold and only moves via a critical bundle. Installing
+    # the latest plugin build here — while hyprland stays pinned to an older
+    # version — would break the plugin (ABI mismatch). Any future compositor
     # plugin is therefore installed by smplos-update right after the critical
-    # bundle sets hyprland to its pinned version. fetch-org.sh still stages the
-    # .so under .cache/org-binaries/lib for that step to consume.
+    # bundle sets hyprland to its pinned version.
 
     if [[ $n_bin -gt 0 ]]; then
         ok "$n_bin app binary/binaries updated"
         rebuild-app-cache 2>/dev/null && ok "App cache rebuilt" || true
     else
         ok "smpl-os apps already current"
-    fi
-}
-
-# ── Install ABI-matched compositor plugins ───────────────────────────────────
-# sync_apps stages every published *.so under .cache/org-binaries/lib/ but does
-# NOT install them, because a compositor plugin is ABI-locked to one exact
-# hyprland build and blindly installing the newest plugin over an older pinned
-# hyprland would break it. That safety concern is real — but "never install"
-# left machines that only ever run smplos-os-update (the common case) without
-# the overview plugin at all, since the plugin used to be installed solely by
-# smplos-update's critical-bundle path.
-#
-# The correct guard is a version match, not a blanket skip: install the staged
-# plugin ONLY when the hyprland currently installed equals the version the
-# plugins are built for. That target is the pin declared in critical-bundle.conf
-# (`hyprland=<ver>`), which is bumped in lockstep with every plugin rebuild. If
-# the versions differ (machine hasn't applied a newer bundle yet), we skip and
-# leave it to smplos-update, exactly as before — no ABI mismatch is ever risked.
-sync_compositor_plugins() {
-    local lib_stage="$SMPLOS_REPO/.cache/org-binaries/lib"
-    # Nothing staged (e.g. offline run, or fetch found no plugin) → nothing to do.
-    ls "$lib_stage"/*.so >/dev/null 2>&1 || return 0
-
-    header ""
-    header "── Compositor plugins ──"
-
-    # What hyprland do the published plugins target? Read the pin from the
-    # source-controlled bundle policy.
-    local bundle_conf="$SMPLOS_REPO/src/shared/update-policy/critical-bundle.conf"
-    local pinned=""
-    if [[ -f "$bundle_conf" ]]; then
-        pinned="$(grep -oE 'hyprland=[0-9][^ "]*' "$bundle_conf" 2>/dev/null | head -1 | cut -d= -f2)"
-    fi
-    if [[ -z "$pinned" ]]; then
-        warn "No hyprland pin in critical-bundle.conf — skipping plugin install (ABI unknown)"
-        return 0
-    fi
-
-    # What hyprland is actually installed?
-    local installed=""
-    installed="$(pacman -Q hyprland 2>/dev/null | awk '{print $2}')"
-    if [[ -z "$installed" ]]; then
-        warn "hyprland not installed — skipping plugin install"
-        return 0
-    fi
-
-    if [[ "$installed" != "$pinned" ]]; then
-        log "hyprland $installed ≠ plugin target $pinned — deferring plugin install to smplos-update"
-        return 0
-    fi
-
-    # ABI matches → install any staged plugin that's missing or changed.
-    local n_new=0 src name dest
-    for src in "$lib_stage"/*.so; do
-        [[ -f "$src" ]] || continue
-        name="$(basename "$src")"
-        dest="/usr/local/lib/smplos/$name"
-        if [[ ! -f "$dest" ]] || ! cmp -s "$src" "$dest"; then
-            if sudo install -Dm755 "$src" "$dest" 2>/dev/null; then
-                ((n_new++)) || true
-                ok "Installed $name (hyprland $installed)"
-            else
-                warn "Failed to install $name"
-            fi
-        fi
-    done
-
-    if [[ $n_new -eq 0 ]]; then
-        ok "Compositor plugins already current"
-        return 0
-    fi
-
-    # Load into the running compositor now so the user doesn't have to relogin.
-    # If hyprland isn't running (TTY/SSH), the autostart exec-once loads it next
-    # login. A reload re-applies looknfeel's plugin config now that the plugin's
-    # keywords are registered.
-    if [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]] && command -v hyprctl >/dev/null 2>&1; then
-        for src in "$lib_stage"/*.so; do
-            [[ -f "$src" ]] || continue
-            dest="/usr/local/lib/smplos/$(basename "$src")"
-            if ! hyprctl plugins list 2>/dev/null | grep -q "$dest"; then
-                hyprctl plugin load "$dest" >/dev/null 2>&1 || true
-            fi
-        done
-        hyprctl reload >/dev/null 2>&1 || true
-        ok "Plugin loaded into running session"
     fi
 }
 
@@ -531,7 +444,6 @@ if [[ $SCRIPTS_ONLY -eq 0 ]]; then
     sync_configs
     sync_themes
     sync_apps
-    sync_compositor_plugins
     sync_hypr_configs
     run_migrations
 

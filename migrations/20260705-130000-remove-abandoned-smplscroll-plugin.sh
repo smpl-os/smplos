@@ -4,10 +4,10 @@
 # Context: smplscroll was smplOS's old custom niri/PaperWM scrolling-layout
 #          Hyprland plugin. Hyprland 0.55 ships a native `scrolling` layout that
 #          fully replaces it, so the plugin is no longer built, shipped, or
-#          loaded (autostart only loads libhyprtasking.so). The upstream repo
-#          (smpl-os/smplscroll) has been deleted. Current ISOs no longer contain
-#          smplscroll.so, but machines installed from an older ISO still carry a
-#          stale /usr/local/lib/smplos/smplscroll.so that nothing references.
+#          loaded. The upstream repo (smpl-os/smplscroll) has been deleted.
+#          Current ISOs no longer contain smplscroll.so, but machines installed
+#          from an older ISO still carry a stale /usr/local/lib/smplos/smplscroll.so
+#          that nothing references.
 #
 # Safety:  Removes ONLY the stale system plugin binary — never any user data.
 #          Idempotent (skips if already gone). Privileged step is best-effort and

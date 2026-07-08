@@ -992,75 +992,6 @@ install_xr_packaging() {
 }
 
 ###############################################################################
-# Build the hyprtasking overview plugin (Hyprland only)
-#
-# hyprtasking is a niri-style workspace-overview plugin (Super+Tab). Hyprland
-# plugins are ABI-locked to the exact hyprland version they were built against,
-# and smplOS holds hyprland as a critical package — so we build the .so HERE,
-# inside the ISO container against the very hyprland the ISO ships, guaranteeing
-# the ABI matches on the installed system. The result is dropped at
-# /usr/local/lib/smplos/libhyprtasking.so and loaded by autostart.{conf,lua}.
-#
-# Best effort: any failure only logs a warning and skips the plugin. The
-# Hyprland config guards every hyprtasking call with pcall + is_active(), so a
-# missing .so degrades to "Super+Tab does nothing" — it never breaks the build.
-###############################################################################
-HYPRTASKING_REPO="${HYPRTASKING_REPO:-https://github.com/raybbian/hyprtasking.git}"
-
-build_hyprtasking_plugin() {
-    [[ "$COMPOSITOR" == "hyprland" ]] || return 0
-    log_step "Building hyprtasking overview plugin"
-
-    local airootfs="$PROFILE_DIR/airootfs"
-
-    # Build deps are container-only. hyprland provides the pkg-config + headers
-    # the plugin links against; the plugin's runtime deps (pixman, libdrm,
-    # pango, cairo, libinput, wayland, xkbcommon) are all hyprland deps that
-    # already ship in the ISO, so nothing extra lands on the installed system.
-    if ! pacman -S --needed --noconfirm \
-            git meson ninja gcc pkgconf hyprland \
-            pixman libdrm pango cairo libinput systemd-libs wayland libxkbcommon \
-            >/dev/null 2>&1; then
-        log_warn "hyprtasking: could not install build deps — skipping plugin"
-        return 0
-    fi
-
-    local ht_hl_ver ht_tmp
-    ht_hl_ver="$(pacman -Q hyprland 2>/dev/null | awk '{print $2}')"
-    ht_tmp="$(mktemp -d)"
-
-    if ! git clone --depth 1 "$HYPRTASKING_REPO" "$ht_tmp/hyprtasking" >/dev/null 2>&1; then
-        log_warn "hyprtasking: git clone failed — skipping plugin"
-        rm -rf "$ht_tmp"
-        return 0
-    fi
-
-    # meson + ninja, exactly as the plugin's hyprpm.toml specifies.
-    if ( cd "$ht_tmp/hyprtasking" \
-            && meson setup build --buildtype=debug \
-            && meson compile -C build ) >/dev/null 2>&1 \
-            && [[ -f "$ht_tmp/hyprtasking/build/libhyprtasking.so" ]]; then
-        install -Dm755 "$ht_tmp/hyprtasking/build/libhyprtasking.so" \
-            "$airootfs/usr/local/lib/smplos/libhyprtasking.so"
-        log_info "hyprtasking: built against hyprland $ht_hl_ver → /usr/local/lib/smplos/libhyprtasking.so"
-
-        # Also export the ABI-correct .so to the host-visible release dir so it
-        # can be published as a compositor-plugin release asset (see
-        # src/builder/publish-plugins.sh). This is the SAME binary the ISO ships,
-        # so it is guaranteed to match the pinned hyprland the fleet runs. The
-        # hyprland version is recorded alongside for traceability.
-        install -Dm755 "$ht_tmp/hyprtasking/build/libhyprtasking.so" \
-            "$RELEASE_DIR/plugins/libhyprtasking.so"
-        printf '%s\n' "$ht_hl_ver" > "$RELEASE_DIR/plugins/HYPRLAND_VERSION"
-        log_info "hyprtasking: exported to $RELEASE_DIR/plugins/ for release publishing"
-    else
-        log_warn "hyprtasking: meson build failed (likely a hyprland $ht_hl_ver API mismatch) — skipping plugin"
-    fi
-
-    rm -rf "$ht_tmp"
-}
-
-###############################################################################
 # Configure Airootfs
 ###############################################################################
 
@@ -2246,7 +2177,6 @@ main() {
     update_profiledef
     setup_airootfs
     install_prebuilt_apps
-    build_hyprtasking_plugin
     setup_boot
     build_iso
     

@@ -250,25 +250,6 @@ local function make_dispatcher(dispatcher, arg)
             hl.dispatch(hl.dsp.focus({ window = wins[nxt] }))
         end
 
-    elseif dispatcher:match("^hyprtasking:") then
-        -- Hyprtasking overview plugin (Super+Tab). In lua-config mode the
-        -- plugin's dispatchers are exposed as hl.plugin.hyprtasking.<method>()
-        -- and must be *called* — they execute in-process and return
-        -- immediately, exactly like the is_active()/move() binds in
-        -- looknfeel.lua. They are NOT under hl.dsp, and invoking them through
-        -- `hyprctl eval`/hyprctl messages returns a "no such message" error on
-        -- any Hyprland that lacks the eval IPC command. Wrap in a closure so
-        -- the call fires per keypress, and guard so a missing/unloaded plugin
-        -- degrades to a no-op instead of raising a runtime error.
-        local method = dispatcher:sub(#"hyprtasking:" + 1)
-        local a = arg
-        if method == "toggle" and a == "" then a = "all" end
-        return function()
-            local pt = hl.plugin and hl.plugin.hyprtasking
-            local fn = pt and pt[method]
-            if fn then fn(a) end
-        end
-
     elseif dispatcher == "exit" then
         return hl.dsp.exit()
     end

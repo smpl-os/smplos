@@ -121,43 +121,6 @@ csv_join() {
     echo "$*"
 }
 
-# Install ABI-locked compositor plugins (e.g. the workspace-overview plugin,
-# libhyprtasking.so) AFTER the critical bundle has set hyprland to its pinned
-# version. The plugin is delivered as a loose *.so asset from the org release
-# and MUST match the hyprland the bundle just installed — that's why this runs
-# only from the bundle path and never from the version-independent app updater.
-# We're already root here; the plugin loads on next login via autostart.
-install_compositor_plugins() {
-    local repo="$SMPLOS_PATH/repo"
-    local fetch_script="$repo/src/fetch-org.sh"
-    local stage="$repo/.cache/org-binaries/lib"
-
-    [[ -f "$fetch_script" ]] || return 0
-
-    # Reuse plugins staged earlier this run; otherwise stage them now (plugins
-    # only, so we don't re-pull every app binary just to refresh a .so).
-    if ! ls "$stage"/*.so >/dev/null 2>&1; then
-        bash "$fetch_script" --plugins-only --force >/dev/null 2>&1 || true
-    fi
-    ls "$stage"/*.so >/dev/null 2>&1 || return 0
-
-    local installed=0 src name dest
-    for src in "$stage"/*.so; do
-        [[ -f "$src" ]] || continue
-        name="$(basename "$src")"
-        dest="/usr/local/lib/smplos/$name"
-        if [[ ! -f "$dest" ]] || ! cmp -s "$src" "$dest"; then
-            if install -Dm755 "$src" "$dest" 2>/dev/null; then
-                ((installed++)) || true
-            fi
-        fi
-    done
-    if [[ $installed -gt 0 ]]; then
-        echo "  ✓ Compositor plugin(s) installed for pinned hyprland: $installed"
-        echo "    They load automatically on next login."
-    fi
-}
-
 load_critical_packages() {
     CRITICAL_PACKAGES=("${DEFAULT_CRITICAL_PACKAGES[@]}")
 
@@ -209,10 +172,7 @@ critical_bundle_prompt_and_apply() {
     [[ -f "$APPLIED_BUNDLE_FILE" ]] && applied_id=$(<"$APPLIED_BUNDLE_FILE")
 
     if [[ "$applied_id" == "$bundle_id" ]]; then
-        # Bundle already applied → hyprland is at the pinned version. Make sure
-        # the matching plugin is present (e.g. after a fresh install or if it
-        # was cleared), then we're done.
-        install_compositor_plugins
+        # Bundle already applied → hyprland is at the pinned version.
         return 0
     fi
 
@@ -234,8 +194,6 @@ critical_bundle_prompt_and_apply() {
             pacman -Q "$pkg_name" 2>/dev/null >> "$BUNDLE_SNAPSHOT_FILE" || true
         done
         echo "  ✓ Critical bundle applied: $bundle_id"
-        # hyprland is now at the pinned version → install the matching plugin.
-        install_compositor_plugins
         if [[ "$bundle_reboot" == "1" ]]; then
             # Write reboot-pending marker (boot_id so it self-expires on reboot)
             mkdir -p "$(dirname "$STATE_DIR")/smplos"

@@ -9,11 +9,10 @@ set -euo pipefail
 # Usage:
 #   ./fetch-org.sh                 # fetch anything newer than what's cached
 #   ./fetch-org.sh --force         # re-fetch everything
-#   ./fetch-org.sh --plugins-only  # stage only *.so compositor plugins
 #
 # Staging output (consumed by smplos-os-update):
 #   .cache/org-binaries/bin/          ← executables  → /usr/local/bin/
-#   .cache/org-binaries/lib/          ← *.so plugins → /usr/local/lib/smplos/
+#   .cache/org-binaries/lib/          ← *.so bundles → /usr/local/lib/smplos/
 #   .cache/org-binaries/.versions/    ← per-repo "latest tag" markers
 #
 # WHY THIS EXISTS
@@ -45,15 +44,9 @@ warn() { echo -e "${YELLOW}[fetch-org]${NC} $*"; }
 die()  { echo -e "${RED}[fetch-org]${NC} $*" >&2; exit 1; }
 
 FORCE=false
-PLUGINS_ONLY=false
 for arg in "$@"; do
     [[ "$arg" == "--force" ]] && FORCE=true
-    [[ "$arg" == "--plugins-only" ]] && PLUGINS_ONLY=true
 done
-
-# Plugins-only scans track their own markers so they never mask a later full
-# run into skipping app binaries (and vice-versa).
-[[ "$PLUGINS_ONLY" == "true" ]] && VER_DIR="$STAGE/.versions-plugins"
 
 command -v curl >/dev/null 2>&1 || die "curl is required"
 mkdir -p "$BIN_STAGE" "$LIB_STAGE" "$VER_DIR"
@@ -102,13 +95,6 @@ stage_bundle() {
 handle_asset() {
     local url="$1" name tmp
     name="$(basename "$url")"
-    # In plugins-only mode, ignore everything that isn't a loose shared object.
-    if [[ "$PLUGINS_ONLY" == "true" ]]; then
-        case "$name" in
-            *.so|*.so.[0-9]*) ;;
-            *) return ;;
-        esac
-    fi
     case "$name" in
         # Skip: pacman packages, rootfs images, checksums/signatures
         *.pkg.tar.*|*-rootfs.tar.*|*.sha|*.sha256|*.sha512|*.sig|*.asc|*.md5)

@@ -2,14 +2,6 @@
 -- Mirrors src/compositors/hyprland/hypr/autostart.conf.
 
 hl.on("hyprland.start", function()
-    -- Hyprtasking overview plugin (niri-style workspace overview, Super+Tab).
-    -- The .so is built against the ISO's exact hyprland (ABI-locked) and shipped
-    -- by the ISO builder to /usr/local/lib/smplos/. Load it, then reload so
-    -- looknfeel's plugin config (grid, colours, buttons) applies now that the
-    -- plugin's keywords are registered. A missing/mismatched .so just fails to
-    -- load and Super+Tab no-ops (looknfeel guards every call with pcall).
-    hl.exec_cmd("hyprctl plugin load /usr/local/lib/smplos/libhyprtasking.so && hyprctl reload")
-
     -- Core services
     hl.exec_cmd("hypridle")
     hl.exec_cmd("dunst")
