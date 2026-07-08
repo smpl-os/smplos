@@ -210,10 +210,6 @@ sync_scripts() {
 
         # Only copy if changed (compare against the system copy)
         if [[ -f "$dest" ]] && cmp -s "$script" "$dest"; then
-            # Still sync to user-local bin in case it's stale
-            if [[ -f "$smplos_bin/$name" ]] && ! cmp -s "$script" "$smplos_bin/$name"; then
-                install -m755 "$script" "$smplos_bin/$name" 2>/dev/null || true
-            fi
             continue
         fi
 
@@ -222,8 +218,11 @@ sync_scripts() {
         else
             warn "Failed to install $name (sudo required)"
         fi
-        # Also update the user-local copy (takes priority in PATH)
-        install -m755 "$script" "$smplos_bin/$name" 2>/dev/null || true
+        # Single-copy invariant: do NOT mirror into ~/.local/share/smplos/bin.
+        # Historically we did — the intent was "user-local wins on PATH so a
+        # broken sudo path still updates" — but the effect was to seed the
+        # exact shadow-copy mess this script now spends its life cleaning up.
+        # Any pre-existing shadow gets scrubbed by cleanup_shadow_bins() below.
     done
 
     if [[ $n_updated -gt 0 ]]; then
@@ -550,6 +549,86 @@ sync_hypr_configs() {
     fi
 }
 
+# ── Cleanup shadow binaries on PATH ───────────────────────────────────────────
+# Blanket sweep of the three legacy user-writable PATH dirs that show up ahead
+# of /usr/local/bin in envs.conf. For every entry we find, if the same basename
+# exists in /usr/local/bin, the shadow is unconditionally removed — the entire
+# reason we're here is that "shadow wins on PATH" turned every partial install
+# into a permanent stale-binary trap (Eww's smpl-calendar pinned at v0.7.4
+# while /usr/local/bin/smpl-calendar was v0.8.11 is the canonical example).
+#
+# Policy:
+#   * symlink under a shadow dir       -> delete (it's routing PATH to somewhere
+#                                          we don't control; noisy report)
+#   * regular file, canonical exists   -> delete (canonical is authoritative
+#                                          regardless of whether content matches)
+#   * regular file, no canonical       -> keep (it's a user script we didn't
+#                                          put there and don't manage)
+#
+# This runs on every update, unconditionally — a few hundred stat calls per
+# run is a rounding error compared to the pacman transaction, and doing it
+# every time is what makes the invariant self-healing.
+cleanup_shadow_bins() {
+    header ""
+    header "── Scrubbing shadow \$PATH binaries ──"
+
+    local shadow_dirs=(
+        "$HOME/.local/share/smplos/bin"
+        "$HOME/.local/bin"
+        "$HOME/bin"
+    )
+
+    local n_removed=0 n_kept=0
+    local dir entry name canonical target
+    for dir in "${shadow_dirs[@]}"; do
+        [[ -d "$dir" ]] || continue
+        # Include hidden files defensively, but there shouldn't be any.
+        shopt -s nullglob dotglob
+        for entry in "$dir"/*; do
+            # Skip subdirectories — we only manage executables at the top level.
+            [[ -d "$entry" && ! -L "$entry" ]] && continue
+
+            name=$(basename "$entry")
+            canonical="/usr/local/bin/$name"
+
+            if [[ -L "$entry" ]]; then
+                target=$(readlink -f "$entry" 2>/dev/null || echo "?")
+                if rm -f "$entry" 2>/dev/null; then
+                    warn "  removed symlink shadow: $entry -> $target"
+                    ((n_removed++)) || true
+                fi
+                continue
+            fi
+
+            if [[ -f "$canonical" ]]; then
+                # Canonical exists — shadow is by definition unwanted.
+                if cmp -s "$entry" "$canonical" 2>/dev/null; then
+                    if rm -f "$entry" 2>/dev/null; then
+                        log "  removed duplicate: $entry (matches canonical)"
+                        ((n_removed++)) || true
+                    fi
+                else
+                    if rm -f "$entry" 2>/dev/null; then
+                        warn "  removed STALE shadow: $entry (was overriding $canonical on \$PATH)"
+                        ((n_removed++)) || true
+                    fi
+                fi
+            else
+                # No canonical /usr/local/bin/<name> — this is a user script
+                # or something we didn't install. Leave it alone.
+                ((n_kept++)) || true
+            fi
+        done
+        shopt -u nullglob dotglob
+    done
+
+    if [[ $n_removed -gt 0 ]]; then
+        ok "Removed $n_removed shadow entrie(s); left $n_kept unmanaged entry(ies) alone"
+    else
+        ok "No shadow binaries found (kept $n_kept unmanaged entry(ies))"
+    fi
+}
+
 # ── Post-deploy hooks ─────────────────────────────────────────────────────────
 
 # Kill any running instance of a smpl-os app whose binary we just replaced,
@@ -677,6 +756,13 @@ if [[ $SCRIPTS_ONLY -eq 0 ]]; then
     sync_apps
     sync_hypr_configs
     run_migrations
+
+    # Unconditional shadow-binary sweep. Runs AFTER sync_apps so we've already
+    # deposited the fresh canonical /usr/local/bin/<foo> before deciding whether
+    # its shadow is stale. Costs a few hundred stat calls; the payoff is that
+    # dev-machine deploy-local.sh drops, hand-copied binaries, and any prior
+    # broken update-apps runs all get healed on every OS update.
+    cleanup_shadow_bins
 
     # Reload Hyprland whenever EITHER new commits were pulled OR the hypr
     # config sync wrote anything. The latter catches the case where the git
