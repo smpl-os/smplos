@@ -68,6 +68,7 @@ hl.window_rule({
 local slint_apps = {
     "start-menu", "notif-center", "settings",
     "app-center", "webapp-center", "sync-center", "smpl-calendar",
+    "smpl-calendar-details",
 }
 hl.window_rule({
     match = { class = "^(" .. table.concat(slint_apps, "|") .. ")$" },
@@ -205,6 +206,18 @@ hl.window_rule({
     no_shadow = true,
     animation = "slide",
     stay_focused = true,
+})
+
+-- smpl Calendar — standalone details window (spawned by the compact popup's
+-- "Details" button). Full Teams-style calendar; centered, floating, freely
+-- resizable, animated with a popin. NOT click-outside dismissed (that watcher
+-- is scoped to `smpl-calendar`, not this variant).
+hl.window_rule({
+    match = { class = "^(smpl-calendar-details)$" },
+    float = true, center = true,
+    size = "1100 700",
+    no_shadow = true,
+    animation = "popin",
 })
 
 -- ============================================================================
