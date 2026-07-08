@@ -403,6 +403,10 @@ sync_hypr_configs() {
 
     if [[ $((n_new + n_updated)) -gt 0 ]]; then
         ok "$n_updated config(s) updated, $n_new new config(s) synced ($n_total total)"
+        # Signal to main() that Hyprland must be reloaded even if the git pull
+        # was a no-op (e.g. previous run pulled but crashed before reload, or
+        # ~/.config/hypr drifted from repo and this sync restored it).
+        HYPR_CONFIGS_CHANGED=1
     else
         ok "All $n_total Hyprland configs are current"
     fi
@@ -435,6 +439,7 @@ if [[ $MIGRATE_ONLY -eq 1 ]]; then
 fi
 
 had_updates=0
+HYPR_CONFIGS_CHANGED=0
 if pull_updates; then
     had_updates=1
 fi
@@ -447,7 +452,13 @@ if [[ $SCRIPTS_ONLY -eq 0 ]]; then
     sync_hypr_configs
     run_migrations
 
-    if [[ $had_updates -eq 1 ]]; then
+    # Reload Hyprland whenever EITHER new commits were pulled OR the hypr
+    # config sync wrote anything. The latter catches the case where the git
+    # pull was a no-op but ~/.config/hypr had drifted from repo (e.g. a
+    # previous run interrupted before reload). Without this, users would need
+    # to manually `hyprctl reload` after certain updates — and we've promised
+    # them the process is self-contained.
+    if [[ $had_updates -eq 1 || $HYPR_CONFIGS_CHANGED -eq 1 ]]; then
         header ""
         header "── Post-deploy ──"
         post_deploy

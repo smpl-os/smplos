@@ -41,6 +41,12 @@ end
 
 -- Cache the last applied value so a stream of monitor.focused events (e.g.
 -- cursor drifting between two identical 16:9 panels) doesn't spam the setter.
+-- IMPORTANT: this cache MUST be invalidated whenever something else in the
+-- config re-runs (config.reloaded, hyprland.start), because looknfeel.lua
+-- resets scrolling.column_width to its 0.95 fallback on every re-parse. If we
+-- kept the stale cache, we'd think "already applied 0.65, skip" while the
+-- compositor was actually sitting at 0.95 — which is exactly the "opens at
+-- 9/10 after a reload" bug users hit on ultrawides.
 local last_applied
 
 local function apply(mon)
@@ -60,6 +66,14 @@ local function apply_active()
     apply(hl.get_active_monitor())
 end
 
+-- Force-apply variant used by lifecycle events. Bypasses the cache because
+-- something else in the config just re-asserted the fallback (looknfeel) and
+-- our cached value would falsely claim "already applied".
+local function reapply_active()
+    last_applied = nil
+    apply_active()
+end
+
 -- The monitor.focused callback receives the newly focused HL.Monitor. Fall
 -- back to hl.get_active_monitor() if the payload shape is unexpected on a
 -- particular Hyprland version.
@@ -71,13 +85,18 @@ hl.on("monitor.focused", function(mon)
     end
 end)
 
--- Monitors aren't guaranteed to be enumerable before hyprland.start fires,
--- layout_changed covers live rotation/scale updates from Settings, and
--- config.reloaded fires on `hyprctl reload` so the width is re-asserted
--- after any config re-parse.
-hl.on("hyprland.start",         apply_active)
-hl.on("config.reloaded",        apply_active)
-hl.on("monitor.added",          apply_active)
-hl.on("monitor.layout_changed", apply_active)
+-- Lifecycle events that MUST bypass the cache: on each of these the config
+-- has just been (re-)parsed and looknfeel's fallback column_width = 0.95 is
+-- live again — the cached value is a lie until we re-set it.
+hl.on("hyprland.start",         reapply_active)
+hl.on("config.reloaded",        reapply_active)
+hl.on("monitor.added",          reapply_active)
+hl.on("monitor.layout_changed", reapply_active)
+
+-- Belt-and-suspenders: every window open re-asserts the width from scratch.
+-- If any of the lifecycle events above missed (Hyprland version quirks,
+-- event ordering races on reload), the very next window the user opens
+-- will fix column_width before that window gets laid out.
+hl.on("window.open_early",      reapply_active)
 
 return M
