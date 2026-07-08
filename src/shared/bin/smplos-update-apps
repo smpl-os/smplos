@@ -134,8 +134,32 @@ update_smpl_apps() {
         fi
 
         sudo install -m755 "$src" "/usr/local/bin/$app"
-        # Also update the user-local copy which takes priority in PATH
-        install -m755 "$src" "$SMPLOS_BIN/$app"
+
+        # ── Shadow scrub (single-copy invariant) ─────────────────────────
+        # Previously this script also `install -m755` d the binary into
+        # ~/.local/share/smplos/bin/, on the theory that dir sits earlier
+        # on PATH than /usr/local/bin (envs.conf prepends it) and mirroring
+        # the binary there would prevent stale user-local copies from
+        # shadowing the canonical install. In practice the mirror IS the
+        # shadow — every partial failure (sudo denied, disk full during
+        # the second install -m755, script interrupted between the two)
+        # left the two copies out of sync, and the ~/.local/share copy
+        # silently kept serving old code because it comes first on PATH.
+        # This is exactly how ~/.local/share/smplos/bin/smpl-calendar got
+        # pinned at v0.7.4 while /usr/local/bin ran v0.8.11 — Eww resolved
+        # by bare name, hit the shadow, users saw "the fix did not take".
+        # We now DELETE any shadow left behind by previous runs (or by
+        # deploy-local.sh) so the /usr/local/bin copy is the only one
+        # anything on PATH can find.
+        local shadow
+        for shadow in \
+            "$HOME/.local/share/smplos/bin/$app" \
+            "$HOME/.local/bin/$app" \
+            "$HOME/bin/$app"
+        do
+            [[ -e "$shadow" || -L "$shadow" ]] || continue
+            rm -f "$shadow" 2>/dev/null || true
+        done
 
         # Restart GUI apps that were running (not daemons — those restart via systemd/autostart)
         if [[ $was_running -eq 1 ]]; then
@@ -144,7 +168,7 @@ update_smpl_apps() {
                     # Daemon — let systemd or autostart handle restart
                     ;;
                 *)
-                    nohup "$SMPLOS_BIN/$app" &>/dev/null &
+                    nohup "/usr/local/bin/$app" &>/dev/null &
                     disown
                     restarted+=("$app")
                     ;;
@@ -152,15 +176,20 @@ update_smpl_apps() {
         fi
     done
 
-    # XR glasses module — the renderer + helpers are bundled into the smpl-apps
-    # release tarball (CI pulls them from the private xr-workspace repo, so the
-    # secret never touches customer machines and they ride this one public feed).
-    # Install whatever xr binaries are present; absence is never an error.
+    # XR glasses module — same story as apps above: canonical install goes to
+    # /usr/local/bin only, then scrub the shadow dirs so PATH lookup can't
+    # possibly resolve to a stale copy.
     local xr_installed=0 xrbin
     for xrbin in xr-workspace xrctl xr-game xr-glasses-hotplugd; do
         [[ -f "$tmpdir/$xrbin" ]] || continue
         sudo install -m755 "$tmpdir/$xrbin" "/usr/local/bin/$xrbin"
-        install -m755 "$tmpdir/$xrbin" "$SMPLOS_BIN/$xrbin"
+        for shadow in \
+            "$HOME/.local/share/smplos/bin/$xrbin" \
+            "$HOME/.local/bin/$xrbin" \
+            "$HOME/bin/$xrbin"
+        do
+            [[ -e "$shadow" || -L "$shadow" ]] && rm -f "$shadow" 2>/dev/null || true
+        done
         xr_installed=1
     done
     if [[ $xr_installed -eq 1 ]]; then
@@ -228,7 +257,16 @@ update_st_smpl() {
     if curl -fSL --connect-timeout 30 --retry 3 --progress-bar \
             "$asset_url" -o "$tmpfile"; then
         sudo install -m755 "$tmpfile" "/usr/local/bin/st-wl"
-        install -m755 "$tmpfile" "$SMPLOS_BIN/st-wl"
+        # Single-copy invariant: scrub the shadow instead of mirroring the
+        # binary into it. See the apps loop above for the full rationale.
+        local st_shadow
+        for st_shadow in \
+            "$HOME/.local/share/smplos/bin/st-wl" \
+            "$HOME/.local/bin/st-wl" \
+            "$HOME/bin/st-wl"
+        do
+            [[ -e "$st_shadow" || -L "$st_shadow" ]] && rm -f "$st_shadow" 2>/dev/null || true
+        done
 
         # Also install the matching terminfo so key sequences work correctly.
         # Download from the same release if available; fall back to repo copy.
@@ -372,7 +410,15 @@ update_micro_smpl() {
         micro_bin=$(find "$tmpdir" -name micro -type f | head -1)
         if [[ -n "$micro_bin" ]]; then
             sudo install -m755 "$micro_bin" "/usr/local/bin/micro"
-            install -m755 "$micro_bin" "$SMPLOS_BIN/micro"
+            # Single-copy invariant: scrub shadows rather than mirror.
+            local m_shadow
+            for m_shadow in \
+                "$HOME/.local/share/smplos/bin/micro" \
+                "$HOME/.local/bin/micro" \
+                "$HOME/bin/micro"
+            do
+                [[ -e "$m_shadow" || -L "$m_shadow" ]] && rm -f "$m_shadow" 2>/dev/null || true
+            done
             echo "$remote_ver" > "$STATE_DIR/micro-smpl"
             ok "micro-smpl: updated to $remote_ver"
             ((n_updated++)) || true
