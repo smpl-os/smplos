@@ -307,12 +307,17 @@ echo
 
 # ── Step 1: smplOS system files (git pull + sync scripts + migrations) ───────
 # Only in full mode — these aren't "app" updates.
-if [[ "$UPDATE_MODE" == "full" ]]; then
-    if command -v smplos-os-update &>/dev/null; then
-        smplos-os-update 2>&1 || echo "    WARNING: OS file update failed (exit $?)"
-    fi
-    echo
+# Always print the section header BEFORE the guard so a silent skip is
+# impossible to hide. Every failure mode has an audit trail in the log.
+echo "── smplOS system files ──"
+if [[ "$UPDATE_MODE" != "full" ]]; then
+    echo "  Skipped: mode=$UPDATE_MODE (only runs in --mode full)"
+elif ! command -v smplos-os-update &>/dev/null; then
+    echo "  WARNING: smplos-os-update not found in PATH (\$PATH=$PATH)"
+else
+    smplos-os-update 2>&1 || echo "  WARNING: smplos-os-update failed (exit $?)"
 fi
+echo
 
 # ── Step 2: Official repos ───────────────────────────────────────────────────
 if [[ "$UPDATE_MODE" == "apps" ]]; then
@@ -333,15 +338,22 @@ fi
 echo
 
 # ── Step 4: Forked smplOS apps (GitHub releases) ────────────────────────────
-if command -v smplos-update-apps &>/dev/null; then
-    echo "── smplOS Apps ──"
-    if [[ "$NETWORK_OK" -eq 0 ]]; then
-        echo "    Skipped: no internet connection"
-    else
-        smplos-update-apps 2>&1 || echo "    WARNING: smplOS app update failed"
-    fi
-    echo
+# Always print the header BEFORE the guard: a silent skip here was the bug
+# where Update OS would appear to succeed but never actually fetch new
+# settings/app-center/etc. binaries from GitHub.
+echo "── smplOS Apps ──"
+if [[ "$NETWORK_OK" -eq 0 ]]; then
+    echo "  Skipped: no internet connection"
+elif ! command -v smplos-update-apps &>/dev/null; then
+    echo "  WARNING: smplos-update-apps not found in PATH (\$PATH=$PATH)"
+else
+    # Signal to smplos-update-apps that sudo credentials are already primed
+    # (we're root via pkexec) so it doesn't try `sudo -v` against a pkexec
+    # environment where cached credentials may not carry over.
+    SMPLOS_SUDO_READY=1 smplos-update-apps 2>&1 \
+        || echo "  WARNING: smplos-update-apps failed (exit $?)"
 fi
+echo
 
 # ── Step 5: AUR packages (paru) — auto-heal if libalpm was bumped ────────────
 paru_ok() { paru --version &>/dev/null 2>&1; }
@@ -400,11 +412,33 @@ critical_bundle_prompt_and_apply
 # ── Final Hyprland reload ─────────────────────────────────────────────────────
 # Reload config after all compilation is done so any state lost during heavy
 # CPU load (e.g. paru building webkit2gtk) is cleanly restored.
-if [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]] && command -v hyprctl &>/dev/null; then
-    echo "── Reloading Hyprland ──"
-    hyprctl reload 2>/dev/null && echo "  Config reloaded" || echo "  Reload failed (safe to ignore)"
-    echo
+# pkexec strips HYPRLAND_INSTANCE_SIGNATURE, so we probe the invoker's
+# environment (via SMPLOS_INVOKER_UID) to find the running instance instead of
+# relying on our own env — otherwise this step silently skips every time.
+echo "── Reloading Hyprland ──"
+if ! command -v hyprctl &>/dev/null; then
+    echo "  Skipped: hyprctl not installed"
+else
+    # Try current env first; fall back to invoker's Hyprland signature.
+    _his="${HYPRLAND_INSTANCE_SIGNATURE:-}"
+    if [[ -z "$_his" && -n "${SMPLOS_INVOKER_UID:-}" ]]; then
+        _runtime="/run/user/$SMPLOS_INVOKER_UID"
+        if [[ -d "$_runtime/hypr" ]]; then
+            _his=$(ls -t "$_runtime/hypr" 2>/dev/null | head -1)
+        fi
+    fi
+    if [[ -z "$_his" ]]; then
+        echo "  Skipped: no running Hyprland instance"
+    else
+        HYPRLAND_INSTANCE_SIGNATURE="$_his" \
+        XDG_RUNTIME_DIR="/run/user/${SMPLOS_INVOKER_UID:-$UID}" \
+        hyprctl reload 2>/dev/null \
+            && echo "  Config reloaded" \
+            || echo "  Reload failed (safe to ignore)"
+    fi
+    unset _his _runtime
 fi
+echo
 
 echo "══════════════════════════════════════"
 echo "  Update complete!"

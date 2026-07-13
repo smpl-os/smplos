@@ -20,6 +20,11 @@ set -euo pipefail
 
 STATE_DIR="$HOME/.local/state/smplos/app-versions"
 SMPLOS_BIN="$HOME/.local/share/smplos/bin"
+# SMPLOS_PATH is where the smplos data root lives (contains repo/, configs/,
+# themes/, etc.). Every other smplOS script defaults to $HOME/.local/share/smplos.
+# Without a default here, `set -u` explodes on the one reference at the end of
+# the script (grafium PKGBUILD lookup) and the run aborts mid-flight.
+SMPLOS_PATH="${SMPLOS_PATH:-$HOME/.local/share/smplos}"
 mkdir -p "$STATE_DIR" "$SMPLOS_BIN"
 
 CHECK_ONLY=0; QUIET=0
