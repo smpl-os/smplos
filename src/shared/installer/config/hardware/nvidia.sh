@@ -23,7 +23,7 @@ KERNEL_HEADERS="$(pacman -Qqs '^linux(-zen|-lts|-hardened)?$' 2>/dev/null | head
 # These have NVIDIA GSP firmware and support the open-source kernel module.
 if echo "$NVIDIA" | grep -qE \
     "GTX 16[0-9]{2}|RTX [2-5][0-9]{3}|RTX PRO|Quadro RTX|RTX A[0-9]{4}|A[1-9][0-9]{2}|H[1-9][0-9]{2}|T[1-9][0-9]{2}|L[0-9]+"; then
-    PACKAGES=(nvidia-open-dkms nvidia-utils lib32-nvidia-utils)
+    PACKAGES=(nvidia-open-dkms nvidia-utils lib32-nvidia-utils nvidia-container-toolkit)
     GPU_ARCH="turing_plus"
     echo "  [GPU] Architecture: Turing+ (open-source kernel module)"
 
@@ -33,7 +33,7 @@ elif echo "$NVIDIA" | grep -qE \
     "GTX (9[0-9]{2}|10[0-9]{2})|GT 10[0-9]{2}|Quadro [PM][0-9]{3,4}|Quadro GV100|MX *[0-9]+|Titan (X|Xp|V)|Tesla V100"; then
     # Only proceed if the prebuilt legacy driver is in our offline repo
     if pacman -Si nvidia-580xx-dkms &>/dev/null 2>&1; then
-        PACKAGES=(nvidia-580xx-dkms nvidia-580xx-utils lib32-nvidia-580xx-utils)
+        PACKAGES=(nvidia-580xx-dkms nvidia-580xx-utils lib32-nvidia-580xx-utils nvidia-container-toolkit)
         GPU_ARCH="maxwell_pascal_volta"
         echo "  [GPU] Architecture: Maxwell/Pascal/Volta (nvidia-580xx-dkms)"
     else
@@ -97,6 +97,27 @@ env = __GLX_VENDOR_LIBRARY_NAME,nvidia
 ENVEOF
     fi
     echo "  [GPU] Hyprland envs.conf updated"
+fi
+
+# ── Container Device Interface (CDI) spec ────────────────────────────────────
+# Generates /etc/cdi/nvidia.yaml describing the GPU + all libraries podman/
+# docker need to mount into a container. With this file present, users can
+# run any NGC / Ollama / vLLM / llama.cpp container against the GPU with:
+#
+#     podman run --device nvidia.com/gpu=all <image>
+#
+# The spec is regenerated automatically after driver upgrades (see the
+# ALPM hook installed by nvidia-container-toolkit). Best-effort here — if
+# the toolkit is not yet resolvable in the live nvidia_uvm chain (nvidia
+# module needs an initial load to enumerate GPUs), the hook will retry on
+# first boot.
+if command -v nvidia-ctk &>/dev/null; then
+    sudo mkdir -p /etc/cdi
+    if sudo nvidia-ctk cdi generate --output=/etc/cdi/nvidia.yaml 2>/dev/null; then
+        echo "  [GPU] Container Device Interface spec written to /etc/cdi/nvidia.yaml"
+    else
+        echo "  [GPU] CDI spec generation deferred (GPU not yet enumerable) — will retry on first boot"
+    fi
 fi
 
 echo "  [GPU] NVIDIA driver setup complete"

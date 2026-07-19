@@ -17,6 +17,22 @@ nvidia-open-dkms
 nvidia-utils
 lib32-nvidia-utils
 
+# ── NVIDIA container runtime (AI workloads) ─────────────────────────────────
+# nvidia-container-toolkit: enables podman/docker to pass the GPU into
+# containers via the Container Device Interface (CDI). Required for every
+# GPU-accelerated container image on the planet — NGC (PyTorch, vLLM,
+# TensorRT, Triton), Ollama, LocalAI, HuggingFace TGI, llama.cpp CUDA
+# builds, ROCm equivalents, etc. Without this installed, `podman run
+# --device nvidia.com/gpu=all …` fails with "no such device".
+#
+# Post-install (nvidia.sh) runs `nvidia-ctk cdi generate` to write
+# /etc/cdi/nvidia.yaml so podman auto-discovers the GPU.
+#
+# This is the SINGLE MOST IMPORTANT missing package for AI-on-smplOS:
+# with it, users can pull any NGC container and immediately run inference/
+# training against their GPU. Adds ~10 MB.
+nvidia-container-toolkit
+
 # ── AMD (all GCN/RDNA generations + AMD APU iGPUs) ───────────────────────────
 # mesa: base OpenGL/EGL/DRI library; also provides the amdgpu DRM userspace.
 # vulkan-radeon: AMD Vulkan via Mesa RADV (required by Hyprland for rendering).
