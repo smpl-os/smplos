@@ -1,19 +1,34 @@
 #!/bin/bash
-# deploy-app-center — Deploy app-center binary to all required locations
+# deploy-app-center — Deploy locally-built app-center to the canonical path
 # Usage: deploy-app-center [--verify]
+#
+# Single-copy invariant (see smplos-update-apps for the full backstory):
+# /usr/local/bin is the ONLY place any smplOS app binary should live at
+# runtime. Historically this script mirrored the binary into
+# ~/.local/share/smplos/bin/, ~/Documents/source/…/.cache/app-binaries/,
+# and a few other spots — which was exactly the shadow-copy pattern that
+# left smpl-calendar pinned at v0.7.4 while /usr/local/bin ran v0.8.11.
+# We now install ONCE and then scrub any shadow left by an older run.
 
 set -euo pipefail
 
 REPO_ROOT="/home/blin/Documents/source/smpl-os/smpl-apps"
 SOURCE_BIN="$REPO_ROOT/target/release/app-center"
-DEPLOYMENT_PATHS=(
-    "$REPO_ROOT/dist/app-center"
+SYSTEM_BIN="/usr/local/bin/app-center"
+
+# Directories a previous version of this script (or deploy-local.sh) may
+# have populated. All of these either sit earlier on PATH than
+# /usr/local/bin (~/.local/share/smplos/bin via envs.conf) or get picked
+# up by dev tooling that resolves by bare name. Scrub them so nothing on
+# PATH can resolve to a stale copy.
+SHADOW_PATHS=(
     "$HOME/.local/share/smplos/bin/app-center"
+    "$HOME/.local/bin/app-center"
+    "$HOME/bin/app-center"
+    "$REPO_ROOT/dist/app-center"
     "$HOME/Documents/source/smpl-os/smplos/.cache/app-binaries/app-center"
     "$HOME/.local/share/smplos/repo/.cache/app-binaries/app-center"
 )
-# This path requires root and is what toggle-app-center launches FIRST.
-SYSTEM_BIN="/usr/local/bin/app-center"
 
 # Verify source binary exists
 if [[ ! -f "$SOURCE_BIN" ]]; then
@@ -30,48 +45,55 @@ echo "📦 Deploying app-center $VERSION ($SOURCE_SIZE)"
 echo "From: $SOURCE_BIN"
 echo ""
 
-# Deploy to all locations
-for path in "${DEPLOYMENT_PATHS[@]}"; do
-    if cp -f "$SOURCE_BIN" "$path" 2>/dev/null; then
-        echo "✅ $path"
-    else
-        echo "⚠️  Failed: $path (directory may not exist)"
+# 1. Install the canonical copy (root — this is what start-menu / toggle-app-center launches)
+if sudo install -m755 "$SOURCE_BIN" "$SYSTEM_BIN"; then
+    echo "✅ $SYSTEM_BIN (canonical)"
+else
+    echo "❌ Failed to install $SYSTEM_BIN — aborting so we don't leave stale shadows in place"
+    exit 1
+fi
+
+# 2. Scrub every known shadow (this is the whole point of the rewrite)
+scrubbed=0
+for shadow in "${SHADOW_PATHS[@]}"; do
+    if [[ -e "$shadow" || -L "$shadow" ]]; then
+        if rm -f "$shadow" 2>/dev/null; then
+            echo "🧹 scrubbed shadow: $shadow"
+            ((scrubbed++)) || true
+        else
+            echo "⚠️  could not remove shadow: $shadow"
+        fi
     fi
 done
-
-# Deploy to /usr/local/bin (requires root — toggle-app-center launches this FIRST)
-if sudo install -m755 "$SOURCE_BIN" "$SYSTEM_BIN" 2>/dev/null; then
-    echo "✅ $SYSTEM_BIN (root)"
-else
-    echo "⚠️  Failed: $SYSTEM_BIN (run with sudo access — this is what start-menu launches!)"
+if [[ $scrubbed -eq 0 ]]; then
+    echo "✨ no shadows found (single-copy invariant already held)"
 fi
 
 echo ""
 
-# Verify deployment if requested
+# 3. Verify
 if [[ "${1:-}" == "--verify" ]]; then
-    echo "Verifying deployments:"
-    all_match=true
-    for path in "${DEPLOYMENT_PATHS[@]}" "$SYSTEM_BIN"; do
-        if [[ -f "$path" ]]; then
-            path_version=$("$path" --version 2>/dev/null | awk '{print $2}' || echo "unknown")
-            if [[ "$path_version" == "$VERSION" ]]; then
-                echo "✅ $path ($path_version)"
-            else
-                echo "❌ $path ($path_version) - mismatch!"
-                all_match=false
-            fi
-        fi
-    done
-    
-    if $all_match; then
-        echo ""
-        echo "🎉 All deployments verified successfully!"
+    echo "Verifying:"
+    installed_version=$("$SYSTEM_BIN" --version 2>/dev/null | awk '{print $2}' || echo "unknown")
+    if [[ "$installed_version" == "$VERSION" ]]; then
+        echo "✅ $SYSTEM_BIN ($installed_version)"
     else
-        echo ""
-        echo "⚠️  Some deployments have mismatched versions"
+        echo "❌ $SYSTEM_BIN reports $installed_version, expected $VERSION"
         exit 1
     fi
+
+    remaining=()
+    for shadow in "${SHADOW_PATHS[@]}"; do
+        [[ -e "$shadow" || -L "$shadow" ]] && remaining+=("$shadow")
+    done
+    if [[ ${#remaining[@]} -gt 0 ]]; then
+        echo "❌ Shadow copies remain (would resolve before /usr/local/bin on PATH):"
+        printf '   %s\n' "${remaining[@]}"
+        exit 1
+    fi
+    echo "✅ no shadow copies on PATH"
+    echo ""
+    echo "🎉 verified: /usr/local/bin/app-center is the single copy"
 fi
 
 echo "✅ Deployment complete"
