@@ -119,6 +119,14 @@ PREAMBLE
 # Append the body (single-quoted: no substitution; uses UPDATE_MODE set above)
 cat >> "$UPDATE_SCRIPT" << 'EOF'
 
+# pkexec sanitizes PATH to a hardcoded minimal set that does NOT include
+# /usr/local/bin — but every smplOS management script (smplos-os-update,
+# smplos-update-apps, smplos-migrate, heal-paru, smplos-check-shadows, …)
+# lives there. Without this line, `command -v smplos-os-update` returns
+# nothing under pkexec and steps 1 and 3 silently no-op, which is exactly
+# the "Update OS button appears to run but nothing gets updated" bug.
+export PATH="/usr/local/sbin:/usr/local/bin:$PATH"
+
 SMPLOS_PATH="${SMPLOS_PATH:-$HOME/.local/share/smplos}"
 POLICY_DIR="$SMPLOS_PATH/repo/src/shared/update-policy"
 CRITICAL_LIST_FILE="$POLICY_DIR/critical-packages.txt"
