@@ -114,6 +114,21 @@ gammastep
 e2fsprogs
 timeshift             # system snapshots via rsync (ext4-compatible)
 
+# ── Kernel Module Preservation ───────────────────────────────
+# Preserves the currently-running kernel's module tree in
+# /usr/lib/modules across kernel upgrades until reboot. Without
+# this, `pacman -Syu` deletes the old module tree the moment a
+# new linux-lts lands and the *running* kernel loses the ability
+# to load any module it hasn't loaded yet (overlay, nvidia,
+# nvidia_uvm, dkms modules for new hardware, …). This is exactly
+# what breaks podman/containers, docker, VirtualBox, and DKMS
+# rebuilds between upgrade time and the next reboot.
+#
+# Fleet impact: EVERY Update OS pass that touches linux-lts
+# would silently break module loading fleet-wide until reboot
+# unless this hook is present.
+kernel-modules-hook
+
 # ── Bootloaders ──────────────────────────────────────────────
 grub
 syslinux
