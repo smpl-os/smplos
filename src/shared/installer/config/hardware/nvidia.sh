@@ -120,5 +120,52 @@ if command -v nvidia-ctk &>/dev/null; then
     fi
 fi
 
+# ── Privacy hardening: null-route NVIDIA telemetry endpoints ─────────────────
+# smplOS promises full privacy. The Linux NVIDIA userspace stack does not
+# currently phone home to any of the hosts below — they are exclusively used
+# by the Windows GeForce Experience client + NvTelemetryContainer service.
+# Blocking them defensively costs nothing on Linux and protects against any
+# future NVIDIA userspace tool that might contact them (Nsight, potential
+# future Linux GFE, …).
+#
+# Explicitly NOT blocked: nvcr.io (NGC container registry — legit),
+# developer.download.nvidia.com (CUDA/driver downloads — legit),
+# download.nvidia.com (DLSS/NGX assets — user-triggered).
+#
+# Audit with: /usr/local/bin/smplos-nvidia-privacy-audit
+# Reverse:    delete the marked block between BEGIN/END in /etc/hosts
+if ! grep -qF "smplOS NVIDIA telemetry blocklist BEGIN" /etc/hosts 2>/dev/null; then
+    sudo tee -a /etc/hosts >/dev/null << 'HOSTS_BLOCK'
+
+# === smplOS NVIDIA telemetry blocklist BEGIN ===
+# Managed by src/shared/installer/config/hardware/nvidia.sh
+# See:      /usr/local/bin/smplos-nvidia-privacy-audit
+# Reverse:  delete this entire marked block
+0.0.0.0 telemetry.nvidia.com
+0.0.0.0 services.gfe.nvidia.com
+0.0.0.0 gfe.nvidia.com
+0.0.0.0 events.gfe.nvidia.com
+0.0.0.0 rds.nvidia.com
+0.0.0.0 gfwsl.geforce.com
+0.0.0.0 assets1.gfe.nvidia.com
+0.0.0.0 assets2.gfe.nvidia.com
+0.0.0.0 images.nvidia.com
+::1 telemetry.nvidia.com
+::1 services.gfe.nvidia.com
+::1 gfe.nvidia.com
+::1 events.gfe.nvidia.com
+::1 rds.nvidia.com
+::1 gfwsl.geforce.com
+::1 assets1.gfe.nvidia.com
+::1 assets2.gfe.nvidia.com
+::1 images.nvidia.com
+# === smplOS NVIDIA telemetry blocklist END ===
+HOSTS_BLOCK
+    echo "  [GPU] Installed NVIDIA telemetry blocklist in /etc/hosts"
+else
+    echo "  [GPU] NVIDIA telemetry blocklist already present in /etc/hosts"
+fi
+
 echo "  [GPU] NVIDIA driver setup complete"
 echo "  [GPU] Note: initramfs will be rebuilt by the Plymouth setup step"
+echo "  [GPU] Audit privacy anytime with: smplos-nvidia-privacy-audit"

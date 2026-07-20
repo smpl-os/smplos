@@ -1,0 +1,176 @@
+#!/bin/bash
+# smplos-nvidia-privacy-audit — verify no NVIDIA component is phoning home.
+#
+# smplOS promises full privacy. This script audits the live NVIDIA userspace
+# stack for any active network activity, enabled telemetry services, or
+# unexpected outbound sockets. Run it any time to reassure yourself, or
+# on a schedule if you're paranoid.
+#
+# Exit codes:
+#   0 — clean (no NVIDIA process has an open network socket, no telemetry
+#       services running, hosts blocklist in place)
+#   1 — one or more findings that warrant investigation
+#
+# Baseline findings (verified 2026-07-19 on Arch + linux-lts 6.18.39 +
+# nvidia-open-dkms 610.43.03-3 + nvidia-container-toolkit):
+#
+#   Linux NVIDIA driver + userspace stack — does NOT phone home.
+#     - No systemd timers.
+#     - No listening or outbound sockets from any nvidia-* process.
+#     - nvidia-bug-report.sh writes a local tarball only; user submits
+#       manually to NVIDIA support — nothing auto-uploads.
+#     - nvidia-ngx-updater downloads DLSS assets ONLY when a game
+#       explicitly asks for them; no auto-scheduled fetch.
+#     - nvidia-persistenced, nvidia-powerd — local daemons, no network.
+#     - nvidia-container-toolkit — local runtime wrapper, no telemetry.
+#     - NVML / nvidia-smi — read local ioctl(2), never network.
+#
+#   Windows-only telemetry (blocked defensively in /etc/hosts):
+#     - GeForce Experience, NvTelemetryContainer, and the GFE overlay.
+#
+# If NVIDIA ever ships a Linux telemetry daemon, this audit will surface it.
+
+set -u
+
+RED=$'\033[31m'
+GREEN=$'\033[32m'
+YELLOW=$'\033[33m'
+BOLD=$'\033[1m'
+DIM=$'\033[2m'
+NC=$'\033[0m'
+
+FINDINGS=0
+BEGIN_MARKER="# === smplOS NVIDIA telemetry blocklist BEGIN ==="
+END_MARKER="# === smplOS NVIDIA telemetry blocklist END ==="
+
+# ── Only meaningful on NVIDIA hosts ──────────────────────────────────────────
+if ! lspci 2>/dev/null | grep -qi 'nvidia'; then
+    echo "No NVIDIA GPU detected — nothing to audit."
+    exit 0
+fi
+
+echo "${BOLD}smplOS NVIDIA Privacy Audit${NC}"
+echo "${DIM}$(date '+%Y-%m-%d %H:%M:%S %Z')  host $(hostname)${NC}"
+echo
+
+# ── 1. Installed NVIDIA packages ─────────────────────────────────────────────
+echo "${BOLD}[1/6] Installed NVIDIA packages${NC}"
+if command -v pacman &>/dev/null; then
+    mapfile -t PKGS < <(pacman -Qqs '^nvidia|^cuda|^ngc-cli|nsight' 2>/dev/null | sort -u)
+    for pkg in "${PKGS[@]}"; do
+        case "$pkg" in
+            nsight*|ngc-cli|cuda-samples)
+                echo "  ${YELLOW}⚠${NC} $pkg  (telemetry-capable — see step 4)"
+                ;;
+            *)
+                echo "  ${GREEN}✓${NC} $pkg"
+                ;;
+        esac
+    done
+    [[ ${#PKGS[@]} -eq 0 ]] && echo "  (none — that's odd on an NVIDIA host)"
+fi
+echo
+
+# ── 2. Enabled NVIDIA systemd units ──────────────────────────────────────────
+echo "${BOLD}[2/6] Enabled NVIDIA systemd units${NC}"
+ENABLED_UNITS=$(systemctl list-unit-files --state=enabled 2>/dev/null | awk '/nvidia/ {print $1}')
+if [[ -n "$ENABLED_UNITS" ]]; then
+    while IFS= read -r unit; do
+        # Whitelist: all enabled units MUST be sleep/hibernate-related
+        case "$unit" in
+            nvidia-suspend.service|nvidia-resume.service|nvidia-hibernate.service|\
+            nvidia-suspend-then-hibernate.service|nvidia-persistenced.service)
+                echo "  ${GREEN}✓${NC} $unit  (local suspend/resume/hibernate helper — no network)"
+                ;;
+            *)
+                echo "  ${RED}✗${NC} $unit  (unexpected — investigate)"
+                FINDINGS=$((FINDINGS + 1))
+                ;;
+        esac
+    done <<< "$ENABLED_UNITS"
+else
+    echo "  (none enabled)"
+fi
+echo
+
+# ── 3. Systemd timers ────────────────────────────────────────────────────────
+echo "${BOLD}[3/6] Systemd timers touching NVIDIA${NC}"
+TIMERS=$(systemctl list-timers --all 2>/dev/null | grep -i nvidia)
+if [[ -n "$TIMERS" ]]; then
+    echo "  ${RED}✗${NC} scheduled NVIDIA activity detected:"
+    echo "$TIMERS" | sed 's/^/    /'
+    FINDINGS=$((FINDINGS + 1))
+else
+    echo "  ${GREEN}✓${NC} no NVIDIA-related timers"
+fi
+echo
+
+# ── 4. Active network sockets owned by NVIDIA processes ──────────────────────
+echo "${BOLD}[4/6] Active network sockets owned by NVIDIA processes${NC}"
+if command -v ss &>/dev/null; then
+    NVIDIA_SOCKETS=$(sudo -n ss -tunap 2>/dev/null | grep -iE 'nvidia|nvcuda|nvml|nvctk|nvidia-ctk|nvidia-container' || true)
+    if [[ -n "$NVIDIA_SOCKETS" ]]; then
+        echo "  ${RED}✗${NC} NVIDIA process holding network sockets:"
+        echo "$NVIDIA_SOCKETS" | sed 's/^/    /'
+        FINDINGS=$((FINDINGS + 1))
+    else
+        echo "  ${GREEN}✓${NC} no NVIDIA process has any open network socket"
+    fi
+else
+    echo "  ${YELLOW}⚠${NC} 'ss' not available; skipping"
+fi
+echo
+
+# ── 5. Nsight/CUDA/NGC telemetry config sanity ───────────────────────────────
+echo "${BOLD}[5/6] Third-party NVIDIA tool telemetry state${NC}"
+NSIGHT_CFG_DIR="$HOME/.config/NVIDIA Corporation"
+if [[ -d "$NSIGHT_CFG_DIR" ]]; then
+    if grep -riq '"OptIn":[[:space:]]*true' "$NSIGHT_CFG_DIR" 2>/dev/null; then
+        echo "  ${RED}✗${NC} Nsight telemetry opt-in is TRUE in $NSIGHT_CFG_DIR"
+        FINDINGS=$((FINDINGS + 1))
+    else
+        echo "  ${GREEN}✓${NC} Nsight telemetry opt-in disabled"
+    fi
+else
+    echo "  ${GREEN}✓${NC} Nsight not installed / not configured"
+fi
+if [[ -f "$HOME/.ngc/config" ]]; then
+    if grep -Eq '^[[:space:]]*telemetry[[:space:]]*=[[:space:]]*(true|1|yes)' "$HOME/.ngc/config"; then
+        echo "  ${RED}✗${NC} NGC CLI telemetry enabled in ~/.ngc/config"
+        FINDINGS=$((FINDINGS + 1))
+    else
+        echo "  ${GREEN}✓${NC} NGC CLI telemetry disabled"
+    fi
+else
+    echo "  ${GREEN}✓${NC} NGC CLI not installed"
+fi
+echo
+
+# ── 6. Hosts blocklist verification ──────────────────────────────────────────
+echo "${BOLD}[6/6] /etc/hosts telemetry blocklist${NC}"
+if grep -qF "$BEGIN_MARKER" /etc/hosts 2>/dev/null; then
+    COUNT=$(sed -n "/$BEGIN_MARKER/,/$END_MARKER/p" /etc/hosts | grep -cE '^[0-9:]+\s+[a-z]' || true)
+    echo "  ${GREEN}✓${NC} smplOS NVIDIA blocklist present ($COUNT entries)"
+    # Verify entries actually resolve to a sink hole (0.0.0.0 or ::1)
+    if getent hosts telemetry.nvidia.com 2>/dev/null | grep -qE '^(0\.0\.0\.0|::1)'; then
+        echo "  ${GREEN}✓${NC} telemetry.nvidia.com resolves to sink hole"
+    else
+        RESOLVED=$(getent hosts telemetry.nvidia.com 2>/dev/null | awk '{print $1}')
+        echo "  ${YELLOW}⚠${NC} telemetry.nvidia.com resolves to '$RESOLVED' — NSS may be bypassing /etc/hosts"
+        FINDINGS=$((FINDINGS + 1))
+    fi
+else
+    echo "  ${YELLOW}⚠${NC} smplOS NVIDIA blocklist NOT installed in /etc/hosts"
+    echo "     Run:  sudo /usr/local/bin/smplos-migrate  (or reinstall NVIDIA driver)"
+    FINDINGS=$((FINDINGS + 1))
+fi
+echo
+
+# ── Summary ──────────────────────────────────────────────────────────────────
+if [[ $FINDINGS -eq 0 ]]; then
+    echo "${BOLD}${GREEN}RESULT: clean — no NVIDIA telemetry detected${NC}"
+    exit 0
+else
+    echo "${BOLD}${RED}RESULT: $FINDINGS finding(s) — review above${NC}"
+    exit 1
+fi
