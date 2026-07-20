@@ -1641,6 +1641,20 @@ RestartSec=3
 WantedBy=default.target
 SYNCSVC
     ln -sf ../sync-center-daemon.service "$user_wants/sync-center-daemon.service" 2>/dev/null || true
+
+    # hypridle (idle daemon: lock / DPMS / suspend timeouts)
+    # The unit file itself is shipped by the `hypridle` Arch package to
+    # /usr/lib/systemd/user/hypridle.service and declares
+    # `WantedBy=graphical-session.target`, so the wants symlink must live in
+    # `graphical-session.target.wants` (NOT default.target.wants) to be picked
+    # up by systemd's user manager on session activation. Enabling it removes
+    # the historical failure mode where `exec-once = hypridle` fired once per
+    # session and, if hypridle ever died, Settings would keep advertising
+    # timeouts that never actually fired.
+    local user_graphical_wants="$skel/.config/systemd/user/graphical-session.target.wants"
+    mkdir -p "$user_graphical_wants"
+    ln -sf /usr/lib/systemd/user/hypridle.service \
+        "$user_graphical_wants/hypridle.service" 2>/dev/null || true
 }
 
 setup_helper_scripts() {

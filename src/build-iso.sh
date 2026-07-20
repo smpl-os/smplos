@@ -181,6 +181,50 @@ detect_runtime() {
         # but podman itself needs no daemon or background service.
         CTR="sudo podman"
         log_info "Container runtime: Podman ($(podman --version 2>/dev/null | head -1))"
+
+        # Podman 6.x tightened its native-overlay checks and now refuses to
+        # start on ext4/ext2 backings unless fuse-overlayfs is available as a
+        # userspace fallback.  Detect that here and auto-install rather than
+        # dying deep inside "podman pull" with a cryptic backing-filesystem
+        # error.
+        if ! sudo podman info &>/dev/null; then
+            local podman_err
+            podman_err=$(sudo podman info 2>&1 || true)
+            if echo "$podman_err" | grep -q "overlay.*not supported\|backing file system is unsupported"; then
+                log_warn "Podman cannot use native overlay on this filesystem"
+                if ! command -v fuse-overlayfs &>/dev/null; then
+                    local distro
+                    distro=$(detect_distro)
+                    log_info "Installing fuse-overlayfs (userspace overlay fallback)"
+                    case "$distro" in
+                        arch|endeavouros|manjaro|garuda|cachyos|smplos)
+                            sudo pacman -S --noconfirm --needed fuse-overlayfs ;;
+                        ubuntu|debian|pop|linuxmint|zorin)
+                            sudo apt-get install -y fuse-overlayfs ;;
+                        fedora|nobara)
+                            sudo dnf install -y fuse-overlayfs ;;
+                        opensuse*|sles)
+                            sudo zypper install -y fuse-overlayfs ;;
+                        void)
+                            sudo xbps-install -y fuse-overlayfs ;;
+                        *)
+                            die_help \
+                                "Podman refuses to use overlay on this filesystem and fuse-overlayfs is not installed" \
+                                "Podman 6.x rejects native overlay on ext2/3/4 without a userspace fallback" \
+                                "Install fuse-overlayfs manually for your distro, then re-run the build"
+                            ;;
+                    esac
+                fi
+                # Re-verify
+                if ! sudo podman info &>/dev/null; then
+                    die_help \
+                        "Podman still cannot initialise storage after installing fuse-overlayfs" \
+                        "$(sudo podman info 2>&1 | tail -3 | tr '\n' ' ')" \
+                        "Inspect: sudo podman info | head -30 — you may need to edit /etc/containers/storage.conf"
+                fi
+                log_info "Podman storage OK (using fuse-overlayfs fallback)"
+            fi
+        fi
     elif command -v docker &>/dev/null; then
         CTR="docker"
         # Docker needs its daemon running and the user in the docker group
@@ -203,22 +247,24 @@ install_runtime() {
     local distro="$1"
     log_step "Installing Podman"
 
+    # fuse-overlayfs is needed when podman's native overlay driver rejects
+    # the backing filesystem (podman 6.x has been stricter about ext4).
     case "$distro" in
         arch|endeavouros|manjaro|garuda|cachyos|smplos)
-            sudo pacman -S --noconfirm --needed podman
+            sudo pacman -S --noconfirm --needed podman fuse-overlayfs
             ;;
         ubuntu|debian|pop|linuxmint|zorin)
             sudo apt-get update
-            sudo apt-get install -y podman
+            sudo apt-get install -y podman fuse-overlayfs
             ;;
         fedora|nobara)
-            sudo dnf install -y podman
+            sudo dnf install -y podman fuse-overlayfs
             ;;
         opensuse*|sles)
-            sudo zypper install -y podman
+            sudo zypper install -y podman fuse-overlayfs
             ;;
         void)
-            sudo xbps-install -y podman
+            sudo xbps-install -y podman fuse-overlayfs
             ;;
         *)
             die "Unknown distro '$distro'. Install podman manually: https://podman.io/docs/installation"
