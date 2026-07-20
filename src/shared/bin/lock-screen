@@ -1,13 +1,39 @@
 #!/bin/bash
 # Lock Screen
 # Locks the screen using hyprlock (Hyprland) or i3lock (X11)
+#
+# On Wayland/Hyprland we run hyprlock SYNCHRONOUSLY so we can attach a
+# post-unlock DPMS cycle. This works around a nvidia-open + Hyprland +
+# hyprlock bug where, after a successful unlock following resume-from-suspend,
+# the compositor regains DRM master but never commits a new frame — backlight
+# comes back on, keyboard input still routes to the (invisible) desktop, but
+# the panel stays black until the machine is hard-power-cycled.
+#
+# Cycling DPMS off/on after hyprlock exits forces a full modeset and page
+# flip, which restores the picture. The extra `hyprctl reload` covers the
+# case where the compositor thinks the output is already on and skips the
+# CRTC power write.
 
 if [[ -n "$WAYLAND_DISPLAY" ]]; then
     # Turn screen on first so the user sees the lock dialog
     hyprctl dispatch "hl.dsp.dpms({state='on'})" 2>/dev/null
-    # Launch hyprlock (skip if already running)
+    # Launch hyprlock (skip if already running) — SYNCHRONOUS so we can
+    # run post-unlock recovery below.
     if ! pidof hyprlock &>/dev/null; then
         hyprlock
+    fi
+    # Post-unlock recovery: force a DPMS cycle + reload so the compositor
+    # actually paints again on nvidia. Cheap (sub-second) and harmless when
+    # the display was already fine.
+    if command -v hyprctl &>/dev/null; then
+        sleep 0.2
+        hyprctl dispatch "hl.dsp.dpms({state='off'})" 2>/dev/null
+        sleep 0.4
+        hyprctl dispatch "hl.dsp.dpms({state='on'})" 2>/dev/null
+        sleep 0.2
+        hyprctl reload 2>/dev/null
+        sleep 0.2
+        hyprctl dispatch "hl.dsp.dpms({state='on'})" 2>/dev/null
     fi
 else
     if command -v i3lock &>/dev/null; then

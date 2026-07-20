@@ -32,6 +32,21 @@ if [[ ! -f "$UNIT_SRC" ]]; then
     exit 0
 fi
 
+# Kill any bare `hypridle` process that came from the OLD
+# `exec-once = hypridle` line in autostart.conf. Same-release sync_hypr_configs
+# removes that line from the file, but the running Hyprland session already
+# spawned the daemon at session start, so it survives until logout. Leaving it
+# alive means the systemd-managed instance and the exec-once instance both
+# respond to logind Lock/Sleep signals, doubling every after_sleep_cmd. Kill
+# only bare-name matches so we don't touch the /usr/bin/hypridle from systemd.
+if pgrep -x hypridle >/dev/null 2>&1; then
+    # -f matches command line; pgrep -x on the bare name catches the exec-once
+    # invocation (argv[0] = "hypridle") without hitting the fullpath one.
+    pkill -x hypridle 2>/dev/null || true
+    sleep 0.3
+    echo "  killed stale bare hypridle (was likely from exec-once)"
+fi
+
 # Check if already enabled (idempotent guard)
 if systemctl --user is-enabled hypridle.service >/dev/null 2>&1; then
     echo "  hypridle.service already enabled — nothing to do"
