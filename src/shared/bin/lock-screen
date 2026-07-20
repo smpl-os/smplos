@@ -13,29 +13,64 @@
 # flip, which restores the picture. The extra `hyprctl reload` covers the
 # case where the compositor thinks the output is already on and skips the
 # CRTC power write.
+#
+# Every step is logged to a persistent file so that, when the black-screen
+# bug DOES bite and the user has to hard-reboot, we can inspect what
+# actually ran after unlock. /tmp is tmpfs on Arch and gets wiped on boot,
+# so we log under ~/.cache/smplos/ which survives.
+
+LOG_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/smplos"
+mkdir -p "$LOG_DIR" 2>/dev/null
+LOG="$LOG_DIR/lock-screen.log"
+# Cap the log at ~200 KB so it can't grow unbounded across months of use.
+if [[ -f "$LOG" ]] && [[ $(stat -c%s "$LOG" 2>/dev/null || echo 0) -gt 204800 ]]; then
+    tail -c 102400 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
+fi
+log() { printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S.%3N')" "$*" >> "$LOG"; }
+log "=== lock-screen invoked (pid $$, WAYLAND_DISPLAY=${WAYLAND_DISPLAY:-none}) ==="
 
 if [[ -n "$WAYLAND_DISPLAY" ]]; then
     # Turn screen on first so the user sees the lock dialog
-    hyprctl dispatch "hl.dsp.dpms({state='on'})" 2>/dev/null
+    hyprctl dispatch "hl.dsp.dpms({state='on'})" 2>>"$LOG"
+    log "pre-lock dpms on -> exit $?"
     # Launch hyprlock (skip if already running) — SYNCHRONOUS so we can
     # run post-unlock recovery below.
-    if ! pidof hyprlock &>/dev/null; then
+    if pidof hyprlock &>/dev/null; then
+        log "hyprlock already running, skipping launch"
+    else
+        log "launching hyprlock synchronously"
+        start=$(date +%s)
         hyprlock
+        rc=$?
+        log "hyprlock exited rc=$rc after $(($(date +%s) - start))s"
     fi
     # Post-unlock recovery: force a DPMS cycle + reload so the compositor
     # actually paints again on nvidia. Cheap (sub-second) and harmless when
-    # the display was already fine.
+    # the display was already fine. Log every step: if the screen still goes
+    # black, the log tells us exactly which hyprctl call hung or errored.
     if command -v hyprctl &>/dev/null; then
+        log "post-unlock recovery: dpms off"
         sleep 0.2
-        hyprctl dispatch "hl.dsp.dpms({state='off'})" 2>/dev/null
+        hyprctl dispatch "hl.dsp.dpms({state='off'})" 2>>"$LOG"
+        log "dpms off -> exit $?"
         sleep 0.4
-        hyprctl dispatch "hl.dsp.dpms({state='on'})" 2>/dev/null
+        log "post-unlock recovery: dpms on (1st)"
+        hyprctl dispatch "hl.dsp.dpms({state='on'})" 2>>"$LOG"
+        log "dpms on (1st) -> exit $?"
         sleep 0.2
-        hyprctl reload 2>/dev/null
+        log "post-unlock recovery: hyprctl reload"
+        hyprctl reload 2>>"$LOG"
+        log "reload -> exit $?"
         sleep 0.2
-        hyprctl dispatch "hl.dsp.dpms({state='on'})" 2>/dev/null
+        log "post-unlock recovery: dpms on (2nd)"
+        hyprctl dispatch "hl.dsp.dpms({state='on'})" 2>>"$LOG"
+        log "dpms on (2nd) -> exit $?"
+    else
+        log "hyprctl not in PATH — cannot run post-unlock recovery"
     fi
+    log "=== lock-screen done (pid $$) ==="
 else
+    log "no WAYLAND_DISPLAY — falling back to X11 lockers"
     if command -v i3lock &>/dev/null; then
         i3lock -c 1e1e2e
     elif command -v slock &>/dev/null; then

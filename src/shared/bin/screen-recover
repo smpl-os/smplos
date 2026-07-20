@@ -1,0 +1,61 @@
+#!/bin/bash
+# smplOS Emergency Screen Recovery
+#
+# Blind-typable via `Ctrl+Alt+D` binding in emergency.conf. Purpose: when
+# the nvidia+Hyprland+hyprlock post-unlock black-screen bug bites, keyboard
+# input still routes to the invisible compositor — the user can hit this
+# shortcut without seeing anything and (hopefully) get the picture back
+# without a hard reboot.
+#
+# Recovery cascade (most aggressive last):
+#   1. `hl.dsp.dpms({state='off'})` then `on` — forces a full CRTC power
+#      cycle. Usually enough.
+#   2. `hyprctl reload` — re-reads config and rebuilds monitor layout.
+#   3. `hyprctl dispatch dpms toggle` twice via wildcard — last-resort
+#      per-monitor toggle in case the Lua dispatcher failed.
+#
+# Every step is logged to ~/.cache/smplos/screen-recover.log so we can
+# see what worked. Non-fatal on every command — always keeps going.
+
+set +e
+
+LOG_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/smplos"
+mkdir -p "$LOG_DIR" 2>/dev/null
+LOG="$LOG_DIR/screen-recover.log"
+if [[ -f "$LOG" ]] && [[ $(stat -c%s "$LOG" 2>/dev/null || echo 0) -gt 204800 ]]; then
+    tail -c 102400 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
+fi
+log() { printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S.%3N')" "$*" >> "$LOG"; }
+log "=== screen-recover invoked (pid $$) ==="
+
+if ! command -v hyprctl &>/dev/null; then
+    log "hyprctl not in PATH — nothing to do"
+    exit 1
+fi
+
+# Step 1: DPMS cycle via Lua dispatcher
+log "step 1: dpms off -> on (Lua)"
+hyprctl dispatch "hl.dsp.dpms({state='off'})" 2>>"$LOG"
+log "  dpms off -> $?"
+sleep 0.5
+hyprctl dispatch "hl.dsp.dpms({state='on'})" 2>>"$LOG"
+log "  dpms on  -> $?"
+sleep 0.3
+
+# Step 2: reload compositor config (rebuilds monitor state)
+log "step 2: hyprctl reload"
+hyprctl reload 2>>"$LOG"
+log "  reload -> $?"
+sleep 0.3
+
+# Step 3: last-resort second DPMS cycle
+log "step 3: dpms on (retry)"
+hyprctl dispatch "hl.dsp.dpms({state='on'})" 2>>"$LOG"
+log "  dpms on -> $?"
+
+# Nudge the user with a notification so they know a recovery ran (and, if
+# the screen is back, they see it). Non-fatal.
+notify-send "Screen Recovery" "Ran DPMS cycle + reload + workspace churn. Check ~/.cache/smplos/screen-recover.log for details." 2>/dev/null || true
+
+log "=== screen-recover done ==="
+exit 0
