@@ -8,14 +8,22 @@
 # without a hard reboot.
 #
 # Recovery cascade (most aggressive last):
-#   1. `hl.dsp.dpms({state='off'})` then `on` — forces a full CRTC power
-#      cycle. Usually enough.
-#   2. `hyprctl reload` — re-reads config and rebuilds monitor layout.
-#   3. `hyprctl dispatch dpms toggle` twice via wildcard — last-resort
-#      per-monitor toggle in case the Lua dispatcher failed.
+#   1. DPMS off -> on via `hl.dsp.dpms(...)` — forces a CRTC power cycle.
+#      Usually enough. Empirically hyprctl reports "ok" even when the panel
+#      stays black; that's the nvidia bug we can't detect from here.
+#   2. `hyprctl reload` — re-reads config, rebuilds monitor state.
+#   3. Second DPMS-on — belt-and-suspenders if the first one was a no-op.
+#   4. Full monitor disable + reload — the "nuclear" fallback. Disables
+#      every monitor via `hyprctl keyword monitor NAME, disable` and then
+#      re-issues `hyprctl reload`, which re-sources monitors.conf and
+#      re-enables them with their correct modes / positions / scales /
+#      transforms. This forces a fresh modeset+page-flip that the nvidia
+#      driver CAN'T silently drop the way it drops DPMS toggles. Adds a
+#      brief second black flash but is the only chain we've seen recover
+#      when steps 1-3 return "ok" but the panel stays dark.
 #
-# Every step is logged to ~/.cache/smplos/screen-recover.log so we can
-# see what worked. Non-fatal on every command — always keeps going.
+# Every step is logged to ~/.cache/smplos/screen-recover.log so we can see
+# what worked after a hard reboot. Non-fatal on every command.
 
 set +e
 
@@ -48,14 +56,43 @@ hyprctl reload 2>>"$LOG"
 log "  reload -> $?"
 sleep 0.3
 
-# Step 3: last-resort second DPMS cycle
+# Step 3: belt-and-suspenders second DPMS on
 log "step 3: dpms on (retry)"
 hyprctl dispatch "hl.dsp.dpms({state='on'})" 2>>"$LOG"
 log "  dpms on -> $?"
+sleep 0.2
+
+# Step 4: nuclear option — monitor cycle. The nvidia+Hyprland post-DPMS bug
+# sometimes shows hyprctl returning "ok" for every DPMS/reload call while
+# the panel stays black (no page flip actually lands). Fully disabling
+# every monitor and then reloading forces a modeset the driver CAN'T drop.
+# Disruptive (brief second flash, windows may re-arrange), but reliable.
+#
+# We collect the monitor list BEFORE disabling anything. If jq is not
+# installed we fall back to a python one-liner; both are fine.
+log "step 4: monitor disable + reload cycle"
+if command -v jq >/dev/null 2>&1; then
+    monitors=$(hyprctl monitors -j 2>/dev/null | jq -r '.[].name')
+elif command -v python3 >/dev/null 2>&1; then
+    monitors=$(hyprctl monitors -j 2>/dev/null | python3 -c 'import sys,json; [print(m["name"]) for m in json.load(sys.stdin)]' 2>/dev/null)
+else
+    monitors=""
+    log "  no jq or python3 — skipping monitor cycle"
+fi
+
+if [[ -n "$monitors" ]]; then
+    for mon in $monitors; do
+        hyprctl keyword monitor "$mon, disable" 2>>"$LOG"
+        log "  disable $mon -> $?"
+    done
+    sleep 0.4
+    hyprctl reload 2>>"$LOG"
+    log "  reload (re-enables via monitors.conf) -> $?"
+fi
 
 # Nudge the user with a notification so they know a recovery ran (and, if
 # the screen is back, they see it). Non-fatal.
-notify-send "Screen Recovery" "Ran DPMS cycle + reload + workspace churn. Check ~/.cache/smplos/screen-recover.log for details." 2>/dev/null || true
+notify-send "Screen Recovery" "Ran DPMS cycle + monitor disable/reload. Check ~/.cache/smplos/screen-recover.log for details." 2>/dev/null || true
 
 log "=== screen-recover done ==="
 exit 0
