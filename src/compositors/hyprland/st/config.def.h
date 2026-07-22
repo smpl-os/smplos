@@ -600,7 +600,10 @@ static Key key[] = {
 	{ XKB_KEY_Delete,        MOD_MASK_ANY,     "\033[3~",      +1,    0},
 	{ XKB_KEY_BackSpace,     MOD_MASK_NONE,      "\177",          0,    0},
 	{ XKB_KEY_BackSpace,     MOD_MASK_ALT,       "\033\177",      0,    0},
-	{ XKB_KEY_BackSpace,     MOD_MASK_CTRL,    "\037",          0,    0},  /* \x1f = CtrlUnderscore — micro binds this to DeleteWordLeft */
+	/* Ctrl+Backspace -> \x17 (Ctrl+W) so readline (bash/fish/zsh) and modern
+	 * CLIs (Copilot CLI, opencode, Claude Code) treat it as unix-word-rubout.
+	 * micro must bind "CtrlW": "DeleteWordLeft" to keep the same behaviour. */
+	{ XKB_KEY_BackSpace,     MOD_MASK_CTRL,    "\027",          0,    0},
 	{ XKB_KEY_Home,          MOD_MASK_SHIFT,      "\033[1;2~",     0,    0},
 	{ XKB_KEY_Home,          MOD_MASK_ANY,     "\033[H",        0,   -1},
 	{ XKB_KEY_Home,          MOD_MASK_ANY,     "\033[1~",       0,   +1},

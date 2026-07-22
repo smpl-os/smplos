@@ -3,6 +3,7 @@
     "CtrlRight":      "WordRight",
     "CtrlBackspace":  "DeleteWordLeft",
     "CtrlUnderscore": "DeleteWordLeft",
+    "CtrlW":          "DeleteWordLeft",
     "CtrlDelete":     "DeleteWordRight",
     "ShiftUp":        "SelectUp",
     "ShiftDown":      "SelectDown",
