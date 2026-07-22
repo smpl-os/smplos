@@ -577,6 +577,10 @@ static Key key[] = {
 	{ XKB_KEY_Right,         MOD_MASK_ANY,     "\033OC",        0,   +1},
 	{ XKB_KEY_ISO_Left_Tab,  MOD_MASK_SHIFT,      "\033[Z",        0,    0},
 	{ XKB_KEY_Return,        MOD_MASK_ALT,       "\033\r",        0,    0},
+	/* Shift+Enter -> CSI-u sequence so apps (Copilot CLI, opencode, etc.)
+	 * can distinguish it from plain Enter. Must precede the MOD_MASK_ANY
+	 * catch-all below since match() is exact-equality. */
+	{ XKB_KEY_Return,        MOD_MASK_SHIFT,     "\033[13;2u",    0,    0},
 	{ XKB_KEY_Return,        MOD_MASK_ANY,     "\r",            0,    0},
 	{ XKB_KEY_Insert,        MOD_MASK_SHIFT,      "\033[4l",      -1,    0},
 	{ XKB_KEY_Insert,        MOD_MASK_SHIFT,      "\033[2;2~",    +1,    0},
