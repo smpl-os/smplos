@@ -62,32 +62,47 @@ hyprctl dispatch "hl.dsp.dpms({state='on'})" 2>>"$LOG"
 log "  dpms on -> $?"
 sleep 0.2
 
-# Step 4: nuclear option — monitor cycle. The nvidia+Hyprland post-DPMS bug
-# sometimes shows hyprctl returning "ok" for every DPMS/reload call while
-# the panel stays black (no page flip actually lands). Fully disabling
-# every monitor and then reloading forces a modeset the driver CAN'T drop.
-# Disruptive (brief second flash, windows may re-arrange), but reliable.
+# Step 4: monitor disable via monitors.conf swap + reload. The old
+# `hyprctl keyword monitor NAME, disable` form is REJECTED silently by
+# Hyprland 0.55.x's Lua parser ("keyword can't work with non-legacy
+# parsers. Use eval.") — hyprctl returned exit 0 while the compositor
+# printed the error only to its journal, so earlier revisions of this
+# script were doing nothing at all here despite the log saying "ok".
 #
-# We collect the monitor list BEFORE disabling anything. If jq is not
-# installed we fall back to a python one-liner; both are fine.
-log "step 4: monitor disable + reload cycle"
-if command -v jq >/dev/null 2>&1; then
-    monitors=$(hyprctl monitors -j 2>/dev/null | jq -r '.[].name')
-elif command -v python3 >/dev/null 2>&1; then
-    monitors=$(hyprctl monitors -j 2>/dev/null | python3 -c 'import sys,json; [print(m["name"]) for m in json.load(sys.stdin)]' 2>/dev/null)
+# What works with the Lua config: rewrite ~/.config/hypr/monitors.conf so
+# every `monitor = NAME, ...` line becomes `monitor = NAME, disable`,
+# then `hyprctl reload` (which re-runs monitors_loader.lua → hl.monitor()
+# for each entry). That fully disables each output at the compositor
+# level, forcing a real modeset. We then restore the original
+# monitors.conf and reload again to bring them back with their proper
+# modes / positions / scales / transforms.
+#
+# This IS the nuclear option — briefly kills the framebuffer entirely.
+# Also the only reliable way to force nvidia to accept a fresh page flip
+# when the DPMS toggle silently no-ops.
+log "step 4: monitors.conf disable + reload + restore"
+MONCONF="$HOME/.config/hypr/monitors.conf"
+if [[ -f "$MONCONF" ]]; then
+    MONBAK=$(mktemp -t monitors.conf.recovery.XXXXXX 2>/dev/null)
+    if [[ -n "$MONBAK" ]] && cp "$MONCONF" "$MONBAK" 2>/dev/null; then
+        # Replace each `monitor = NAME, ...` with `monitor = NAME, disable`.
+        # -E for POSIX-portable regex; only touches lines that already start
+        # with `monitor =` so comments/other content survive untouched.
+        sed -E 's|^(monitor[[:space:]]*=[[:space:]]*[^,]+),.*|\1, disable|' \
+            "$MONBAK" > "$MONCONF"
+        hyprctl reload 2>>"$LOG"
+        log "  reload (monitors disabled) -> $?"
+        sleep 0.5
+        # Restore original and reload again to re-enable with full spec
+        cp "$MONBAK" "$MONCONF" 2>/dev/null
+        hyprctl reload 2>>"$LOG"
+        log "  reload (monitors restored) -> $?"
+        rm -f "$MONBAK"
+    else
+        log "  could not back up monitors.conf — skipping monitor cycle"
+    fi
 else
-    monitors=""
-    log "  no jq or python3 — skipping monitor cycle"
-fi
-
-if [[ -n "$monitors" ]]; then
-    for mon in $monitors; do
-        hyprctl keyword monitor "$mon, disable" 2>>"$LOG"
-        log "  disable $mon -> $?"
-    done
-    sleep 0.4
-    hyprctl reload 2>>"$LOG"
-    log "  reload (re-enables via monitors.conf) -> $?"
+    log "  monitors.conf not present — skipping monitor cycle"
 fi
 
 # Nudge the user with a notification so they know a recovery ran (and, if
