@@ -1,0 +1,25 @@
+// smplOS default VS Code keybindings.
+//
+// Copied to ~/.config/Code/User/keybindings.json for new users at install
+// time and by the 20260724-* migration for existing users (only if they
+// don't already have keybindings.json — user customisations are never
+// overwritten).
+//
+// ── Ctrl+Alt+C — focus GitHub Copilot Chat input ────────────────────────────
+// Companion to the smplos black-screen recovery workflow: when the nvidia+
+// Hyprland DPMS bug leaves the display dark, the user can hit Ctrl+Alt+C
+// blindly (assuming VS Code is the focused window — usually true during
+// coding sessions), start typing, and hit Enter to send. The chat input
+// receives keystrokes even when the compositor isn't drawing, so the
+// message reaches the assistant and we can diagnose without a hard reboot.
+//
+// The compositor-level Ctrl+Alt+C binding in Hyprland's emergency.conf was
+// intentionally REMOVED so VS Code sees this keypress. If the compositor
+// grabbed it, VS Code would never fire this rule.
+[
+    {
+        "key": "ctrl+alt+c",
+        "command": "workbench.action.chat.open",
+        "when": "chatIsEnabled"
+    }
+]
