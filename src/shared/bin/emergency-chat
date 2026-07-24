@@ -1,0 +1,109 @@
+#!/bin/bash
+# smplOS Emergency "Chat to Copilot" (blind-typable)
+#
+# Bound to Ctrl+Alt+C via emergency.conf. Purpose: when the display goes
+# black (nvidia post-DPMS bug) and you can't see anything to run screen-
+# recover manually, this shortcut simultaneously:
+#
+#   1. Fires screen-recover (backgrounded) — attempts to bring the
+#      framebuffer back via DPMS cycle + monitor disable/reload.
+#
+#   2. Opens/focuses VS Code with the GitHub Copilot Chat panel and cursor
+#      in the message input, so you can type "screen is black" and hit
+#      Enter — the model receives it and can help diagnose without you
+#      needing to hard-reboot to reach the chat surface.
+#
+# The whole thing is designed to be blind-typable: hit the shortcut, wait
+# a couple of seconds, type your message, hit Enter. If step 1 recovered
+# the display, you see the chat. If not, you're typing to me anyway.
+#
+# Logs everything to ~/.cache/smplos/emergency-chat.log so we can see
+# afterward what actually happened (VS Code start time, command status).
+#
+# CANDIDATE_COMMANDS is a fallback chain — VS Code's chat command IDs
+# have shifted across Copilot versions. We try the most likely current
+# one first and fall through.
+
+set +e
+
+LOG_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/smplos"
+mkdir -p "$LOG_DIR" 2>/dev/null
+LOG="$LOG_DIR/emergency-chat.log"
+if [[ -f "$LOG" ]] && [[ $(stat -c%s "$LOG" 2>/dev/null || echo 0) -gt 204800 ]]; then
+    tail -c 102400 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
+fi
+log() { printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S.%3N')" "$*" >> "$LOG"; }
+log "=== emergency-chat invoked (pid $$) ==="
+
+# ── Step 1: fire screen-recover in the background ────────────────────────────
+# We don't wait for it — screen-recover takes ~1.5s (DPMS cycle + monitor
+# disable+reload) and we want VS Code launching in parallel.
+if command -v screen-recover >/dev/null 2>&1; then
+    log "step 1: firing screen-recover in background"
+    screen-recover >/dev/null 2>&1 &
+else
+    log "step 1: screen-recover not in PATH — skipping"
+fi
+
+# ── Step 2: open / focus VS Code with Copilot Chat ───────────────────────────
+CODE_BIN="$(command -v code)"
+if [[ -z "$CODE_BIN" ]]; then
+    log "step 2: 'code' binary not in PATH — cannot open VS Code chat"
+    notify-send -u critical "Emergency Chat" "VS Code not installed — screen-recover fired anyway" 2>/dev/null
+    exit 1
+fi
+log "step 2: code binary at $CODE_BIN"
+
+# If VS Code isn't running yet, launch it first and give it time to start.
+# VS Code's remote-command flag only works against an already-running
+# window; a cold launch takes ~1-2s before the extension host is ready to
+# accept commands. So: check, spawn if needed, brief sleep, then command.
+if ! pgrep -f "/code" >/dev/null 2>&1; then
+    log "step 2: no code process running — launching cold"
+    setsid "$CODE_BIN" --new-window >/dev/null 2>&1 &
+    # Wait for VS Code to be responsive. Poll pgrep with a cap.
+    for i in {1..20}; do
+        sleep 0.25
+        pgrep -f "/code" >/dev/null 2>&1 && break
+    done
+    # Extra half second for the extension host to spin up so --command works
+    sleep 0.5
+    log "step 2: cold launch settled after ${i}x 0.25s"
+else
+    log "step 2: existing code process detected"
+fi
+
+# Send the open-chat command. Different VS Code / Copilot versions have used
+# different command IDs; try them in order until one succeeds. `code --command`
+# runs a command in the already-open window; exit 0 means dispatched.
+# Ordering: most current first (workbench.action.chat.open — Copilot Chat panel),
+# then older aliases, then the fallback inline-chat opener.
+CANDIDATE_COMMANDS=(
+    "workbench.action.chat.open"
+    "workbench.panel.chat.view.copilot.focus"
+    "workbench.action.chat.openInSidebar"
+    "github.copilot.chat.focus"
+    "workbench.action.chat.newChat"
+    "inlineChat.start"
+)
+
+dispatched=""
+for cmd in "${CANDIDATE_COMMANDS[@]}"; do
+    log "step 2: trying --command $cmd"
+    if "$CODE_BIN" --command "$cmd" >>"$LOG" 2>&1; then
+        log "  -> dispatched OK"
+        dispatched="$cmd"
+        break
+    else
+        log "  -> failed (rc=$?)"
+    fi
+done
+
+if [[ -z "$dispatched" ]]; then
+    log "step 2: no chat command accepted — user may need to Ctrl+Alt+I manually"
+    notify-send -u normal "Emergency Chat" "Could not open Copilot chat panel — try Ctrl+Alt+I inside VS Code" 2>/dev/null
+    exit 2
+fi
+
+log "=== emergency-chat done (opened via $dispatched) ==="
+exit 0
