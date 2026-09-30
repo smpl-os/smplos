@@ -91,7 +91,13 @@ def migrate_file(config, pending):
             stage.flush()
             os.fsync(stage.fileno())
             os.fchmod(stage.fileno(), stat.S_IMODE(original_stat.st_mode))
-        validate(Path(temporary))
+        # Hypridle resolves relative includes beside the supplied config path,
+        # not its symlink target. Publish beside the target, but preflight beside
+        # the original link so dotfile layouts validate the same included rules.
+        with tempfile.NamedTemporaryFile(prefix=".hypridle-validate.", dir=config.parent) as candidate:
+            candidate.write(updated)
+            candidate.flush()
+            validate(Path(candidate.name))
         current_stat = target.stat()
         if (config.resolve(strict=True) != target
                 or any(getattr(current_stat, field) != getattr(original_stat, field)

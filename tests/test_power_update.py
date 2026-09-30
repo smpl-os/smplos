@@ -208,6 +208,25 @@ as_invoker() { "$@"; }
         self.assertEqual(target.stat().st_mode & 0o777, 0o600)
         self.assertEqual(next(target.parent.glob("my preferences.pre-dpms-helper.*")).read_text(), CUSTOM)
 
+    def test_cross_directory_symlink_preflight_uses_logical_config_parent(self):
+        target = self.root / "dotfiles/idle.conf"
+        target.parent.mkdir()
+        self.config.rename(target)
+        self.config.symlink_to(target)
+        checked = []
+        def check_candidate(path):
+            checked.append(path)
+            self.assertEqual(path.parent, self.config.parent)
+            self.assertEqual(path.read_text(), MIGRATE.migrate(CUSTOM))
+        with mock.patch.dict(os.environ, self.env), mock.patch.object(
+                MIGRATE, "validate", side_effect=check_candidate):
+            MIGRATE.migrate_file(self.config, self.pending)
+        self.assertTrue(checked)
+        self.assertTrue(all(not path.exists() for path in checked))
+        self.assertEqual(self.config.readlink(), target)
+        self.assertEqual(target.read_text(), MIGRATE.migrate(CUSTOM))
+        self.assertEqual(next(target.parent.glob("idle.conf.pre-dpms-helper.*")).read_text(), CUSTOM)
+
     def test_missing_config_noop_dangling_link_explicit_failure(self):
         self.config.unlink()
         self.migration()
@@ -454,6 +473,39 @@ sudo() {
         self.env.update(DISPATCH_REPLY="ok", DISPATCH_STATUS="1")
         self.assertNotEqual(self.run_shell("smplos-hypr-dpms on", False).returncode, 0)
         self.assertNotEqual(self.run_shell("smplos-hypr-dpms bogus", False).returncode, 0)
+
+    @unittest.skipUnless(shutil.which("hypridle"), "real hypridle is not installed")
+    def test_real_parser_uses_symlink_parent_includes_not_target_includes(self):
+        real_hypridle = shutil.which("hypridle")
+        (self.bin / "hypridle").unlink()
+        (self.bin / "hypridle").symlink_to(real_hypridle)
+        target = self.root / "dotfiles/idle.conf"
+        target.parent.mkdir()
+        self.config.rename(target)
+        self.config.symlink_to(target)
+        valid = "listener {\n timeout = 888\n on-timeout = NEVER_EXECUTE\n}\n"
+        invalid = "listener {\n timeout = abc\n on-timeout = NEVER_EXECUTE\n}\n"
+        logical_include = self.write(self.config.parent / "extra.conf", valid)
+        target_include = self.write(target.parent / "extra.conf", invalid)
+        self.migration()
+        self.assertEqual(self.config.readlink(), target)
+        self.assertEqual(target.read_text(), MIGRATE.migrate(CUSTOM))
+        self.assertEqual(logical_include.read_text(), valid)
+        self.assertEqual(target_include.read_text(), invalid)
+        self.assertFalse(self.pending.exists())
+        self.assertFalse(list(self.config.parent.glob(".hypridle-validate.*")))
+
+        # A valid unrelated include beside the target must not mask a broken
+        # include that the real daemon will load beside the symlink.
+        target.write_text(CUSTOM)
+        logical_include.write_text(invalid)
+        target_include.write_text(valid)
+        result = self.migration(check=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Category has a missing timeout setting", result.stderr)
+        self.assertEqual(target.read_text(), CUSTOM)
+        self.assertFalse(self.pending.exists())
+        self.assertFalse(list(self.config.parent.glob(".hypridle-validate.*")))
 
     @unittest.skipUnless(shutil.which("hypridle"), "real hypridle is not installed")
     def test_real_hypridle_parser_isolated_from_desktop(self):

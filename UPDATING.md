@@ -142,8 +142,10 @@ releases can write direct dispatcher syntax again. It edits only recognized
 whole stock command values (including reversible `# smpl-settings-disabled: `
 lines), never arbitrary shell commands or sourced files. A unique adjacent
 backup precedes atomic publication; symlink targets retain the symlink, owner
-and permissions. Custom command syntax and includes remain the user's
-responsibility. Changing stock timeout defaults does not change saved choices.
+and permissions. Preflight resolves relative source includes beside the original
+config pathname, not beside a cross-directory symlink target. Custom command
+syntax and includes remain the user's responsibility. Changing stock timeout
+defaults does not change saved choices.
 
 Before publication, the installed hypridle parser runs against a private,
 nonexistent Wayland socket. Parser diagnostics fail the migration, except
