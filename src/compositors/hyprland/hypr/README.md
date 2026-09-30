@@ -84,6 +84,13 @@ mv ~/.config/hypr/hyprland.conf.disabled ~/.config/hypr/hyprland.conf
 
 ## Editing rules
 
+* **Idle preferences**: `hypridle.conf` belongs to hypridle, not either
+  compositor configuration tree. Never include/source it from Hyprland.
+  Updates preserve existing user files and only bootstrap a missing file.
+  Known command-syntax migrations retain timers/custom content, back up before
+  atomic replacement, and apply through `hypridle.service`; compositor reload
+  alone does not apply idle rules. Stock DPMS commands use `smplos-hypr-dpms`,
+  which selects syntax from the running provider rather than package version.
 * **Keybindings**: edit `src/shared/configs/smplos/bindings.conf` (hyprlang).
   The Lua side reads the exact same file via `bindings_loader.lua`.
 * **Theme variables**: edit by running `theme-set <name>`. Both providers pick

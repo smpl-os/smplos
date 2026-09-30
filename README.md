@@ -576,7 +576,15 @@ A full update runs through these stages:
 | Forked apps (start-menu, st, nemo, etc.) | Downloaded from GitHub releases | ✅ |
 | System packages (pacman/AUR/Flatpak) | Standard package manager updates | ✅ |
 | Breaking config changes | One-shot migrations in `migrations/` | ✅ |
-| Non-breaking config changes | User runs `smplos-refresh-config <file>` | Manual |
+| OS-owned EWW/Hyprland configs | Synced on every normal OS update | ✅ |
+| User-owned configs (including idle preferences) | Preserved; focused migrations for known syntax changes | ✅ |
+
+Power settings in `~/.config/hypr/hypridle.conf` survive OS updates, including
+Never and custom durations. Updates bootstrap a missing file but do not replace
+existing preferences with defaults. Known stock DPMS commands receive focused,
+backed-up compatibility migrations; other Hyprland rules/modules still update
+normally. See [power update behavior](UPDATING.md#power-preferences-and-command-compatibility)
+for daemon application, deferred updates and the coordinated Settings release.
 
 ### Migrations
 

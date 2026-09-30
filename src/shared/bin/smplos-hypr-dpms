@@ -1,0 +1,27 @@
+#!/bin/bash
+# Resolve the running config provider, not the possibly newer installed binary.
+set -euo pipefail
+
+die() { echo "smplos-hypr-dpms: $*" >&2; exit 1; }
+[[ $# == 1 ]] || die "usage: smplos-hypr-dpms on|off|--check"
+case "$1" in on|off|--check) ;; *) die "invalid state: $1" ;; esac
+
+# Older hyprctl clients may reject eval themselves. In that case only a
+# positively identified pre-Lua running compositor permits the legacy form.
+probe=$(timeout 3 hyprctl eval "assert(type(hl.dsp.dpms) == 'function')" 2>&1) || probe_status=$?
+if [[ "${probe_status:-0}" == 0 && "$probe" == ok ]]; then
+    command_args=("hl.dsp.dpms({state='$1'})")
+elif [[ "${probe_status:-0}" == 0 && "$probe" == "eval is only supported with the lua config manager" ]]; then
+    command_args=(dpms "$1")
+else
+    version=$(timeout 3 hyprctl version 2>&1) || die "cannot query running compositor: $version"
+    if [[ "$version" =~ ^Hyprland[[:space:]]v?0\.([0-9]+)\.([0-9]+)[[:space:]] ]] \
+        && (( 10#${BASH_REMATCH[1]} <= 54 )); then
+        command_args=(dpms "$1")
+    else
+        die "unsupported/unavailable running DPMS API: $probe"
+    fi
+fi
+[[ "$1" == --check ]] && exit 0
+reply=$(timeout 3 hyprctl dispatch "${command_args[@]}" 2>&1) || die "DPMS request failed: $reply"
+[[ "$reply" == ok ]] || die "DPMS request rejected: $reply"

@@ -233,6 +233,7 @@ EOF
   if [[ -d /root/smplos/lib ]]; then
     mkdir -p /mnt/usr/local/lib/smplos
     cp /root/smplos/lib/*.sh /mnt/usr/local/lib/smplos/ 2>/dev/null || true
+    install -m644 /root/smplos/lib/smplos-hypridle-migrate.py /mnt/usr/local/lib/smplos/ || return 1
     chmod 644 /mnt/usr/local/lib/smplos/*.sh 2>/dev/null || true
   fi
 

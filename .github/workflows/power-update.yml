@@ -1,0 +1,56 @@
+name: Power update preservation
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/power-update.yml"
+      - "src/shared/bin/smplos-os-update"
+      - "src/shared/bin/smplos-migrate"
+      - "src/shared/bin/smplos-hypr-dpms"
+      - "src/shared/lib/smplos-hypridle*"
+      - "src/shared/lib/smplos-session-env.sh"
+      - "src/builder/build.sh"
+      - "src/shared/installer/automated_script.sh"
+      - "src/compositors/hyprland/hypr/**"
+      - "migrations/*hypridle*.sh"
+      - "migrations/*idle-preferences.sh"
+      - "tests/test_power_update.py"
+      - "tests/test_workspace_rollout.py"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/power-update.yml"
+      - "src/shared/bin/smplos-os-update"
+      - "src/shared/bin/smplos-migrate"
+      - "src/shared/bin/smplos-hypr-dpms"
+      - "src/shared/lib/smplos-hypridle*"
+      - "src/shared/lib/smplos-session-env.sh"
+      - "src/builder/build.sh"
+      - "src/shared/installer/automated_script.sh"
+      - "src/compositors/hyprland/hypr/**"
+      - "migrations/*hypridle*.sh"
+      - "migrations/*idle-preferences.sh"
+      - "tests/test_power_update.py"
+      - "tests/test_workspace_rollout.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  power-update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check power update and config rollout behavior
+        run: |
+          python3 -m unittest discover -s tests -p 'test_power_update.py' -v
+          python3 -m unittest discover -s tests -p 'test_workspace_rollout.py' -v
+          bash -n src/shared/bin/smplos-os-update src/shared/bin/smplos-migrate \
+            src/shared/bin/smplos-hypr-dpms src/shared/lib/smplos-hypridle.sh \
+            migrations/20260707-210000-hypridle-legacy-dpms-syntax.sh \
+            migrations/20260720-120000-enable-hypridle-service.sh \
+            migrations/20260930-120000-preserve-idle-preferences.sh

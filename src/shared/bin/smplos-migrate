@@ -67,7 +67,7 @@ if [[ ! -d "$MIGRATIONS_DIR" ]] || ! compgen -G "$MIGRATIONS_DIR/*.sh" &>/dev/nu
     exit 0
 fi
 
-n_run=0 n_skip=0 n_fail=0
+n_run=0 n_skip=0 n_fail=0 n_defer=0
 
 for file in "$MIGRATIONS_DIR"/*.sh; do
     filename=$(basename "$file")
@@ -88,6 +88,12 @@ for file in "$MIGRATIONS_DIR"/*.sh; do
         touch "$STATE_DIR/$filename"
         ((n_run++)) || true
     else
+        status=$?
+        if [[ $status -eq 75 ]]; then
+            echo "  Migration ${filename%.sh} deferred; leaving unmarked for retry."
+            ((n_defer++)) || true
+            continue
+        fi
         echo -e "\e[31m  Migration ${filename%.sh} failed.\e[0m"
         # DEFAULT: continue with subsequent migrations. The failed migration
         # is intentionally NOT marked done, so it retries on the next
@@ -113,4 +119,7 @@ else
     [[ $n_run -gt 0 ]] && echo -e "\n  Ran $n_run migration(s)."
     [[ $n_skip -gt 0 ]] && echo "  Skipped $n_skip migration(s)."
     [[ $n_fail -gt 0 ]] && echo -e "\e[33m  $n_fail migration(s) failed and will retry on the next update.\e[0m"
+    [[ $n_defer -gt 0 ]] && echo "  $n_defer migration(s) deferred and will retry on the next update."
 fi
+
+[[ $n_fail -eq 0 ]]

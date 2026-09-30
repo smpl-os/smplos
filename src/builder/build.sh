@@ -1134,6 +1134,8 @@ VOXCFG
         mkdir -p "$airootfs/usr/local/lib/smplos" "$airootfs/root/smplos/lib"
         cp "$SRC_DIR/shared/lib/"*.sh "$airootfs/usr/local/lib/smplos/" 2>/dev/null || true
         cp "$SRC_DIR/shared/lib/"*.sh "$airootfs/root/smplos/lib/" 2>/dev/null || true
+        install -m644 "$SRC_DIR/shared/lib/smplos-hypridle-migrate.py" "$airootfs/usr/local/lib/smplos/"
+        install -m644 "$SRC_DIR/shared/lib/smplos-hypridle-migrate.py" "$airootfs/root/smplos/lib/"
         chmod 644 "$airootfs/usr/local/lib/smplos/"*.sh 2>/dev/null || true
         chmod 644 "$airootfs/root/smplos/lib/"*.sh 2>/dev/null || true
     fi

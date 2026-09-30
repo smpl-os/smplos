@@ -28,8 +28,8 @@ Changes to independently built apps also require a release in their own repo.
 | What you changed | Where it lives | How it reaches users |
 |---|---|---|
 | Script (bin) | `src/shared/bin/` | `smplos-os-update` syncs to `/usr/local/bin/` |
-| EWW widget | `src/shared/eww/` | User must run `smplos-refresh-config eww/...` (or migration) |
-| Hyprland config | `src/compositors/hyprland/hypr/` | User must run `smplos-refresh-config hypr/...` (or migration) |
+| EWW widget | `src/shared/eww/` | OS-owned entry point, overview, styles and scripts sync automatically |
+| Hyprland config | `src/compositors/hyprland/hypr/` | OS-owned `.conf`/`.lua` files sync automatically; user-owned exceptions below |
 | Theme | `src/shared/themes/` | `post_deploy()` reapplies current theme automatically |
 | Keybindings | `src/shared/configs/smplos/bindings.conf` | Needs migration if format changed |
 | smpl-apps (Rust) | `smpl-os/smpl-apps` repo | `smplos-update-apps` downloads from GitHub releases |
@@ -94,11 +94,22 @@ target machine; no developer profile is shipped.
 
 ## 2. Updating Configs (EWW, Hyprland, foot, etc.)
 
-Config files are NOT automatically overwritten — users may have customized
-them. You have two options:
+Config ownership determines update behavior. EWW's OS-owned entry point,
+overview fragment, stylesheet and scripts are refreshed. Hyprland's OS-owned
+`.conf`/`.lua` files and `apps/` rules are refreshed on every normal update,
+even when no new commits were pulled. Modules are published atomically before
+entry points, so includes never refer to a module not yet installed.
+
+Existing `hypridle.conf`, `monitors.conf`, `bindings.conf`,
+`messenger-bindings.conf`, `theme.conf` and `hyprlock-theme.conf` are protected
+from default-file replacement. Only a truly absent `hypridle.conf` is
+bootstrapped; symlinks (including dangling links) are not treated as missing.
+Other application configs are not automatically refreshed unless an updater
+step or migration explicitly owns them.
 
 ### Option A: Non-breaking change (additive)
-Just commit the change. Users who want the new default can run:
+For an OS-owned config, commit the change and normal updates deliver it.
+For a user-owned config, users who explicitly want the new defaults can run:
 ```bash
 smplos-refresh-config hypr/hyprlock.conf
 ```
@@ -106,6 +117,57 @@ This backs up their version and copies the new default.
 
 ### Option B: Breaking change (must update or things break)
 Write a migration. See section 5 below.
+
+### Power preferences and command compatibility
+
+Settings and the user own `~/.config/hypr/hypridle.conf`: updates retain exact
+seconds, Never/disabled listeners, custom commands, source includes and comments.
+This is **hypridle's grammar**, not a Hyprland compositor config: never source it
+from `hyprland.conf` or `hyprland.lua`. A Hyprland reload does not reload hypridle.
+Previously overwritten choices cannot be recovered reliably; users must
+reselect those choices rather than have the updater guess them.
+
+Known stock legacy/Lua DPMS commands are migrated to `smplos-hypr-dpms on|off`.
+The helper probes the **running** config provider with a bounded read-only
+request, including legacy pre-Lua sessions. It checks both IPC exit status and
+reply; `--check` performs no DPMS action. It does not infer the active parser
+from the installed package, which may have been upgraded since login, and
+unknown capabilities fail explicitly. Future upstream syntax changes still
+need tested, targeted compatibility changes; preserving preferences cannot
+guarantee compatibility with unknown future releases.
+
+Migration `20260930-120000-preserve-idle-preferences.sh` catches up already-marked
+July migrations and runs on every normal update, because older Settings
+releases can write direct dispatcher syntax again. It edits only recognized
+whole stock command values (including reversible `# smpl-settings-disabled: `
+lines), never arbitrary shell commands or sourced files. A unique adjacent
+backup precedes atomic publication; symlink targets retain the symlink, owner
+and permissions. Custom command syntax and includes remain the user's
+responsibility. Changing stock timeout defaults does not change saved choices.
+
+Before publication, the installed hypridle parser runs against a private,
+nonexistent Wayland socket. Parser diagnostics fail the migration, except
+`No rules configured` for all-Never; no idle actions execute during this check.
+The parser is not a complete semantic validator (unknown fields may be ignored
+by upstream). Applying changed/bootstrap configs uses the invoking user's
+`hypridle.service`, checks restart and active status, and never kills processes
+by name or spawns an unmanaged daemon. Active status is not acknowledgement
+that every individual rule has fired.
+
+Interrupted/failed application retains
+`~/.local/state/smplos/hypridle-apply-pending`. Unchanged repeated updates do not
+restart the daemon/reset its countdown. No graphical session or an unmanaged
+daemon defers application and leaves migrations unmarked, without blocking
+unrelated/non-Hyprland updates. A service or parse failure is reported as an
+incomplete update. For an old bare autostart daemon, run a **normal Update OS**
+(not only `--migrate`) to refresh OS-owned autostart, log out/in, then retry.
+The existing process is deliberately left running until logout.
+
+**Release order:** deliver the OS helper/scripts before the Settings release
+that writes helper commands. New Settings must report a missing helper rather
+than generate an obsolete fallback. OS preservation alone does not fix older
+Settings' value parsing/writing; the coordinated smpl-apps release is required
+for the complete Power UI fix.
 
 ---
 
@@ -210,6 +272,14 @@ smplos-migrate --dry-run    # show what would run without executing
 
 State is in `~/.local/state/smplos/migrations/` (one empty file per
 completed migration, `skipped/` subdirectory for skipped ones).
+
+Exit `0` only for completed/not-applicable work. Exit `75` for an explicitly
+deferred migration (for example no graphical session): it remains unmarked
+and is retried, while unrelated updates can continue. Other nonzero statuses
+count as failures. The runner attempts remaining migrations and returns
+nonzero if any failed; `SMPLOS_MIGRATE_STRICT=1` aborts on the first failure.
+The OS updater still attempts pending idle reconciliation before reporting
+aggregate migration failure.
 
 ---
 
@@ -346,8 +416,13 @@ dependency conflicts (`aquamarine`/`hyprutils` ABI bumps). Use
 
 ### Hyprland config format note
 
-Hyprland still uses **Hyprlang** config files (`.conf`). There is no
-Lua migration required for normal smplOS Hyprland configs.
+smplOS ships parallel Lua and Hyprlang compositor trees. The running provider,
+chosen at session startup, determines the accepted runtime dispatcher syntax.
+Keep OS-owned modules/rules current in both trees; do not freeze all configs
+to preserve one user-owned setting. Validate breaking compositor changes with
+the supported Hyprland version and inspect `hyprctl configerrors` after reload.
+Keep daemon-specific files such as `hypridle.conf` out of the compositor's
+source/include tree. See `src/compositors/hyprland/hypr/README.md`.
 
 ---
 
