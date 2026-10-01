@@ -1023,6 +1023,13 @@ and fullscreen multipliers. This removes added whole-window fading, not an
 app's existing per-pixel alpha. Unknown windowed media/games need a matching
 class/content type or an explicit `compositor-opaque` tag.
 
+Opacity rules also match `class = ".*"` when their role is selected by tag,
+content or fullscreen state. This is an intentional dependency, not redundant
+filtering: Hyprland 0.56 replays class rules on title changes and can otherwise
+reapply ordinary alpha without replaying a tag-only exemption. Check window
+`opacity`, `opacity_inactive` and `opacity_fullscreen` with `hyprctl getprop`;
+global decoration opacity and the presence of a tag alone are not proof.
+
 #### Per-app messenger overrides
 
 All messengers default to `messenger_opacity` from the active theme, but individual apps can be pinned to a specific value by uncommenting the override lines in `windows.conf`:

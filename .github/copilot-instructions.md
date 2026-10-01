@@ -492,6 +492,11 @@ slint::platform::set_platform(Box::new(backend))
   always receive neutral active/inactive/fullscreen multipliers. This prevents
   added compositor fade, not app-provided pixel alpha. Never use compositor
   fading as a substitute for owned native background transparency.
+  Keep `class = ".*"` / `match:class .*` on tag-, content- and fullscreen-based
+  opacity rules: Hyprland 0.56 replays CLASS rules on title updates, so a
+  tag-only exemption can otherwise lose to ordinary alpha. Verify actual
+  `opacity`, `opacity_inactive`, `opacity_fullscreen` window properties after
+  title changes and reloads; tags/global settings alone do not establish alpha.
 - **Atomic watchers:** `theme-set` replaces `current/theme` and atomically
   publishes EWW palette/Nemo CSS. Watch parents/reopen paths after replacement,
   not only the original inode. Native releases and reopen-once rollout are

@@ -397,6 +397,13 @@ In Hyprland 0.56 `match:fullscreen = 1` is a boolean matcher calling
 `isFullscreen()`, not the numeric `fullscreen_state` enum; maximized ordinary
 windows are not treated as fullscreen.
 
+Keep the explicit `class = ".*"` / `match:class .*` on tag-, content- and
+fullscreen-based opacity rules. Hyprland 0.56's incremental rule engine replays
+class rules on title changes; without the class dependency, the ordinary
+multiplier can overwrite native safety or a custom browser/messenger value.
+Tests cover fresh windows, repeated title updates and theme reapplication,
+not only the initial rule sequence.
+
 This prevents added compositor fading; it cannot make an app's existing ARGB
 background opaque. Native fullscreen apps retain their own background alpha.
 Unrecognized windowed games/media that expose neither a known class nor content

@@ -228,6 +228,11 @@ alpha, which fades text and images too; stock active/inactive values are equal.
    guarantees native/media/PiP/known-game/fullscreen exemptions win. Ordinary
    browser/messenger stock keys follow the theme; optional author overrides
    cannot bypass the final safety policy.
+   Keep the explicit class wildcard on role-based opacity rules: Hyprland 0.56
+   needs that dependency to replay exemptions and browser/messenger overrides
+   after title changes. Verify per-window `opacity`, `opacity_inactive` and
+   `opacity_fullscreen`, including after navigation/title updates; a visible
+   `self-managed-alpha*` tag and neutral global settings are insufficient.
    `app_background_opacity` is explicit in all 17 stock palettes; it generates
    `$theme-app-background-opacity` for native readers. `sync_themes()` copies
    stock data, preserves user overrides, and `post_deploy()` reapplies the active

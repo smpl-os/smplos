@@ -17,8 +17,8 @@ hl.window_rule({
 -- Override so focus/unfocus uses the same value (no dim on blur).
 local browser_opacity = theme.themeBrowserOpacity .. " override "
                      .. theme.themeBrowserOpacity .. " override"
-hl.window_rule({ match = { tag = "chromium-based-browser" }, opacity = browser_opacity })
-hl.window_rule({ match = { tag = "firefox-based-browser"  }, opacity = browser_opacity })
+hl.window_rule({ match = { class = ".*", tag = "chromium-based-browser" }, opacity = browser_opacity })
+hl.window_rule({ match = { class = ".*", tag = "firefox-based-browser"  }, opacity = browser_opacity })
 
 -- Force chromium-based browsers into a tile to deal with --app bug
 hl.window_rule({ match = { tag = "chromium-based-browser" }, tile = true })

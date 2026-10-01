@@ -113,14 +113,14 @@ local default_opacity = theme.themeOpacityActive .. " override "
 hl.window_rule({ match = { class = ".*" }, opacity = default_opacity })
 
 -- Browsers: force same value active & inactive (override prevents focus-dim)
-hl.window_rule({ match = { tag = "chromium-based-browser" }, opacity = default_opacity })
-hl.window_rule({ match = { tag = "firefox-based-browser" },  opacity = default_opacity })
+hl.window_rule({ match = { class = ".*", tag = "chromium-based-browser" }, opacity = default_opacity })
+hl.window_rule({ match = { class = ".*", tag = "firefox-based-browser" },  opacity = default_opacity })
 
 -- compositor-opaque: always fully opaque
-hl.window_rule({ match = { tag = "compositor-opaque" },  opacity = "1.0 override 1.0 override" })
+hl.window_rule({ match = { class = ".*", tag = "compositor-opaque" },  opacity = "1.0 override 1.0 override" })
 
 -- self-managed-alpha: pass through untouched — app owns its ARGB alpha
-hl.window_rule({ match = { tag = "self-managed-alpha" }, opacity = "1.0 override 1.0 override" })
+hl.window_rule({ match = { class = ".*", tag = "self-managed-alpha" }, opacity = "1.0 override 1.0 override" })
 
 -- Fix some dragging issues with XWayland
 hl.window_rule({
@@ -264,7 +264,7 @@ hl.window_rule({
 -- Default opacity for all messenger windows
 local messenger_opacity = theme.themeMessengerOpacity .. " override "
                        .. theme.themeMessengerOpacity .. " override"
-hl.window_rule({ match = { tag = "messenger" }, opacity = messenger_opacity })
+hl.window_rule({ match = { class = ".*", tag = "messenger" }, opacity = messenger_opacity })
 
 -- Per-app opacity overrides (last matching rule wins, so these come after the
 -- tag rule). Uncomment by adding entries to this table.
