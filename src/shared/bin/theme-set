@@ -425,6 +425,15 @@ if [[ -n "${VSCODE_THEME_PATH:-}" && -f "$VSCODE_THEME_PATH/vscode.json" ]]; the
   _set_vscode_theme "cursor" "$HOME/.config/Cursor/User/settings.json"   "cursor"
 fi
 
+# Copilot desktop uses its own Settings UI, only with explicit opt-in.
+if [[ -f "$HOME/.config/smplos/copilot-theme-sync.enabled" ]]; then
+  if ! command -v theme-set-copilot &>/dev/null; then
+    echo "theme-set: Copilot sync enabled, but theme-set-copilot is not installed" >&2
+  elif ! theme-set-copilot; then
+    echo "theme-set: Copilot theme sync failed; other theme integrations will continue" >&2
+  fi
+fi
+
 # Logseq — switch theme via preferences.json + custom.css
 # custom.css provides full color theming via CSS variables (always works)
 # Plugin themes are optional — enhance theming if plugins are installed

@@ -353,6 +353,63 @@ theme-set catppuccin     # or: dracula, nord, gruvbox, rose-pine, ...
 
 Or open the theme picker from the start menu's Settings tab.
 
+#### Copilot desktop theme sync (experimental, opt-in)
+
+`theme-set-copilot` maps the active smplOS theme to a built-in GitHub Copilot
+**desktop app** palette without restarting the app or its sessions. It uses
+Copilot's own Settings controls through AT-SPI, not the CLI theme or database
+writes. This was exercised with desktop version 1.1.21 on Linux.
+
+**This briefly opens Settings and can move keyboard focus or interrupt typing.**
+Only enable it if that tradeoff is acceptable. It closes the dialog it opened
+and attempts to restore keyboard focus; restoration is not guaranteed. An
+already-open Settings dialog is left alone. Matching saved palette and
+appearance settings are a no-op, so repeated theme applications do not open it.
+
+With the updated `theme-set` and `theme-set-copilot` installed, enable:
+
+```bash
+mkdir -p ~/.config/smplos
+touch ~/.config/smplos/copilot-theme-sync.enabled
+```
+
+Subsequent selections with **Super+Shift+T** apply automatically to the running
+app. To try only this integration against the current theme, run
+`theme-set-copilot`. Disable it by removing that single opt-in file. The app
+must already be running, with Linux `python-gobject` and `at-spi2-core`
+available. The integration never installs dependencies or launches the app.
+
+| smplOS | Copilot built-in palette |
+|--------|--------------------------|
+| Amber | IC Orange PPL |
+| Catppuccin, Catppuccin Latte | Catppuccin Mocha |
+| Ethereal | Light purple |
+| Everforest, Osaka Jade | Selene Selenized |
+| Flexoki Light | Flexoki |
+| Grafium | GitHub |
+| Gruvbox | Gruvbox Material |
+| Hackerman, Matrix | Homebrew |
+| Kanagawa | Kanso Ink |
+| Matte Black | Monochrome |
+| Nord | Nord Midnight |
+| Ristretto | Espresso |
+| Rose Pine | Rosé Pine |
+| Tokyo Night | Tokyo Night |
+
+These are nearest built-in choices, not exact smplOS palettes. Both app and
+terminal appearance use Light when the active theme has `light.mode`, otherwise
+Dark. In particular, Catppuccin Latte uses the Catppuccin Mocha palette with
+Light appearance. Unknown/custom theme names use GitHub with a warning.
+Fonts, contrast/color mode, other settings and opacity are not set; Copilot
+updates its own recent-palette history normally.
+
+The adapter confirms the selected UI controls and checks the app's saved theme
+row read-only. Missing/filtered palette controls, unsupported settings formats,
+unavailable accessibility or an absent app produce warnings without aborting
+the rest of `theme-set`. Reset the palette filter in Copilot Settings if a mapped
+palette is hidden. Future Copilot UI changes may require updating this
+experimental adapter. It is not a supported Copilot settings API.
+
 ---
 
 ## Architecture

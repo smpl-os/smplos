@@ -23,6 +23,7 @@ case "$name" in
     exec /usr/bin/cp "$@" ;;
   bar-ctl) exit "${FAIL_RELOAD:-0}" ;;
   theme-set-st) exit "${FAIL_TERMINAL:-0}" ;;
+  theme-set-copilot) exit "${FAIL_COPILOT:-0}" ;;
   code|codium|cursor) exit 0 ;;
 esac
 """
@@ -199,6 +200,26 @@ class ThemeSwitchingTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("terminal refresh failed", result.stderr)
         self.assertNotIn("Theme set to:", result.stdout)
+        self.assert_switched("new")
+
+    def test_copilot_sync_is_opt_in_and_failure_does_not_abort_theme_switch(self):
+        helper = self.bin / "theme-set-copilot"
+        helper.write_text(MOCK_COMMAND)
+        helper.chmod(0o755)
+        self.assertEqual(self.switch("old").returncode, 0)
+        self.assertNotIn("theme-set-copilot", self.log.read_text())
+        (self.home / ".config/smplos/copilot-theme-sync.enabled").touch()
+        result = self.switch("new", FAIL_COPILOT="1")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Copilot theme sync failed", result.stderr)
+        self.assertEqual(self.log.read_text().count("theme-set-copilot \n"), 1)
+        self.assert_switched("new")
+
+    def test_missing_opted_in_copilot_helper_warns_without_aborting(self):
+        (self.home / ".config/smplos/copilot-theme-sync.enabled").touch()
+        result = self.switch("new")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("theme-set-copilot is not installed", result.stderr)
         self.assert_switched("new")
 
     def test_bar_ctl_preserves_eww_reload_failure(self):

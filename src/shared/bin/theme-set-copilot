@@ -1,0 +1,299 @@
+#!/usr/bin/python3
+"""Opt-in live Copilot desktop theming through its accessibility controls."""
+
+import fcntl
+import json
+import sqlite3
+import sys
+import time
+from collections import deque
+from contextlib import closing
+from pathlib import Path
+
+
+PALETTES = {
+    "amber": "IC Orange PPL",
+    "catppuccin": "Catppuccin Mocha",
+    "catppuccin-latte": "Catppuccin Mocha",
+    "ethereal": "Light purple",
+    "everforest": "Selene Selenized",
+    "flexoki-light": "Flexoki",
+    "grafium": "GitHub",
+    "gruvbox": "Gruvbox Material",
+    "hackerman": "Homebrew",
+    "kanagawa": "Kanso Ink",
+    "matrix": "Homebrew",
+    "matte-black": "Monochrome",
+    "nord": "Nord Midnight",
+    "osaka-jade": "Selene Selenized",
+    "ristretto": "Espresso",
+    "rose-pine": "Ros\u00e9 Pine",
+    "tokyo-night": "Tokyo Night",
+}
+MANAGED = {"themeName", "mode", "terminalMode", "recentThemes"}
+
+
+class SyncError(RuntimeError):
+    pass
+
+
+def warn(message):
+    print(f"theme-set-copilot: {message}", file=sys.stderr)
+
+
+def target_for(current):
+    name = (current / "theme.name").read_text().strip()
+    if not name:
+        raise SyncError("Active smplOS theme name is empty.")
+    mode = "light" if (current / "theme/light.mode").is_file() else "dark"
+    if name not in PALETTES:
+        warn(f"No built-in mapping for {name!r}; using GitHub ({mode}).")
+    return {"themeName": PALETTES.get(name, "GitHub"), "mode": mode, "terminalMode": mode}
+
+
+def read_settings(database):
+    # Only this settings row is read; the app remains the sole database writer.
+    with closing(sqlite3.connect(database.as_uri() + "?mode=ro", uri=True, timeout=1)) as db:
+        row = db.execute(
+            "SELECT value FROM app_state WHERE key = ?", ("theme-settings-v2",)
+        ).fetchone()
+    if row is None:
+        raise SyncError("Copilot theme settings are unavailable; open Themes once in the app.")
+    document = json.loads(row[0])
+    state = document.get("state") if isinstance(document, dict) else None
+    if not isinstance(state, dict) or document.get("version") != 3:
+        raise SyncError("Unsupported Copilot theme settings version; integration needs updating.")
+    if not isinstance(state.get("themeName"), str) or any(
+        state.get(key) not in ("light", "dark", "system") for key in ("mode", "terminalMode")
+    ):
+        raise SyncError("Unsupported Copilot appearance settings; no changes made.")
+    return state
+
+
+def matches(state, target):
+    return all(state.get(key) == value for key, value in target.items())
+
+
+class CopilotUI:
+    def __init__(self):
+        try:
+            import gi
+            gi.require_version("Atspi", "2.0")
+            from gi.repository import Atspi, GLib
+        except (ImportError, ValueError) as error:
+            raise SyncError(
+                "Accessibility support is missing; install python-gobject and at-spi2-core."
+            ) from error
+        self.api = Atspi
+        self.bus_error = GLib.Error
+        Atspi.set_timeout(2500, 2500)
+        self.deadline = time.monotonic() + 25
+        try:
+            desktop = Atspi.get_desktop(0)
+            candidates = [
+                app for app in (
+                    desktop.get_child_at_index(i) for i in range(desktop.get_child_count())
+                ) if app.get_name() == "github"
+            ]
+        except GLib.Error as error:
+            raise SyncError(f"Cannot contact desktop accessibility: {error}") from error
+        if len(candidates) != 1:
+            raise SyncError("One running accessible GitHub Copilot app is required; not launching it.")
+        self.app = candidates[0]
+        self.opened = False
+        self.previous_focus = None
+
+    def walk(self, root):
+        queue = deque([root])
+        count = 0
+        while queue:
+            if count >= 2000 or time.monotonic() > self.deadline:
+                raise SyncError("Copilot accessibility inspection exceeded its limit.")
+            node = queue.popleft()
+            count += 1
+            yield node
+            if node.get_role_name() not in ("entry", "text", "paragraph", "terminal"):
+                queue.extend(
+                    node.get_child_at_index(i) for i in range(node.get_child_count())
+                )
+
+    def find(self, root, role, name):
+        if root is None:
+            return None
+        return next(
+            (node for node in self.walk(root)
+             if node.get_role_name() == role and node.get_name() == name),
+            None,
+        )
+
+    def require(self, root, role, name):
+        node = self.find(root, role, name)
+        if node is None:
+            raise SyncError(f"Copilot control {name!r} is unavailable; its UI may have changed.")
+        return node
+
+    def selected(self, node, state):
+        return node.get_state_set().contains(state)
+
+    def wait(self, predicate):
+        until = min(self.deadline, time.monotonic() + 5)
+        while time.monotonic() < until:
+            if predicate():
+                return
+            time.sleep(0.1)
+        raise SyncError("Copilot did not confirm the requested UI change.")
+
+    def press(self, node, confirmed):
+        action = node.get_action_iface()
+        if action is None or action.get_n_actions() != 1:
+            raise SyncError("Copilot control has no unambiguous accessibility action.")
+        try:
+            accepted = action.do_action(0)
+        except self.bus_error:
+            # WebKit can finish an action after the AT-SPI reply times out.
+            # Observe its result instead of pressing a second time.
+            accepted = True
+        if not accepted:
+            raise SyncError("Copilot rejected the accessibility action.")
+        self.wait(confirmed)
+
+    def settings_dialog(self):
+        return self.find(self.app, "dialog", "Settings")
+
+    def open(self):
+        if self.settings_dialog() is not None:
+            raise SyncError("Settings is already open; close it before syncing to avoid interrupting edits.")
+        for node in self.walk(self.app):
+            if node.get_role_name() == "dialog":
+                raise SyncError("Another Copilot dialog is open; close it before syncing.")
+            if self.selected(node, self.api.StateType.FOCUSED):
+                self.previous_focus = node
+        button = self.require(self.app, "button", "Settings, Ctrl + Comma")
+        self.opened = True
+        self.press(button, lambda: self.settings_dialog() is not None)
+        dialog = self.settings_dialog()
+        self.press(
+            self.require(dialog, "button", "Themes"),
+            lambda: self.find(dialog, "landmark", "Themes") is not None,
+        )
+
+    def content(self):
+        return self.require(self.settings_dialog(), "landmark", "Themes")
+
+    def palette(self, name):
+        # Exclude the sidebar, font buttons and recent duplicates.
+        content = self.content()
+        for group in ("Staff picks", "More palettes"):
+            panel = self.require(content, "panel", group)
+            node = self.find(panel, "button", name)
+            if node is not None:
+                return node
+        raise SyncError(f"Copilot palette {name!r} is not visible; reset its palette filter in Settings.")
+
+    def mode(self, group, value):
+        panel = self.require(self.content(), "panel", group)
+        return self.require(panel, "radio button", value.title())
+
+    def validate(self, target):
+        self.palette(target["themeName"])
+        self.mode("Mode", target["mode"])
+        self.mode("Terminal", target["terminalMode"])
+
+    def apply(self, target):
+        changes = (
+            (lambda: self.palette(target["themeName"]), self.api.StateType.SELECTED),
+            (lambda: self.mode("Mode", target["mode"]), self.api.StateType.CHECKED),
+            (lambda: self.mode("Terminal", target["terminalMode"]), self.api.StateType.CHECKED),
+        )
+        for lookup, state in changes:
+            if not self.selected(lookup(), state):
+                self.press(lookup(), lambda: self.selected(lookup(), state))
+
+    def close(self):
+        if not self.opened:
+            return
+        self.deadline = time.monotonic() + 8
+        dialog = self.settings_dialog()
+        if dialog is not None:
+            self.press(
+                self.require(dialog, "button", "Close dialog"),
+                lambda: self.settings_dialog() is None,
+            )
+        if self.previous_focus is not None:
+            try:
+                component = self.previous_focus.get_component_iface()
+                restored = component is not None and component.grab_focus()
+            except self.bus_error:
+                restored = False
+            if not restored:
+                warn("Settings closed, but the previous keyboard focus could not be restored.")
+        else:
+            warn("Settings closed; previous keyboard focus was unavailable. Check focus before typing.")
+
+
+def synchronize(target, read_state, ui_factory=CopilotUI):
+    before = read_state()
+    if matches(before, target):
+        return False
+    ui = ui_factory()
+    changed = False
+    try:
+        ui.open()
+        ui.validate(target)
+        ui.validate({key: before[key] for key in ("themeName", "mode", "terminalMode")})
+        changed = True
+        ui.apply(target)
+        until = time.monotonic() + 3
+        after = read_state()
+        while not matches(after, target) and time.monotonic() < until:
+            time.sleep(0.1)
+            after = read_state()
+        if not matches(after, target):
+            raise SyncError("The selected palette was not persisted by Copilot.")
+        if {k: v for k, v in before.items() if k not in MANAGED} != {
+            k: v for k, v in after.items() if k not in MANAGED
+        }:
+            raise SyncError("Other Copilot settings changed during sync; no direct repair attempted.")
+    except (SyncError, OSError, sqlite3.Error, ValueError, ui.bus_error) as error:
+        if changed:
+            try:
+                ui.deadline = time.monotonic() + 10
+                ui.apply({key: before[key] for key in ("themeName", "mode", "terminalMode")})
+            except (SyncError, ui.bus_error) as restore_error:
+                warn(f"Could not restore the original palette through Settings: {restore_error}")
+        raise SyncError(str(error)) from error
+    finally:
+        try:
+            ui.close()
+        except (SyncError, ui.bus_error) as error:
+            raise SyncError(f"Could not close Settings/restore focus; check the app: {error}") from error
+    return True
+
+
+def main():
+    if len(sys.argv) != 1:
+        warn("Usage: theme-set-copilot (syncs the current smplOS theme when opted in)")
+        return 2
+    config = Path.home() / ".config/smplos"
+    if not (config / "copilot-theme-sync.enabled").is_file():
+        return 0
+    try:
+        with (config / ".copilot-theme-sync.lock").open("a") as lock:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as error:
+                raise SyncError("A Copilot theme sync is already running; try again after it finishes.") from error
+            target = target_for(config / "current")
+            database = Path.home() / ".copilot/data.db"
+            if not database.is_file():
+                raise SyncError("Copilot settings not found; start and configure the app first.")
+            if synchronize(target, lambda: read_settings(database)):
+                print(f"Copilot theme: {target['themeName']} ({target['mode']})")
+    except (OSError, sqlite3.Error, ValueError, SyncError) as error:
+        warn(str(error))
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
