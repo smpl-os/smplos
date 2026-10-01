@@ -296,6 +296,15 @@ good palette, never silently selecting the HOME file. Without absolute XDG,
 HOME is used directly. Invalid startup input uses an opaque built-in palette;
 running apps keep the last good palette until a valid update arrives.
 
+Nemo similarly prefers an absolute `$XDG_CONFIG_HOME/smplos/nemo-theme.css`,
+with `$HOME/.config/smplos/nemo-theme.css` fallback only on a not-found error.
+Unset, empty or relative XDG uses HOME directly. Empty/malformed CSS, permission
+errors and other read failures in an existing preferred file log an error and
+retain the last good provider; they do not select the fallback. Both candidate
+directory hierarchies are watched: preferred creation takes precedence,
+preferred deletion re-evaluates HOME, and fallback edits/recreation apply while
+preferred is absent. If both files are missing, Nemo restores stock GTK styling.
+
 One surface owns the background fill. Do not place another semi-transparent
 fill behind it or apply widget/container `opacity`: stacked fills compound
 and container opacity fades descendants. Cards and selection/control fills
@@ -304,7 +313,11 @@ not inherit the background alpha.
 
 Nemo's opt-in `.smplos-native-alpha` class gates **both** the root fill and
 transparent child backing surfaces. Without the capable native binary,
-existing opaque CSS continues to apply. Desktop windows are excluded.
+existing opaque CSS continues to apply. The class requires both an assigned
+RGBA visual and a composited GDK screen; noncomposited X11 keeps opaque backing.
+Existing main and Quick Preview windows track compositor loss/restoration,
+removing/restoring the class without replacing their native visual.
+Desktop windows are excluded.
 Main and Quick Preview windows opt in; separate menus, tooltips and
 preferences/properties dialogs remain opaque. Preserve the direct-child
 hover label selectors and explicit submenu reset block in `regen-nemo-css.py`.
@@ -337,7 +350,8 @@ own RGBA root and raised surfaces with opaque text; no additional compositor
 fade is applied. These surfaces do not consume `app_background_opacity`.
 
 Blur is a compositor effect, separate from alpha. Hyprland provides configured
-blur; do not promise identical blur on niri or uncomposited X11. Unowned
+blur; do not promise identical blur on niri. Nemo uses opaque fallback on
+noncomposited X11 rather than exposing an unusable alpha surface. Unowned
 GTK/Qt/Electron applications remain outside the native background contract.
 Terminal semantic `term_N` versus the legacy `theme-set-st` `colorN` reader is
 a separate known palette issue, not fixed by this alpha work.

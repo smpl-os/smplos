@@ -227,7 +227,10 @@ opacity 1.0: lowering whole-window opacity fades text and images too.
    theme as the desktop user. No one-time migration is required.
 2. Publish compatible **nemo-smpl** and **smpl-apps** binary releases from their
    own repositories. Nemo CSS gates root alpha and transparent descendants with
-   `.smplos-native-alpha`, so an older Nemo remains opaque. Old smpl-apps keeps
+   `.smplos-native-alpha`, so an older Nemo remains opaque. Capable Nemo also
+   requires a composited screen and tracks compositor loss/restoration; merely
+   having an RGBA visual must not enable alpha on noncomposited X11.
+   Old smpl-apps keeps
    its legacy popup behavior; a new regular-role reader falls back to explicit
    popup alpha for old generated custom palettes, then safe opaque 1.0.
 3. Release/package the compatible **Grafium** Linux build separately.
@@ -251,6 +254,13 @@ HOME path only when that preferred file is absent; existing invalid/unreadable
 files log an error and retain the last good palette. Discovery is retried on
 every poll. This is consumer compatibility, not a migration of `theme-set`'s
 canonical `$HOME/.config` writer.
+
+Nemo's CSS reader uses the same absolute-XDG preference and absent-only HOME
+fallback for `smplos/nemo-theme.css`. It watches both directory hierarchies for
+creation, replacement and removal. Empty/malformed/unreadable preferred CSS
+retains the last good provider with a reported error; both candidates absent
+restores stock GTK. Include this reader and the compositor-availability gate
+in the compatible Nemo release, not just the initial RGBA visual change.
 
 **ISO boundary:** the builder copies pre-generated theme files and OS scripts
 into the live image, user skeleton and installer payload. It seeds the default

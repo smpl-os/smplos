@@ -267,6 +267,13 @@ Keep separate menus/dialogs, media and selection/control fills intact; use
 opaque semantic colors for secondary labels, not widget opacity. The native
 class/RGBA visual lives in nemo-smpl, never in this repo.
 
+The class requires an assigned RGBA visual **and** a composited GDK screen.
+Noncomposited X11 stays opaque; existing windows remove/restore the class on
+compositor loss/restoration. Nemo prefers absolute XDG CSS and falls back to
+the canonical HOME path only when the preferred file is missing, never on
+invalid/unreadable content. Watch both candidate hierarchies; retain the last
+good provider on errors and restore stock GTK only when both files are absent.
+
 **NEVER do these:**
 - NEVER run `generate-theme-configs.sh` or `regen-nemo-css.py` directly —
   always use `regen-all-themes.sh` so both generators run and stay in sync.
