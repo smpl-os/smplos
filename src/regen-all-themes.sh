@@ -32,32 +32,13 @@ for arg in "$@"; do
   esac
 done
 
-# --check mode: regenerate into a clean git work tree, then diff.
-# Uses git to detect any stale/manually-edited generated file.
+# --check compares isolated outputs with the working tree, not the git baseline.
 if $CHECK_MODE; then
-  echo "Checking theme files are up to date..."
-  echo ""
-
-  # Run the generators (they write in-place)
-  bash "$SCRIPT_DIR/generate-theme-configs.sh" > /dev/null
-  python3 "$SCRIPT_DIR/regen-nemo-css.py" > /dev/null
-
-  # Ask git if anything changed
-  cd "$SCRIPT_DIR/.."
-  if git diff --quiet -- src/shared/themes/; then
-    echo "✓ All theme files are up to date."
-    exit 0
-  else
-    echo "✗ Generated theme files are out of sync with their generators!"
-    echo "  The following files differ from what the generators would produce:"
-    echo ""
-    git diff --name-only -- src/shared/themes/
-    echo ""
-    echo "  Run:  cd src && bash regen-all-themes.sh"
-    echo "  Then commit the result."
-    exit 1
-  fi
+  exec python3 "$SCRIPT_DIR/check-theme-generation.py"
 fi
+
+# Reject invalid alpha before either generator publishes any theme.
+python3 "$SCRIPT_DIR/theme_opacity.py" "$SCRIPT_DIR"/shared/themes/*/colors.toml >/dev/null
 
 # Normal regeneration mode
 echo "=== smplOS theme regeneration ==="

@@ -864,3 +864,87 @@ scrollbar slider {
 scrollbar slider:hover {
     background-color: #7aa2f7;
 }
+
+/* Native-alpha capability: one background owner, never widget opacity.
+ * Old Nemo binaries lack this class and retain the opaque rules above.
+ * Selections and controls are overlays; menus/dialogs remain opaque. */
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window),
+.nemo-quick-preview.smplos-native-alpha {
+    background-color: alpha(#1a1b26, 0.70);
+    background-image: none;
+}
+
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) box:not(.floating-bar),
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) grid,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) paned,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) notebook,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) notebook > header,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) stack,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) scrolledwindow,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) viewport,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) layout,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) .view:not(:selected),
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) iconview:not(:selected),
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) treeview:not(:selected),
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) .sidebar,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) .places-treeview:not(:selected),
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) .nemo-preview-pane,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) .nemo-query-editor,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) toolbar.primary-toolbar,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) menubar,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) headerbar,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) searchbar,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) textview,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) textview text,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) scrollbar,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) decoration,
+.nemo-quick-preview.smplos-native-alpha box:not(.floating-bar),
+.nemo-quick-preview.smplos-native-alpha grid,
+.nemo-quick-preview.smplos-native-alpha paned,
+.nemo-quick-preview.smplos-native-alpha notebook,
+.nemo-quick-preview.smplos-native-alpha notebook > header,
+.nemo-quick-preview.smplos-native-alpha stack,
+.nemo-quick-preview.smplos-native-alpha scrolledwindow,
+.nemo-quick-preview.smplos-native-alpha viewport,
+.nemo-quick-preview.smplos-native-alpha layout,
+.nemo-quick-preview.smplos-native-alpha .view:not(:selected),
+.nemo-quick-preview.smplos-native-alpha iconview:not(:selected),
+.nemo-quick-preview.smplos-native-alpha treeview:not(:selected),
+.nemo-quick-preview.smplos-native-alpha .sidebar,
+.nemo-quick-preview.smplos-native-alpha .places-treeview:not(:selected),
+.nemo-quick-preview.smplos-native-alpha .nemo-preview-pane,
+.nemo-quick-preview.smplos-native-alpha .nemo-query-editor,
+.nemo-quick-preview.smplos-native-alpha toolbar.primary-toolbar,
+.nemo-quick-preview.smplos-native-alpha menubar,
+.nemo-quick-preview.smplos-native-alpha headerbar,
+.nemo-quick-preview.smplos-native-alpha searchbar,
+.nemo-quick-preview.smplos-native-alpha textview,
+.nemo-quick-preview.smplos-native-alpha textview text,
+.nemo-quick-preview.smplos-native-alpha scrollbar,
+.nemo-quick-preview.smplos-native-alpha decoration {
+    background-color: transparent;
+    background-image: none;
+}
+
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) .nemo-secondary-label,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) .dim-label:not(:selected),
+.nemo-quick-preview.smplos-native-alpha .nemo-secondary-label,
+.nemo-quick-preview.smplos-native-alpha .dim-label:not(:selected) {
+    opacity: 1;
+    color: #acb0d0;
+}
+
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) .dim-label:selected,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) .view:selected .dim-label,
+.nemo-quick-preview.smplos-native-alpha .dim-label:selected,
+.nemo-quick-preview.smplos-native-alpha .view:selected .dim-label {
+    opacity: 1;
+    color: #c0caf5;
+}
+
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) .nemo-inactive-pane .dim-label:selected,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) .nemo-inactive-pane .view:selected .dim-label,
+.nemo-quick-preview.smplos-native-alpha .nemo-inactive-pane .dim-label:selected,
+.nemo-quick-preview.smplos-native-alpha .nemo-inactive-pane .view:selected .dim-label {
+    color: #a9b1d6;
+}

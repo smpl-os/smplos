@@ -205,11 +205,84 @@ not as root with the user's `HOME`: root-owned active theme directories prevent
 subsequent theme changes. `theme-set` rejects that elevated invocation.
 
 **Steps:**
-1. Edit the theme template(s) in `src/shared/themes/<name>/`
-2. Test with `theme-set <name>` locally
-3. Commit and push
+1. Edit `src/shared/themes/<name>/colors.toml`, shared templates in
+   `src/shared/themes/_templates/`, or `src/regen-nemo-css.py` for Nemo CSS.
+2. Run `bash src/regen-all-themes.sh`, then
+   `bash src/regen-all-themes.sh --check` (non-mutating drift comparison).
+3. Exercise isolated tests, then test theme application on an authorized
+   test desktop. Commit both sources and generated outputs.
 
 Users get the updated theme automatically on next update.
+
+### Background-only transparency delivery
+
+This feature crosses independently released binaries. OS source alone is
+**not** delivery of native alpha support. Keep normal apps at compositor
+opacity 1.0: lowering whole-window opacity fades text and images too.
+
+1. Ship the OS palette/template/CSS and both Hyprland rule trees together.
+   `app_background_opacity` is explicit in all 17 stock palettes; it generates
+   `$theme-app-background-opacity` for native readers. `sync_themes()` copies
+   stock data, preserves user overrides, and `post_deploy()` reapplies the active
+   theme as the desktop user. No one-time migration is required.
+2. Publish compatible **nemo-smpl** and **smpl-apps** binary releases from their
+   own repositories. Nemo CSS gates root alpha and transparent descendants with
+   `.smplos-native-alpha`, so an older Nemo remains opaque. Old smpl-apps keeps
+   its legacy popup behavior; a new regular-role reader falls back to explicit
+   popup alpha for old generated custom palettes, then safe opaque 1.0.
+3. Release/package the compatible **Grafium** Linux build separately.
+   `grafium-bin` extracts the upstream `.deb`; updating OS theme files or a
+   repository submodule cannot update its native Tauri/WebKit window.
+   Grafium consumes active `colors.toml` only in Auto mode; explicit built-in
+   palettes remain opaque.
+4. After installing the new binaries, reopen the affected apps once so their
+   native RGBA-capable windows are created. Further theme switches are live.
+   Do not restart the whole desktop or close user documents as part of theme
+   generation. Repeated transparent -> opaque -> transparent switches must work.
+
+The active `current/theme` directory is replaced during switching, while
+`nemo-theme.css` and EWW's `theme-colors.scss` are atomically renamed into place.
+Watch parent directories/reopen paths rather than keeping stale file watches.
+Invalid explicit alpha reports an error; it must not silently fall through to
+another transparency control.
+
+smpl-apps honors an absolute XDG palette location but falls back to the deployed
+HOME path only when that preferred file is absent; existing invalid/unreadable
+files log an error and retain the last good palette. Discovery is retried on
+every poll. This is consumer compatibility, not a migration of `theme-set`'s
+canonical `$HOME/.config` writer.
+
+**ISO boundary:** the builder copies pre-generated theme files and OS scripts
+into the live image, user skeleton and installer payload. It seeds the default
+Nemo CSS path and EWW palette before the first theme switch. Native app builds
+consume published binary bundles by default; `--build-apps` builds the pinned app source.
+Only update the smpl-apps submodule pointer after its commit is reachable in
+the app repository. Confirm cached/prebuilt Nemo, smpl-apps and Grafium packages
+actually contain the compatible binaries before advertising native alpha on an
+ISO. Installation itself remains offline. Do not point at an unpublished local
+commit or claim a release version that has not been published.
+
+**Scope/limitations:** regular native backgrounds use the new key; popup apps,
+EWW/Rofi and terminals retain their existing controls. Matrix, Amber and
+Grafium themes remain intentionally opaque. Nemo desktop, separate menus and
+dialogs remain opaque; selections and media retain their own paint. Foreign
+GTK/Qt/Electron apps and existing messenger/browser whole-window policies are
+not converted. Alpha can work cross-compositor, but blur depends on compositor
+support. See the [ownership/audit table](CREATING_MODIFYING_A_THEME.md#stock-palette-audit).
+
+Before coordinated publication, run:
+
+```bash
+bash src/regen-all-themes.sh --check
+python3 -m unittest discover -s tests -p 'test_theme*.py' -v
+```
+
+On a test desktop with compatible binaries, check Catppuccin, Latte, Ethereal,
+Matrix and a custom theme across icon/list/split views, previews and dialogs;
+focused/unfocused text must remain opaque. Verify old Nemo without the
+capability class remains readable, then test atomic palette/directory replacement
+and restoration to alpha 1.0. This repository's static/fixture checks are not
+a substitute for native rendering verification.
 
 ---
 

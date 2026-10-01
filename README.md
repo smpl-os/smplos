@@ -76,7 +76,7 @@ It started as an attempt to build a lighter version of Omarchy - same keybinding
 - **Fast installs.** Fully offline - no internet required. A fresh install completes in under 2 minutes.
 - **Cross-compositor.** Built from the ground up to support multiple compositors. Hyprland (Wayland) ships first, [DWM (X11) is next](DWM-X11.md). Shared configs, shared themes, shared keybindings - the compositor is just a thin layer.
 - **One UI toolkit.** EWW powers the bar, widgets, and dialogs. It runs on both X11 and Wayland. No waybar, no polybar, no redundant tools.
-- **14 built-in themes.** One command switches colors across the entire system - terminal, bar, notifications, borders, lock screen, and editor.
+- **17 built-in themes.** One command switches colors across the entire system - terminal, bar, notifications, borders, lock screen, and editor.
 
 ---
 
@@ -120,7 +120,20 @@ This is the same pattern we use everywhere: the theme system writes config files
 
 #### Themes
 
-smplOS ships with 14 themes inherited and expanded from the Omarchy project. A single `theme-set` command applies colors system-wide - terminal, EWW bar, notifications, Hyprland borders, lock screen, btop, neovim, and VS Code. Every theme includes matching wallpapers and is generated from a single `colors.toml` source of truth.
+smplOS ships with 17 themes inherited and expanded from the Omarchy project. A single `theme-set` command applies colors system-wide - terminal, EWW bar, notifications, Hyprland borders, lock screen, btop, neovim, and VS Code. Every theme includes matching wallpapers and is generated from a single `colors.toml` source of truth.
+
+Native transparency is **background-only**: capable Nemo, Grafium in Auto mode,
+and regular smpl-apps windows use `app_background_opacity`, while text, icons,
+selections, and content remain readable. Popup apps retain `popup_opacity`;
+terminals retain their separate background controls. Hyprland passes native
+alpha through without fading the entire window. Matrix, Amber, and Grafium
+themes intentionally keep regular native backgrounds opaque.
+
+This needs the coordinated native app releases, not just updated theme files.
+Old Nemo remains opaque safely. Arbitrary GTK/Qt/Electron apps are not made
+background-transparent by the OS, and blur depends on compositor support.
+See the [theme alpha ownership guide](CREATING_MODIFYING_A_THEME.md#opacity-keys-in-colorstoml)
+and [release sequence](UPDATING.md#background-only-transparency-delivery).
 
 <a href="images/5-themes.png"><img src="images/5-themes.png" width="720" /></a>
 
@@ -342,7 +355,7 @@ smplOS separates shared infrastructure from compositor-specific config. The goal
 src/
   build-iso.sh              Entry point — detects Docker, launches builder
   bootstrap.sh              One-shot host bootstrap (installs Docker if absent)
-  generate-theme-configs.sh Re-generates pre-baked theme configs from colors.toml templates
+  regen-all-themes.sh       Single entry point for templates and Nemo CSS generation
 
   shared/                   Everything here works on ALL compositors
     bin/                    User-facing scripts (installed to /usr/local/bin/)
@@ -352,7 +365,7 @@ src/
     configs/
       smplos/               Cross-compositor configs (bindings.conf, messengers.conf, branding)
       <app>/                Per-app default configs (btop, dunst, fish, foot, nvim, …)
-    themes/                 14 themes — each a self-contained directory with pre-baked configs
+    themes/                 17 themes — each a self-contained directory with pre-baked configs
     icons/                  SVG status icon templates (baked with accent colors by theme-set)
     applications/           Shared web-app .desktop entries and hicolor icons
     skel/                   Default user home skeleton (copied to /etc/skel in the ISO)
@@ -765,9 +778,9 @@ See the [Development Guide](DEVELOPMENT.md) for hot-reload iteration, VM testing
 
 ## Themes
 
-14 built-in themes. Press <kbd>Super</kbd> + <kbd>Shift</kbd> + <kbd>T</kbd> to open the theme picker and switch instantly.
+17 built-in themes. Press <kbd>Super</kbd> + <kbd>Shift</kbd> + <kbd>T</kbd> to open the theme picker and switch instantly.
 
-Catppuccin Mocha, Catppuccin Latte, Ethereal, Everforest, Flexoki Light, Gruvbox, Hackerman, Kanagawa, Matte Black, Nord, Osaka Jade, Ristretto, Rose Pine, Tokyo Night.
+Amber, Catppuccin Mocha, Catppuccin Latte, Ethereal, Everforest, Flexoki Light, Grafium, Gruvbox, Hackerman, Kanagawa, Matrix, Matte Black, Nord, Osaka Jade, Ristretto, Rose Pine, Tokyo Night.
 
 One command - `theme-set <name>` - applies colors across the entire system: terminal, bar, notifications, compositor borders, lock screen, launcher, system monitor, editor, fish shell, Logseq, and browser chrome.
 
@@ -778,11 +791,11 @@ For a full step-by-step authoring workflow, see [CREATING_MODIFYING_A_THEME.md](
 The theme system is a **build-time template pipeline** plus a **runtime switcher**:
 
 ```
-colors.toml --> generate-theme-configs.sh --> 9 pre-baked configs per theme
-                      (sed templates)
-                                               theme-set copies them to
-                                               their target locations and
-                                               restarts/reloads each app
+colors.toml --> regen-all-themes.sh --> templates + dedicated Nemo CSS
+                  (alpha validation)             |
+                                                 v
+                                      theme-set publishes active files
+                                      and notifies/reloads consumers
 ```
 
 Each theme is a directory under `src/shared/themes/<name>/` containing:
@@ -797,8 +810,12 @@ Each theme is a directory under `src/shared/themes/<name>/` containing:
 | `fish.theme` | Generated | Fish shell syntax highlighting and pager colors |
 | `foot.ini` | Generated | Foot terminal colors |
 | `hyprland.conf` | Generated | Hyprland border colors, rounding, blur, opacity |
+| `niri-theme.kdl` | Generated | niri border colors and geometry |
 | `hyprlock.conf` | Generated | Lock screen colors |
 | `logseq-custom.css` | Generated | Logseq editor colors (backgrounds, text, links, highlights) |
+| `micro.theme` | Generated | Micro editor colors |
+| `smplos-launcher.rasi` | Generated | Rofi native RGBA backgrounds and opaque foreground |
+| `nemo.css` | Generated by Python | Nemo colors and capability-gated background alpha |
 | `neovim.lua` | Hand-authored | Lazy.nvim colorscheme spec |
 | `vscode.json` | Hand-authored | VS Code/Codium/Cursor theme name + extension ID |
 | `icons.theme` | Hand-authored | GTK icon theme name |
@@ -809,7 +826,8 @@ Each theme is a directory under `src/shared/themes/<name>/` containing:
 
 ### colors.toml Reference
 
-Every theme defines all its values in a single `colors.toml` file. Here's the full set of variables:
+Every theme defines its values in a single `colors.toml` file. Core variables
+are summarized here; see the [complete semantic palette guide](CREATING_MODIFYING_A_THEME.md).
 
 #### Colors
 
@@ -821,9 +839,11 @@ Every theme defines all its values in a single `colors.toml` file. Here's the fu
 | `background` | Window/terminal background | `"#1e1e2e"` |
 | `selection_foreground` | Text color in selections | `"#1e1e2e"` |
 | `selection_background` | Background color of selections | `"#f5e0dc"` |
-| `color0` - `color15` | Standard 16-color terminal palette | `"#45475a"` |
+| `term_0` - `term_15` | Optional overrides for terminal slots derived from semantic roles | `"#45475a"` |
 
-> **Note:** `color7` and `color15` are the colors terminals actually display for normal text in most shells. If terminal text looks dim, brighten these to match `foreground`.
+Terminal templates derive their palette from semantic roles such as `surface`,
+`danger` and `fg_dim`. The separate legacy `theme-set-st` reader still uses
+`colorN`; see the theme guide's audit limitations.
 
 #### Decoration
 
@@ -834,10 +854,11 @@ Every theme defines all its values in a single `colors.toml` file. Here's the fu
 | `blur_passes` | `"3"` | Number of blur passes (higher = smoother, more GPU) |
 | `opacity_active` | `"1.0"` | Opacity of focused windows (all regular apps). **Keep at 1.0** — the compositor multiplies the entire rendered frame, including text, by this value. Sub-1.0 values make text appear faded and less legible. |
 | `opacity_inactive` | `"1.0"` | Opacity of unfocused windows. **Keep at 1.0** for the same reason — sub-1.0 dims foreground text at the compositor level, not just the background. |
+| `app_background_opacity` | Explicit popup value, otherwise `"1.0"` | Background-only alpha for capable Nemo, Grafium Auto and regular smpl-apps. |
 | `term_opacity_active` | `"0.85"` | st-wl **background-only** alpha. Text is always 100% opaque — only the background pixels carry this alpha in the ARGB surface. |
 | `browser_opacity` | `"1.0"` | Opacity of browsers (Brave, Firefox, Chrome, etc.) |
 | `messenger_opacity` | `"0.85"` | Opacity of messengers (Signal, Telegram, Slack, Discord, Teams, WhatsApp) |
-| `popup_opacity` | `"0.85"` | Opacity of smplOS Rust popup apps (start-menu, notif-center, kb-center, disp-center) |
+| `popup_opacity` | `"0.60"` when absent during generation | Background alpha of popup-role apps (start-menu, notif-center, calendar), EWW popups and Rofi. |
 
 Each opacity class is owned exactly once — no value is applied twice. See [Opacity Architecture](#opacity-architecture) for details.
 
@@ -855,6 +876,8 @@ By default, each built-in theme points these to itself. You can mix and match (e
 
 #### Example: Catppuccin Mocha
 
+Excerpt; copy the complete shipped palette when creating a theme:
+
 ```toml
 accent = "#89b4fa"
 cursor = "#f5e0dc"
@@ -863,31 +886,15 @@ background = "#1e1e2e"
 selection_foreground = "#1e1e2e"
 selection_background = "#f5e0dc"
 
-color0 = "#45475a"
-color1 = "#f38ba8"
-color2 = "#a6e3a1"
-color3 = "#f9e2af"
-color4 = "#89b4fa"
-color5 = "#f5c2e7"
-color6 = "#94e2d5"
-color7 = "#cdd6f4"
-color8 = "#585b70"
-color9 = "#f38ba8"
-color10 = "#a6e3a1"
-color11 = "#f9e2af"
-color12 = "#89b4fa"
-color13 = "#f5c2e7"
-color14 = "#94e2d5"
-color15 = "#cdd6f4"
-
-rounding = "12"
+rounding = "8"
 blur_size = "14"
 blur_passes = "3"
 opacity_active = "1.0"
 opacity_inactive = "1.0"
 browser_opacity = "1.0"
 messenger_opacity = "0.85"
-popup_opacity = "0.85"
+popup_opacity = "0.50"
+app_background_opacity = "0.50"
 ```
 
 ### Template System
@@ -924,9 +931,10 @@ The generator provides three variants of each color variable:
 
 4. **Generate configs:**
    ```bash
-   cd src && bash generate-theme-configs.sh
+   cd src && bash regen-all-themes.sh && bash regen-all-themes.sh --check
    ```
-   This reads your `colors.toml`, expands all 9 templates, and writes the results into your theme directory.
+   This validates native alpha, expands the templates, and generates Nemo CSS.
+   The check compares temporary outputs without rewriting your working tree.
 
 5. **Test it:**
    ```bash
@@ -941,18 +949,19 @@ When you run `theme-set <name>`, it:
 2. Stages a complete theme, replaces `~/.config/smplos/current/theme/`, and only then records the selected name. Switches are serialized; an old root-owned theme is preserved in a recovery directory rather than blocking the switch.
 3. Copies pre-baked configs to their target locations:
    - `eww-colors.scss` -> `~/.config/eww/theme-colors.scss`
+   - `nemo.css` -> `~/.config/smplos/nemo-theme.css` (both this and the EWW palette publish by atomic rename)
    - `hyprland.conf` -> `~/.config/hypr/theme.conf`
    - `hyprlock.conf` -> `~/.config/hypr/hyprlock-theme.conf`
    - `foot.ini` -> `~/.config/foot/theme.ini`
    - `btop.theme` -> `~/.config/btop/themes/current.theme`
    - `fish.theme` -> `~/.config/fish/theme.fish`
    - `tide.theme` -> applied via `fish -c "source ...; tide reload"`
-   - `logseq-custom.css` -> `~/.logseq/config/custom.css` + plugin theme via `preferences.json`
-   - `dunstrc.theme` -> appended to `~/.config/dunst/dunstrc.active`
+   - `logseq-custom.css` -> inline CSS in `~/.logseq/config/config.edn` plus legacy graph CSS files
+   - `dunstrc.theme` -> composed with `dunstrc.base` into `~/.config/dunst/dunstrc`
    - `neovim.lua` -> `~/.config/nvim/lua/plugins/colorscheme.lua`
 4. Bakes accent/fg colors into SVG icon templates for the EWW bar
 5. Sets the wallpaper from `backgrounds/`
-6. Restarts/reloads all running apps:
+6. Refreshes supported consumers (not every application can reload live):
    - EWW bar: `bar-ctl reload` (re-compiles SCSS without killing the bar)
    - Hyprland: `hyprctl reload`
    - st/st-wl: OSC escape sequences (live, no restart)
@@ -961,31 +970,40 @@ When you run `theme-set <name>`, it:
    - Tide prompt: `tide reload` (updates git, pwd, vi-mode segment colors)
    - Dunst: `dunstctl reload`
    - btop: `SIGUSR2`
-   - Logseq: writes `preferences.json` (Logseq watches this file)
+   - Nemo and native smpl-apps: watch/reopen atomically replaced theme files
+   - Grafium Auto: watches active theme content and directory replacement
+   - Logseq: config/plugin preferences require an application restart
    - GTK: `gsettings` (dark/light mode)
    - Brave/Chromium: managed policy + flags file
 
 ### Opacity Architecture
 
-Every window belongs to exactly one opacity class. The value for each class lives in `colors.toml` and is never applied in more than one place — no compounding.
+Owned native apps apply alpha only to background paint. Their compositor
+multiplier is neutral, so foregrounds do not fade. Third-party browser and
+messenger policies remain whole-window effects, not background-only support.
 
 #### Opacity classes (tags)
 
 | Class | Tag | Who controls opacity | `colors.toml` key |
 |-------|-----|----------------------|-------------------|
-| Regular apps | *(untagged)* | Hyprland compositor | `opacity_active` / `opacity_inactive` |
+| Foreign regular apps | *(untagged)* | Hyprland compositor (stock 1.0) | `opacity_active` / `opacity_inactive` |
 | Browsers | `chromium-based-browser` / `firefox-based-browser` | Hyprland compositor | `browser_opacity` |
 | Messengers | `messenger` | Hyprland compositor | `messenger_opacity` |
 | smplOS Rust popups | `self-managed-alpha` | App itself (Slint ARGB surface) | `popup_opacity` |
-| Terminals | `self-managed-alpha` | App itself (st ALPHA_PATCH per-pixel) | `term_opacity_active` |
+| Regular smpl-apps, capable Nemo, Grafium Auto | `self-managed-alpha` | Native background paint only | `app_background_opacity` |
+| Rofi windows | `self-managed-alpha` | Rasi RGBA background | `popup_opacity` |
+| Terminals | `self-managed-alpha` | App itself (st ALPHA_PATCH per-pixel) | `term_opacity_active` / `term_opacity_inactive` |
 | Media / fullscreen | `compositor-opaque` | Hyprland compositor (forced 1.0) | — |
 
 #### Why `self-managed-alpha` windows use `1.0 override`
 
-Slint (smplOS Rust apps) and st with ALPHA_PATCH render their own semi-transparent pixels directly into an ARGB Wayland surface. If the compositor *also* applies opacity, the two multiply together:
+Slint, capable Nemo, Grafium Auto, Rofi and st render their own semi-transparent
+background pixels. If the compositor also applies opacity, the two multiply,
+and even an opaque text pixel becomes translucent:
 
 ```
-0.85 (app alpha) × 0.85 (compositor) ≈ 0.72 opaque → only 28% see-through
+background: 0.85 (app alpha) * 0.85 (compositor) = 0.7225
+text:       1.00 (app alpha) * 0.85 (compositor) = 0.85 (incorrect)
 ```
 
 To prevent this, all `self-managed-alpha` windows receive `opacity 1.0 override` from Hyprland, so the compositor passes pixels through untouched and the app's ARGB alpha is the sole controller.
@@ -1003,13 +1021,17 @@ These lines come *after* the tag-level rule, so they win (Hyprland last-match-wi
 
 #### Adding a new Slint app
 
-If you add a new Rust/Slint app, add one line to `windows.conf` in the `self-managed-alpha` tag block:
+If you add a new Rust/Slint app, give it the proper shared regular/popup role
+and add its verified native app ID to `self-managed-alpha` in **both**
+`windows.lua` and `windows.conf`:
 
 ```properties
 windowrule = tag +self-managed-alpha, match:class ^(my-new-app)$
 ```
 
-The `opacity 1.0 override` rule fires automatically from the tag. Nothing else to change.
+The `opacity 1.0 override` rule then protects its foreground. Background paint
+and live file-replacement handling must still be implemented in the app;
+tagging an opaque buffer cannot make only its background transparent.
 
 ## License
 

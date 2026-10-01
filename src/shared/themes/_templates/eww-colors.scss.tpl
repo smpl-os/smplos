@@ -12,3 +12,4 @@ $theme-warning: {{ warning }};
 $theme-warning-alt: {{ warning }};
 $theme-info: {{ info }};
 $theme-popup-opacity: {{ popup_opacity }};
+$theme-app-background-opacity: {{ app_background_opacity }};

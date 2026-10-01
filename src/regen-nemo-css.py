@@ -8,28 +8,80 @@ Fixes:
   - Adds tooltip styling
   - Scopes broad `button` rules so they don't fight toolbar or main-view rules
 
-Usage:
-  python3 regen-nemo-css.py
-Run from the repo root or from src/. Writes in-place.
+Run through src/regen-all-themes.sh only.
 """
 
-import os, re, sys
+import os, sys
+
+from theme_opacity import app_background_opacity, read_colors
 
 THEMES_DIR = os.path.join(os.path.dirname(__file__), "shared", "themes")
 
 
 def read_toml_simple(path):
-    """Parse a flat key = "value" TOML file. No sections, no arrays."""
-    d = {}
-    with open(path) as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            m = re.match(r'^(\w+)\s*=\s*"([^"]+)"', line)
-            if m:
-                d[m.group(1)] = m.group(2)
-    return d
+    """Read the canonical palette, including numeric alpha values."""
+    return read_colors(path)
+
+
+def native_alpha_css(c):
+    alpha = app_background_opacity(c)
+    roots = (
+        ".nemo-window.smplos-native-alpha:not(.nemo-desktop-window)",
+        ".nemo-quick-preview.smplos-native-alpha",
+    )
+    # Only structural backing surfaces clear. Controls, selected rows, media,
+    # and separate menu/dialog surfaces retain their existing paint/state rules.
+    children = (
+        "box:not(.floating-bar)", "grid", "paned", "notebook", "notebook > header",
+        "stack", "scrolledwindow", "viewport", "layout",
+        ".view:not(:selected)", "iconview:not(:selected)",
+        "treeview:not(:selected)", ".sidebar", ".places-treeview:not(:selected)",
+        ".nemo-preview-pane", ".nemo-query-editor",
+        "toolbar.primary-toolbar", "menubar", "headerbar", "searchbar",
+        "textview", "textview text", "scrollbar", "decoration",
+    )
+    owners = ",\n".join(roots)
+    clear = ",\n".join(f"{root} {child}" for root in roots for child in children)
+    labels = ",\n".join(
+        f"{root} {label}" for root in roots
+        for label in (".nemo-secondary-label", ".dim-label:not(:selected)")
+    )
+    selected_labels = ",\n".join(
+        f"{root} {label}" for root in roots
+        for label in (".dim-label:selected", ".view:selected .dim-label")
+    )
+    inactive_labels = ",\n".join(
+        f"{root} .nemo-inactive-pane {label}" for root in roots
+        for label in (".dim-label:selected", ".view:selected .dim-label")
+    )
+    return f"""
+/* Native-alpha capability: one background owner, never widget opacity.
+ * Old Nemo binaries lack this class and retain the opaque rules above.
+ * Selections and controls are overlays; menus/dialogs remain opaque. */
+{owners} {{
+    background-color: alpha({c["background"]}, {alpha});
+    background-image: none;
+}}
+
+{clear} {{
+    background-color: transparent;
+    background-image: none;
+}}
+
+{labels} {{
+    opacity: 1;
+    color: {c.get("fg_dim", c["foreground"])};
+}}
+
+{selected_labels} {{
+    opacity: 1;
+    color: {c.get("selection_foreground", c["background"])};
+}}
+
+{inactive_labels} {{
+    color: {c["foreground"]};
+}}
+"""
 
 
 def make_nemo_css(c):
@@ -917,7 +969,7 @@ scrollbar slider {{
 scrollbar slider:hover {{
     background-color: {sel_bg};
 }}
-"""
+""" + native_alpha_css(c)
 
 
 def main():
@@ -929,6 +981,7 @@ def main():
 
     ok = 0
     skip = 0
+    failed = 0
     for theme in themes:
         toml_path = os.path.join(themes_dir, theme, "colors.toml")
         css_path  = os.path.join(themes_dir, theme, "nemo.css")
@@ -942,11 +995,13 @@ def main():
                 f.write(css)
             print(f"  ✓ {theme}")
             ok += 1
-        except Exception as e:
+        except (OSError, ValueError, KeyError) as e:
             print(f"  ✗ {theme}: {e}", file=sys.stderr)
+            failed += 1
 
     print(f"\n{ok} themes updated, {skip} skipped (no colors.toml).")
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

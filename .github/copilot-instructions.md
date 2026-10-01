@@ -104,7 +104,7 @@ src/shared/          ← Everything here works on ALL compositors
   bin/               ← User-facing scripts (installed to /usr/local/bin/)
   eww/               ← EWW bar, launcher, theme picker, keybind help (GTK3, works on X11 + Wayland)
   configs/smplos/    ← Cross-compositor configs (bindings.conf = single source of truth)
-  themes/            ← 14 themes with templates for all apps
+  themes/            ← 17 themes with templates for all apps
   apps/              ← git submodule → github.com/smpl-os/smpl-apps
     Cargo.toml       ← workspace root (shared deps, renderer-femtovg)
     smpl-common/     ← shared init library for all apps
@@ -170,8 +170,8 @@ generation. Run it whenever you change any template or `colors.toml`:
 cd src && bash regen-all-themes.sh
 ```
 
-It runs both generators in order:
-1. `generate-theme-configs.sh` — all `.tpl` files → 12 outputs per theme
+It validates native alpha, then runs both generators in order:
+1. `generate-theme-configs.sh` — all `.tpl` files
 2. `regen-nemo-css.py` — `nemo.css` only (GTK CSS; cannot use simple sed expansion)
 
 **Never run `generate-theme-configs.sh` or `regen-nemo-css.py` directly.**
@@ -179,7 +179,7 @@ Use `regen-all-themes.sh` so both always run and outputs stay in sync.
 
 To verify nothing is out of sync (CI / pre-commit):
 ```bash
-cd src && bash regen-all-themes.sh --check   # exits 1 if any file drifted
+cd src && bash regen-all-themes.sh --check   # temporary fixture; no checkout writes
 ```
 
 `regen-nemo-css.py` is the sole source of truth for `nemo.css`. Any fix
@@ -251,9 +251,21 @@ cat ~/.config/smplos/current/theme.name
 cp src/shared/themes/<name>/nemo.css ~/.config/smplos/nemo-theme.css.tmp
 mv -f ~/.config/smplos/nemo-theme.css.tmp ~/.config/smplos/nemo-theme.css
 
-# Relaunch nemo to pick up the change:
-pkill nemo; nemo &
+# A compatible nemo-smpl watches the CSS path and reloads it live.
+# Reopening is needed only after installing a new native binary.
 ```
+
+**Native alpha ownership:** `app_background_opacity` is a finite decimal in
+`[0,1]`; absent falls back to explicit `popup_opacity`, then 1.0. Invalid
+explicit values are errors, never silent fallbacks. `theme_opacity.py` shares
+build-time validation between generators. The root
+`.nemo-window.smplos-native-alpha:not(.nemo-desktop-window)` or
+`.nemo-quick-preview.smplos-native-alpha` owns the only background fill.
+All descendant backing clears must also require that capability class, so old
+Nemo stays opaque. Do not repeatedly alpha-fill root and child views.
+Keep separate menus/dialogs, media and selection/control fills intact; use
+opaque semantic colors for secondary labels, not widget opacity. The native
+class/RGBA visual lives in nemo-smpl, never in this repo.
 
 **NEVER do these:**
 - NEVER run `generate-theme-configs.sh` or `regen-nemo-css.py` directly —
@@ -464,12 +476,23 @@ slint::platform::set_platform(Box::new(backend))
 - **`with_name(app_id, instance)` is mandatory.** Without it the Wayland `app_id` is
   empty/generic and `windowrulev2` in `windows.conf` can't target the window for
   float/opacity/blur rules. Convention: both args match the binary name.
-- **Background alpha comes from the theme palette.** Each `.slint` Window uses
-  `background: Theme.bg.transparentize(1.0 - Theme.opacity)`. The `opacity`
-  value is read from `$theme-popup-opacity` in `theme-colors.scss` at runtime.
-  Never hardcode a fully-opaque `#rrggbb` background on a Window.
-- **Hyprland rules** in `windows.conf` target `initialClass` matching the `app_id`:
-  `windowrulev2 = float, initialClass:start-menu`.
+- **Background alpha comes from the theme palette, by role.** Regular windows
+  (Settings, App Center, Web App Center, Sync Center) consume
+  `$theme-app-background-opacity` generated from `app_background_opacity`.
+  Start Menu, Notification Center and Calendar retain `$theme-popup-opacity`.
+  Legacy app-token fallback is explicit popup, then 1.0. Hints keeps a transparent
+  root with themed badges. Apply alpha only to background paint, never to
+  Window/container opacity or foreground colors. Nested backing fills must not
+  cancel/compound alpha. Opaque 1.0 must be reversible through live theme changes.
+- **Hyprland rules** in both `windows.lua` and `windows.conf` protect actual
+  app IDs with `self-managed-alpha` and `1.0 override` for active/inactive.
+  Keep Nemo (`nemo`, `org.Nemo.nemo-float`), Grafium (`grafium`), Rofi and
+  all smpl-apps IDs including `hints-overlay` protected. Regular compositor
+  opacity stays 1.0; never restore old whole-window theme fades.
+- **Atomic watchers:** `theme-set` replaces `current/theme` and atomically
+  publishes EWW palette/Nemo CSS. Watch parents/reopen paths after replacement,
+  not only the original inode. Native releases and reopen-once rollout are
+  required; an OS source update is not a native binary delivery.
 
 **NEVER do these — each one silently kills transparency with no error:**
 - NEVER put `renderer-software` or `renderer-skia` in the workspace Cargo.toml

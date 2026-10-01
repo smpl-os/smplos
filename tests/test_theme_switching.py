@@ -176,6 +176,18 @@ class ThemeSwitchingTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assert_switched("old")
 
+    def test_palette_publication_replaces_inode_without_truncating_readers(self):
+        self.assertEqual(self.switch("old").returncode, 0)
+        for relative in ("eww/theme-colors.scss", "smplos/nemo-theme.css"):
+            target = self.home / ".config" / relative
+            with self.subTest(target=relative), target.open("rb") as reader:
+                old = reader.read()
+                reader.seek(0)
+                self.assertEqual(self.switch("new").returncode, 0)
+                self.assertEqual(reader.read(), old)
+                self.assertNotEqual(target.read_bytes(), old)
+            self.assertEqual(self.switch("old").returncode, 0)
+
     def test_reload_failure_is_not_reported_as_success(self):
         result = self.switch("new", FAIL_RELOAD="1")
         self.assertNotEqual(result.returncode, 0)

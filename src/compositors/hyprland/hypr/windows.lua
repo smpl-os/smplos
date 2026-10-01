@@ -29,13 +29,10 @@ hl.layer_rule({ match = { namespace = "rofi" }, blur_popups = true })
 hl.layer_rule({ match = { namespace = "rofi" }, ignore_alpha = 0.1 })
 
 -- Rofi dialogs (keybind-help, theme-picker use -normal-window for popin animation)
-local popup_opacity_str = theme.themePopupOpacity .. " override "
-                       .. theme.themePopupOpacity .. " override"
 hl.window_rule({
     match = { class = "^(rofi)$" },
     float = true, center = true, pin = true,
     animation = "popin",
-    opacity = popup_opacity_str,
 })
 
 -- ============================================================================
@@ -68,10 +65,16 @@ hl.window_rule({
 local slint_apps = {
     "start-menu", "notif-center", "settings",
     "app-center", "webapp-center", "sync-center", "smpl-calendar",
-    "smpl-calendar-details",
+    "smpl-calendar-details", "hints-overlay",
 }
 hl.window_rule({
     match = { class = "^(" .. table.concat(slint_apps, "|") .. ")$" },
+    tag = "+self-managed-alpha",
+})
+
+-- Native backgrounds and Rofi own alpha; whole-surface opacity fades text.
+hl.window_rule({
+    match = { class = "^(rofi|grafium|nemo|org\\.Nemo\\.nemo-float)$" },
     tag = "+self-managed-alpha",
 })
 

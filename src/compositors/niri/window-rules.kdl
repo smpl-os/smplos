@@ -17,11 +17,10 @@
 //   On Hyprland, theme opacity (windowrule = opacity ...) controls window
 //   transparency app-wide. On niri there is NO compositor-side opacity;
 //   only the app's own ARGB surface alpha applies. So:
-//     - Slint apps (self-managed-alpha) work the same — they own their alpha
+//     - Slint, capable Nemo and Grafium Auto own native background alpha
 //     - st (ALPHA_PATCH) works the same — owns its alpha
 //     - Browsers/regular apps: opaque on niri (no compositor transparency)
-//   To get the "theme opacity for regular apps" effect on niri would require
-//   apps to opt into transparency themselves. Out of scope.
+//   Unowned GTK/Qt/Electron apps are not converted by the native alpha contract.
 
 // ── Default rule: all windows ────────────────────────────────────────────
 // Tone down focus ring intensity for non-focused windows.
@@ -32,7 +31,8 @@ window-rule {
 
 // ── smplOS Slint apps (self-managed-alpha) ────────────────────────────────
 // These render ARGB surfaces with their own background alpha read from the
-// theme's $theme-popup-opacity. They must float + center / dock to specific
+// theme's app-background-opacity (regular) or popup-opacity (popup role).
+// They must float + center / dock to specific
 // positions to match the Hyprland experience.
 
 // Start Menu — bottom-left, just above the bar.

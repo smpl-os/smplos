@@ -68,6 +68,8 @@ generate_theme() {
     pairs["$key"]="$value"
   done < "$colors_file"
 
+  pairs[app_background_opacity]=$(python3 "$SCRIPT_DIR/theme_opacity.py" "$colors_file")
+
   # --- Derive terminal palette (ANSI 0-15) from semantic names ---
   # Each slot maps to a semantic variable. Themes can override with term_N.
   local -a term_sources=(

@@ -48,6 +48,7 @@ opacity_inactive = "1.0"
 term_opacity_active = "1.0"
 term_opacity_inactive = "1.0"
 popup_opacity = "1.0"
+app_background_opacity = "1.0"
 messenger_opacity = "1.0"
 browser_opacity = "1.0"
 

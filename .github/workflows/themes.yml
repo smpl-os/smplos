@@ -1,0 +1,45 @@
+name: Theme alpha and generation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'src/*theme*'
+      - 'src/regen-nemo-css.py'
+      - 'src/shared/themes/**'
+      - 'src/shared/bin/theme-set*'
+      - 'src/shared/bin/bar-ctl'
+      - 'src/builder/build.sh'
+      - 'src/compositors/hyprland/hypr/windows.*'
+      - 'tests/test_theme*.py'
+      - '.github/workflows/themes.yml'
+  pull_request:
+    paths:
+      - 'src/*theme*'
+      - 'src/regen-nemo-css.py'
+      - 'src/shared/themes/**'
+      - 'src/shared/bin/theme-set*'
+      - 'src/shared/bin/bar-ctl'
+      - 'src/builder/build.sh'
+      - 'src/compositors/hyprland/hypr/windows.*'
+      - 'tests/test_theme*.py'
+      - '.github/workflows/themes.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  regressions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check shell syntax
+        run: |
+          bash -n src/regen-all-themes.sh
+          bash -n src/generate-theme-configs.sh
+          bash -n src/shared/bin/theme-set
+          bash -n src/builder/build.sh
+      - name: Check generated themes without rewriting files
+        run: bash src/regen-all-themes.sh --check
+      - name: Exercise isolated theme fixtures
+        run: python3 -m unittest discover -s tests -p 'test_theme*.py' -v

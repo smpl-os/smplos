@@ -95,7 +95,8 @@ rm -rf -- "$NEXT_THEME_PATH" || die "Cannot clean theme staging directory"
 # Link EWW theme colors into EWW config dir
 if [[ -f "$CURRENT_THEME_PATH/eww-colors.scss" ]]; then
   mkdir -p "$HOME/.config/eww"
-  cp "$CURRENT_THEME_PATH/eww-colors.scss" "$HOME/.config/eww/theme-colors.scss" \
+  cp "$CURRENT_THEME_PATH/eww-colors.scss" "$HOME/.config/eww/theme-colors.scss.tmp" \
+    && mv -f "$HOME/.config/eww/theme-colors.scss.tmp" "$HOME/.config/eww/theme-colors.scss" \
     || die "Cannot deploy EWW theme"
 fi
 

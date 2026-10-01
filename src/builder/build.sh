@@ -1271,7 +1271,8 @@ DCONF_PROFILE
         
         # Link pre-baked configs into app config dirs for live session
         local theme_src="$SRC_DIR/shared/themes/catppuccin"
-        cp "$theme_src/eww-colors.scss" "$skel/.config/eww/theme-colors.scss" 2>/dev/null || true
+        install -Dm644 "$theme_src/eww-colors.scss" "$skel/.config/eww/theme-colors.scss"
+        install -Dm644 "$theme_src/nemo.css" "$skel/.config/smplos/nemo-theme.css"
         # Bake SVG icon templates with catppuccin colors for live session
         if [[ -d "$SRC_DIR/shared/icons/status" ]]; then
             # Install templates to smplos data dir
