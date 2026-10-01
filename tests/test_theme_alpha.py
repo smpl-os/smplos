@@ -40,15 +40,15 @@ class AlphaContractTests(unittest.TestCase):
                         {"app_background_opacity": value, "popup_opacity": "0.8"}
                     )
 
-    def test_all_stock_palettes_preserve_identity_and_neutral_compositor(self):
+    def test_all_stock_palettes_apply_equal_ordinary_alpha_without_focus_fade(self):
         palettes = list((SRC / "shared/themes").glob("*/colors.toml"))
         self.assertEqual(len(palettes), 17)
         for path in palettes:
             with self.subTest(theme=path.parent.name):
                 colors = read_colors(path)
                 self.assertEqual(colors["app_background_opacity"], colors["popup_opacity"])
-                self.assertEqual(colors["opacity_active"], "1.0")
-                self.assertEqual(colors["opacity_inactive"], "1.0")
+                for key in ("opacity_active", "opacity_inactive", "browser_opacity", "messenger_opacity"):
+                    self.assertEqual(colors[key], colors["app_background_opacity"])
                 if path.parent.name in ("matrix", "amber", "grafium"):
                     self.assertEqual(app_background_opacity(colors), "1.0")
 

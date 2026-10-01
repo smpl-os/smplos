@@ -10,7 +10,7 @@ on:
       - 'src/shared/bin/theme-set*'
       - 'src/shared/bin/bar-ctl'
       - 'src/builder/build.sh'
-      - 'src/compositors/hyprland/hypr/windows.*'
+      - 'src/compositors/hyprland/hypr/**'
       - 'tests/test_theme*.py'
       - '.github/workflows/themes.yml'
   pull_request:
@@ -21,7 +21,7 @@ on:
       - 'src/shared/bin/theme-set*'
       - 'src/shared/bin/bar-ctl'
       - 'src/builder/build.sh'
-      - 'src/compositors/hyprland/hypr/windows.*'
+      - 'src/compositors/hyprland/hypr/**'
       - 'tests/test_theme*.py'
       - '.github/workflows/themes.yml'
 

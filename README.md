@@ -130,8 +130,11 @@ alpha through without fading the entire window. Matrix, Amber, and Grafium
 themes intentionally keep regular native backgrounds opaque.
 
 This needs the coordinated native app releases, not just updated theme files.
-Old Nemo remains opaque safely. Arbitrary GTK/Qt/Electron apps are not made
-background-transparent by the OS, and blur depends on compositor support.
+Old Nemo remains opaque safely. Other ordinary GTK/Qt/Electron apps receive
+theme-controlled **whole-window** transparency on Hyprland: text and icons fade
+too, an intentional tradeoff. Known media, games, picture-in-picture and
+fullscreen windows are exempt from added compositor fading. Native app alpha
+is still app-owned even in fullscreen; blur depends on compositor support.
 See the [theme alpha ownership guide](CREATING_MODIFYING_A_THEME.md#opacity-keys-in-colorstoml)
 and [release sequence](UPDATING.md#background-only-transparency-delivery).
 
@@ -852,8 +855,8 @@ Terminal templates derive their palette from semantic roles such as `surface`,
 | `rounding` | `"10"` | Window corner radius in pixels |
 | `blur_size` | `"6"` | Background blur kernel size |
 | `blur_passes` | `"3"` | Number of blur passes (higher = smoother, more GPU) |
-| `opacity_active` | `"1.0"` | Opacity of focused windows (all regular apps). **Keep at 1.0** — the compositor multiplies the entire rendered frame, including text, by this value. Sub-1.0 values make text appear faded and less legible. |
-| `opacity_inactive` | `"1.0"` | Opacity of unfocused windows. **Keep at 1.0** for the same reason — sub-1.0 dims foreground text at the compositor level, not just the background. |
+| `opacity_active` | `"1.0"` if absent | Third-party ordinary whole-window opacity, including text/icons. Stock values follow theme background intensity. |
+| `opacity_inactive` | `"1.0"` if absent | Keep equal to active to avoid focus-dependent fading. |
 | `app_background_opacity` | Explicit popup value, otherwise `"1.0"` | Background-only alpha for capable Nemo, Grafium Auto and regular smpl-apps. |
 | `term_opacity_active` | `"0.85"` | st-wl **background-only** alpha. Text is always 100% opaque — only the background pixels carry this alpha in the ARGB surface. |
 | `browser_opacity` | `"1.0"` | Opacity of browsers (Brave, Firefox, Chrome, etc.) |
@@ -889,10 +892,10 @@ selection_background = "#f5e0dc"
 rounding = "8"
 blur_size = "14"
 blur_passes = "3"
-opacity_active = "1.0"
-opacity_inactive = "1.0"
-browser_opacity = "1.0"
-messenger_opacity = "0.85"
+opacity_active = "0.50"
+opacity_inactive = "0.50"
+browser_opacity = "0.50"
+messenger_opacity = "0.50"
 popup_opacity = "0.50"
 app_background_opacity = "0.50"
 ```
@@ -979,21 +982,22 @@ When you run `theme-set <name>`, it:
 ### Opacity Architecture
 
 Owned native apps apply alpha only to background paint. Their compositor
-multiplier is neutral, so foregrounds do not fade. Third-party browser and
-messenger policies remain whole-window effects, not background-only support.
+multiplier is neutral, so foregrounds do not fade. Third-party ordinary apps,
+including browsers/messengers, intentionally receive whole-window theme alpha.
+Their text/icons fade too; stock focused/unfocused values are equal.
 
 #### Opacity classes (tags)
 
 | Class | Tag | Who controls opacity | `colors.toml` key |
 |-------|-----|----------------------|-------------------|
-| Foreign regular apps | *(untagged)* | Hyprland compositor (stock 1.0) | `opacity_active` / `opacity_inactive` |
+| Foreign regular apps | *(untagged)* | Hyprland whole-window theme multiplier | `opacity_active` / `opacity_inactive` |
 | Browsers | `chromium-based-browser` / `firefox-based-browser` | Hyprland compositor | `browser_opacity` |
 | Messengers | `messenger` | Hyprland compositor | `messenger_opacity` |
 | smplOS Rust popups | `self-managed-alpha` | App itself (Slint ARGB surface) | `popup_opacity` |
 | Regular smpl-apps, capable Nemo, Grafium Auto | `self-managed-alpha` | Native background paint only | `app_background_opacity` |
 | Rofi windows | `self-managed-alpha` | Rasi RGBA background | `popup_opacity` |
 | Terminals | `self-managed-alpha` | App itself (st ALPHA_PATCH per-pixel) | `term_opacity_active` / `term_opacity_inactive` |
-| Media / fullscreen | `compositor-opaque` | Hyprland compositor (forced 1.0) | — |
+| Known media, games, PiP / fullscreen | `compositor-opaque` or final direct matcher | Hyprland compositor (forced 1.0) | — |
 
 #### Why `self-managed-alpha` windows use `1.0 override`
 
@@ -1007,6 +1011,12 @@ text:       1.00 (app alpha) * 0.85 (compositor) = 0.85 (incorrect)
 ```
 
 To prevent this, all `self-managed-alpha` windows receive `opacity 1.0 override` from Hyprland, so the compositor passes pixels through untouched and the app's ARGB alpha is the sole controller.
+
+`opacity-policy.lua` / `.conf` loads last, after browser and messenger rules,
+and protects native/media/fullscreen surfaces with neutral active, inactive
+and fullscreen multipliers. This removes added whole-window fading, not an
+app's existing per-pixel alpha. Unknown windowed media/games need a matching
+class/content type or an explicit `compositor-opaque` tag.
 
 #### Per-app messenger overrides
 

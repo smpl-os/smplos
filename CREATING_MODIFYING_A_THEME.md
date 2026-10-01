@@ -249,21 +249,22 @@ So one theme can reuse another theme's app presets without duplicating settings.
 
 ## Opacity keys in colors.toml
 
-Background alpha belongs to the application, **not to its text or whole
-window**. Hyprland's `self-managed-alpha` tag forces neutral
-`1.0 override 1.0 override` for owned native surfaces in both Lua and legacy
-configs. Do not restore the old Catppuccin `.55/.55` or Ethereal `.75/.75`
-whole-window settings: equal active/inactive values still fade every glyph.
+There are two intentionally different policies. **Owned native apps** render
+background-only alpha; Hyprland's `self-managed-alpha` tag preserves their
+opaque foregrounds at compositor 1.0. **Other ordinary apps** use theme-controlled
+whole-window transparency, including their text and icons. This accepted
+readability tradeoff is not background-only transparency. Keep active/inactive
+values equal so switching focus does not add another fade.
 
 | Key | Default | What it affects |
 |-----|---------|------------------|
 | `app_background_opacity` | Explicit `popup_opacity`, otherwise `"1.0"` | Capable Nemo main/quick-preview roots, Grafium Auto, Settings, App Center, Web App Center, Sync Center. Background only. |
-| `opacity_active` | `"1.0"` | Whole-window compositor multiplier for unowned regular apps. Keep neutral to preserve foreground opacity. |
-| `opacity_inactive` | `"1.0"` | Same multiplier when unfocused. All stock themes keep both values at 1.0. |
+| `opacity_active` | `"1.0"` if absent | Whole-window multiplier for third-party ordinary apps; stock values match `app_background_opacity`. Text/icons fade too. |
+| `opacity_inactive` | `"1.0"` if absent | Unfocused multiplier; keep equal to active. Stock values match active. |
 | `term_opacity_active` | `"0.85"` | st-wl **background-only** alpha (focused). Text is always 100% opaque — only background pixels carry this alpha. Set low (e.g. `"0.60"`) for a heavily frosted glass terminal with perfectly sharp text. |
 | `term_opacity_inactive` | `"0.70"` | st-wl background alpha when the terminal loses focus. Creates a gentle fade on the background, not on text. |
-| `browser_opacity` | `"1.0"` | Legacy whole-window opacity for browsers; not background-only. |
-| `messenger_opacity` | `"0.85"` | Legacy whole-window opacity for messengers; existing per-app overrides remain. Not background-only. |
+| `browser_opacity` | `"1.0"` if absent | Optional browser override; stock values match ordinary theme alpha. |
+| `messenger_opacity` | `"0.85"` if absent | Optional messenger override; stock values match ordinary theme alpha. |
 | `popup_opacity` | `"0.60"` in generated palettes when absent | Start Menu, Notification Center, Calendar, EWW popup/dialog backgrounds and Rofi. Explicit stock values are listed below. |
 
 ### Native app contract and compatibility
@@ -272,8 +273,10 @@ Use a finite decimal in the inclusive range 0 to 1, normally a quoted string:
 
 ```toml
 app_background_opacity = "0.50"
-opacity_active = "1.0"
-opacity_inactive = "1.0"
+opacity_active = "0.50"
+opacity_inactive = "0.50"
+browser_opacity = "0.50"
+messenger_opacity = "0.50"
 ```
 
 An explicit valid app value wins. If the key is **absent**, use an explicitly
@@ -330,9 +333,9 @@ ARGB surfaces and undecorated windows in the native app repos.
 
 ### Stock palette audit
 
-All 17 themes keep compositor active/inactive opacity at **1.0**. Native app
-background values initially match their existing popup intensity; popup and
-terminal values are not redesigned by this change.
+All 17 themes set ordinary active/inactive, browser and messenger multipliers
+equal to the native background intensity below. Native surfaces still receive
+compositor **1.0**, not this multiplier. Popup and terminal values are unchanged.
 
 | Themes | App background / existing popup alpha |
 |--------|--------------------------------------|
@@ -343,6 +346,23 @@ terminal values are not redesigned by this change.
 | Catppuccin Latte, Flexoki Light | 0.90 |
 | Amber, Grafium, Matrix | 1.0 (intentionally opaque) |
 
+### Final compositor safety policy
+
+`opacity-policy.lua` / `.conf` must load **last**, after `apps.browser` and all
+messenger/app rules. Owned native surfaces, tagged media, picture-in-picture,
+Steam game classes and advertised photo/video/game content receive
+`1.0 override 1.0 override 1.0 override`. Fullscreen also gets this exemption.
+In Hyprland 0.56 `match:fullscreen = 1` is a boolean matcher calling
+`isFullscreen()`, not the numeric `fullscreen_state` enum; maximized ordinary
+windows are not treated as fullscreen.
+
+This prevents added compositor fading; it cannot make an app's existing ARGB
+background opaque. Native fullscreen apps retain their own background alpha.
+Unrecognized windowed games/media that expose neither a known class nor content
+type need an explicit `compositor-opaque` tag. Existing media/Wine policies are
+retained; ordinary apps get the theme multiplier. Browser/messenger author
+overrides cannot beat final native/media/fullscreen safety.
+
 EWW owns its GTK background alpha: bar 0.95, tooltips 0.92, monitor identification
 0.94, and dialogs/popups use `popup_opacity`. Its theme foreground tokens remain
 opaque; existing muted/disabled/state styling is intentional. Rofi paints its
@@ -352,7 +372,9 @@ fade is applied. These surfaces do not consume `app_background_opacity`.
 Blur is a compositor effect, separate from alpha. Hyprland provides configured
 blur; do not promise identical blur on niri. Nemo uses opaque fallback on
 noncomposited X11 rather than exposing an unusable alpha surface. Unowned
-GTK/Qt/Electron applications remain outside the native background contract.
+GTK/Qt/Electron applications remain outside the native background contract but
+receive the whole-window theme multiplier on Hyprland. That compositor-specific
+effect is not implemented on niri.
 Terminal semantic `term_N` versus the legacy `theme-set-st` `colorN` reader is
 a separate known palette issue, not fixed by this alpha work.
 

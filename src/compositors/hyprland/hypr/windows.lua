@@ -275,8 +275,8 @@ local opacity_overrides = {
     -- ["^(discord|WebCord|vesktop)$"]                  = "0.65 override 0.65 override",
     -- ["^(brave-teams\\.microsoft\\.com)(.*)$"]        = "0.80 override 0.80 override",
     -- ["^(brave-web\\.whatsapp)(.*)$"]                 = "0.75 override 0.75 override",
-    ["^(brave-discord)(.*)$"]  = "0.90 override 0.70 override",
-    ["^(brave-github\\.com)(.*)$"] = "0.90 override 0.70 override",
+    -- ["^(brave-discord)(.*)$"] = "0.85 override 0.85 override",
+    -- ["^(brave-github\\.com)(.*)$"] = "0.85 override 0.85 override",
 }
 for class, opacity in pairs(opacity_overrides) do
     hl.window_rule({ match = { class = class }, opacity = opacity })

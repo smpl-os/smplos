@@ -66,6 +66,7 @@ if fe then fe:close(); bindings.load(emergency) end
 -- first; the non-consuming bind here coexists with them.
 require("popup_watchers")
 
--- ── App-specific rules + autostart (last, so apps win opacity overrides) ──
+-- ── App rules, autostart, then final opacity safety exemptions ──
 require("apps")
 require("autostart")
+require("opacity-policy")

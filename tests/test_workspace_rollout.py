@@ -91,6 +91,10 @@ as_invoker() {
         hypr = self.repo / "src/compositors/hyprland/hypr"
         self.write(hypr / "workspace_policy.lua", "return true\n")
         self.write(hypr / "hyprland.lua", 'require("workspace_policy")\n')
+        self.write(hypr / "hyprland.conf", "source = opacity-policy.conf\n")
+        for suffix in ("lua", "conf"):
+            self.write(hypr / f"opacity-policy.{suffix}",
+                       (ROOT / f"src/compositors/hyprland/hypr/opacity-policy.{suffix}").read_text())
         self.write(hypr / "apps/example.lua", "-- app rules\n")
         self.write(hypr / "apps/theme.conf", "managed app theme\n")
         self.write(hypr / "monitors.conf", "stock monitor\n")
@@ -111,6 +115,11 @@ as_invoker() {
                         events.index(str(self.home / ".config/eww/eww.yuck")))
         self.assertLess(events.index(str(self.home / ".config/hypr/workspace_policy.lua")),
                         events.index(str(self.home / ".config/hypr/hyprland.lua")))
+        for suffix in ("lua", "conf"):
+            policy = self.home / f".config/hypr/opacity-policy.{suffix}"
+            self.assertEqual(policy.read_bytes(), (hypr / policy.name).read_bytes())
+            self.assertLess(events.index(str(policy)),
+                            events.index(str(self.home / f".config/hypr/hyprland.{suffix}")))
         self.run_bash(script)
         self.assertEqual(self.log.read_text().splitlines(), events)
 

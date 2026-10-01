@@ -494,8 +494,15 @@ slint::platform::set_platform(Box::new(backend))
 - **Hyprland rules** in both `windows.lua` and `windows.conf` protect actual
   app IDs with `self-managed-alpha` and `1.0 override` for active/inactive.
   Keep Nemo (`nemo`, `org.Nemo.nemo-float`), Grafium (`grafium`), Rofi and
-  all smpl-apps IDs including `hints-overlay` protected. Regular compositor
-  opacity stays 1.0; never restore old whole-window theme fades.
+  all smpl-apps IDs including `hints-overlay` protected. The user-approved
+  third-party policy is different: ordinary apps (including browsers/messengers)
+  use theme-controlled whole-window alpha, accepting faded text/icons.
+  Stock active/inactive/browser/messenger values equal `app_background_opacity`;
+  keep focus values equal. `opacity-policy.lua` / `.conf` MUST load last, after
+  all app rules, so native, media, known games, PiP and fullscreen exemptions
+  always receive neutral active/inactive/fullscreen multipliers. This prevents
+  added compositor fade, not app-provided pixel alpha. Never use compositor
+  fading as a substitute for owned native background transparency.
 - **Atomic watchers:** `theme-set` replaces `current/theme` and atomically
   publishes EWW palette/Nemo CSS. Watch parents/reopen paths after replacement,
   not only the original inode. Native releases and reopen-once rollout are

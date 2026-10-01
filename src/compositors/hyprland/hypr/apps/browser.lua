@@ -13,7 +13,7 @@ hl.window_rule({
     tag = "+firefox-based-browser",
 })
 
--- Browsers are fully opaque by default (browser_opacity in colors.toml).
+-- Stock browser alpha follows the theme; authors can set browser_opacity.
 -- Override so focus/unfocus uses the same value (no dim on blur).
 local browser_opacity = theme.themeBrowserOpacity .. " override "
                      .. theme.themeBrowserOpacity .. " override"

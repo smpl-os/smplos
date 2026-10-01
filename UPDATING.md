@@ -217,10 +217,16 @@ Users get the updated theme automatically on next update.
 ### Background-only transparency delivery
 
 This feature crosses independently released binaries. OS source alone is
-**not** delivery of native alpha support. Keep normal apps at compositor
-opacity 1.0: lowering whole-window opacity fades text and images too.
+**not** delivery of native alpha support. Keep owned native apps at compositor
+opacity 1.0. Other ordinary apps intentionally use theme-controlled whole-window
+alpha, which fades text and images too; stock active/inactive values are equal.
 
 1. Ship the OS palette/template/CSS and both Hyprland rule trees together.
+   Publish the final `opacity-policy.lua` / `.conf` modules before the entry
+   points that load them last, after all browser/messenger/app rules. This
+   guarantees native/media/PiP/known-game/fullscreen exemptions win. Ordinary
+   browser/messenger stock keys follow the theme; optional author overrides
+   cannot bypass the final safety policy.
    `app_background_opacity` is explicit in all 17 stock palettes; it generates
    `$theme-app-background-opacity` for native readers. `sync_themes()` copies
    stock data, preserves user overrides, and `post_deploy()` reapplies the active
@@ -276,8 +282,11 @@ commit or claim a release version that has not been published.
 EWW/Rofi and terminals retain their existing controls. Matrix, Amber and
 Grafium themes remain intentionally opaque. Nemo desktop, separate menus and
 dialogs remain opaque; selections and media retain their own paint. Foreign
-GTK/Qt/Electron apps and existing messenger/browser whole-window policies are
-not converted. Alpha can work cross-compositor, but blur depends on compositor
+GTK/Qt/Electron apps use whole-window theme opacity on Hyprland, including faded
+foregrounds. Known media/games/PiP/fullscreen are exempt from this added fade;
+native fullscreen backgrounds still retain app-provided alpha. Unrecognized
+windowed games/media need explicit class/content matching or an opaque tag.
+Native alpha can work cross-compositor, but blur depends on compositor
 support. See the [ownership/audit table](CREATING_MODIFYING_A_THEME.md#stock-palette-audit).
 
 Before coordinated publication, run:
@@ -289,7 +298,8 @@ python3 -m unittest discover -s tests -p 'test_theme*.py' -v
 
 On a test desktop with compatible binaries, check Catppuccin, Latte, Ethereal,
 Matrix and a custom theme across icon/list/split views, previews and dialogs;
-focused/unfocused text must remain opaque. Verify old Nemo without the
+owned native focused/unfocused text must remain opaque; ordinary app text is
+intentionally faded equally in both states. Verify old Nemo without the
 capability class remains readable, then test atomic palette/directory replacement
 and restoration to alpha 1.0. This repository's static/fixture checks are not
 a substitute for native rendering verification.
