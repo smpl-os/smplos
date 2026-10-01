@@ -63,7 +63,9 @@ if [[ -n "$NIRI_SOCKET" ]] && command -v niri &>/dev/null; then
     esac
   done
 else
-  read_static_count || exit 1
+  # Parse errors are logged without emitting a replacement for the last good
+  # value. Keep watching so correcting bar.conf recovers without an EWW reload.
+  read_static_count
   if command -v inotifywait &>/dev/null && [[ -d "$(dirname "$bar_conf")" ]]; then
     inotifywait -m -e modify -e create -e moved_to "$(dirname "$bar_conf")" 2>/dev/null \
       | while read -r _dir _events file; do

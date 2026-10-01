@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import runpy
+import select
 import subprocess
 import tempfile
 import unittest
@@ -151,7 +152,7 @@ class BarApplyTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     self.read_policy_count()
                 legacy = self.read_legacy_count()
-                self.assertNotEqual(legacy.returncode, 0)
+                self.assertEqual(legacy.returncode, 0)  # Finite mock watcher exits normally.
                 self.assertIn("ws_count", legacy.stderr)
                 self.assertEqual(legacy.stdout, "")
 
@@ -178,9 +179,58 @@ class BarApplyTests(unittest.TestCase):
         with self.assertRaises(OSError):
             self.read_policy_count()
         legacy = self.read_legacy_count()
-        self.assertNotEqual(legacy.returncode, 0)
+        self.assertEqual(legacy.returncode, 0)
         self.assertIn("Cannot read", legacy.stderr)
         self.assertEqual(legacy.stdout, "")
+
+    def test_live_count_listener_recovers_without_restart_and_keeps_last_good_value(self):
+        watcher = self.root / "bin/inotifywait"
+        watcher.write_text(
+            "#!/usr/bin/env python3\nimport sys\n"
+            "for event in sys.stdin:\n"
+            "    print(f'{sys.argv[-1]} MOVED_TO bar.conf', flush=True)\n")
+
+        def read_line(stream):
+            self.assertTrue(select.select([stream], [], [], 3)[0], "Listener did not respond")
+            return stream.readline().decode().strip()
+
+        for initial in ("malformed", "unreadable"):
+            with self.subTest(initial=initial):
+                self.conf.unlink(missing_ok=True)
+                if initial == "unreadable":
+                    self.conf.mkdir()
+                else:
+                    self.conf.write_text("ws_count=invalid\n")
+                listener = subprocess.Popen(
+                    ["bash", str(ROOT / "src/shared/eww/scripts/workspace-count.sh")],
+                    env=self.env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE, bufsize=0,
+                )
+                try:
+                    self.assertIn("workspace-count:", read_line(listener.stderr))
+                    self.assertIsNone(listener.poll())
+                    self.assertFalse(select.select([listener.stdout], [], [], 0.05)[0])
+                    if initial == "unreadable":
+                        self.conf.rmdir()
+                    for contents, expected in (("ws_count=7\n", "7"),
+                                               ("ws_count=1 0\n", None),
+                                               (" ws_count = 3 \r\n", "3")):
+                        replacement = self.conf.with_suffix(".tmp")
+                        replacement.write_bytes(contents.encode())
+                        replacement.replace(self.conf)
+                        listener.stdin.write(b"changed\n")
+                        if expected is None:
+                            self.assertIn("Invalid ws_count", read_line(listener.stderr))
+                            self.assertFalse(select.select([listener.stdout], [], [], 0.05)[0])
+                        else:
+                            self.assertEqual(read_line(listener.stdout), expected)
+                        self.assertIsNone(listener.poll())
+                finally:
+                    listener.stdin.close()
+                    listener.wait(timeout=5)
+                    listener.stdout.close()
+                    listener.stderr.close()
+                self.assertEqual(listener.returncode, 0)
 
     def test_eww_failure_propagates_without_success_log(self):
         result = self.run_apply(FAIL_EWW="1")
