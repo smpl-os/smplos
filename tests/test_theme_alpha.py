@@ -79,6 +79,10 @@ class AlphaContractTests(unittest.TestCase):
             self.assertIn("box:not(.floating-bar)", native)
             self.assertIn(".smplos-native-alpha decoration", native)
             self.assertIn(".smplos-native-alpha scrollbar trough", native)
+            for path in ("treeview header button", ".path-bar button", "toolbar.primary-toolbar button"):
+                self.assertIn(path, native)
+                self.assertIn(path + ":checked:focus", native)
+            self.assertIn("box-shadow: inset 0 -2px", native)
             self.assertNotIn("menuitem", native)
 
     def test_nemo_selection_contrast_is_shared_by_native_and_legacy_labels(self):

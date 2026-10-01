@@ -1133,6 +1133,80 @@ menuitem:disabled accelerator {
     background-image: none;
 }
 
+/* Chrome button faces share the root fill; state uses edges, not tinted slabs. */
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) treeview header button,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) .path-bar button,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) toolbar.primary-toolbar button,
+.nemo-quick-preview.smplos-native-alpha treeview header button,
+.nemo-quick-preview.smplos-native-alpha .path-bar button,
+.nemo-quick-preview.smplos-native-alpha toolbar.primary-toolbar button {
+    background-color: transparent;
+    background-image: none;
+    color: #100F0F;
+    border-color: transparent;
+    box-shadow: none;
+}
+
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) treeview header button:hover,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) .path-bar button:hover,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) toolbar.primary-toolbar button:hover,
+.nemo-quick-preview.smplos-native-alpha treeview header button:hover,
+.nemo-quick-preview.smplos-native-alpha .path-bar button:hover,
+.nemo-quick-preview.smplos-native-alpha toolbar.primary-toolbar button:hover {
+    box-shadow: inset 0 0 0 1px #878580;
+}
+
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) treeview header button:checked,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) .path-bar button:checked,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) toolbar.primary-toolbar button:checked,
+.nemo-quick-preview.smplos-native-alpha treeview header button:checked,
+.nemo-quick-preview.smplos-native-alpha .path-bar button:checked,
+.nemo-quick-preview.smplos-native-alpha toolbar.primary-toolbar button:checked,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) treeview header button:active,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) .path-bar button:active,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) toolbar.primary-toolbar button:active,
+.nemo-quick-preview.smplos-native-alpha treeview header button:active,
+.nemo-quick-preview.smplos-native-alpha .path-bar button:active,
+.nemo-quick-preview.smplos-native-alpha toolbar.primary-toolbar button:active,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) treeview header button.active,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) .path-bar button.active,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) toolbar.primary-toolbar button.active,
+.nemo-quick-preview.smplos-native-alpha treeview header button.active,
+.nemo-quick-preview.smplos-native-alpha .path-bar button.active,
+.nemo-quick-preview.smplos-native-alpha toolbar.primary-toolbar button.active {
+    box-shadow: inset 0 -2px #100F0F;
+}
+
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) treeview header button:focus,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) .path-bar button:focus,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) toolbar.primary-toolbar button:focus,
+.nemo-quick-preview.smplos-native-alpha treeview header button:focus,
+.nemo-quick-preview.smplos-native-alpha .path-bar button:focus,
+.nemo-quick-preview.smplos-native-alpha toolbar.primary-toolbar button:focus {
+    box-shadow: inset 0 0 0 2px #100F0F;
+}
+
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) treeview header button:checked:focus,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) .path-bar button:checked:focus,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) toolbar.primary-toolbar button:checked:focus,
+.nemo-quick-preview.smplos-native-alpha treeview header button:checked:focus,
+.nemo-quick-preview.smplos-native-alpha .path-bar button:checked:focus,
+.nemo-quick-preview.smplos-native-alpha toolbar.primary-toolbar button:checked:focus,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) treeview header button:active:focus,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) .path-bar button:active:focus,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) toolbar.primary-toolbar button:active:focus,
+.nemo-quick-preview.smplos-native-alpha treeview header button:active:focus,
+.nemo-quick-preview.smplos-native-alpha .path-bar button:active:focus,
+.nemo-quick-preview.smplos-native-alpha toolbar.primary-toolbar button:active:focus,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) treeview header button.active:focus,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) .path-bar button.active:focus,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) toolbar.primary-toolbar button.active:focus,
+.nemo-quick-preview.smplos-native-alpha treeview header button.active:focus,
+.nemo-quick-preview.smplos-native-alpha .path-bar button.active:focus,
+.nemo-quick-preview.smplos-native-alpha toolbar.primary-toolbar button.active:focus {
+    box-shadow: inset 0 -3px #100F0F, inset 0 0 0 2px #100F0F;
+}
+
 .nemo-window.smplos-native-alpha:not(.nemo-desktop-window) .nemo-secondary-label,
 .nemo-window.smplos-native-alpha:not(.nemo-desktop-window) .dim-label:not(:selected),
 .nemo-quick-preview.smplos-native-alpha .nemo-secondary-label,

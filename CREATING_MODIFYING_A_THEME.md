@@ -275,6 +275,17 @@ tested separately: transparent backing must not compound the root fill, and
 selected labels must remain opaque. These fixtures do not prove live Wayland
 compositing or contrast against every possible wallpaper.
 
+Capable Nemo's column headers, breadcrumb buttons and toolbar view toggles
+share the root background in **every** state. Never reintroduce an opaque or
+tinted button face there. Hover uses a thin inset edge, checked/current uses
+an underline, and focus uses a thicker inset frame (combined with the underline
+when checked). Preferences, other controls and old non-capable Nemo keep their
+opaque styling. The GTK fixture renders these actual controls, checks face
+alpha and opaque glyph interiors, and repeats split-pane activation, hover
+and backdrop changes on empty areas of both panes and the sidebar. Set
+`NEMO_CHROME_PROOFS_DIR` to an artifact directory to save labeled control PNGs;
+they are rendered fixtures, not screenshots of a user's desktop.
+
 ---
 
 ## Opacity keys in colors.toml

@@ -80,6 +80,9 @@ def native_alpha_css(c):
         f"{root} .nemo-inactive-pane {label}" for root in roots
         for label in (".dim-label:selected", ".view:selected .dim-label")
     )
+    chrome_paths = ("treeview header button", ".path-bar button", "toolbar.primary-toolbar button")
+    def chrome(suffix):
+        return ",\n".join(f"{root} {path}{suffix}" for root in roots for path in chrome_paths)
     return f"""
 /* Native-alpha capability: one background owner, never widget opacity.
  * Old Nemo binaries lack this class and retain the opaque rules above.
@@ -92,6 +95,35 @@ def native_alpha_css(c):
 {clear} {{
     background-color: transparent;
     background-image: none;
+}}
+
+/* Chrome button faces share the root fill; state uses edges, not tinted slabs. */
+{chrome("")} {{
+    background-color: transparent;
+    background-image: none;
+    color: {c["foreground"]};
+    border-color: transparent;
+    box-shadow: none;
+}}
+
+{chrome(":hover")} {{
+    box-shadow: inset 0 0 0 1px {c.get("fg_dim", c["foreground"])};
+}}
+
+{chrome(":checked")},
+{chrome(":active")},
+{chrome(".active")} {{
+    box-shadow: inset 0 -2px {c["foreground"]};
+}}
+
+{chrome(":focus")} {{
+    box-shadow: inset 0 0 0 2px {c["foreground"]};
+}}
+
+{chrome(":checked:focus")},
+{chrome(":active:focus")},
+{chrome(".active:focus")} {{
+    box-shadow: inset 0 -3px {c["foreground"]}, inset 0 0 0 2px {c["foreground"]};
 }}
 
 {labels} {{
