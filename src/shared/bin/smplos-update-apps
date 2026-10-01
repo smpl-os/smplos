@@ -440,7 +440,28 @@ grafium_launchers_current() {
     for path in "$HOME/.local/share/applications/"{grafium,grafium-bin,Grafium}.desktop \
                 "$HOME/.config/smplos/pinned-apps.txt"; do
         [[ -f "$path" ]] || continue
-        if grep -Eq '(\.local/(bin|lib)/grafium|/bin/grafium-bin)' "$path"; then
+        if ! python3 - "$path" "$HOME" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+path, home = Path(sys.argv[1]), Path(sys.argv[2])
+text = path.read_text()
+for relative in (".local/bin/grafium", ".local/bin/grafium-bin"):
+    alias = home / relative
+    if alias.is_symlink() and alias.resolve() == Path("/usr/bin/grafium"):
+        # Only direct desktop executables or complete pins, never shell fragments.
+        escaped = re.escape(str(alias))
+        if path.suffix == ".desktop":
+            pattern = r'^(Exec|TryExec)=(?:"' + escaped + r'"|' + escaped + r')([ \t]+%[fFuU])?[ \t]*$'
+            text = re.sub(pattern, lambda match: match[1] + "=/usr/bin/grafium" + (match[2] or ""),
+                          text, flags=re.MULTILINE)
+        else:
+            text = re.sub(r'^"' + escaped + r'"[ \t]*$', '"/usr/bin/grafium"',
+                          text, flags=re.MULTILINE)
+sys.exit(bool(re.search(r"(\.local/(bin|lib)/grafium|/bin/grafium-bin)", text)))
+PY
+        then
             warn "grafium: preserved custom launch target in $path"
             failed=1
         fi

@@ -331,6 +331,12 @@ as incomplete launcher delivery, including when the package is already current.
 Choose either to retain/update that local build separately, or explicitly back
 up and repoint the wrappers, desktop entries and pins to the package executable.
 No note data or custom Grafium launchers are deleted automatically.
+After an explicitly approved migration, `~/.local/bin/grafium` and
+`~/.local/bin/grafium-bin` may be symlinks resolving to `/usr/bin/grafium`.
+Direct desktop `Exec`/`TryExec` references and complete quoted pins to these
+verified aliases are accepted without rewriting the user's files. Ordinary
+wrapper scripts, shell fragments, wrong/broken targets and old immutable-build
+paths still report incomplete delivery.
 
 Native GUI replacement is atomic for the smpl-apps suite. Neither OS app sync
 nor the native Nemo/Grafium update closes user windows to force adoption.

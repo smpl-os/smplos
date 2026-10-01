@@ -589,6 +589,91 @@ echo "$*" > "$HOME/makepkg.log"
         self.assertIn("delivery incomplete", result.stderr)
         self.assertEqual(before, [path.read_bytes() for path in (wrapper, pins, desktop)])
 
+    def test_grafium_update_accepts_canonical_migration_without_modifying_launchers(self):
+        self.package_mocks()
+        links = [self.home / suffix for suffix in (
+            ".local/bin/grafium", ".local/bin/grafium-bin",
+            ".local/share/smplos/bin/grafium", "bin/grafium",
+        )]
+        for link in links:
+            link.parent.mkdir(parents=True, exist_ok=True)
+            link.symlink_to("/usr/bin/grafium")
+        targets = [self.home / ".local/share/applications" / (name + ".desktop")
+                   for name in ("grafium", "grafium-bin", "Grafium")]
+        for target, command in zip(targets, (f'"{links[0]}" %U', f'"{links[1]}"', str(links[0]))):
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(f'[Desktop Entry]\nExec={command}\n')
+        pins = self.home / ".config/smplos/pinned-apps.txt"
+        pins.parent.mkdir(parents=True, exist_ok=True)
+        pins.write_text(f'"/usr/bin/grafium"\n"{links[0]}"\n"{links[1]}"\ncustom --command\n')
+        targets.append(pins)
+        before = {path: path.read_bytes() for path in targets}
+        self.mock("curl", """#!/bin/bash
+[[ "$*" == *https://api.github.com/repos/KonTy/grafium/releases/latest* ]] || exit 99
+printf '{"tag_name":"v0.0.149","assets":[]}\\n'
+""")
+        updater = ROOT / "src/shared/bin/smplos-update-apps"
+        source = f'source "{ROOT}/src/shared/lib/smplos-release-package.sh"\n'
+        source += "\n".join(function(updater, name) for name in (
+            "_gh_api", "_cached_ver", "grafium_launchers_current", "update_grafium",
+        ))
+        source += """
+STATE_DIR="$HOME/state"; mkdir -p "$STATE_DIR"
+warn() { echo "$*" >&2; }; ok() { echo "$*"; }
+update_grafium
+"""
+        result = self.shell(source, INSTALLED_VERSION="0.0.149-1")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("installed package is current", result.stdout)
+        self.assertNotIn("delivery incomplete", result.stderr)
+        self.assertFalse((self.home / "pacman.log").exists())
+        self.assertEqual(before, {path: path.read_bytes() for path in targets})
+        self.assertTrue(all(link.is_symlink() and os.readlink(link) == "/usr/bin/grafium"
+                            for link in links))
+
+    def test_grafium_alias_reference_allowance_does_not_accept_custom_paths_or_proxies(self):
+        alias = self.home / ".local/bin/grafium"
+        alias.parent.mkdir(parents=True)
+        alias.symlink_to("/usr/bin/grafium")
+        pins = self.home / ".config/smplos/pinned-apps.txt"
+        pins.parent.mkdir(parents=True)
+        source = function(ROOT / "src/shared/bin/smplos-update-apps", "grafium_launchers_current")
+        script = source + '\nwarn() { echo "$*" >&2; }\ngrafium_launchers_current'
+        for target in (str(alias) + "-custom", str(alias) + "/child",
+                       str(alias) + ".backup", str(alias) + "%U",
+                       "sh -c " + str(alias),
+                       str(self.home / ".local/lib/grafium/build/grafium-bin")):
+            with self.subTest(target=target):
+                pins.write_text(f'"{target}"\n')
+                result = self.shell(script)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("delivery incomplete", result.stderr)
+                self.assertEqual(pins.read_text(), f'"{target}"\n')
+        desktop = self.home / ".local/share/applications/grafium.desktop"
+        desktop.parent.mkdir(parents=True)
+        pins.write_text(f'"{alias}"\n')
+        desktop.write_text(f'[Desktop Entry]\nExec=sh -c "{alias}"\n')
+        result = self.shell(script)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("preserved custom launch target", result.stderr)
+        desktop.write_text(f"[Desktop Entry]\nExec={alias}\n")
+        for destination in ("/usr/bin/false", str(self.home / "missing-grafium")):
+            with self.subTest(destination=destination):
+                alias.unlink()
+                alias.symlink_to(destination)
+                result = self.shell(script)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("preserved local launcher", result.stderr)
+                self.assertIn("preserved custom launch target", result.stderr)
+        alias.unlink()
+        alias.write_text('#!/bin/sh\nexec /usr/bin/grafium "$@"\n')
+        pins.write_text(f'"{alias}"\n')
+        result = self.shell(script)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("preserved local launcher", result.stderr)
+        self.assertIn("preserved custom launch target", result.stderr)
+        self.assertEqual(alias.read_text(), '#!/bin/sh\nexec /usr/bin/grafium "$@"\n')
+
     @unittest.skipUnless(shutil.which("bsdtar") and shutil.which("ar"), "Debian archive tools unavailable")
     def test_grafium_pkgbuild_downloads_versioned_deb_and_installs_expected_paths(self):
         rootfs = self.base / "deb-root"
