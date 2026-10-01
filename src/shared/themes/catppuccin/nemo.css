@@ -14,10 +14,164 @@
 @define-color theme_selected_bg_color #f5e0dc;
 @define-color theme_selected_fg_color #1e1e2e;
 @define-color theme_bg_color #1e1e2e;
+@define-color theme_base_color #1e1e2e;
 @define-color theme_fg_color #cdd6f4;
+@define-color theme_text_color #cdd6f4;
 @define-color theme_unfocused_bg_color #45475a;
+@define-color theme_unfocused_fg_color #cdd6f4;
+@define-color theme_unfocused_base_color #1e1e2e;
+@define-color theme_unfocused_text_color #cdd6f4;
 @define-color theme_unfocused_selected_bg_color alpha(#f5e0dc, 0.35);
+@define-color theme_unfocused_selected_fg_color #cdd6f4;
 @define-color borders #585b70;
+
+/* =====================================================================
+ * Native GTK controls, including plain GtkWindow preferences.
+ * Running applications retain GTK_THEME across live theme switches.
+ * Clear base-theme images as well as colors: images paint over colors.
+ * Keep these defaults before the more specific Nemo chrome rules.
+ * ===================================================================== */
+
+button {
+    background-color: #45475a;
+    background-image: none;
+    color: #cdd6f4;
+    border-color: #585b70;
+    box-shadow: none;
+    text-shadow: none;
+    -gtk-icon-shadow: none;
+}
+
+button:hover,
+button:active,
+button:checked {
+    background-color: #585b70;
+    color: #cdd6f4;
+}
+
+button label,
+button image,
+button arrow {
+    color: inherit;
+}
+
+button.suggested-action {
+    background-color: #f5e0dc;
+    color: #1e1e2e;
+}
+
+button.destructive-action {
+    background-color: #f38ba8;
+    color: #1e1e2e;
+}
+
+entry,
+spinbutton,
+spinbutton entry,
+scale trough,
+progressbar trough,
+levelbar trough,
+switch {
+    background-color: #45475a;
+    background-image: none;
+    color: #cdd6f4;
+    border-color: #585b70;
+    box-shadow: none;
+}
+
+entry,
+spinbutton entry,
+textview text {
+    caret-color: #cdd6f4;
+}
+
+headerbar,
+treeview header button {
+    background-color: #45475a;
+    background-image: none;
+    color: #cdd6f4;
+    border-color: #585b70;
+    box-shadow: none;
+}
+
+treeview header button:hover,
+treeview header button:active {
+    background-color: #585b70;
+    color: #cdd6f4;
+}
+
+notebook,
+notebook header,
+popover,
+popover.background {
+    background-color: #1e1e2e;
+    background-image: none;
+    color: #cdd6f4;
+}
+
+infobar,
+infobar.info,
+infobar.question,
+infobar.warning,
+infobar.error {
+    background-color: #45475a;
+    background-image: none;
+    color: #cdd6f4;
+}
+
+menuitem arrow,
+menuitem accelerator,
+menuitem image,
+expander arrow {
+    color: inherit;
+}
+
+check,
+radio {
+    background-color: #45475a;
+    background-image: none;
+    color: #cdd6f4;
+    border-color: #cdd6f4;
+    box-shadow: none;
+    -gtk-icon-shadow: none;
+}
+
+check:checked,
+check:indeterminate,
+radio:checked,
+radio:indeterminate,
+switch:checked {
+    background-color: #f5e0dc;
+    color: #1e1e2e;
+}
+
+switch slider,
+scale slider {
+    background-color: #585b70;
+    background-image: none;
+    color: #cdd6f4;
+    border-color: #cdd6f4;
+    box-shadow: none;
+}
+
+scale highlight,
+progressbar progress,
+levelbar block.filled {
+    background-color: #f5e0dc;
+    background-image: none;
+    border-color: #f5e0dc;
+}
+
+progressbar text,
+scale value {
+    color: #cdd6f4;
+}
+
+scrollbar,
+scrollbar trough {
+    background-color: #1e1e2e;
+    background-image: none;
+}
 
 /* =====================================================================
  * Main window chrome
@@ -75,7 +229,7 @@ box.toolbar button:checked,
 box.toolbar togglebutton:checked,
 box.toolbar button:active,
 box.toolbar togglebutton:active {
-    background-color: alpha(#f5e0dc, 0.25);
+    background-color: alpha(#f5e0dc, 0.2);
     background-image: none;
     color: #cdd6f4;
     box-shadow: none;
@@ -113,7 +267,7 @@ toolbar.primary-toolbar button:active,
 toolbar.primary-toolbar button.active,
 toolbar.primary-toolbar button.suggested-action {
     /* Subtle tint only — keep icon at fg so symbols remain visible */
-    background-color: alpha(#f5e0dc, 0.25);
+    background-color: alpha(#f5e0dc, 0.2);
     color: #cdd6f4;
 }
 
@@ -158,7 +312,7 @@ toolbar.primary-toolbar button.suggested-action label {
     /* Current directory: subtle tint, keep foreground text colour.
      * background-image: none clears Adwaita's button:checked
      * { background-image: image(#191919) } which paints over bg-color. */
-    background-color: alpha(#f5e0dc, 0.25);
+    background-color: alpha(#f5e0dc, 0.2);
     background-image: none;
     color: #cdd6f4;
     box-shadow: none;
@@ -265,6 +419,10 @@ toolbar.primary-toolbar button.suggested-action label {
     background-color: #89b4fa;
     color: #1e1e2e;
     border-color: #89b4fa;
+}
+
+.floating-bar label {
+    color: inherit;
 }
 
 /* =====================================================================
@@ -374,7 +532,7 @@ toolbar.primary-toolbar button.suggested-action label {
 
 /* Dir-analyzer / label text */
 .nemo-quick-preview label {
-    color: #cdd6f4;
+    color: inherit;
 }
 
 /* Text/hex drawing area — GTK "view" class defaults to white bg in Adwaita */
@@ -604,7 +762,7 @@ listbox row {
 }
 
 listbox row:hover {
-    background-color: alpha(#f5e0dc, 0.3);
+    background-color: alpha(#f5e0dc, 0.15);
     color: #cdd6f4;
 }
 
@@ -626,7 +784,7 @@ listbox row:selected:hover * {
  * ===================================================================== */
 
 selection {
-    background-color: alpha(#f5e0dc, 0.6);
+    background-color: #f5e0dc;
     color: #1e1e2e;
 }
 
@@ -714,7 +872,7 @@ messagedialog button:active label,
 messagedialog button:active *,
 dialog button.default label,
 messagedialog button.default label {
-    color: #cdd6f4;
+    color: inherit;
 }
 
 dialog button:hover,
@@ -733,7 +891,7 @@ messagedialog button:hover *,
 .preferences button:hover *,
 popover button:hover label,
 popover button:hover * {
-    color: #1e1e2e;
+    color: inherit;
 }
 
 dialog button.suggested-action,
@@ -746,7 +904,7 @@ dialog button.suggested-action label,
 dialog button.suggested-action *,
 messagedialog button.suggested-action label,
 messagedialog button.suggested-action * {
-    color: #1e1e2e;
+    color: inherit;
 }
 
 /* Notebook tabs (preferences, properties) */
@@ -756,7 +914,13 @@ notebook header {
 }
 
 notebook header tab {
+    background-color: transparent;
+    background-image: none;
     color: #cdd6f4;
+}
+
+notebook header tab:hover {
+    background-color: #45475a;
 }
 
 notebook header tab:checked {
@@ -787,7 +951,7 @@ stackswitcher button:checked {
 
 stackswitcher button:checked label,
 stackswitcher button:checked * {
-    color: #1e1e2e;
+    color: inherit;
 }
 
 /* Text views (about license, etc.) */
@@ -818,6 +982,7 @@ radiobutton label {
 /* Combo boxes */
 combobox button {
     background-color: #45475a;
+    background-image: none;
     color: #cdd6f4;
     border: 1px solid #585b70;
 }
@@ -826,6 +991,16 @@ combobox button {
 treeview {
     background-color: #1e1e2e;
     color: #cdd6f4;
+}
+
+iconview {
+    background-color: #1e1e2e;
+    color: #cdd6f4;
+}
+
+iconview:selected {
+    background-color: #f5e0dc;
+    color: #1e1e2e;
 }
 
 treeview:selected {
@@ -865,6 +1040,36 @@ scrollbar slider:hover {
     background-color: #f5e0dc;
 }
 
+/* Disabled content stays distinct without inheriting stale dark-theme colors.
+ * Backdrop intentionally keeps the same readable foreground/background pair. */
+button:disabled,
+button.suggested-action:disabled,
+button.destructive-action:disabled,
+.nemo-quick-preview headerbar button:disabled,
+.nemo-quick-preview searchbar button:disabled {
+    background-color: #45475a;
+    color: #cdd6f4;
+}
+
+button:disabled,
+button:disabled label,
+button:disabled image,
+button:disabled arrow,
+combobox:disabled button,
+combobox:disabled label,
+combobox:disabled arrow,
+entry:disabled,
+spinbutton:disabled,
+checkbutton:disabled label,
+radiobutton:disabled label,
+menuitem:disabled,
+menuitem:disabled label,
+menuitem:disabled accelerator {
+    color: #cdd6f4;
+    text-shadow: none;
+    -gtk-icon-shadow: none;
+}
+
 /* Native-alpha capability: one background owner, never widget opacity.
  * Old Nemo binaries lack this class and retain the opaque rules above.
  * Selections and controls are overlays; menus/dialogs remain opaque. */
@@ -897,6 +1102,7 @@ scrollbar slider:hover {
 .nemo-window.smplos-native-alpha:not(.nemo-desktop-window) textview,
 .nemo-window.smplos-native-alpha:not(.nemo-desktop-window) textview text,
 .nemo-window.smplos-native-alpha:not(.nemo-desktop-window) scrollbar,
+.nemo-window.smplos-native-alpha:not(.nemo-desktop-window) scrollbar trough,
 .nemo-window.smplos-native-alpha:not(.nemo-desktop-window) decoration,
 .nemo-quick-preview.smplos-native-alpha box:not(.floating-bar),
 .nemo-quick-preview.smplos-native-alpha grid,
@@ -921,6 +1127,7 @@ scrollbar slider:hover {
 .nemo-quick-preview.smplos-native-alpha textview,
 .nemo-quick-preview.smplos-native-alpha textview text,
 .nemo-quick-preview.smplos-native-alpha scrollbar,
+.nemo-quick-preview.smplos-native-alpha scrollbar trough,
 .nemo-quick-preview.smplos-native-alpha decoration {
     background-color: transparent;
     background-image: none;

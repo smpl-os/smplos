@@ -244,6 +244,36 @@ So one theme can reuse another theme's app presets without duplicating settings.
 - `neovim.lua` → app preset payload for LazyVim/Lazy.nvim colorscheme
 - `vscode.json` → app preset payload (theme name + extension/vsix)
 - `logseq-custom.css` → generated Logseq custom css layer
+- `nemo.css` → generated Nemo GTK controls and capability-gated backgrounds
+
+### Nemo control and alpha checks
+
+Edit `src/regen-nemo-css.py`, not individual generated `nemo.css` files.
+Running Nemo processes can retain an old `GTK_THEME` variant after a live theme
+switch. Controls must reset both `background-color` and `background-image`,
+and their labels/icons must inherit the control's foreground. Preferences is
+a plain `GtkWindow`, so dialog-only selectors do not cover it. Generated
+selection foregrounds preserve the requested color when it has at least 4.5:1
+contrast; otherwise they use a readable palette or black/white fallback.
+Native selected secondary labels use the same resolved foreground.
+
+After `bash src/regen-all-themes.sh`, run from the repository root:
+
+```bash
+xvfb-run -a python3 src/test-nemo-css.py
+```
+
+This requires GTK3, PyGObject, pycairo and Xvfb. To include the real Nemo
+preferences layout, explicitly set `NEMO_PREFERENCES_UI` to its
+`gresources/nemo-file-management-properties.glade` path; this also requires
+XApp's introspection bindings. The test never discovers other checkouts
+implicitly. It renders all 17 palettes over both Adwaita variants, exercises
+control states and RTL, and replaces providers on existing windows to cover
+live light/dark switching. Temporary profiles leave the active desktop alone.
+Opaque control contrast and synthetic native-capability background alpha are
+tested separately: transparent backing must not compound the root fill, and
+selected labels must remain opaque. These fixtures do not prove live Wayland
+compositing or contrast against every possible wallpaper.
 
 ---
 

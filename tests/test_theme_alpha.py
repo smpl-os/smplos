@@ -78,7 +78,23 @@ class AlphaContractTests(unittest.TestCase):
             self.assertIn(".view:not(:selected)", native)
             self.assertIn("box:not(.floating-bar)", native)
             self.assertIn(".smplos-native-alpha decoration", native)
+            self.assertIn(".smplos-native-alpha scrollbar trough", native)
             self.assertNotIn("menuitem", native)
+
+    def test_nemo_selection_contrast_is_shared_by_native_and_legacy_labels(self):
+        for path in (SRC / "shared/themes").glob("*/colors.toml"):
+            colors = read_colors(path)
+            background = colors.get("selection_background", colors["accent"])
+            foreground = nemo.selection_foreground(colors)
+            with self.subTest(theme=path.parent.name):
+                self.assertGreaterEqual(nemo.contrast_ratio(background, foreground), 4.5)
+                css = nemo.make_nemo_css(colors)
+                legacy, native = css.split("/* Native-alpha capability:", 1)
+                self.assertIn(f"@define-color theme_selected_fg_color {foreground};", legacy)
+                selected = native.split(".dim-label:selected", 1)[1].split("}", 1)[0]
+                self.assertIn(f"color: {foreground};", selected)
+        self.assertEqual(nemo.readable_foreground("#000000", "#ffffff"), "#ffffff")
+        self.assertEqual(nemo.readable_foreground("#000000", "#000000"), "#ffffff")
 
     def test_compositor_passthrough_and_rofi_native_background(self):
         hypr = SRC / "compositors/hyprland/hypr"

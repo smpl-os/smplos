@@ -6,6 +6,7 @@ on:
     paths:
       - 'src/*theme*'
       - 'src/regen-nemo-css.py'
+      - 'src/test-nemo-css.py'
       - 'src/shared/themes/**'
       - 'src/shared/bin/theme-set*'
       - 'src/shared/bin/bar-ctl'
@@ -17,6 +18,7 @@ on:
     paths:
       - 'src/*theme*'
       - 'src/regen-nemo-css.py'
+      - 'src/test-nemo-css.py'
       - 'src/shared/themes/**'
       - 'src/shared/bin/theme-set*'
       - 'src/shared/bin/bar-ctl'
@@ -43,3 +45,7 @@ jobs:
         run: bash src/regen-all-themes.sh --check
       - name: Exercise isolated theme fixtures
         run: python3 -m unittest discover -s tests -p 'test_theme*.py' -v
+      - name: Install GTK renderer test dependencies
+        run: sudo apt-get update -qq && sudo apt-get install -y python3-gi python3-gi-cairo python3-cairo gir1.2-gtk-3.0 xvfb xauth
+      - name: Render native controls and background ownership
+        run: xvfb-run -a /usr/bin/python3 src/test-nemo-css.py
