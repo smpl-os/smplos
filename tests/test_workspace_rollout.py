@@ -125,6 +125,54 @@ as_invoker() {
         self.assertEqual(old.read_text(), "old entry point\n")
         self.assertFalse((old.parent / "workspace-overview.yuck").exists())
 
+    def test_normal_update_delivers_taskbar_files_without_replacing_preferences(self):
+        commands = ("bar-ctl", "workspace-ctl", "smplos-hypr-dpms")
+        configs = ("workspace-overview.yuck", "eww.yuck", "eww.scss",
+                   "scripts/workspace-count.sh")
+        for relative in ([f"src/shared/bin/{name}" for name in commands]
+                         + [f"src/shared/eww/{name}" for name in configs]):
+            destination = self.repo / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(ROOT / relative, destination)
+        preferences = {
+            ".config/smplos/bar.conf": "ws_count=7\nws_style=squares\nws_spacing=3\nws_position=left\n",
+            ".config/smplos/workspace-policy.json": '{"enabled":true,"homes":{"7":"m2"}}\n',
+            ".config/hypr/hypridle.conf": "general {\n    lock_cmd = custom-lock\n}\n",
+        }
+        for relative, contents in preferences.items():
+            self.write(self.home / relative, contents)
+        installed = self.root / "installed"
+        installed.mkdir()
+        self.env["TEST_INSTALL_ROOT"] = str(installed)
+        script = self.config_sync_script() + r"""
+warn() { echo "$*" >&2; }
+sudo() {
+    [[ "$1" == install && "${@: -1}" == "$TEST_INSTALL_ROOT/"* ]] || {
+        echo "FORBIDDEN sudo operation" >&2
+        return 99
+    }
+    "$@"
+}
+sync_libs() { :; }
+"""
+        script += function("sync_scripts").replace(
+            'dest="/usr/local/bin/$name"', 'dest="$TEST_INSTALL_ROOT/$name"')
+        script += "\nsync_scripts\nsync_configs\n"
+        result = self.run_bash(script)
+        self.assertNotIn("FORBIDDEN", result.stderr)
+        for name in commands:
+            self.assertEqual((installed / name).read_bytes(), (BIN / name).read_bytes())
+            self.assertTrue(os.access(installed / name, os.X_OK))
+        for name in configs:
+            self.assertEqual((self.home / ".config/eww" / name).read_bytes(),
+                             (ROOT / "src/shared/eww" / name).read_bytes())
+        self.assertTrue(os.access(self.home / ".config/eww/scripts/workspace-count.sh", os.X_OK))
+        for relative, contents in preferences.items():
+            self.assertEqual((self.home / relative).read_text(), contents)
+        self.run_bash(script)
+        for relative, contents in preferences.items():
+            self.assertEqual((self.home / relative).read_text(), contents)
+
     def test_first_login_enrolls_once_and_keeps_enabled_or_disabled_choices(self):
         self.mocks()
         script = 'exec bash "$SESSION_INIT"'

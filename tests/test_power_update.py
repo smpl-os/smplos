@@ -433,19 +433,19 @@ run_migrations() {{ bash "{BIN / 'smplos-migrate'}"; }}
         self.run_shell("set -e\ninstall_fixture() {\n" + install_block + "\n}\ninstall_fixture\n")
         self.assertEqual((destination / "usr/local/lib/smplos/smplos-hypridle-migrate.py").read_bytes(),
                          (LIB / "smplos-hypridle-migrate.py").read_bytes())
-        # Exercise real sync_libs with sudo redirected strictly into the fixture.
+        # Redirect comparisons as well as writes, even when the host is current.
         self.env["LIB_DEST"] = str(self.root / "installed-libs")
         script = r"""
 set -euo pipefail
 ok() { :; }; warn() { echo "$*" >&2; }
 sudo() {
-    local arg args=()
-    for arg in "$@"; do
-        args+=("${arg/\/usr\/local\/lib\/smplos/$LIB_DEST}")
-    done
-    "${args[@]}"
+    [[ "$1" == mkdir || "$1" == install ]] || return 99
+    [[ "${@: -1}" == "$LIB_DEST" || "${@: -1}" == "$LIB_DEST/"* ]] || return 99
+    "$@"
 }
-""" + function("sync_libs") + "\nsync_libs\n"
+""" + function("sync_libs").replace(
+            'local dest_dir="/usr/local/lib/smplos"', 'local dest_dir="$LIB_DEST"'
+        ) + "\nsync_libs\n"
         self.run_shell(script)
         self.assertEqual((Path(self.env["LIB_DEST"]) / "smplos-hypridle-migrate.py").read_bytes(),
                          (LIB / "smplos-hypridle-migrate.py").read_bytes())

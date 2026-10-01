@@ -171,6 +171,29 @@ than generate an obsolete fallback. OS preservation alone does not fix older
 Settings' value parsing/writing; the coordinated smpl-apps release is required
 for the complete Power UI fix.
 
+### Taskbar settings and app binary delivery
+
+App Center's **Update OS** action launches `smplos-update --mode full`. Its OS
+phase refreshes `bar-ctl`, `workspace-ctl`, the EWW entry point, overview,
+stylesheet and workspace-count listener. Existing `bar.conf` and saved
+workspace mappings are not replaced. The theme hook reloads the bar and
+reapplies its saved preferences.
+
+The monitor-owned bar's Squares/Numbers and spacing fixes ship from this OS
+repository. Settings' safe count handling, checked saves and responsive
+controls ship separately in **smpl-apps v0.8.23**, together with the previously
+unreleased Power and typography fixes. Push the OS changes first, then publish
+the complete versioned smpl-apps binary release; a push to smpl-apps `main`
+alone does not update installed apps.
+
+Both `fetch-org.sh` (used by `smplos-os-update`) and `smplos-update-apps`
+consume GitHub's latest published binary bundle. They validate the required
+apps before recording its version. Confirm the release contains
+`smpl-apps-<version>-x86_64.tar.gz` with the new Settings binary, not just source
+archives or a standalone local build. A complete update therefore needs the
+published release to be available, network access and successful installation;
+do not report source publication alone as completed binary delivery.
+
 ---
 
 ## 3. Updating Themes

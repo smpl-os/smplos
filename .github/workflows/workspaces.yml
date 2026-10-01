@@ -9,6 +9,7 @@ on:
       - "src/shared/bin/window-to-*"
       - "src/shared/bin/launch-webapp"
       - "src/shared/bin/popup-toggle"
+      - "src/shared/bin/bar-ctl"
       - "src/shared/bin/toggle-messenger"
       - "src/shared/bin/smplos-os-update"
       - "src/shared/eww/**"
@@ -16,6 +17,7 @@ on:
       - "src/compositors/hyprland/hypr/**"
       - "migrations/*workspace*.sh"
       - "tests/test_workspace*.py"
+      - "tests/test_bar_ctl.py"
   push:
     branches: [main]
     paths:
@@ -25,6 +27,7 @@ on:
       - "src/shared/bin/window-to-*"
       - "src/shared/bin/launch-webapp"
       - "src/shared/bin/popup-toggle"
+      - "src/shared/bin/bar-ctl"
       - "src/shared/bin/toggle-messenger"
       - "src/shared/bin/smplos-os-update"
       - "src/shared/eww/**"
@@ -32,6 +35,7 @@ on:
       - "src/compositors/hyprland/hypr/**"
       - "migrations/*workspace*.sh"
       - "tests/test_workspace*.py"
+      - "tests/test_bar_ctl.py"
   workflow_dispatch:
 
 permissions:
@@ -49,3 +53,5 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends jq lua5.4
       - name: Check workspace behavior and rollout
         run: python3 -m unittest discover -s tests -p 'test_workspace*.py' -v
+      - name: Check taskbar preference application
+        run: python3 -m unittest discover -s tests -p 'test_bar_ctl.py' -v
