@@ -13,14 +13,39 @@
 bar_conf="$HOME/.config/smplos/bar.conf"
 
 read_static_count() {
-  local v=4
-  if [[ -f "$bar_conf" ]]; then
-    local _ws
-    _ws=$(grep -m1 '^ws_count=' "$bar_conf" 2>/dev/null | cut -d= -f2 || true)
-    [[ -n "$_ws" && "$_ws" =~ ^[0-9]+$ ]] && v=$_ws
+  local v=4 key val seen=false
+  if [[ -e "$bar_conf" && ( ! -f "$bar_conf" || ! -r "$bar_conf" ) ]]; then
+    echo "workspace-count: Cannot read $bar_conf" >&2
+    return 1
   fi
-  [[ $v -lt 1 ]] && v=1
-  [[ $v -gt 10 ]] && v=10
+  if [[ -f "$bar_conf" ]]; then
+    while IFS='=' read -r key val || [[ -n "$key" ]]; do
+      key="${key#"${key%%[![:space:]]*}"}"
+      key="${key%"${key##*[![:space:]]}"}"
+      [[ "$key" == ws_count ]] || continue
+      if $seen; then
+        echo "workspace-count: Duplicate ws_count in bar.conf" >&2
+        return 1
+      fi
+      seen=true
+      val="${val#"${val%%[![:space:]]*}"}"
+      val="${val%"${val##*[![:space:]]}"}"
+      if [[ ! "$val" =~ ^[0-9]+$ ]]; then
+        echo "workspace-count: Invalid ws_count in bar.conf: expected a decimal integer" >&2
+        return 1
+      fi
+      # Clamp legacy slots without octal interpretation or integer overflow.
+      val="${val#"${val%%[!0]*}"}"
+      if [[ -z "$val" ]]; then
+        v=1
+      elif [[ ${#val} -gt 2 ]]; then
+        v=10
+      else
+        v=$((10#$val))
+        if [[ $v -gt 10 ]]; then v=10; fi
+      fi
+    done < "$bar_conf" || { echo "workspace-count: Cannot read $bar_conf" >&2; return 1; }
+  fi
   echo "$v"
 }
 
@@ -38,7 +63,7 @@ if [[ -n "$NIRI_SOCKET" ]] && command -v niri &>/dev/null; then
     esac
   done
 else
-  read_static_count
+  read_static_count || exit 1
   if command -v inotifywait &>/dev/null && [[ -d "$(dirname "$bar_conf")" ]]; then
     inotifywait -m -e modify -e create -e moved_to "$(dirname "$bar_conf")" 2>/dev/null \
       | while read -r _dir _events file; do

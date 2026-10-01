@@ -10,7 +10,7 @@ BAR_NAME="${2:-bar}"
 echo "$(date '+%Y-%m-%d %H:%M:%S') bar-ctl: action=$action bar=$BAR_NAME config=$EWW_CONFIG" >> "$LOG"
 
 if ! command -v eww &>/dev/null; then
-    echo "Error: eww not found" | tee -a "$LOG"
+    echo "Error: eww not found" | tee -a "$LOG" >&2
     exit 1
 fi
 
@@ -43,7 +43,7 @@ eww_start() {
     eww --config "$EWW_CONFIG" open "$BAR_NAME" >> "$LOG" 2>&1
 
     # Apply saved bar settings (workspace count, position, etc.)
-    eww_apply
+    eww_apply || return
 
     echo "$(date '+%H:%M:%S') Active windows:" >> "$LOG"
     eww --config "$EWW_CONFIG" active-windows >> "$LOG" 2>&1
@@ -72,7 +72,7 @@ eww_redraw() {
     eww --config "$EWW_CONFIG" close "$BAR_NAME" 2>/dev/null
     sleep 0.3
     eww --config "$EWW_CONFIG" open "$BAR_NAME" >> "$LOG" 2>&1
-    eww_apply
+    eww_apply || return
     echo "$(date '+%H:%M:%S') bar-ctl redraw complete" >> "$LOG"
 }
 
@@ -106,34 +106,63 @@ eww_reload() {
 }
 
 # Apply bar settings from ~/.config/smplos/bar.conf to running EWW instance.
-# File format: KEY=VALUE (shell-compatible).  Supported keys:
-#   ws_count    = 1-10   (workspace dot count, default 4)
+# File format: literal KEY=VALUE (not sourced as shell). Supported keys:
+#   ws_count    = 1-10   (total workspace slots, default 4)
 #   ws_position = center | left  (where workspaces live, default center)
+#   ws_spacing  = 1-10   (pixel gap, default 1)
+#   ws_style    = numbers | squares (default numbers)
+apply_error() {
+    echo "bar-ctl apply: $*" | tee -a "$LOG" >&2
+    return 1
+}
+
 eww_apply() {
     local conf="$HOME/.config/smplos/bar.conf"
     local ws_count=4
     local ws_position="center"
     local ws_spacing=1
     local ws_style="numbers"
+    local key val
+    local -A seen=()
 
+    if [[ -e "$conf" && ( ! -f "$conf" || ! -r "$conf" ) ]]; then
+        apply_error "Cannot read $conf"
+        return 1
+    fi
     if [[ -f "$conf" ]]; then
-        while IFS='=' read -r key val; do
-            key="${key// /}"
-            val="${val// /}"
+        while IFS='=' read -r key val || [[ -n "$key" ]]; do
+            key="${key#"${key%%[![:space:]]*}"}"
+            key="${key%"${key##*[![:space:]]}"}"
+            val="${val#"${val%%[![:space:]]*}"}"
+            val="${val%"${val##*[![:space:]]}"}"
             [[ -z "$key" || "$key" == \#* ]] && continue
+            case "$key" in
+                ws_count|ws_position|ws_spacing|ws_style)
+                    [[ -z "${seen[$key]:-}" ]] || { apply_error "Duplicate $key"; return 1; }
+                    seen[$key]=1
+                    ;;
+            esac
             case "$key" in
                 ws_count)    ws_count="$val" ;;
                 ws_position) ws_position="$val" ;;
                 ws_spacing)  ws_spacing="$val" ;;
                 ws_style)    ws_style="$val" ;;
             esac
-        done < "$conf"
+        done < "$conf" || { apply_error "Cannot read $conf"; return 1; }
     fi
 
-    eww --config "$EWW_CONFIG" update ws-count="$ws_count" 2>/dev/null
-    eww --config "$EWW_CONFIG" update ws-position="$ws_position" 2>/dev/null
-    eww --config "$EWW_CONFIG" update ws-spacing="$ws_spacing" 2>/dev/null
-    eww --config "$EWW_CONFIG" update ws-style="$ws_style" 2>/dev/null
+    [[ "$ws_count" =~ ^([1-9]|10)$ ]] || { apply_error "Invalid ws_count: $ws_count (expected 1-10)"; return 1; }
+    [[ "$ws_spacing" =~ ^([1-9]|10)$ ]] || { apply_error "Invalid ws_spacing: $ws_spacing (expected 1-10)"; return 1; }
+    [[ "$ws_position" == center || "$ws_position" == left ]] || { apply_error "Invalid ws_position: $ws_position"; return 1; }
+    [[ "$ws_style" == numbers || "$ws_style" == squares ]] || { apply_error "Invalid ws_style: $ws_style"; return 1; }
+
+    # The workspace listener reconciles count changes from bar.conf itself.
+    # Presentation-only changes must not force a policy reload or move focus.
+    if ! eww --config "$EWW_CONFIG" update ws-count="$ws_count" ws-position="$ws_position" \
+            ws-spacing="$ws_spacing" ws-style="$ws_style"; then
+        apply_error "EWW update failed; saved preferences have not been applied"
+        return 1
+    fi
     echo "$(date '+%H:%M:%S') bar-ctl apply: ws_count=$ws_count ws_position=$ws_position ws_spacing=$ws_spacing ws_style=$ws_style" >> "$LOG"
 }
 

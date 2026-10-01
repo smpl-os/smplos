@@ -257,6 +257,17 @@ window {
   background: $bg;
 }
 
+.workspace-chip.workspace-square {
+  min-width: 6px;
+  min-height: 6px;
+  padding: 0;
+  border-radius: 2px;
+}
+
+.workspace-square .workspace-occupied {
+  margin-bottom: 1px;
+}
+
 .workspace-choice,
 .workspace-bar-choice {
   border-radius: 3px;

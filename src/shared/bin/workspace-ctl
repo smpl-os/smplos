@@ -220,14 +220,20 @@ class Policy:
 
     def configured_count(self):
         path = self.config_dir / "bar.conf"
+        count = None
         if path.exists():
             for line in path.read_text().splitlines():
-                if line.startswith("ws_count="):
-                    count = int(line.split("=", 1)[1])
+                key, _, value = line.partition("=")
+                if key.strip() == "ws_count":
+                    if count is not None:
+                        raise ValueError("Duplicate ws_count in bar.conf")
+                    value = value.strip()
+                    if not re.fullmatch(r"[0-9]+", value):
+                        raise ValueError("Invalid ws_count in bar.conf: expected a decimal integer")
+                    count = int(value)
                     if not 1 <= count <= 100:
                         raise ValueError("Workspace count must be between 1 and 100")
-                    return count
-        return 4
+        return count if count is not None else 4
 
     def match_monitors(self, profile, snapshot, add=False):
         monitors = logical_monitors(snapshot)

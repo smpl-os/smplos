@@ -1,5 +1,7 @@
 """UI-only checks, including an isolated EWW/Xvfb smoke test when available."""
 
+import ctypes
+import ctypes.util
 import json
 import math
 import os
@@ -10,6 +12,7 @@ import shutil
 import socket
 import struct
 import subprocess
+import tempfile
 import time
 import unittest
 
@@ -22,6 +25,24 @@ INITIAL = json.loads(re.search(r":initial '([^']+)'", OVERVIEW)[1])
 WATCHERS = ROOT / "src/compositors/hyprland/hypr/popup_watchers.lua"
 CLOSE_OVERVIEW = 'eww --config "$HOME/.config/eww" close workspace-overview'
 FOCUS_EXPRESSION = re.search(r":focusable \{([^}]+)\}", OVERVIEW)[1]
+FOCUS_SCENARIOS = [
+    ("hyprland", dict(HYPRLAND_INSTANCE_SIGNATURE="test",
+                      WAYLAND_DISPLAY="wayland-test"), {"escape_available": True}, "true"),
+    ("hyprland-disabled", dict(HYPRLAND_INSTANCE_SIGNATURE="test",
+                               WAYLAND_DISPLAY="wayland-test"), {"escape_available": False}, "ondemand"),
+    ("hyprland-old-state", dict(HYPRLAND_INSTANCE_SIGNATURE="test",
+                                WAYLAND_DISPLAY="wayland-test"), {}, "ondemand"),
+    ("hyprland-null", dict(HYPRLAND_INSTANCE_SIGNATURE="test",
+                           WAYLAND_DISPLAY="wayland-test"), {"escape_available": None}, "ondemand"),
+    ("niri", dict(NIRI_SOCKET="test", WAYLAND_DISPLAY="wayland-test"),
+     {"escape_available": True}, "ondemand"),
+    ("niri-inherited-signature", dict(NIRI_SOCKET="test", WAYLAND_DISPLAY="wayland-test",
+                                      HYPRLAND_INSTANCE_SIGNATURE="stale"),
+     {"escape_available": True}, "ondemand"),
+    ("x11", {}, {"escape_available": True}, "ondemand"),
+    ("x11-inherited-signature", dict(HYPRLAND_INSTANCE_SIGNATURE="stale"),
+     {"escape_available": True}, "ondemand"),
+]
 
 
 def definition(source, name):
@@ -65,6 +86,24 @@ def state_for(count):
     return state
 
 
+def sparse_state(count, total, focus):
+    state = state_for(count)
+    for i, monitor in enumerate(state["monitors"]):
+        ids = list(range(i + 1, total + 1, count))
+        monitor["workspaces"] = [
+            dict(monitor["workspaces"][0], id=identity, home=monitor["id"],
+                 focused=i == focus and slot == 0, visible=slot == 0,
+                 occupied=slot < 2, windows=int(slot < 2), temporary=slot == 2,
+                 tooltip=f"Workspace {identity}")
+            for slot, identity in enumerate(ids)
+        ]
+        monitor.update(focused=i == focus, active_workspace=ids[0] if ids else 0)
+    focused = state["monitors"][focus]
+    state.update(current=focused["workspaces"], focused_monitor=focused["id"],
+                 focused_label=focused["label"])
+    return state
+
+
 class WorkspaceOverviewContractTests(unittest.TestCase):
     def test_disabled_state_is_complete(self):
         self.assertEqual(INITIAL, dict(
@@ -86,7 +125,10 @@ class WorkspaceOverviewContractTests(unittest.TestCase):
         self.assertIn("(deflisten active-workspace ", MAIN)
         trial = definition(OVERVIEW, "workspace-trial-bar")
         self.assertIn("workspace-state.current", trial)
-        self.assertNotIn("ws-style", trial)
+        self.assertIn('ws-style == "numbers"', trial)
+        self.assertIn('ws-style == "squares"', trial)
+        self.assertEqual(trial.count(":spacing ws-spacing"), 5)
+        self.assertIn("ceil(arraylength(workspace-state.current) / 2)", trial)
         self.assertNotIn("workspace-state.monitors", trial)
         self.assertIn(':text {ws.id}', definition(OVERVIEW, "workspace-chip"))
 
@@ -96,7 +138,8 @@ class WorkspaceOverviewContractTests(unittest.TestCase):
         self.assertIn('(button :class "workspace-overview-toggle"', trial)
         self.assertIn(':onclick "popup-toggle workspace-overview"', trial)
         self.assertNotIn("workspace-ctl enabled", trial)
-        self.assertIn("(workspace-bar-choice :ws ws)", trial)
+        self.assertIn("(workspace-bar-choice :ws ws :square false)", trial)
+        self.assertIn("(workspace-bar-choice :ws ws :square true)", trial)
         chip = definition(OVERVIEW, "workspace-bar-choice")
         self.assertIn(':onclick "workspace-ctl select ${ws.id}"', chip)
         self.assertNotIn("popup-toggle", chip)
@@ -356,9 +399,9 @@ print("unsupported popup APIs remained safe")
 class WorkspaceOverviewNativeTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.root = ROOT / "tests" / f".w{secrets.token_hex(2)}"
-        cls.root.mkdir(mode=0o700)
-        cls.addClassCleanup(shutil.rmtree, cls.root)
+        cls.temp = tempfile.TemporaryDirectory(prefix="wui-", dir="/tmp")
+        cls.root = Path(cls.temp.name)
+        cls.addClassCleanup(cls.temp.cleanup)
         cls.config = cls.root / "home/.config/eww"
         cls.config.mkdir(parents=True)
         for directory in ("r", "cache"):
@@ -369,8 +412,42 @@ class WorkspaceOverviewNativeTests(unittest.TestCase):
                        XDG_CONFIG_HOME=str(cls.root / "home/.config"),
                        GDK_BACKEND="x11", XDG_SESSION_TYPE="x11", NO_AT_BRIDGE="1")
         for key in ("WAYLAND_DISPLAY", "HYPRLAND_INSTANCE_SIGNATURE", "NIRI_SOCKET",
-                    "DBUS_SESSION_BUS_ADDRESS"):
+                    "DBUS_SESSION_BUS_ADDRESS", "GTK_MODULES", "GTK3_MODULES"):
             cls.env.pop(key, None)
+        cls.mock_bin = cls.root / "bin"
+        cls.mock_bin.mkdir()
+        cls.calls = cls.root / "calls"
+        for name in ("workspace-ctl", "workspace-group"):
+            mock = cls.mock_bin / name
+            mock.write_text(
+                '#!/bin/sh\nprintf "%s\\n" "$*" > "$WORKSPACE_UI_CALLS"\n'
+                'eww --config "$HOME/.config/eww" active-windows >> "$WORKSPACE_UI_CALLS"\n')
+            mock.chmod(0o755)
+        popup = cls.mock_bin / "popup-toggle"
+        popup.write_text(
+            '#!/bin/sh\n'
+            'printf "popup %s\\n" "$*" > "$WORKSPACE_UI_CALLS"\n'
+            'if [ "$1" = "--close" ]; then\n'
+            '  exec eww --config "$HOME/.config/eww" close workspace-overview\n'
+            'fi\n'
+            'exec eww --config "$HOME/.config/eww" open workspace-overview '
+            '--arg \'overview-state={}\'\n')
+        popup.chmod(0o755)
+        cls.env.update(PATH=f"{cls.mock_bin}:{os.environ['PATH']}",
+                       WORKSPACE_UI_CALLS=str(cls.calls))
+        cls.probe_available = shutil.which("gcc") and shutil.which("pkg-config")
+        if cls.probe_available:
+            flags = subprocess.run(["pkg-config", "--cflags", "--libs", "gtk+-3.0"],
+                                   capture_output=True, text=True, timeout=10)
+            cls.probe_available = flags.returncode == 0
+        if cls.probe_available:
+            module = cls.root / "probe.so"
+            subprocess.run(["gcc", "-shared", "-fPIC", "-Wall", "-Wextra", "-Werror",
+                            str(ROOT / "tests/fixtures/workspace_ui_probe.c"), "-o", str(module),
+                            *flags.stdout.split()], capture_output=True, text=True, check=True, timeout=30)
+            cls.env.update(GTK_MODULES=str(module),
+                           WORKSPACE_UI_REQUEST=str(cls.root / "request"),
+                           WORKSPACE_UI_RESPONSE=str(cls.root / "response"))
         # TCP-only Xvfb avoids all shared /tmp sockets and lock files.
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", 0))
@@ -399,22 +476,62 @@ class WorkspaceOverviewNativeTests(unittest.TestCase):
                 time.sleep(0.05)
         else:
             raise AssertionError("Isolated Xvfb did not become responsive")
+        cls.xtst = None
+        if ctypes.util.find_library("Xtst") and ctypes.util.find_library("X11"):
+            cls.xlib = ctypes.CDLL(ctypes.util.find_library("X11"))
+            cls.xtst = ctypes.CDLL(ctypes.util.find_library("Xtst"))
+            cls.xlib.XOpenDisplay.argtypes = [ctypes.c_char_p]
+            cls.xlib.XOpenDisplay.restype = ctypes.c_void_p
+            cls.xlib.XCloseDisplay.argtypes = [ctypes.c_void_p]
+            cls.xlib.XSync.argtypes = [ctypes.c_void_p, ctypes.c_int]
+            cls.xtst.XTestFakeMotionEvent.argtypes = [
+                ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_ulong]
+            cls.xtst.XTestFakeButtonEvent.argtypes = [
+                ctypes.c_void_p, ctypes.c_uint, ctypes.c_int, ctypes.c_ulong]
+            # Xlib reads XAUTHORITY from the calling process. Restore it immediately.
+            old_auth = os.environ.get("XAUTHORITY")
+            try:
+                os.environ["XAUTHORITY"] = str(auth)
+                cls.display = cls.xlib.XOpenDisplay(cls.env["DISPLAY"].encode())
+            finally:
+                if old_auth is None:
+                    os.environ.pop("XAUTHORITY", None)
+                else:
+                    os.environ["XAUTHORITY"] = old_auth
+            if not cls.display:
+                raise AssertionError("Cannot open private Xvfb display for native click testing")
+            cls.addClassCleanup(cls.xlib.XCloseDisplay, cls.display)
 
         source = OVERVIEW[OVERVIEW.index("(defwidget"):]
         fixtures = '\n'.join(definition(MAIN, name) for name in (
-            "workspaces-widget", "workspace-dot", "workspace-grid", "workspace-sq"))
+            "workspaces-widget", "workspace-dot", "workspace-grid", "workspace-sq",
+            "bar-left", "bar-center", "bar-content"))
+        focus_definitions = []
+        for name, values, state, _ in FOCUS_SCENARIOS:
+            expression = FOCUS_EXPRESSION.replace("overview-state", json.dumps(json.dumps(state)))
+            for key in ("HYPRLAND_INSTANCE_SIGNATURE", "WAYLAND_DISPLAY", "NIRI_SOCKET"):
+                expression = expression.replace(f'get_env("{key}")', json.dumps(values.get(key, "")))
+            focus_definitions.append(f"(defvar focus-{name} {{{expression}}})")
         (cls.config / "eww.yuck").write_text(
             f"(defvar workspace-state '{json.dumps(INITIAL)}')\n"
             '(defvar ws-style "squares")\n(defvar ws-total 7)\n'
             '(defvar ws-spacing 1)\n(defvar workspaces "[1,2]")\n'
-            '(defvar active-workspace 1)\n' + fixtures + "\n" + source +
+            '(defvar active-workspace 1)\n(defvar ws-position "left")\n'
+            '(defwidget logo [] (label :text ""))\n'
+            '(defwidget window [] (label :text ""))\n'
+            '(defwidget bar-right [] (label :text ""))\n' + fixtures + "\n" + source +
             '\n(defwindow trial-bar :namespace "eww-workspace-trial-test"'
             ' :geometry (geometry :width "560px" :height "32px" :anchor "top left")'
-            ' (workspaces-widget))\n')
+            ' (bar-content))\n' + "\n".join(focus_definitions) + "\n")
         for path in EWW.glob("*.scss"):
             shutil.copy2(path, cls.config / path.name)
         cls.log = (cls.root / "eww.log").open("w+")
         cls.addClassCleanup(cls.log.close)
+        cls.start_daemon()
+
+    @classmethod
+    def start_daemon(cls):
+        cls.log_start = (cls.root / "eww.log").stat().st_size
         cls.daemon = subprocess.Popen(
             ["eww", "--config", str(cls.config), "--no-daemonize", "daemon"],
             env=cls.env, stdout=cls.log, stderr=subprocess.STDOUT,
@@ -452,6 +569,159 @@ class WorkspaceOverviewNativeTests(unittest.TestCase):
         subprocess.run(["bash", str(ROOT / "src/shared/bin/popup-toggle"), "workspace-overview"],
                        env=cls.env, capture_output=True, text=True, timeout=10, check=True)
 
+    def probe(self):
+        if not self.probe_available:
+            self.skipTest("GTK3 development files and gcc are required for widget inspection")
+        response = self.root / "response"
+        response.unlink(missing_ok=True)
+        (self.root / "request").write_text("snapshot")
+        for _ in range(100):
+            if response.exists():
+                return json.loads(response.read_text())
+            time.sleep(0.02)
+        self.fail("No response from isolated GTK widget probe")
+
+    def widgets(self, css_class):
+        return [w for w in self.probe()["widgets"] if w["mapped"] and css_class in w["classes"]]
+
+    def click(self, widget):
+        if self.xtst is None:
+            self.skipTest("libXtst is required for isolated native clicks")
+        self.calls.unlink(missing_ok=True)
+        x = widget["screen_x"] + widget["width"] // 2
+        y = widget["screen_y"] + widget["height"] // 2
+        self.xtst.XTestFakeMotionEvent(self.display, 0, x, y, 0)
+        self.xtst.XTestFakeButtonEvent(self.display, 1, True, 0)
+        self.xtst.XTestFakeButtonEvent(self.display, 1, False, 0)
+        self.xlib.XSync(self.display, False)
+        for _ in range(100):
+            if self.calls.exists() and self.calls.read_text().endswith("\n"):
+                time.sleep(0.05)
+                return self.calls.read_text().splitlines()
+            time.sleep(0.02)
+        self.fail("Native EWW button did not invoke mock")
+
+    def assert_clean_log(self):
+        self.log.flush()
+        log = (self.root / "eww.log").read_bytes()[self.log_start:].decode()
+        log = re.sub(r"\x1b\[[0-9;]*m", "", log)
+        self.assertNotRegex(log, r"(?im)(^error:|^warning:|\b(ERROR|WARN)\s|CRITICAL|panic|Unknown attribute)")
+
+    def test_native_taskbar_preferences_sparse_rows_and_width(self):
+        # Actual EWW styles, not a substitute CSS approximation.
+        for theme in ("catppuccin", "catppuccin-latte"):
+            # Check the live daemon before shutdown; teardown can close EWW's
+            # internal channels while its worker threads are still exiting.
+            self.assert_clean_log()
+            self.stop(self.daemon)
+            shutil.copy2(ROOT / f"src/shared/themes/{theme}/eww-colors.scss",
+                         self.config / "theme-colors.scss")
+            self.start_daemon()
+            self.eww("open", "trial-bar")
+            for style in ("numbers", "squares"):
+                for spacing in range(1, 11):
+                    for monitors, total, focus in (
+                        (1, 0, 0), (1, 1, 0), (1, 7, 0), (1, 10, 0),
+                        (2, 7, 0), (2, 7, 1), (4, 10, 2),
+                    ):
+                        with self.subTest(theme=theme, style=style, spacing=spacing,
+                                          monitors=monitors, total=total, focus=focus):
+                            state = sparse_state(monitors, total, focus)
+                            position = "left" if spacing % 2 else "center"
+                            self.eww("update", "workspace-state=" + json.dumps(state),
+                                     f"ws-style={style}", f"ws-spacing={spacing}",
+                                     f"ws-position={position}")
+                            time.sleep(0.035)
+                            tree = self.probe()["widgets"]
+                            mapped = [w for w in tree if w["mapped"]]
+                            choices = [w for w in mapped if "workspace-bar-choice" in w["classes"]]
+                            ids = [ws["id"] for ws in state["current"]]
+                            self.assertEqual([w["tooltip"] for w in choices],
+                                             [f"Workspace {identity}" for identity in ids])
+                            labels = [w["text"] for w in mapped if "workspace-number" in w["classes"]]
+                            self.assertEqual(labels, list(map(str, ids)) if style == "numbers" else [])
+                            bars = [w for w in mapped if "workspace-trial-bar" in w["classes"]]
+                            self.assertEqual(len(bars), 1)
+                            bar = bars[0]
+                            self.assertEqual(bar["spacing"], spacing)
+                            self.assertLessEqual(bar["width"], 420 if style == "numbers" else 160)
+                            ancestor = bar["parent"]
+                            classes = []
+                            while ancestor >= 0:
+                                classes.extend(tree[ancestor]["classes"])
+                                ancestor = tree[ancestor]["parent"]
+                            self.assertIn(f"bar-{position}", classes)
+                            if not choices:
+                                continue
+                            rows = {}
+                            for choice in choices:
+                                rows.setdefault(choice["y"], []).append(choice)
+                            expected_rows = [len(ids)] if style == "numbers" else [
+                                math.ceil(len(ids) / 2), len(ids) // 2]
+                            self.assertEqual([len(row) for row in rows.values()],
+                                             [n for n in expected_rows if n])
+                            for row in rows.values():
+                                for left, right in zip(row, row[1:]):
+                                    self.assertEqual(right["x"] - left["x"] - left["width"], spacing)
+                            if len(rows) == 2:
+                                upper, lower = list(rows.values())
+                                self.assertEqual(lower[0]["y"] - upper[0]["y"] - upper[0]["height"],
+                                                 spacing)
+                            chips = [w for w in mapped if "workspace-chip" in w["classes"]]
+                            for chip, workspace in zip(chips, state["current"]):
+                                expected = "is-focused" if workspace["focused"] else (
+                                    "is-visible" if workspace["visible"] else "is-neutral")
+                                self.assertIn(expected, chip["classes"])
+                                self.assertEqual("is-temporary" in chip["classes"], workspace["temporary"])
+                                if style == "squares":
+                                    self.assertEqual((chip["width"], chip["height"]), (8, 8))
+                            dots = [w for w in mapped if "workspace-occupied" in w["classes"]]
+                            self.assertEqual(["has-windows" in w["classes"] for w in dots],
+                                             [w["occupied"] for w in state["current"]])
+        self.assert_clean_log()
+        self.eww("close", "trial-bar")
+
+    def test_native_buttons_keep_real_ids_and_overview_lifetime(self):
+        self.eww("open", "trial-bar")
+        for style in ("numbers", "squares"):
+            for focus in (0, 1):
+                state = sparse_state(2, 7, focus)
+                # Visible-but-not-focused remains a distinct outlined shape.
+                state["current"][-1]["visible"] = True
+                self.eww("update", "workspace-state=" + json.dumps(state), f"ws-style={style}")
+                time.sleep(0.04)
+                for opened in (False, True):
+                    if opened:
+                        toggles = self.widgets("workspace-overview-toggle")
+                        self.assertEqual(len(toggles), 1)
+                        self.assertEqual(self.click(toggles[0])[0], "popup workspace-overview")
+                        self.assertIn("workspace-overview", self.eww("active-windows").stdout)
+                        # Overview identities remain numbered even in Squares mode.
+                        tree = self.probe()["widgets"]
+                        numbers = [w["text"] for w in tree if w["mapped"] and "workspace-number" in w["classes"]]
+                        for identity in range(1, 8):
+                            self.assertIn(str(identity), numbers)
+                    for button, workspace in zip(self.widgets("workspace-bar-choice"), state["current"]):
+                        lines = self.click(button)
+                        self.assertEqual(lines[0], f"select {workspace['id']}")
+                        self.assertIn("trial-bar: trial-bar", lines)
+                        self.assertEqual("workspace-overview: workspace-overview" in lines, opened)
+                    self.assertTrue(any("is-visible" in w["classes"] for w in self.widgets("workspace-chip")))
+                    if opened:
+                        self.eww("close", "workspace-overview")
+        # Legacy/niri-disabled policy follows its own slot list and click helper.
+        self.eww("update", "workspace-state=" + json.dumps(INITIAL), "ws-total=7")
+        for style, css in (("numbers", "ws-dot"), ("squares", "ws-btn")):
+            self.eww("update", f"ws-style={style}")
+            time.sleep(0.04)
+            self.assertEqual(self.widgets("workspace-bar-choice"), [])
+            self.assertEqual(self.widgets("workspace-overview-toggle"), [])
+            choices = self.widgets(css)
+            self.assertEqual(len(choices), 7)
+            self.assertEqual(self.click(choices[-1])[0], "7")
+        self.assert_clean_log()
+        self.eww("close", "trial-bar")
+
     def test_native_layouts_and_live_state_changes(self):
         self.eww("open", "trial-bar")
         self.open_overview()
@@ -477,23 +747,12 @@ class WorkspaceOverviewNativeTests(unittest.TestCase):
         self.eww("update", "workspace-state=" + json.dumps(INITIAL), "ws-style=numbers")
         self.eww("update", "ws-style=squares")
         time.sleep(0.1)
-        self.log.flush()
-        log = (self.root / "eww.log").read_text()
-        log = re.sub(r"\x1b\[[0-9;]*m", "", log)
-        self.assertNotRegex(log, r"(?im)(^error:|^warning:|\b(ERROR|WARN)\s|CRITICAL|panic|Unknown attribute)")
+        self.assert_clean_log()
         self.eww("close", "workspace-overview", "trial-bar")
 
     def test_selection_command_runs_after_native_window_closes(self):
-        mock_bin = self.root / "bin"
-        mock_bin.mkdir()
-        mock = mock_bin / "workspace-ctl"
-        mock.write_text(
-            '#!/bin/sh\nprintf "%s\\n" "$*" > "$WORKSPACE_UI_CALLS"\n'
-            'eww --config "$HOME/.config/eww" active-windows >> "$WORKSPACE_UI_CALLS"\n')
-        mock.chmod(0o755)
-        calls = self.root / "calls"
-        env = dict(self.env, PATH=f"{mock_bin}:{os.environ['PATH']}",
-                   WORKSPACE_UI_CALLS=str(calls))
+        calls = self.calls
+        env = self.env
         self.eww("update", "workspace-state=" + json.dumps(state_for(3)))
         self.eww("open", "trial-bar")
         self.open_overview()
@@ -529,34 +788,7 @@ class WorkspaceOverviewNativeTests(unittest.TestCase):
         self.eww("close", "trial-bar")
 
     def test_native_focus_expression_preserves_other_compositors(self):
-        scenarios = [
-            ("hyprland", dict(HYPRLAND_INSTANCE_SIGNATURE="test",
-                              WAYLAND_DISPLAY="wayland-test"), {"escape_available": True}, "true"),
-            ("hyprland-disabled", dict(HYPRLAND_INSTANCE_SIGNATURE="test",
-                                       WAYLAND_DISPLAY="wayland-test"), {"escape_available": False}, "ondemand"),
-            ("hyprland-old-state", dict(HYPRLAND_INSTANCE_SIGNATURE="test",
-                                        WAYLAND_DISPLAY="wayland-test"), {}, "ondemand"),
-            ("hyprland-null", dict(HYPRLAND_INSTANCE_SIGNATURE="test",
-                                   WAYLAND_DISPLAY="wayland-test"), {"escape_available": None}, "ondemand"),
-            ("niri", dict(NIRI_SOCKET="test", WAYLAND_DISPLAY="wayland-test"),
-             {"escape_available": True}, "ondemand"),
-            ("niri-inherited-signature", dict(NIRI_SOCKET="test", WAYLAND_DISPLAY="wayland-test",
-                                              HYPRLAND_INSTANCE_SIGNATURE="stale"),
-             {"escape_available": True}, "ondemand"),
-            ("x11", {}, {"escape_available": True}, "ondemand"),
-            ("x11-inherited-signature", dict(HYPRLAND_INSTANCE_SIGNATURE="stale"),
-             {"escape_available": True}, "ondemand"),
-        ]
-        definitions = []
-        for name, values, state, _ in scenarios:
-            expression = FOCUS_EXPRESSION.replace("overview-state", json.dumps(json.dumps(state)))
-            for key in ("HYPRLAND_INSTANCE_SIGNATURE", "WAYLAND_DISPLAY", "NIRI_SOCKET"):
-                expression = expression.replace(f'get_env("{key}")', json.dumps(values.get(key, "")))
-            definitions.append(f"(defvar focus-{name} {{{expression}}})")
-        with (self.config / "eww.yuck").open("a") as source:
-            source.write("\n" + "\n".join(definitions) + "\n")
-        self.eww("reload")
-        for name, _, _, expected in scenarios:
+        for name, _, _, expected in FOCUS_SCENARIOS:
             with self.subTest(compositor=name):
                 self.assertEqual(self.eww("get", f"focus-{name}").stdout.strip(), expected)
 

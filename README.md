@@ -264,12 +264,25 @@ remain stable when their positions change; unique hardware identities also
 survive connector changes. Identical displays without unique identities use
 their connectors to avoid guessing.
 
-The single EWW bar shows the keyboard-focused monitor's numbered workspaces.
+The single EWW bar shows the keyboard-focused monitor's workspaces using the
+Numbers or compact two-row Squares style from Settings > Taskbar. Spacing and
+Left/Center position also apply to both styles. Squares keep the real workspace
+IDs (including gaps); hover for their identities or open the numbered overview.
 Its monitor button opens a spatial overview of all displays, including rotated,
 stacked, and disconnected monitors. Filled chips indicate keyboard focus,
 outlines indicate visibility, and dots indicate occupied workspaces. Escape
 closes the overview on supported Hyprland versions without consuming Escape
 in other applications once the overview is closed.
+
+The Taskbar workspace count is a **total across all monitors**, not a per-monitor
+count. Changing it updates the shared pool through the workspace listener.
+Automatic mode provides at least one workspace per connected monitor, and
+occupied or visible workspaces remain available even above the configured count.
+Changing style, spacing or position does not reassign homes or move focus.
+`bar-ctl apply` validates the saved workspace preferences together and reports
+invalid values, duplicate workspace keys or EWW failures instead of silently
+claiming success. `bar.conf` uses literal `key=value` lines; surrounding whitespace
+and full-line comments are supported.
 
 Keyboard workspace selection, bar clicks, and existing-app shortcuts follow a
 workspace to its home instead of swapping it onto another monitor. Local

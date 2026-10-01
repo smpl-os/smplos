@@ -513,6 +513,45 @@ class WorkspacePolicyTests(unittest.TestCase):
         self.policy.state()
         self.assertEqual(set(self.policy.load()["homes"]), {"1", "2", "12"})
 
+    def test_taskbar_presentation_does_not_rewrite_policy_or_move_focus(self):
+        self.policy.init(only_new=True)
+        self.policy.state()
+        profile = self.policy.path.read_bytes()
+        rules = self.policy.rules.read_bytes()
+        stamps = (self.policy.path.stat().st_mtime_ns, self.policy.rules.stat().st_mtime_ns)
+        actions = list(self.backend.actions)
+        reloads = self.backend.reloads
+        active = copy.deepcopy(self.backend.data["active"])
+        for style, spacing, position in (("squares", 10, "left"), ("numbers", 1, "center")):
+            (self.config / "bar.conf").write_text(
+                f"ws_count=7\nws_style={style}\nws_spacing={spacing}\nws_position={position}\n")
+            state = self.policy.state()
+            self.assertEqual(self.policy.path.read_bytes(), profile)
+            self.assertEqual(self.policy.rules.read_bytes(), rules)
+            self.assertEqual((self.policy.path.stat().st_mtime_ns,
+                              self.policy.rules.stat().st_mtime_ns), stamps)
+            self.assertEqual(self.backend.actions, actions)
+            self.assertEqual(self.backend.reloads, reloads)
+            self.assertEqual(self.backend.data["active"], active)
+            self.assertEqual([[ws["id"] for ws in monitor["workspaces"]]
+                              for monitor in state["monitors"]], [[1, 3, 5, 7], [2, 4, 6]])
+
+    def test_taskbar_count_is_global_and_changes_reconcile_without_app_dispatch(self):
+        self.policy.init(only_new=True)
+        (self.config / "bar.conf").write_text("ws_count=10\n")
+        state = self.policy.state()
+        self.assertEqual([[ws["id"] for ws in monitor["workspaces"]]
+                          for monitor in state["monitors"]], [[1, 3, 5, 7, 9], [2, 4, 6, 8, 10]])
+        self.backend.data["workspaces"].append(
+            {"id": 12, "name": "12", "monitor": "DP-3", "windows": 1})
+        self.policy.state()
+        (self.config / "bar.conf").write_text("ws_count=1\n")
+        state = self.policy.state()
+        self.assertEqual(self.policy.load()["count"], 1)
+        self.assertEqual({ws["id"] for monitor in state["monitors"] for ws in monitor["workspaces"]},
+                         {1, 2, 12})
+        self.assertTrue(all(monitor["workspaces"] for monitor in state["monitors"]))
+
     def test_disabled_watch_emits_single_line_json_without_compositor_access(self):
         env = {**os.environ, "HOME": str(self.home), "XDG_RUNTIME_DIR": str(self.home / "run")}
         process = subprocess.Popen(

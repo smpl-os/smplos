@@ -3,17 +3,17 @@
   :initial '{"enabled":false,"error":"","assignment":"preserve","focused_monitor":"","focused_label":"","current":[],"monitors":[],"disconnected":[],"map_width":560,"map_height":260}'
   `workspace-ctl watch`)
 
-(defwidget workspace-chip [ws]
-  (box :class "workspace-chip ${ws.focused ? 'is-focused' : ws.visible ? 'is-visible' : 'is-neutral'} ${ws.temporary ? 'is-temporary' : ''}"
+(defwidget workspace-chip [ws ?square]
+  (box :class "workspace-chip ${square == true ? 'workspace-square' : ''} ${ws.focused ? 'is-focused' : ws.visible ? 'is-visible' : 'is-neutral'} ${ws.temporary ? 'is-temporary' : ''}"
        :orientation "v" :space-evenly false :spacing 1
        :tooltip {ws.tooltip}
-    (label :class "workspace-number" :text {ws.id})
+    (label :class "workspace-number" :visible {square != true} :text {ws.id})
     (box :class "workspace-occupied ${ws.occupied ? 'has-windows' : ''}"
          :halign "center" :valign "end")))
 
 ;; Only the monitor label opens the overview; chips switch workspaces directly.
 (defwidget workspace-trial-bar []
-  (box :class "workspace-trial-bar" :orientation "h" :space-evenly false :spacing 4
+  (box :class "workspace-trial-bar" :orientation "h" :space-evenly false :spacing ws-spacing
     (button :class "workspace-overview-toggle"
             :onclick "popup-toggle workspace-overview"
             :timeout "3s"
@@ -23,14 +23,24 @@
                :text {workspace-state.focused_label != "" ? workspace-state.focused_label : "WS"})
         (label :class "workspace-bar-error" :text "!"
                :visible {workspace-state.error != ""} :tooltip {workspace-state.error})))
-    (for ws in {workspace-state.current}
-      (workspace-bar-choice :ws ws))))
+    (box :visible {ws-style == "numbers"} :orientation "h" :space-evenly false :spacing ws-spacing
+      (for ws in {workspace-state.current}
+        (workspace-bar-choice :ws ws :square false)))
+    (box :visible {ws-style == "squares"} :orientation "v" :space-evenly false :valign "center" :spacing ws-spacing
+      (box :orientation "h" :space-evenly false :halign "start" :spacing ws-spacing
+        (for ws in {jq(workspace-state.current, ".[0:${ceil(arraylength(workspace-state.current) / 2)}]")}
+          (workspace-bar-choice :ws ws :square true)))
+      (box :visible {arraylength(workspace-state.current) > 1}
+           :orientation "h" :space-evenly false :halign "start" :spacing ws-spacing
+        (for ws in {jq(workspace-state.current, ".[${ceil(arraylength(workspace-state.current) / 2)}:]")}
+          (workspace-bar-choice :ws ws :square true))))))
 
-(defwidget workspace-bar-choice [ws]
+(defwidget workspace-bar-choice [ws square]
   (button :class "workspace-bar-choice"
           :timeout "3s"
+          :tooltip {ws.tooltip}
           :onclick "workspace-ctl select ${ws.id}"
-    (workspace-chip :ws ws)))
+    (workspace-chip :ws ws :square square)))
 
 (defwidget workspace-choice [ws]
   (button :class "workspace-choice"
