@@ -594,12 +594,18 @@ echo "$*" > "$HOME/makepkg.log"
         rootfs = self.base / "deb-root"
         binary = rootfs / "usr/bin/grafium"
         desktop = rootfs / "usr/share/applications/Grafium.desktop"
-        library = rootfs / "usr/lib/grafium/libllama.so"
+        library = rootfs / "usr/lib/Grafium/libllama.so.0"
         for path, data in ((binary, b"\x7fELFgrafium"),
                            (desktop, b"[Desktop Entry]\nExec=grafium\n"),
                            (library, b"\x7fELFbundled-ai")):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(data)
+        bundled_sonames = ("libllama-common.so.0", "libggml.so.0", "libggml-cpu.so.0",
+                           "libggml-vulkan.so.0", "libggml-base.so.0")
+        for name in bundled_sonames:
+            versioned = library.parent / (name + ".1")
+            versioned.write_bytes(b"\x7fELF" + name.encode())
+            (library.parent / name).symlink_to(versioned.name)
         data_archive = self.base / "data.tar.gz"
         with tarfile.open(data_archive, "w:gz") as archive:
             archive.add(rootfs / "usr", arcname="usr")
@@ -621,7 +627,13 @@ package
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("/releases/download/v0.0.148/Grafium_0.0.148_amd64.deb", self.requests.read_text())
         self.assertEqual((pkgdir / "usr/bin/grafium").read_bytes(), b"\x7fELFgrafium")
-        self.assertEqual((pkgdir / "usr/lib/grafium/libllama.so").read_bytes(), library.read_bytes())
+        self.assertEqual((pkgdir / "usr/lib/Grafium/libllama.so.0").read_bytes(), library.read_bytes())
+        for name in bundled_sonames:
+            installed = pkgdir / "usr/lib/Grafium" / name
+            self.assertTrue(installed.is_symlink())
+            self.assertEqual(os.readlink(installed), name + ".1")
+            self.assertEqual(installed.read_bytes(), b"\x7fELF" + name.encode())
+        self.assertFalse((pkgdir / "usr/lib/grafium").exists())
         self.assertEqual((pkgdir / "usr/share/applications/Grafium.desktop").read_bytes(), desktop.read_bytes())
 
     def test_nemo_rootfs_package_declares_new_worker_dependencies(self):
