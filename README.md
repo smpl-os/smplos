@@ -137,6 +137,11 @@ fullscreen windows are exempt from added compositor fading. Native app alpha
 is still app-owned even in fullscreen; blur depends on compositor support.
 See the [theme alpha ownership guide](CREATING_MODIFYING_A_THEME.md#opacity-keys-in-colorstoml)
 and [release sequence](UPDATING.md#background-only-transparency-delivery).
+Normal **Update OS** must install the published native releases as well as
+theme/config changes; source pushes and cached tags alone are insufficient.
+Reopen apps when ready after updating. Local Grafium launchers can intentionally
+override the packaged binary; the updater preserves and reports those overrides
+rather than silently replacing custom launch choices.
 
 <a href="images/5-themes.png"><img src="images/5-themes.png" width="720" /></a>
 

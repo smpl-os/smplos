@@ -3,7 +3,21 @@
 SMPLOS_APP_BINS=(
     start-menu notif-center settings app-center webapp-center
     sync-center-daemon sync-center-gui smpl-calendar smpl-calendar-alertd
+    smpl-hints smpl-hintsd
 )
+
+smplos_install_app_binary() {
+    local source="$1" destination="$2" staged
+    staged=$(sudo mktemp "${destination}.XXXXXX") || return 1
+    if sudo install -m755 "$source" "$staged" &&
+        sudo mv -f -- "$staged" "$destination" &&
+        cmp -s "$source" "$destination"; then
+        return 0
+    fi
+    sudo rm -f -- "$staged"
+    echo "smpl-apps: failed to install $destination; retry Update OS" >&2
+    return 1
+}
 
 smplos_app_is_elf() {
     [[ -f "$1" && ! -L "$1" ]] &&

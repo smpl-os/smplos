@@ -9,6 +9,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 source "$SCRIPT_DIR/shared/lib/smplos-app-bundle.sh"
+source "$SCRIPT_DIR/shared/lib/smplos-release-package.sh"
 
 # Build log directory (persists across runs for debugging)
 LOG_DIR="$PROJECT_ROOT/.cache/logs"
@@ -379,13 +380,13 @@ build_custom_packages() {
 
         # If the PKGBUILD defines _gh_owner/_gh_repo, query GitHub for the
         # latest release so we always build the newest version automatically.
-        local gh_owner gh_repo
+        local gh_owner gh_repo release_json=""
         gh_owner=$(grep -E '^_gh_owner=' "$dir/PKGBUILD" | head -1 | cut -d= -f2 | tr -d '"'"'"' ' || true)
         gh_repo=$(grep -E '^_gh_repo=' "$dir/PKGBUILD" | head -1 | cut -d= -f2 | tr -d '"'"'"' ' || true)
         if [[ -n "$gh_owner" && -n "$gh_repo" ]]; then
             local latest
-            latest=$(curl -fsSL "https://api.github.com/repos/${gh_owner}/${gh_repo}/releases/latest" \
-                     2>/dev/null | grep -oP '"tag_name"\s*:\s*"\Kv?[^"]+' | sed 's/^v//' || true)
+            release_json=$(curl -fsSL "https://api.github.com/repos/${gh_owner}/${gh_repo}/releases/latest" 2>/dev/null || true)
+            latest=$(grep -oP '"tag_name"\s*:\s*"\Kv?[^"]+' <<< "$release_json" | sed 's/^v//' || true)
             if [[ -n "$latest" && "$latest" != "$pkgver" ]]; then
                 log_info "GitHub has $pkg $latest (PKGBUILD says $pkgver) — will rebuild"
                 pkgver="$latest"
@@ -395,39 +396,43 @@ build_custom_packages() {
         if [[ -n "$pkgver" && -n "$pkgrel" ]] && \
            ls "$prebuilt_dir"/${pkg}-${pkgver}-${pkgrel}-*.pkg.tar.* &>/dev/null 2>&1; then
             log_info "Found prebuilt custom package: $pkg ($pkgver-$pkgrel)"
+            if [[ "$pkg" == nemo-smpl ]]; then
+                smplos_nemo_package_valid "$prebuilt_dir/$pkg-$pkgver-$pkgrel-x86_64.pkg.tar.zst" "$pkgver" ||
+                    die "nemo-smpl: invalid cached package; rerun prebuilt app download before building"
+            fi
         else
             # Try to download a pre-built .pkg.tar.zst from the GitHub release
             # before falling back to a slow container build from source.
             local _downloaded=false
             if [[ -n "${gh_owner:-}" && -n "${gh_repo:-}" && -n "$pkgver" ]]; then
                 local _pkg_asset_url
-                _pkg_asset_url=$(curl -fsSL \
-                    "https://api.github.com/repos/${gh_owner}/${gh_repo}/releases/latest" \
-                    2>/dev/null \
-                    | grep -oP '"browser_download_url"\s*:\s*"\K[^"]*'"${pkg}"'-[^"]*x86_64\.pkg\.tar\.zst' \
+                _pkg_asset_url=$(grep -oP '"browser_download_url"\s*:\s*"\K[^"]*'"${pkg}"'-[^"]*x86_64\.pkg\.tar\.zst' <<< "$release_json" \
                     | head -1 || true)
                 if [[ -n "$_pkg_asset_url" ]]; then
                     log_info "Downloading prebuilt $pkg $pkgver from GitHub release..."
-                    local _pkg_filename
+                    local _pkg_filename _pkg_staged
                     _pkg_filename=$(basename "$_pkg_asset_url")
-                    # Evict all old versions of this package (including -debug splits)
-                    rm -f "$prebuilt_dir"/${pkg}-[0-9]*-*-*.pkg.tar.*
-                    rm -f "$prebuilt_dir"/${pkg}-debug-[0-9]*-*-*.pkg.tar.*
+                    _pkg_staged=$(mktemp "$prebuilt_dir/.package-download.XXXXXX")
                     if curl -fSL --connect-timeout 30 --retry 3 \
-                        "$_pkg_asset_url" -o "$prebuilt_dir/$_pkg_filename"; then
+                        "$_pkg_asset_url" -o "$_pkg_staged"; then
+                        if [[ "$pkg" == nemo-smpl ]] &&
+                            ! { smplos_verify_release_checksum "$_pkg_staged" "$_pkg_asset_url" "$release_json" &&
+                                smplos_nemo_package_valid "$_pkg_staged" "$pkgver"; }; then
+                            rm -f "$_pkg_staged"
+                            die "nemo-smpl: invalid release package; prior cache retained"
+                        fi
+                        mv -f "$_pkg_staged" "$prebuilt_dir/$_pkg_filename"
                         log_info "Downloaded $pkg $pkgver prebuilt package"
                         _downloaded=true
                     else
+                        rm -f "$_pkg_staged"
                         log_warn "$pkg: download failed, will build from source"
                     fi
                 fi
             fi
             if ! $_downloaded; then
-                # Evict any stale older version so it doesn't get injected into the ISO
-                if ls "$prebuilt_dir"/${pkg}-[0-9]*-*-*.pkg.tar.* &>/dev/null 2>&1; then
-                    log_info "Evicting stale prebuilt for $pkg (want $pkgver-$pkgrel)"
-                    rm -f "$prebuilt_dir"/${pkg}-[0-9]*-*-*.pkg.tar.*
-                fi
+                # Keep prior archives until a replacement succeeds; the builder
+                # selects the newest package using pacman's version ordering.
                 need_build+=("$pkg")
             fi
         fi
@@ -807,7 +812,8 @@ Place binaries in build/prebuilt-apps/ or use --build-apps to compile locally."
         remote_nemo_ver=$(echo "$_gh_json" | grep -oP '"tag_name"\s*:\s*"\K[^"]+' || true)
 
         if [[ -n "$remote_nemo_ver" ]]; then
-            if [[ -z "$cached_nemo_ver" ]]; then
+            if [[ -z "$cached_nemo_ver" ]] || ! smplos_nemo_package_valid \
+                "$prebuilt_dir/nemo-smpl-${cached_nemo_ver#v}-1-x86_64.pkg.tar.zst" "$cached_nemo_ver" 2>/dev/null; then
                 log_info "nemo-smpl: no local cache, will download $remote_nemo_ver"
                 need_nemo_download=true
             elif _version_gt "$remote_nemo_ver" "$cached_nemo_ver"; then
@@ -827,19 +833,25 @@ Place binaries in build/prebuilt-apps/ or use --build-apps to compile locally."
             | grep -oP '"browser_download_url"\s*:\s*"\K[^"]*nemo-smpl-[^"]*x86_64\.pkg\.tar\.zst' \
             | head -1 || true)
         if [[ -n "$nemo_pkg_url" ]]; then
-            # Evict old versions before downloading
-            rm -f "$prebuilt_dir"/nemo-smpl-[0-9]*-*-*.pkg.tar.*
-            local nemo_pkg_name
+            local nemo_pkg_name staged_nemo
             nemo_pkg_name=$(basename "$nemo_pkg_url")
+            staged_nemo=$(mktemp "$prebuilt_dir/.nemo-download.XXXXXX")
             log_info "Downloading $nemo_pkg_url"
             if curl -fSL --connect-timeout 30 --retry 3 \
-                "$nemo_pkg_url" -o "$prebuilt_dir/$nemo_pkg_name"; then
+                "$nemo_pkg_url" -o "$staged_nemo" &&
+                smplos_verify_release_checksum "$staged_nemo" "$nemo_pkg_url" "$_gh_json" &&
+                smplos_nemo_package_valid "$staged_nemo" "$remote_nemo_ver"; then
+                mv -f "$staged_nemo" "$prebuilt_dir/$nemo_pkg_name"
                 echo "$remote_nemo_ver" > "$nemo_ver_file"
                 log_info "nemo-smpl $remote_nemo_ver cached in $prebuilt_dir"
             else
-                log_warn "nemo-smpl: download failed, falling back to existing prebuilt"
+                rm -f "$staged_nemo"
+                die "nemo-smpl: release download/validation failed; prior cache retained, refusing stale ISO"
             fi
         else
+            if ! grep -qE 'nemo-smpl-[^"]*-arch-x86_64-rootfs\.tar\.zst' <<< "$_gh_json"; then
+                die "nemo-smpl: release $remote_nemo_ver has no package or rootfs asset; wait for publication"
+            fi
             log_warn "nemo-smpl: no .pkg.tar.zst asset in release $remote_nemo_ver (rootfs only)"
             log_info "nemo-smpl: will be built from PKGBUILD by build_custom_packages()"
         fi

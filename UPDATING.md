@@ -199,7 +199,8 @@ do not report source publication alone as completed binary delivery.
 ## 3. Updating Themes
 
 Theme files in `src/shared/themes/` are automatically reapplied after
-every update via `theme-set <current-theme>` in the post-deploy hook.
+an update that changes OS source, stock themes, native apps or compositor
+configuration, via `theme-set <current-theme>` in the post-deploy hook.
 The hook must run as the desktop user (with their graphical session environment),
 not as root with the user's `HOME`: root-owned active theme directories prevent
 subsequent theme changes. `theme-set` rejects that elevated invocation.
@@ -241,7 +242,7 @@ alpha, which fades text and images too; stock active/inactive values are equal.
    popup alpha for old generated custom palettes, then safe opaque 1.0.
 3. Release/package the compatible **Grafium** Linux build separately.
    `grafium-bin` extracts the upstream `.deb`; updating OS theme files or a
-   repository submodule cannot update its native Tauri/WebKit window.
+   source checkout cannot update its native Tauri/WebKit window.
    Grafium consumes active `colors.toml` only in Auto mode; explicit built-in
    palettes remain opaque.
 4. After installing the new binaries, reopen the affected apps once so their
@@ -271,12 +272,78 @@ in the compatible Nemo release, not just the initial RGBA visual change.
 **ISO boundary:** the builder copies pre-generated theme files and OS scripts
 into the live image, user skeleton and installer payload. It seeds the default
 Nemo CSS path and EWW palette before the first theme switch. Native app builds
-consume published binary bundles by default; `--build-apps` builds the pinned app source.
-Only update the smpl-apps submodule pointer after its commit is reachable in
-the app repository. Confirm cached/prebuilt Nemo, smpl-apps and Grafium packages
+consume published binary bundles. There is no tracked smpl-apps submodule in
+this repository: `--build-apps` calls `build-apps.sh`, which also fetches the
+smpl-apps release via `fetch-apps.sh`; it does not compile unpublished Rust
+changes. Build and publish those in the independent smpl-apps repository.
+Confirm cached/prebuilt Nemo, smpl-apps and Grafium packages
 actually contain the compatible binaries before advertising native alpha on an
 ISO. Installation itself remains offline. Do not point at an unpublished local
 commit or claim a release version that has not been published.
+
+### Native delivery checks and recovery
+
+For a coordinated rollout, publish and verify the native release assets before
+advertising the complete OS update. The OS integration is backward-compatible,
+but source pushes alone are not binary delivery. A latest release must not be a
+draft, prerelease or source-only tag:
+
+| Consumer | Published artifact | Installed destination |
+|----------|--------------------|-----------------------|
+| smpl-apps OTA and ISO | `smpl-apps-<version>-x86_64.tar.gz`, flat ELF entries | `/usr/local/bin/` (also installer payload on ISO) |
+| Nemo OTA | `nemo-smpl-<version>-1-x86_64.pkg.tar.zst` | Pacman-managed `/usr/bin/nemo` and `/usr/libexec/` helpers |
+| Nemo ISO fallback | `nemo-smpl-<version>-arch-x86_64-rootfs.tar.zst` | Repackaged with current runtime dependencies |
+| Grafium OTA and ISO | `Grafium_<version>_amd64.deb` from `KonTy/grafium` | `grafium-bin` pacman package, `/usr/bin/grafium` |
+
+The smpl-apps bundle contract requires all **11** binaries, including
+`smpl-hints` and `smpl-hintsd`. Sync Center's executable is `sync-center-gui`
+but its window app ID is `sync-center`; `smpl-calendar-details` is a window
+from the calendar binary, and `hints-overlay` is owned by `smpl-hintsd`.
+A matching version marker does not bypass missing-binary checks, either in
+the download cache or installed bundle. Optional XR binaries remain optional.
+
+Nemo downloads validate `.PKGINFO`, the application and document/archive
+worker paths before installation/cache publication. When the same release
+advertises `SHA256SUMS-x86_64`, its basename checksum must match; a missing,
+duplicate or incorrect listed checksum fails the update. Older releases
+without that asset explicitly report metadata-only validation. The ISO keeps
+prior package archives until a replacement is validated, and fails instead of
+silently using stale Nemo after a known newer download fails.
+The rootfs PKGBUILD includes md4c, poppler-glib, mupdf-tools, bubblewrap,
+libarchive, sqlite and libisofs, in addition to GTK/GStreamer dependencies;
+pacman and the offline ISO dependency resolver deliver them with the app.
+
+Nemo and Grafium compare the actual installed pacman version and file presence,
+not only the updater's cached tag. Missing same-version packages/files retry;
+newer installed packages are never silently downgraded. A newer broken install
+reports that its own version needs repair. Grafium builds run as the resolved
+desktop invoker with an explicit HOME and XDG config/cache paths; root handles
+dependency installation and the final `pacman -U`, never `makepkg`.
+
+Local Grafium wrappers, desktop entries and pins can deliberately select an
+independent build instead of `/usr/bin/grafium`. They are preserved and reported
+as incomplete launcher delivery, including when the package is already current.
+Choose either to retain/update that local build separately, or explicitly back
+up and repoint the wrappers, desktop entries and pins to the package executable.
+No note data or custom Grafium launchers are deleted automatically.
+
+Native GUI replacement is atomic for the smpl-apps suite. Neither OS app sync
+nor the native Nemo/Grafium update closes user windows to force adoption.
+Reopen affected apps once when ready, and log out/in for resident background
+daemons. Independent app components continue after a failure, but the updated
+app updater and full-update wrapper return an incomplete status, with no
+version stamp for a failed install. An already-running *old* outer update
+wrapper may still print its old final banner; use its component errors and
+retry with the refreshed wrapper rather than treating that banner as proof.
+
+The OS updater installs refreshed scripts/libraries and re-executes its new
+code before native sync. Boolean resume state carries the source-change flag,
+and resumed or theme-only repairs still reapply the current theme as the user.
+The normal app phase then resolves the newly installed `smplos-update-apps`.
+`rebuild-app-cache` already serializes writers on `.app-cache.lock`, uses a
+unique adjacent temporary file and atomically publishes `app_index`; no
+second cache writer or migration is needed. A legacy `.tmp` race indicates
+an older installed cache script, which the OS script-sync phase replaces.
 
 **Scope/limitations:** regular native backgrounds use the new key; popup apps,
 EWW/Rofi and terminals retain their existing controls. Matrix, Amber and

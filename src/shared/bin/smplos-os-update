@@ -94,6 +94,10 @@ CHECK_ONLY=0; QUIET=0; SCRIPTS_ONLY=0; MIGRATE_ONLY=0
 # Internal flag: set by self-reexec to prevent infinite loops if the newly
 # installed script somehow still detects itself as outdated.
 SELF_UPDATED="${SMPLOS_OS_UPDATE_RESUMED:-0}"
+case "$SELF_UPDATED:${SMPLOS_OS_HAD_UPDATES:-0}" in
+    0:0|0:1|1:0|1:1) ;;
+    *) echo "ERROR: invalid updater resume flags" >&2; exit 1 ;;
+esac
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --check)     CHECK_ONLY=1 ;;
@@ -432,6 +436,7 @@ sync_themes() {
 
     if [[ $n_updated -gt 0 ]]; then
         ok "$n_updated of $n_total themes updated"
+        THEMES_CHANGED=1
     else
         ok "All $n_total themes are current"
     fi
@@ -445,15 +450,12 @@ sync_apps() {
     header ""
     header "── Updating smpl-os apps ──"
 
+    source "$SMPLOS_REPO/src/shared/lib/smplos-app-bundle.sh"
     bash "$fetch_script"
 
     local stage="$SMPLOS_REPO/.cache/org-binaries"
     local n_bin=0
-    # Names of binaries we just updated. Reused in post_deploy to restart any
-    # running instances so users don't keep seeing the OLD binary that was
-    # already resident in memory when the update ran. Without this, every
-    # update would leave the user "not seeing the fix" until the next reboot
-    # or manual pkill — a chronic support issue.
+    # Report which applications need reopening without closing user work.
     UPDATED_APP_BINS=()
 
     # Executables → /usr/local/bin/
@@ -464,11 +466,11 @@ sync_apps() {
             name="$(basename "$src")"
             dest="/usr/local/bin/$name"
             if [[ ! -f "$dest" ]] || ! cmp -s "$src" "$dest"; then
-                if sudo install -m755 "$src" "$dest" 2>/dev/null; then
+                if smplos_install_app_binary "$src" "$dest"; then
                     ((n_bin++)) || true
                     UPDATED_APP_BINS+=("$name")
                 else
-                    warn "Failed to install $name"
+                    die "Failed to install $name; retry Update OS"
                 fi
             fi
 
@@ -529,8 +531,7 @@ sync_apps() {
 
     if [[ $n_bin -gt 0 ]]; then
         ok "$n_bin app binary/binaries updated"
-        # Signal post_deploy so it runs restart_updated_apps even when git
-        # pull was a no-op (org repos update independently from smplos).
+        # App releases move independently of OS commits.
         APPS_CHANGED=1
     else
         ok "smpl-os apps already current"
@@ -851,10 +852,10 @@ post_deploy() {
         as_invoker theme-set "$current_theme" || warn "theme-set failed"
     fi
 
-    # Restart updated app binaries BEFORE reloading Hyprland — if any restarted
-    # app also had a windowrule change, the reload below picks that up too and
-    # the app's next spawn gets the fresh rules from the start.
-    restart_updated_apps
+    if [[ ${#UPDATED_APP_BINS[@]} -gt 0 ]]; then
+        warn "Updated binaries: ${UPDATED_APP_BINS[*]}"
+        warn "Close and reopen affected apps to use the new code. Log out/in for background daemons; running apps were not stopped."
+    fi
 
     if hyprctl version &>/dev/null 2>&1; then
         log "Reloading Hyprland config..."
@@ -880,11 +881,12 @@ if [[ $MIGRATE_ONLY -eq 1 ]]; then
     exit 0
 fi
 
-had_updates=0
+had_updates="${SMPLOS_OS_HAD_UPDATES:-0}"
 HYPR_CONFIGS_CHANGED=0
+THEMES_CHANGED=0
 APPS_CHANGED=0
 # Populated by sync_apps with the basename of every binary it just replaced,
-# consumed by restart_updated_apps in post_deploy. Declared here so nounset
+# reported by post_deploy. Declared here so nounset
 # doesn't trip when sync_apps is skipped (e.g. --scripts) or is a no-op.
 UPDATED_APP_BINS=()
 if pull_updates; then
@@ -931,6 +933,7 @@ if [[ $SCRIPTS_ONLY -eq 0 ]]; then
         reexec_args=()
         [[ $QUIET -eq 1 ]] && reexec_args+=(--quiet)
         export SMPLOS_OS_UPDATE_RESUMED=1
+        export SMPLOS_OS_HAD_UPDATES="$had_updates"
         exec "$SELF_CANONICAL" "${reexec_args[@]}"
     fi
 
@@ -956,9 +959,9 @@ if [[ $SCRIPTS_ONLY -eq 0 ]]; then
     # previous run interrupted before reload). Without this, users would need
     # to manually `hyprctl reload` after certain updates — and we've promised
     # them the process is self-contained.
-    # Also runs on APPS_CHANGED so restart_updated_apps fires even when only
+    # Also runs on APPS_CHANGED so the reopen notice appears even when only
     # an org-repo binary changed (no smplos commits, no config diff).
-    if [[ $had_updates -eq 1 || $HYPR_CONFIGS_CHANGED -eq 1 || $APPS_CHANGED -eq 1 ]]; then
+    if [[ $had_updates -eq 1 || $SELF_UPDATED -eq 1 || $THEMES_CHANGED -eq 1 || $HYPR_CONFIGS_CHANGED -eq 1 || $APPS_CHANGED -eq 1 ]]; then
         header ""
         header "── Post-deploy ──"
         post_deploy

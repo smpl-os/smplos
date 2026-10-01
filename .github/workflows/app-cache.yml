@@ -7,6 +7,9 @@ on:
       - 'src/shared/bin/rebuild-app-cache'
       - 'src/shared/bin/smplos-*update*'
       - 'src/shared/lib/smplos-app-bundle.sh'
+      - 'src/shared/lib/smplos-release-package.sh'
+      - 'src/shared/pkgbuilds/nemo-smpl/PKGBUILD'
+      - 'src/shared/pkgbuilds/grafium-bin/PKGBUILD'
       - 'src/shared/configs/systemd/user/smplos-app-cache.*'
       - 'src/shared/installer/install.sh'
       - 'src/fetch-apps.sh'
@@ -20,6 +23,9 @@ on:
       - 'src/shared/bin/rebuild-app-cache'
       - 'src/shared/bin/smplos-*update*'
       - 'src/shared/lib/smplos-app-bundle.sh'
+      - 'src/shared/lib/smplos-release-package.sh'
+      - 'src/shared/pkgbuilds/nemo-smpl/PKGBUILD'
+      - 'src/shared/pkgbuilds/grafium-bin/PKGBUILD'
       - 'src/shared/configs/systemd/user/smplos-app-cache.*'
       - 'src/shared/installer/install.sh'
       - 'src/fetch-apps.sh'
@@ -43,6 +49,8 @@ jobs:
           bash -n src/shared/bin/smplos-os-update
           bash -n src/shared/bin/smplos-update-apps
           bash -n src/shared/lib/smplos-app-bundle.sh
+          bash -n src/shared/lib/smplos-release-package.sh
+          bash -n src/shared/bin/smplos-update
           bash -n src/fetch-apps.sh
           bash -n src/fetch-org.sh
           bash -n src/build-iso.sh

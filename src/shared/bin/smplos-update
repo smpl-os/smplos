@@ -118,6 +118,8 @@ PREAMBLE
 
 # Append the body (single-quoted: no substitution; uses UPDATE_MODE set above)
 cat >> "$UPDATE_SCRIPT" << 'EOF'
+set -o pipefail
+UPDATE_FAILED=0
 
 # pkexec sanitizes PATH to a hardcoded minimal set that does NOT include
 # /usr/local/bin — but every smplOS management script (smplos-os-update,
@@ -358,8 +360,9 @@ if [[ "$UPDATE_MODE" != "full" ]]; then
     echo "  Skipped: mode=$UPDATE_MODE (only runs in --mode full)"
 elif ! command -v smplos-os-update &>/dev/null; then
     echo "  WARNING: smplos-os-update not found in PATH (\$PATH=$PATH)"
+    UPDATE_FAILED=1
 else
-    smplos-os-update 2>&1 || echo "  WARNING: smplos-os-update failed (exit $?)"
+    smplos-os-update 2>&1 || { echo "  WARNING: smplos-os-update failed (exit $?)"; UPDATE_FAILED=1; }
     # Reload the critical-packages list AFTER smplos-os-update has git-pulled
     # the repo. Otherwise the ignore list handed to pacman -Syu below is the
     # STALE one from before the pull — meaning a policy change (e.g. removing
@@ -395,14 +398,16 @@ echo
 echo "── smplOS Apps ──"
 if [[ "$NETWORK_OK" -eq 0 ]]; then
     echo "  Skipped: no internet connection"
+    UPDATE_FAILED=1
 elif ! command -v smplos-update-apps &>/dev/null; then
     echo "  WARNING: smplos-update-apps not found in PATH (\$PATH=$PATH)"
+    UPDATE_FAILED=1
 else
     # Signal to smplos-update-apps that sudo credentials are already primed
     # (we're root via pkexec) so it doesn't try `sudo -v` against a pkexec
     # environment where cached credentials may not carry over.
     SMPLOS_SUDO_READY=1 smplos-update-apps 2>&1 \
-        || echo "  WARNING: smplos-update-apps failed (exit $?)"
+        || { echo "  WARNING: smplos-update-apps failed (exit $?)"; UPDATE_FAILED=1; }
 fi
 echo
 
@@ -498,7 +503,11 @@ fi
 echo
 
 echo "══════════════════════════════════════"
-echo "  Update complete!"
+if [[ "$UPDATE_FAILED" -eq 0 ]]; then
+    echo "  Update complete!"
+else
+    echo "  Update incomplete: see errors above, resolve them, then retry Update OS."
+fi
 echo "  Log: $LOG_FILE"
 echo "══════════════════════════════════════"
 echo
@@ -513,6 +522,7 @@ if [[ -f "$STATE_DIR/reboot-pending" ]] && command -v smplos-reboot-notify &>/de
     ( sleep 1; smplos-reboot-notify ) &
     disown
 fi
+[[ "$UPDATE_FAILED" -eq 0 ]]
 } 2>&1 | tee -a "$LOG_FILE"
 EOF
 chmod +x "$UPDATE_SCRIPT"

@@ -105,16 +105,6 @@ src/shared/          ← Everything here works on ALL compositors
   eww/               ← EWW bar, launcher, theme picker, keybind help (GTK3, works on X11 + Wayland)
   configs/smplos/    ← Cross-compositor configs (bindings.conf = single source of truth)
   themes/            ← 17 themes with templates for all apps
-  apps/              ← git submodule → github.com/smpl-os/smpl-apps
-    Cargo.toml       ← workspace root (shared deps, renderer-femtovg)
-    smpl-common/     ← shared init library for all apps
-    start-menu/      ← app crates (use workspace deps via smpl-common)
-    notif-center/
-    settings/
-    app-center/
-    webapp-center/
-    sync-center/
-    calendar/
   installer/         ← OS installer
 
 src/compositors/hyprland/   ← ONLY Hyprland-specific config
@@ -402,11 +392,12 @@ look with NO error message.**
 
 #### Source of Truth: smpl-apps Workspace
 
-`src/shared/apps/` is a **git submodule** pointing to the
-[smpl-apps](https://github.com/smpl-os/smpl-apps) repo. It contains:
+Native source lives in the independent
+[smpl-apps](https://github.com/smpl-os/smpl-apps) repo. This OS checkout has no
+tracked `src/shared/apps/` submodule. The external workspace contains:
 
 ```
-src/shared/apps/   ← git submodule (smpl-os/smpl-apps)
+smpl-apps/         ← independent repository
   Cargo.toml          ← workspace root (version, shared deps)
   Cargo.lock
   smpl-common/        ← shared init library (transparency + Wayland setup)
@@ -427,21 +418,19 @@ inline this init code or have its own Backend::builder() calls.**
 ⚠️ **STOP — Read this if you need to change app code:**
 
 **RULE 1: ALL changes go in the smpl-apps repo.**
-`src/shared/apps/` is a read-only submodule. NEVER commit app code changes
-directly in smplos — they belong in the smpl-apps repo. After pushing to
-smpl-apps, update the submodule pointer:
-```bash
-cd smplos && git submodule update --remote src/shared/apps && git add src/shared/apps && git commit -m "chore: update smpl-apps submodule"
-```
+NEVER commit app code changes directly in smplos. Publish a complete native
+binary release from smpl-apps after its source is reachable; there is no OS
+submodule pointer to update. The shared bundle validator requires all 11 native
+binaries, including smpl-hints and smpl-hintsd, before marking a release cached.
 
 **RULE 2: NEVER create standalone Cargo.toml files for individual apps.**
 Apps use `workspace = true` for all shared dependencies. The workspace
 `Cargo.toml` declares `renderer-femtovg` once; individual apps inherit it.
 
 **RULE 3: build-iso.sh downloads pre-built binaries by default.**
-The default build path downloads release binaries from GitHub. Only when
-`--build-apps` is passed does it compile from the submodule source.
-`build-apps.sh` runs `cargo build --release --workspace` inside a container.
+Both the default build path and `--build-apps` download native smpl-apps release
+binaries from GitHub (`build-apps.sh` invokes `fetch-apps.sh`). Neither builds
+unpublished Rust changes from a local subtree.
 
 ```toml
 # ✅ CORRECT — in workspace Cargo.toml (ONE place, inherited by all apps):
@@ -514,7 +503,7 @@ slint::platform::set_platform(Box::new(backend))
 - NEVER set `with_decorations(true)` or omit the decorations call
 - NEVER hardcode an opaque `#rrggbb` background on a `.slint` Window (use theme alpha)
 - NEVER create standalone per-app Cargo.toml files with their own slint dependency
-- NEVER commit app code changes directly in smplos — edit smpl-apps, then update submodule
+- NEVER commit app code changes directly in smplos — edit smpl-apps, then publish its native release
 - NEVER inline Backend::builder() in individual apps — use `smpl_common::init()`
 
 ### Packages

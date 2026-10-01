@@ -30,6 +30,7 @@ for _lib in "$SMPLOS_PATH/repo/src/shared/lib/smplos-app-bundle.sh" \
             /usr/local/lib/smplos/smplos-app-bundle.sh; do
     if [[ -r "$_lib" ]]; then
         source "$_lib"
+        source "$(dirname "$_lib")/smplos-release-package.sh"
         break
     fi
 done
@@ -95,11 +96,11 @@ update_smpl_apps() {
 
     if ! _gh_api "https://api.github.com/repos/smpl-os/smpl-apps/releases/latest"; then
         warn "smpl-apps: GitHub unreachable"
-        return
+        return 1
     fi
 
     remote_ver=$(echo "$_gh_json" | grep -oP '"tag_name"\s*:\s*"\K[^"]+' || true)
-    [[ -z "$remote_ver" ]] && { warn "smpl-apps: could not parse version"; return; }
+    [[ -z "$remote_ver" ]] && { warn "smpl-apps: could not parse version"; return 1; }
 
     if [[ -n "$cached_ver" ]] && ! _version_gt "$remote_ver" "$cached_ver" \
         && smplos_app_bundle_valid /usr/local/bin; then
@@ -119,7 +120,7 @@ update_smpl_apps() {
 
     if [[ -z "$tarball_url" ]]; then
         warn "smpl-apps: no tarball asset in release $remote_ver"
-        return
+        return 1
     fi
 
     log "smpl-apps: updating ${cached_ver:-none} -> $remote_ver"
@@ -133,24 +134,12 @@ update_smpl_apps() {
         return 1
     fi
 
-    # Install each binary to /usr/local/bin/ and restart running ones
-    local restarted=()
+    # Atomic rename preserves already-running mappings; never kill user work.
     for app in "${SMPLOS_APP_BINS[@]}"; do
         local src="$tmpdir/$app"
         [[ -f "$src" ]] || continue
 
-        # Check if this app is currently running
-        local was_running=0
-        if pgrep -x "$app" &>/dev/null; then
-            was_running=1
-            # Kill gracefully so the new binary can take over
-            pkill -x "$app" 2>/dev/null
-            sleep 0.3
-            # Force-kill if still alive
-            pkill -9 -x "$app" 2>/dev/null || true
-        fi
-
-        sudo install -m755 "$src" "/usr/local/bin/$app"
+        smplos_install_app_binary "$src" "/usr/local/bin/$app" || return 1
 
         # ── Shadow scrub (single-copy invariant) ─────────────────────────
         # Previously this script also `install -m755` d the binary into
@@ -178,19 +167,6 @@ update_smpl_apps() {
             rm -f "$shadow" 2>/dev/null || true
         done
 
-        # Restart GUI apps that were running (not daemons — those restart via systemd/autostart)
-        if [[ $was_running -eq 1 ]]; then
-            case "$app" in
-                sync-center-daemon|smpl-calendar-alertd)
-                    # Daemon — let systemd or autostart handle restart
-                    ;;
-                *)
-                    nohup "/usr/local/bin/$app" &>/dev/null &
-                    disown
-                    restarted+=("$app")
-                    ;;
-            esac
-        fi
     done
 
     # XR glasses module — same story as apps above: canonical install goes to
@@ -199,7 +175,7 @@ update_smpl_apps() {
     local xr_installed=0 xrbin
     for xrbin in xr-workspace xrctl xr-game xr-glasses-hotplugd; do
         [[ -f "$tmpdir/$xrbin" ]] || continue
-        sudo install -m755 "$tmpdir/$xrbin" "/usr/local/bin/$xrbin"
+        smplos_install_app_binary "$tmpdir/$xrbin" "/usr/local/bin/$xrbin" || return 1
         for shadow in \
             "$HOME/.local/share/smplos/bin/$xrbin" \
             "$HOME/.local/bin/$xrbin" \
@@ -228,7 +204,7 @@ update_smpl_apps() {
 
     echo "$remote_ver" > "$STATE_DIR/smpl-apps"
     ok "smpl-apps: updated to $remote_ver"
-    [[ ${#restarted[@]} -gt 0 ]] && log "Restarted: ${restarted[*]}"
+    log "Close and reopen apps for the new code; log out/in for background daemons. Running native apps were not stopped."
     ((n_updated++)) || true
 }
 
@@ -319,15 +295,17 @@ update_nemo_smpl() {
 
     if ! _gh_api "https://api.github.com/repos/smpl-os/nemo-smpl/releases/latest"; then
         warn "nemo-smpl: GitHub unreachable"
-        return
+        return 1
     fi
 
     remote_ver=$(echo "$_gh_json" | grep -oP '"tag_name"\s*:\s*"\K[^"]+' || true)
-    [[ -z "$remote_ver" ]] && { warn "nemo-smpl: could not parse version"; return; }
+    [[ -z "$remote_ver" ]] && { warn "nemo-smpl: could not parse version"; return 1; }
 
-    if [[ -n "$cached_ver" ]] && ! _version_gt "$remote_ver" "$cached_ver"; then
-        ok "nemo-smpl: up to date ($cached_ver)"
-        return
+    if smplos_package_current nemo-smpl "$remote_ver"; then
+        ok "nemo-smpl: installed package is current or newer than $remote_ver"
+        return 0
+    elif [[ $? -eq 2 ]]; then
+        return 1
     fi
 
     if [[ $CHECK_ONLY -eq 1 ]]; then
@@ -342,7 +320,7 @@ update_nemo_smpl() {
 
     if [[ -z "$pkg_url" ]]; then
         warn "nemo-smpl: no .pkg.tar.zst in release $remote_ver"
-        return
+        return 1
     fi
 
     log "nemo-smpl: updating ${cached_ver:-none} -> $remote_ver"
@@ -353,31 +331,28 @@ update_nemo_smpl() {
 
     if curl -fSL --connect-timeout 30 --retry 3 --progress-bar \
             "$pkg_url" -o "$tmpfile"; then
-        # If nemo is running, remember so we can restart it after install
-        local nemo_was_running=0
-        if pgrep -x nemo &>/dev/null; then
-            nemo_was_running=1
-        fi
+        smplos_verify_release_checksum "$tmpfile" "$pkg_url" "$_gh_json" || {
+            warn "nemo-smpl: checksum verification failed; retry the release download"
+            return 1
+        }
+        smplos_nemo_package_valid "$tmpfile" "$remote_ver" || {
+            warn "nemo-smpl: invalid release package; not installed or recorded"
+            return 1
+        }
 
         if sudo pacman -U --noconfirm "$tmpfile"; then
             echo "$remote_ver" > "$STATE_DIR/nemo-smpl"
             ok "nemo-smpl: updated to $remote_ver"
             ((n_updated++)) || true
 
-            # Restart nemo if it was running so it picks up the new binary
-            if [[ $nemo_was_running -eq 1 ]]; then
-                nemo --quit 2>/dev/null || pkill -x nemo 2>/dev/null || true
-                sleep 0.5
-                pkill -9 -x nemo 2>/dev/null || true
-                nohup nemo &>/dev/null &
-                disown
-                log "  nemo restarted"
-            fi
+            log "Close and reopen Nemo when file operations finish to load the new binary. No running windows were stopped."
         else
             warn "nemo-smpl: pacman -U failed"
+            return 1
         fi
     else
         warn "nemo-smpl: download failed"
+        return 1
     fi
 }
 
@@ -452,38 +427,80 @@ update_micro_smpl() {
 # repackages its upstream .deb release asset into a native pacman package
 # on-device via a PKGBUILD in the OS repo — pacman-tracked and upgradable, just
 # like an AUR "-bin" package. Provides the app-menu entry + icons natively.
+grafium_launchers_current() {
+    local path failed=0
+    for path in "$HOME/.local/bin/grafium" "$HOME/.local/bin/grafium-bin" \
+                "$HOME/.local/share/smplos/bin/grafium" "$HOME/bin/grafium"; do
+        [[ -e "$path" || -L "$path" ]] || continue
+        if [[ "$(readlink -f "$path")" != /usr/bin/grafium ]]; then
+            warn "grafium: preserved local launcher $path; package /usr/bin/grafium may not be launched"
+            failed=1
+        fi
+    done
+    for path in "$HOME/.local/share/applications/"{grafium,grafium-bin,Grafium}.desktop \
+                "$HOME/.config/smplos/pinned-apps.txt"; do
+        [[ -f "$path" ]] || continue
+        if grep -Eq '(\.local/(bin|lib)/grafium|/bin/grafium-bin)' "$path"; then
+            warn "grafium: preserved custom launch target in $path"
+            failed=1
+        fi
+    done
+    if [[ $failed -eq 1 ]]; then
+        warn "grafium: delivery incomplete for custom launchers. Choose to keep the local build and update it separately, or back up/repoint wrappers, desktop entries and pins to /usr/bin/grafium. No notes or launchers were removed."
+        return 1
+    fi
+}
+
+build_grafium_package() {
+    local builddir="$1" version="$2" uid entry user home
+    if [[ $EUID -eq 0 ]]; then
+        uid="${SMPLOS_INVOKER_UID:-${PKEXEC_UID:-${SUDO_UID:-}}}"
+        [[ "$uid" =~ ^[0-9]+$ && "$uid" != 0 ]] || {
+            warn "grafium: run Update OS as a desktop user; makepkg cannot run as root"
+            return 1
+        }
+        entry=$(getent passwd "$uid") || return 1
+        IFS=: read -r user _ _ _ _ home _ <<< "$entry"
+        chown -R "$uid" "$builddir" || return 1
+        runuser -u "$user" -- env HOME="$home" USER="$user" LOGNAME="$user" \
+            XDG_CONFIG_HOME="$home/.config" XDG_CACHE_HOME="$home/.cache" \
+            PKGVER_OVERRIDE="$version" \
+            bash -c 'cd "$1" && makepkg -c --noconfirm' bash "$builddir"
+    else
+        (cd "$builddir" && PKGVER_OVERRIDE="$version" makepkg -c --noconfirm)
+    fi
+}
+
 update_grafium() {
     local cached_ver remote_ver
     cached_ver=$(_cached_ver grafium)
 
     if ! _gh_api "https://api.github.com/repos/KonTy/grafium/releases/latest"; then
-        warn "grafium: GitHub unreachable"
-        return
+        warn "grafium: no reachable public release; package update incomplete (retry after publication)"
+        return 1
     fi
 
     remote_ver=$(echo "$_gh_json" | grep -oP '"tag_name"\s*:\s*"\K[^"]+' || true)
-    [[ -z "$remote_ver" ]] && { warn "grafium: could not parse version"; return; }
+    [[ -z "$remote_ver" ]] && { warn "grafium: could not parse version"; return 1; }
 
-    if [[ -n "$cached_ver" ]] && ! _version_gt "$remote_ver" "$cached_ver"; then
-        ok "grafium: up to date ($cached_ver)"
-        return
+    if smplos_package_current grafium-bin "$remote_ver"; then
+        ok "grafium: installed package is current or newer than $remote_ver"
+        grafium_launchers_current
+        return $?
+    elif [[ $? -eq 2 ]]; then
+        return 1
     fi
 
     if [[ $CHECK_ONLY -eq 1 ]]; then
         log "grafium: update available ${cached_ver:-none} -> $remote_ver"
-        return
+        return 0
     fi
 
     local pkgbuild_src="$SMPLOS_PATH/repo/src/shared/pkgbuilds/grafium-bin/PKGBUILD"
     if [[ ! -f "$pkgbuild_src" ]]; then
         warn "grafium: PKGBUILD not found ($pkgbuild_src)"
-        return
+        return 1
     fi
-    if ! command -v makepkg &>/dev/null; then
-        warn "grafium: makepkg unavailable (base-devel not installed)"
-        return
-    fi
-
     log "grafium: updating ${cached_ver:-none} -> $remote_ver"
 
     local builddir
@@ -492,42 +509,38 @@ update_grafium() {
     cp "$pkgbuild_src" "$builddir/PKGBUILD"
     # Lock the build to the release we just resolved (prepare() honours this,
     # avoiding a race if a new release lands mid-build). Strip leading 'v'.
-    local was_running=0
-    pgrep -x grafium &>/dev/null && was_running=1
-
-    # makepkg must run as the user (never root); its -i step uses the cached
-    # sudo credentials to pacman -U the freshly built package.
-    if ( cd "$builddir" && PKGVER_OVERRIDE="${remote_ver#v}" makepkg -sic --noconfirm ); then
+    # Resolve dependencies as root; only the unprivileged build reads user config.
+    sudo pacman -S --needed --noconfirm base-devel curl libarchive webkit2gtk-4.1 gtk3 || return 1
+    command -v makepkg &>/dev/null || { warn "grafium: makepkg still unavailable after installing base-devel"; return 1; }
+    local package="$builddir/grafium-bin-${remote_ver#v}-1-x86_64.pkg.tar.zst"
+    if build_grafium_package "$builddir" "${remote_ver#v}" &&
+        [[ -f "$package" ]] && sudo pacman -U --noconfirm "$package"; then
+        log "Close and reopen Grafium when ready; the updater does not stop an open notes window."
+        grafium_launchers_current || return 1
         echo "$remote_ver" > "$STATE_DIR/grafium"
         ok "grafium: updated to $remote_ver"
         ((n_updated++)) || true
 
-        if [[ $was_running -eq 1 ]]; then
-            pkill -x grafium 2>/dev/null || true
-            sleep 0.5
-            pkill -9 -x grafium 2>/dev/null || true
-            nohup grafium &>/dev/null &
-            disown
-            log "  grafium restarted"
-        fi
     else
         warn "grafium: build/install failed"
+        return 1
     fi
 }
 
 # ── Main ─────────────────────────────────────────────────────────────
 [[ $QUIET -eq 0 ]] && echo "── smplOS App Updates ──"
 
-update_smpl_apps
-update_st_smpl
-update_nemo_smpl
-update_micro_smpl
-update_grafium
+failed=0
+for component in update_smpl_apps update_st_smpl update_nemo_smpl update_micro_smpl update_grafium; do
+    # A separate shell retains errexit inside each component; independent apps
+    # still run after a failure, and no failed install gets a version stamp.
+    if ! bash -e -o pipefail -c "$(declare -f); $(declare -p STATE_DIR SMPLOS_PATH CHECK_ONLY QUIET SMPLOS_APP_BINS); n_updated=0; $component"; then
+        failed=1
+    fi
+done
 
 if [[ $CHECK_ONLY -eq 0 ]]; then
     rebuild-app-cache || { warn "App cache refresh failed"; exit 1; }
 fi
 
-if [[ $CHECK_ONLY -eq 0 && $n_updated -gt 0 ]]; then
-    ok "$n_updated app(s) updated"
-fi
+[[ $failed -eq 0 ]] || { warn "Some app updates are incomplete; resolve the errors above and retry."; exit 1; }
