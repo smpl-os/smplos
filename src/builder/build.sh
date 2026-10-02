@@ -918,6 +918,19 @@ install_prebuilt_apps() {
         fi
     done
 
+    local calendar_unit=smpl-calendar-alertd.service
+    local calendar_units="$airootfs/etc/skel/.config/systemd/user"
+    install -Dm644 "$bin_dir/$calendar_unit" "$calendar_units/$calendar_unit"
+    install -Dm644 "$bin_dir/$calendar_unit" \
+        "$airootfs/etc/skel/.local/state/smplos/calendar-service/last-installed.service"
+    mkdir -p "$calendar_units/default.target.wants"
+    ln -sfn "../$calendar_unit" "$calendar_units/default.target.wants/$calendar_unit"
+    install -Dm644 "$bin_dir/$calendar_unit" \
+        "$airootfs/root/smplos/config/systemd/user/$calendar_unit"
+    mkdir -p "$airootfs/root/smplos/config/systemd/user/default.target.wants"
+    ln -sfn "../$calendar_unit" \
+        "$airootfs/root/smplos/config/systemd/user/default.target.wants/$calendar_unit"
+
     # ── micro editor ──
     if [[ -f "$bin_dir/micro" ]]; then
         install -Dm755 "$bin_dir/micro" "$airootfs/usr/local/bin/micro"

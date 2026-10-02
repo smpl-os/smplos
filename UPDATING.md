@@ -194,6 +194,36 @@ archives or a standalone local build. A complete update therefore needs the
 published release to be available, network access and successful installation;
 do not report source publication alone as completed binary delivery.
 
+### Calendar release and ISO delivery
+
+The native release bundle must contain all 11 required app binaries **and**
+the root `smpl-calendar-alertd.service` file (mode `0644`). The unit is owned by
+smpl-apps and runs `/usr/local/bin/smpl-calendar-alertd --foreground` under the
+user's `default.target`. A bare daemon invocation is not a substitute for
+installing this service.
+
+Both normal `src/build-iso.sh` builds and `--build-apps` use the latest published
+smpl-apps release, not a local Rust checkout. The standard build compares its
+tag with `.cache/app-binaries/.smpl-apps-version`; `--build-apps` calls
+`fetch-apps.sh`. Both validate the complete bundle, retain the service, and
+repair incomplete matching-tag caches. A known newer but incomplete release
+fails the build rather than silently using stale binaries. Offline builds
+need a complete cache or manually extracted bundle in `build/prebuilt-apps/`.
+
+The ISO builder installs the binaries for the live system and installer
+payload, and the unit plus its login-enable symlink into both `/etc/skel`
+and the installer configuration payload. New users therefore receive calendar
+reminders without first opening the calendar. No font or weather-icon download
+is needed; those assets are embedded in the native calendar binary.
+
+Existing-system app updates also install the release's user unit, preserving
+custom units, masks and previously disabled/removed managed units. They do not
+start/restart reminder daemons, run a database migration, or stop open editors.
+Log out/in after updating to load the new daemon and its additive tracking
+migration. The targeted smpl-apps development deploy separately performs a
+verified database backup and exact-identity cleanup of legacy duplicate daemons;
+the normal OS updater deliberately leaves live processes alone.
+
 ---
 
 ## 3. Updating Themes

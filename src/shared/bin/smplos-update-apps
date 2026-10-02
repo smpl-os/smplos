@@ -103,7 +103,8 @@ update_smpl_apps() {
     [[ -z "$remote_ver" ]] && { warn "smpl-apps: could not parse version"; return 1; }
 
     if [[ -n "$cached_ver" ]] && ! _version_gt "$remote_ver" "$cached_ver" \
-        && smplos_app_bundle_valid /usr/local/bin; then
+        && smplos_app_binaries_valid /usr/local/bin \
+        && [[ -f "${XDG_STATE_HOME:-$HOME/.local/state}/smplos/calendar-service/last-installed.service" ]]; then
         ok "smpl-apps: up to date ($cached_ver)"
         return
     fi
@@ -168,6 +169,8 @@ update_smpl_apps() {
         done
 
     done
+
+    smplos_install_calendar_service "$tmpdir/smpl-calendar-alertd.service" || return 1
 
     # XR glasses module — same story as apps above: canonical install goes to
     # /usr/local/bin only, then scrub the shadow dirs so PATH lookup can't

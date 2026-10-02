@@ -110,7 +110,7 @@ Options:
     --skip-appimage         Skip AppImages
     --clean-apps            Wipe app build cache before compiling (full rebuild)
     --download-apps         Download app binaries from GitHub releases (default)
-    --build-apps            Compile app binaries locally via build-apps.sh
+    --build-apps            Fetch native app releases via build-apps.sh
     --publish-plugins       After a successful build, upload the ABI-matched
                             compositor plugin(s) to their GitHub release so the
                             fleet installs them on the next update (needs gh auth)
@@ -122,7 +122,7 @@ Examples:
     ./build-iso.sh --all                  # All editions
     ./build-iso.sh --all --skip-aur       # All editions, skip AUR
     ./build-iso.sh --release              # Max compression for release
-    ./build-iso.sh --build-apps           # Compile apps locally instead of downloading
+    ./build-iso.sh --build-apps           # Fetch native apps through build-apps.sh
 EOF
 }
 
@@ -736,6 +736,8 @@ download_prebuilt_apps() {
         for app in "${SMPLOS_APP_BINS[@]}"; do
             install -m755 "$fallback_dir/$app" "$cache_dir/$app"
         done
+        install -m644 "$fallback_dir/smpl-calendar-alertd.service" \
+            "$cache_dir/smpl-calendar-alertd.service"
         # A manually supplied bundle has no verified release tag.
         rm -f "$apps_ver_file"
         have_apps=true
@@ -743,7 +745,7 @@ download_prebuilt_apps() {
 
     if ! $have_apps; then
         die "No smpl-apps binaries available (GitHub unreachable + no cache + no fallback).
-Place binaries in build/prebuilt-apps/ or use --build-apps to compile locally."
+Place the complete release bundle in build/prebuilt-apps/ or retry online."
     fi
 
     # ── st-smpl (optional) ───────────────────────────────────────────────────
@@ -929,8 +931,13 @@ Place binaries in build/prebuilt-apps/ or use --build-apps to compile locally."
         log_warn "micro-smpl: no binary available (will fall back to upstream micro package)"
     fi
 
-    # Make all binaries executable
-    chmod +x "$cache_dir"/* 2>/dev/null || true
+    # Companion service/config files must not become executables.
+    local binary
+    for binary in "$cache_dir"/*; do
+        if smplos_app_is_elf "$binary"; then
+            chmod +x "$binary" || return 1
+        fi
+    done
 
     log_info "App binaries ready in $cache_dir:"
     ls -lh "$cache_dir"

@@ -18,6 +18,17 @@ APPS = (
     "sync-center-daemon", "sync-center-gui", "smpl-calendar", "smpl-calendar-alertd",
     "smpl-hints", "smpl-hintsd",
 )
+CALENDAR_SERVICE = "smpl-calendar-alertd.service"
+SERVICE_CONTENT = """[Unit]
+Description=smplOS Calendar reminders
+After=dbus.socket
+[Service]
+Type=exec
+ExecStart=/usr/local/bin/smpl-calendar-alertd --foreground
+Restart=on-failure
+[Install]
+WantedBy=default.target
+"""
 
 
 def function(path, name):
@@ -78,6 +89,8 @@ class AppDeliveryTests(unittest.TestCase):
             target = self.project / path
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / path, target)
+        self.library = self.project / "src/shared/lib/smplos-app-bundle.sh"
+        self.library.write_text(self.isolate_unit_paths(self.library.read_text()))
         self.env = {
             "HOME": str(self.home),
             "PATH": f"{self.bin}:/usr/bin:/bin",
@@ -86,6 +99,7 @@ class AppDeliveryTests(unittest.TestCase):
             "RELEASE_JSON": str(self.release),
             "ARCHIVE": str(self.archive),
             "REQUEST_LOG": str(self.requests),
+            "XDG_RUNTIME_DIR": str(self.base / "runtime"),
         }
         self.mock("curl", MOCK_CURL)
         self.mock("gh", "#!/bin/bash\nexit 1\n")
@@ -93,12 +107,19 @@ class AppDeliveryTests(unittest.TestCase):
         for name in ("sudo", "pkill", "pacman", "makepkg", "podman", "docker", "nohup"):
             self.mock(name, f'#!/bin/bash\necho "FORBIDDEN: {name}" >&2\nexit 99\n')
         self.mock("pgrep", "#!/bin/bash\nexit 1\n")
+        self.mock("systemctl", '#!/bin/bash\necho "FORBIDDEN: systemctl" >&2\nexit 99\n')
         self.publish()
 
     def mock(self, name, contents):
         path = self.bin / name
         path.write_text(contents)
         path.chmod(0o755)
+
+    def isolate_unit_paths(self, source):
+        for path in ("/etc/systemd/user", "/run/systemd/user",
+                     "/usr/local/lib/systemd/user", "/usr/lib/systemd/user"):
+            source = source.replace(path, str(self.base / "system-units") + path)
+        return source
 
     def publish(self, missing=None, corrupt=None, asset=True):
         url = "https://github.com/smpl-os/smpl-apps/releases/download/v0.8.23/smpl-apps-0.8.23-x86_64.tar.gz"
@@ -115,16 +136,26 @@ class AppDeliveryTests(unittest.TestCase):
                 info.size = len(data)
                 info.mode = 0o755
                 archive.addfile(info, io.BytesIO(data))
+            if missing != CALENDAR_SERVICE:
+                data = (b"ExecStart=smpl-calendar-alertd\n"
+                        if corrupt == CALENDAR_SERVICE else SERVICE_CONTENT.encode())
+                info = tarfile.TarInfo(CALENDAR_SERVICE)
+                info.size = len(data)
+                info.mode = 0o644
+                archive.addfile(info, io.BytesIO(data))
 
     def seed(self, directory, marker=None, version="v0.8.22"):
         directory.mkdir(parents=True, exist_ok=True)
         for app in APPS:
             (directory / app).write_bytes(b"\x7fELFold-" + app.encode())
+        (directory / CALENDAR_SERVICE).write_text(SERVICE_CONTENT)
         if marker:
             marker.parent.mkdir(parents=True, exist_ok=True)
             marker.write_text(version + "\n")
 
     def shell(self, script, **env):
+        script = script.replace(f'source "{LIB}"', f'source "{self.library}"')
+        script = self.isolate_unit_paths(script)
         result = subprocess.run(
             ["bash", "-euo", "pipefail", "-c", script],
             env={**self.env, **env}, text=True, capture_output=True, timeout=15,
@@ -154,10 +185,16 @@ download_prebuilt_apps
             self.assertEqual((directory / app).read_bytes(), b"\x7fELFnew-" + app.encode())
             self.assertTrue(os.access(directory / app, os.X_OK))
 
+    def assert_service(self, directory):
+        service = directory / CALENDAR_SERVICE
+        self.assertEqual(service.read_text(), SERVICE_CONTENT)
+        self.assertEqual(service.stat().st_mode & 0o777, 0o644)
+
     def test_fetch_apps_and_iso_share_one_marker_and_skip_current_download(self):
         result = self.run_fetcher("fetch-apps.sh")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assert_new_bundle(self.cache)
+        self.assert_service(self.cache)
         self.assertEqual((self.cache / ".smpl-apps-version").read_text(), "v0.8.23\n")
         self.assertFalse((self.cache / "smpl-apps.fetched-version").exists())
         result = self.iso_download()
@@ -185,6 +222,32 @@ download_prebuilt_apps
         result = self.run_fetcher("fetch-apps.sh")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assert_new_bundle(self.cache)
+
+    def test_missing_service_repairs_matching_cached_tag_in_all_fetchers(self):
+        for fetcher, directory, marker in (
+            ("fetch-apps.sh", self.cache, self.cache / ".smpl-apps-version"),
+            ("fetch-org.sh", self.project / ".cache/org-binaries/bin",
+             self.project / ".cache/org-binaries/.versions/smpl-apps"),
+        ):
+            with self.subTest(fetcher=fetcher):
+                self.seed(directory, marker, "v0.8.23")
+                (directory / CALENDAR_SERVICE).unlink()
+                result = self.run_fetcher(fetcher)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assert_service(directory)
+
+    def test_missing_or_incompatible_service_rejects_release_before_staging(self):
+        marker = self.cache / ".smpl-apps-version"
+        self.seed(self.cache, marker)
+        for problem in ("missing", "corrupt"):
+            with self.subTest(problem=problem):
+                self.publish(**{problem: CALENDAR_SERVICE})
+                result = self.run_fetcher("fetch-apps.sh")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("calendar reminder service", result.stderr)
+                self.assertEqual(marker.read_text(), "v0.8.22\n")
+                self.assertEqual((self.cache / "smpl-calendar").read_bytes(),
+                                 b"\x7fELFold-smpl-calendar")
 
     def test_old_nine_binary_cache_cannot_skip_new_hints_at_matching_tag(self):
         for fetcher, directory, marker in (
@@ -266,6 +329,7 @@ download_prebuilt_apps
         self.assertFalse(marker.exists())
         for app in APPS:
             self.assertEqual((self.cache / app).read_bytes(), (fallback / app).read_bytes())
+        self.assert_service(self.cache)
 
     def test_app_updater_validates_before_install_or_version_write(self):
         path = ROOT / "src/shared/bin/smplos-update-apps"
@@ -324,10 +388,12 @@ update_smpl_apps
         self.assertEqual((state / "smpl-apps").read_text(), "v0.8.22\n")
         for app in APPS:
             self.assertEqual((installed / app).read_bytes(), b"\x7fELFold-" + app.encode())
-        self.assertEqual(sorted(path.name for path in installed.iterdir()), sorted(APPS))
+        self.assertEqual(sorted(path.name for path in installed.iterdir()),
+                         sorted((*APPS, CALENDAR_SERVICE)))
         result = self.shell(script)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assert_new_bundle(installed)
+        self.assert_service(self.home / ".config/systemd/user")
         self.assertEqual((state / "smpl-apps").read_text(), "v0.8.23\n")
         self.assertEqual(pins.read_text(), '"grafium"\ncustom --command\n')
         result = self.shell(script)
@@ -354,6 +420,122 @@ install_prebuilt_apps
             for target in ("usr/local/bin", "root/smplos/bin"):
                 self.assertEqual((profile / "airootfs" / target / app).read_bytes(),
                                  (binaries / app).read_bytes())
+        for target in ("etc/skel/.config/systemd/user", "root/smplos/config/systemd/user"):
+            units = profile / "airootfs" / target
+            self.assert_service(units)
+            link = units / "default.target.wants" / CALENDAR_SERVICE
+            self.assertTrue(link.is_symlink())
+            self.assertEqual(link.readlink(), Path("..") / CALENDAR_SERVICE)
+            self.assertEqual(link.read_text(), SERVICE_CONTENT)
+
+    def install_service(self):
+        source = self.base / CALENDAR_SERVICE
+        source.write_text(SERVICE_CONTENT)
+        return self.shell(f'source "{LIB}"\nsmplos_install_calendar_service "{source}"')
+
+    def test_service_first_install_enables_login_without_live_operations(self):
+        result = self.install_service()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        units = self.home / ".config/systemd/user"
+        self.assert_service(units)
+        self.assertTrue((units / "default.target.wants" / CALENDAR_SERVICE).is_symlink())
+        self.assertFalse((self.home / ".local/share/smplos/calendar/events.db").exists())
+
+    def test_service_reinstall_preserves_disabled_and_removed_choices(self):
+        self.assertEqual(self.install_service().returncode, 0)
+        units = self.home / ".config/systemd/user"
+        link = units / "default.target.wants" / CALENDAR_SERVICE
+        link.unlink()
+        self.assertEqual(self.install_service().returncode, 0)
+        self.assertFalse(link.exists())
+        (units / CALENDAR_SERVICE).unlink()
+        result = self.install_service()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("preserving removed", result.stderr)
+        self.assertFalse((units / CALENDAR_SERVICE).exists())
+
+    def test_service_preserves_custom_units_and_masks(self):
+        units = self.home / ".config/systemd/user"
+        units.mkdir(parents=True)
+        target = units / CALENDAR_SERVICE
+        target.write_text("custom service\n")
+        result = self.install_service()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(target.read_text(), "custom service\n")
+        target.unlink()
+        target.symlink_to("/dev/null")
+        result = self.install_service()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(target.readlink(), Path("/dev/null"))
+        self.assertFalse((units / "default.target.wants" / CALENDAR_SERVICE).exists())
+
+    def test_service_does_not_override_runtime_mask(self):
+        runtime = self.base / "runtime/systemd/user"
+        runtime.mkdir(parents=True)
+        (runtime / CALENDAR_SERVICE).symlink_to("/dev/null")
+        result = self.install_service()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("preserving existing", result.stderr)
+        self.assertFalse((self.home / ".config/systemd/user" / CALENDAR_SERVICE).exists())
+
+    def test_service_does_not_override_system_wide_unit(self):
+        units = self.base / "system-units/usr/local/lib/systemd/user"
+        units.mkdir(parents=True)
+        (units / CALENDAR_SERVICE).write_text("custom system-wide unit\n")
+        result = self.install_service()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("preserving existing", result.stderr)
+        self.assertFalse((self.home / ".config/systemd/user" / CALENDAR_SERVICE).exists())
+
+    def test_service_updates_owned_unit_but_keeps_enabled_state(self):
+        self.assertEqual(self.install_service().returncode, 0)
+        units = self.home / ".config/systemd/user"
+        old = SERVICE_CONTENT.replace("Restart=on-failure", "Restart=always")
+        (units / CALENDAR_SERVICE).write_text(old)
+        (self.home / ".local/state/smplos/calendar-service/last-installed.service").write_text(old)
+        result = self.install_service()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assert_service(units)
+
+    def test_elevated_service_install_passes_private_source_to_desktop_user(self):
+        source = self.base / CALENDAR_SERVICE
+        source.write_text(SERVICE_CONTENT)
+        source.chmod(0o600)
+        self.mock("getent", '#!/bin/bash\nprintf "desktop:x:1001:1001::%s:/bin/bash\\n" "$HOME"\n')
+        self.mock("runuser", '''#!/bin/bash
+[[ "$1 $2 $3" == "-u desktop --" ]] || exit 99
+shift 3
+export SIMULATE_ROOT=0
+exec "$@"
+''')
+        helpers = LIB.read_text().replace(
+            'if [[ $EUID -eq 0 ]]; then', 'if [[ "${SIMULATE_ROOT:-0}" == 1 ]]; then')
+        result = self.shell(helpers + f'\nsmplos_install_calendar_service "{source}"',
+                            SIMULATE_ROOT="1", SMPLOS_INVOKER_UID="1001")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assert_service(self.home / ".config/systemd/user")
+
+    def test_org_updater_never_installs_service_as_an_executable(self):
+        stage = self.project / ".cache/org-binaries/bin"
+        self.seed(stage)
+        (self.project / "src/fetch-org.sh").write_text("#!/bin/bash\nexit 0\n")
+        library = self.project / "src/shared/lib/smplos-app-bundle.sh"
+        with library.open("a") as output:
+            output.write('''\nsmplos_install_app_binary() {
+    echo "$2" >> "$HOME/binary-installs"
+}
+''')
+        script = function(ROOT / "src/shared/bin/smplos-os-update", "sync_apps")
+        script += '''
+SMPLOS_REPO="$PROJECT_ROOT"
+header() { :; }; ok() { :; }; warn() { echo "$*" >&2; }
+die() { echo "$*" >&2; exit 1; }
+sync_apps
+'''
+        result = self.shell(script)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn(CALENDAR_SERVICE, (self.home / "binary-installs").read_text())
+        self.assert_service(self.home / ".config/systemd/user")
 
     def test_update_mains_refresh_even_without_new_binaries_and_report_failure(self):
         for name in ("smplos-os-update", "smplos-update-apps"):

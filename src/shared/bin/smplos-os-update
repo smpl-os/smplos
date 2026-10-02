@@ -464,6 +464,7 @@ sync_apps() {
         for src in "$stage"/bin/*; do
             [[ -f "$src" ]] || continue
             name="$(basename "$src")"
+            [[ "$name" != smpl-calendar-alertd.service ]] || continue
             dest="/usr/local/bin/$name"
             if [[ ! -f "$dest" ]] || ! cmp -s "$src" "$dest"; then
                 if smplos_install_app_binary "$src" "$dest"; then
@@ -519,6 +520,10 @@ sync_apps() {
                 fi
             done
         done
+        if [[ -f "$stage/bin/smpl-calendar-alertd.service" ]]; then
+            smplos_install_calendar_service "$stage/bin/smpl-calendar-alertd.service" \
+                || die "Failed to install calendar reminder service; retry Update OS"
+        fi
     fi
 
     # NOTE: compositor plugins (*.so) are intentionally NOT installed here.
