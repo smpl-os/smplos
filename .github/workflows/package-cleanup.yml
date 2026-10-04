@@ -1,0 +1,31 @@
+name: Package cleanup migrations
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/package-cleanup.yml"
+      - "migrations/**"
+      - "tests/test_dropped_packages.py"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/package-cleanup.yml"
+      - "migrations/**"
+      - "tests/test_dropped_packages.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package-cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check migration shell syntax
+        run: for f in migrations/*.sh; do bash -n "$f"; done
+      - name: Check cleanups remove only packages nothing needs
+        run: python3 -m unittest discover -s tests -p 'test_dropped_packages.py' -v

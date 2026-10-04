@@ -137,7 +137,13 @@ BUNDLE_ID=$(printf '%s' "$_bundle_meta" | sed -n '1p')
 BUNDLE_PACKAGES=$(printf '%s' "$_bundle_meta" | sed -n '2p')
 
 _bundle_ok=1
-if [[ -z "$BUNDLE_ID" ]] || [[ -z "$BUNDLE_PACKAGES" ]]; then
+if [[ $_syu_ok -eq 0 ]]; then
+    # Arch builds the stack against the current system libraries (e.g. a newer
+    # libstdc++ symbol version that pacman does not track). Installing it on a
+    # partially updated system can leave Hyprland unable to start.
+    echo "  Skipping critical bundle: the system upgrade above did not complete"
+    _bundle_ok=0
+elif [[ -z "$BUNDLE_ID" ]] || [[ -z "$BUNDLE_PACKAGES" ]]; then
     echo "  ERROR: could not parse critical-bundle.conf — will retry on next update"
     _bundle_ok=0
 else
