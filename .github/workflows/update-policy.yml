@@ -1,0 +1,35 @@
+name: Critical stack policy
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/update-policy.yml"
+      - "src/shared/update-policy/**"
+      - "src/shared/bin/smplos-update"
+      - "tests/test_critical_bundle.py"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/update-policy.yml"
+      - "src/shared/update-policy/**"
+      - "src/shared/bin/smplos-update"
+      - "tests/test_critical_bundle.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  critical-stack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check shell syntax
+        run: |
+          bash -n src/shared/bin/smplos-update
+          bash -n src/shared/update-policy/critical-bundle.conf
+      - name: Check one-transaction upgrades and the Hyprland series rule
+        run: python3 -m unittest discover -s tests -p 'test_critical_bundle.py' -v

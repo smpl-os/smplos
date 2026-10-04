@@ -40,9 +40,10 @@ PACMAN = textwrap.dedent("""\
       -Qmq)  in_list "$INSTALLED" "$2" && ! in_list "$IN_REPO" "$2" && echo "$2" ;;
       -Qi)   echo "Name            : $2"; r=$(var REQ "$2"); echo "Required By     : ${r:-None}" ;;
       -Si)   in_list "$IN_REPO" "$2" || exit 1
-             echo "Name            : $2"; d=$(var DEPS "$2"); echo "Depends On      : ${d:-None}" ;;
+             echo "Name            : $2"; v=$(var VER "$2"); echo "Version         : ${v:-1-1}"
+             d=$(var DEPS "$2"); echo "Depends On      : ${d:-None}" ;;
       *)     echo "$*" >> "$CALLS"
-             [[ "$1" == -Syu && "${SYU_FAIL:-0}" == 1 ]] && exit 1
+             [[ ( "$1" == -Syu || "$1" == -Su ) && "${SYU_FAIL:-0}" == 1 ]] && exit 1
              exit 0 ;;
     esac
     """)
@@ -151,7 +152,8 @@ class CatchupMigrationTests(MigrationHarness):
         policy = self.root / "smplos/repo/src/shared/update-policy"
         policy.mkdir(parents=True)
         (policy / "critical-packages.txt").write_text("hyprland\nxdg-desktop-portal-hyprland\n")
-        (policy / "critical-bundle.conf").write_text('BUNDLE_ID="test-1"\nPACKAGES="linux-lts hyprland"\n')
+        (policy / "critical-bundle.conf").write_text(
+            'BUNDLE_ID="test-1"\nHYPRLAND_SERIES="0.56"\nPACKAGES="linux-lts hyprland"\n')
         self.env["SMPLOS_PATH"] = str(self.root / "smplos")
         self.applied = self.root / "home/.local/state/smplos/update/critical-bundle-applied"
 
@@ -160,6 +162,15 @@ class CatchupMigrationTests(MigrationHarness):
         self.assertEqual(result.returncode, 1, result.stdout)
         self.assertFalse([c for c in calls if c.startswith("-S --noconfirm --needed")])
         self.assertFalse(self.applied.exists())
+
+    def test_validated_series_upgrades_the_stack_in_the_same_transaction(self):
+        _, calls = self.run_migration(CATCHUP, IN_REPO="hyprland", VER_hyprland="0.56.2-4")
+        self.assertIn("-Su --noconfirm", calls)
+        self.assertFalse([c for c in calls if c.startswith("-Su") and "--ignore" in c])
+
+    def test_unvalidated_series_is_held(self):
+        _, calls = self.run_migration(CATCHUP, IN_REPO="hyprland", VER_hyprland="0.57.0-1")
+        self.assertIn("-Su --noconfirm --ignore hyprland,xdg-desktop-portal-hyprland", calls)
 
     def test_bundle_is_installed_after_a_successful_system_upgrade(self):
         result, calls = self.run_migration(CATCHUP)

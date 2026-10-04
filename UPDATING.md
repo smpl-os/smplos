@@ -620,34 +620,45 @@ python3 -m unittest discover -s tests -p 'test_app_*.py' -v
 
 ## 7. Hyprland/EWW Update Strategy
 
-Many users pin Hyprland/EWW in `IgnorePkg` inside `/etc/pacman.conf`.
-`smplos-update` handles this safely by:
+`smplos-update` upgrades the whole system, the Hyprland stack included, in
+**one** pacman transaction (`pacman -Sy`, then `pacman -Su`). Arch rebuilds
+Hyprland's libraries against new sonames in lockstep, so holding `hyprland`
+back while they move is a partial upgrade: it fails (`installing aquamarine
+(0.15.0-2) breaks dependency 'libaquamarine.so=12-64' required by hyprland`,
+which blocked every system update for a month), and installing the stack
+separately later can pair it with older system libraries than it was built
+against (current builds need `GLIBCXX_3.4.36`), so Hyprland cannot start.
 
-1. Running migrations first (`smplos-os-update`)
-2. Temporarily removing `hyprland`/`eww` from `IgnorePkg`
-3. Running a single `pacman -Syu` transaction
-4. Restoring the original `/etc/pacman.conf`
+`HYPRLAND_SERIES` in `src/shared/update-policy/critical-bundle.conf` is the
+validated series (for example `0.56`): patch releases of it arrive with the
+normal upgrade. While Arch ships a newer series, the packages in
+`critical-packages.txt` (`hyprland`, `xdg-desktop-portal-hyprland`) are held
+back; if other packages already require it, Update OS reports that system
+updates wait for smplOS to validate the series instead of installing a broken
+mix. A failed refresh or upgrade marks the update incomplete, and a changed
+compositor, kernel or graphics driver triggers the reboot reminder.
 
-### Why?
-
-Hyprland and EWW frequently ship breaking config changes. Without
-`IgnorePkg`, a user running `pacman -Syu` could update Hyprland before
-a migration has fixed their config — resulting in a broken desktop.
+The critical bundle only re-asserts baseline packages (`linux-lts`,
+`kernel-modules-hook`, and the NVIDIA open driver where it is installed under
+that exact name) once per `BUNDLE_ID`, and only after that run's system
+upgrade succeeded.
 
 ### When a new Hyprland/EWW version drops
 
 1. Check the release notes for breaking config changes
 2. If breaking: write a migration (section 5)
 3. Commit the migration + any updated default configs
-4. Push to `main`
+4. Raise `HYPRLAND_SERIES` once the new series works with smplOS
+   (`tests/test_critical_bundle.py` covers the update rules)
+5. Push to `main`
 
-Users will get: migration runs → config fixed → full pacman transaction.
+Users will get: migration runs → config fixed → one-transaction upgrade →
+reboot reminder.
 
 ### Important: manual `pacman -Syu`
 
-If you run `pacman -Syu` manually while Hyprland is pinned, you can hit
-dependency conflicts (`aquamarine`/`hyprutils` ABI bumps). Use
-`smplos-update --mode full` for normal OS updates.
+A plain `pacman -Syu` also upgrades to an unvalidated Hyprland series, before
+migrations have run. Use `smplos-update --mode full` for normal OS updates.
 
 ### Hyprland config format note
 

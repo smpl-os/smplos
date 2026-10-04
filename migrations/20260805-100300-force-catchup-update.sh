@@ -111,18 +111,27 @@ echo "  Fresh ignore list: ${FRESH_IGNORE:-<empty>}"
 # This catches every package the parent smplos-update skipped with its
 # stale in-memory ignore list.
 fix_qemu_gluster_blocker
-echo "  Running pacman -Syu with fresh ignore list..."
+# Like smplos-update: hold the Hyprland stack only while Arch ships a series
+# smplOS has not validated (HYPRLAND_SERIES); otherwise holding it while its
+# libraries move is a partial upgrade that fails.
+_series=$(sed -n 's/^HYPRLAND_SERIES="\{0,1\}\([0-9][0-9]*\.[0-9][0-9]*\)"\{0,1\}[[:space:]]*$/\1/p' \
+    "$CRITICAL_BUNDLE_FILE" | head -n1)
 _syu_ok=1
-if [[ -n "$FRESH_IGNORE" ]]; then
-    if ! sudo pacman -Syu --noconfirm --ignore "$FRESH_IGNORE"; then
-        echo "  WARNING: catch-up pacman -Syu failed"
-        _syu_ok=0
-    fi
+if ! sudo pacman -Sy --noconfirm; then
+    echo "  WARNING: catch-up could not refresh package databases"
+    _syu_ok=0
 else
-    if ! sudo pacman -Syu --noconfirm; then
-        echo "  WARNING: catch-up pacman -Syu failed"
-        _syu_ok=0
+    _available=$(pacman -Si hyprland 2>/dev/null | awk '/^Version/ {print $3; exit}')
+    if [[ -n "$_series" && -n "$_available" && "$_available" == "$_series".* ]]; then
+        FRESH_IGNORE=""
     fi
+    echo "  Running pacman -Su${FRESH_IGNORE:+ holding $FRESH_IGNORE}..."
+    if [[ -n "$FRESH_IGNORE" ]]; then
+        sudo pacman -Su --noconfirm --ignore "$FRESH_IGNORE" || _syu_ok=0
+    else
+        sudo pacman -Su --noconfirm || _syu_ok=0
+    fi
+    [[ $_syu_ok -eq 1 ]] || echo "  WARNING: catch-up pacman -Su failed"
 fi
 
 # ── 3. Apply critical-bundle.conf baseline ───────────────────────────────────

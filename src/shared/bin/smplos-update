@@ -120,6 +120,8 @@ PREAMBLE
 cat >> "$UPDATE_SCRIPT" << 'EOF'
 set -o pipefail
 UPDATE_FAILED=0
+# Set only when this run's system upgrade completed; gates the bundle.
+SYSTEM_UPGRADED=0
 
 # pkexec sanitizes PATH to a hardcoded minimal set that does NOT include
 # /usr/local/bin — but every smplOS management script (smplos-os-update,
@@ -153,6 +155,7 @@ APPS_EXTRA_IGNORE=(pacman libalpm)
 CRITICAL_PACKAGES=()
 CRITICAL_IGNORE=""
 APPS_MODE_IGNORE=""
+HYPRLAND_SERIES=""
 NETWORK_OK=1
 
 csv_join() {
@@ -179,6 +182,76 @@ load_critical_packages() {
 
     CRITICAL_IGNORE=$(csv_join "${CRITICAL_PACKAGES[@]}")
     APPS_MODE_IGNORE=$(csv_join "${CRITICAL_PACKAGES[@]}" "${APPS_EXTRA_IGNORE[@]}")
+
+    # The Hyprland series smplOS has validated, e.g. "0.56" (read, not sourced).
+    HYPRLAND_SERIES=""
+    if [[ -f "$CRITICAL_BUNDLE_FILE" ]]; then
+        HYPRLAND_SERIES=$(sed -n \
+            's/^HYPRLAND_SERIES="\{0,1\}\([0-9][0-9]*\.[0-9][0-9]*\)"\{0,1\}[[:space:]]*$/\1/p' \
+            "$CRITICAL_BUNDLE_FILE" | head -n1)
+    fi
+}
+
+# Upgrades of the stack through system_upgrade are expected, not drift.
+refresh_bundle_snapshot() {
+    [[ -s "$BUNDLE_SNAPSHOT_FILE" ]] || return 0
+    local pkgs=()
+    mapfile -t pkgs < <(awk '{print $1}' "$BUNDLE_SNAPSHOT_FILE")
+    pacman -Q "${pkgs[@]}" 2>/dev/null > "$BUNDLE_SNAPSHOT_FILE.tmp" \
+        && mv -f "$BUNDLE_SNAPSHOT_FILE.tmp" "$BUNDLE_SNAPSHOT_FILE"
+    rm -f "$BUNDLE_SNAPSHOT_FILE.tmp"
+}
+
+# Versions that need a reboot (or at least a new session) when they change.
+stack_versions() {
+    pacman -Q hyprland xdg-desktop-portal-hyprland aquamarine linux linux-lts \
+        linux-zen nvidia-open-dkms nvidia-utils nvidia-580xx-dkms 2>/dev/null
+}
+
+mark_reboot_pending() {
+    mkdir -p "$STATE_DIR"
+    # boot_id, so the marker expires by itself after a reboot.
+    tr -d '-' < /proc/sys/kernel/random/boot_id > "$STATE_DIR/reboot-pending" 2>/dev/null || true
+}
+
+# Upgrade the whole system in ONE transaction. While Arch ships the Hyprland
+# series smplOS validated, the stack moves with everything else: holding
+# hyprland back while its libraries move is a partial upgrade that fails
+# ("installing aquamarine breaks dependency ... required by hyprland"), and
+# installing it separately later can pair it with older system libraries than
+# it was built against (Hyprland then cannot start). A newer series stays
+# held back until smplOS validates it by raising HYPRLAND_SERIES.
+system_upgrade() {
+    local available before held=0
+    if ! sudo pacman -Sy --noconfirm; then
+        echo "  WARNING: could not refresh package databases (check internet/mirrors)"
+        UPDATE_FAILED=1
+        return 0
+    fi
+    available=$(pacman -Si hyprland 2>/dev/null | awk '/^Version/ {print $3; exit}')
+    if [[ -n "$HYPRLAND_SERIES" && -n "$available" && "$available" != "$HYPRLAND_SERIES".* ]]; then
+        held=1
+        echo "  Holding Hyprland $available: smplOS supports the $HYPRLAND_SERIES series."
+    fi
+    before=$(stack_versions)
+    if [[ $held -eq 0 ]] && sudo pacman -Su --noconfirm; then
+        SYSTEM_UPGRADED=1
+        refresh_bundle_snapshot
+    elif [[ $held -eq 1 ]] && sudo pacman -Su --noconfirm --ignore "$CRITICAL_IGNORE"; then
+        SYSTEM_UPGRADED=1
+        refresh_bundle_snapshot
+    else
+        echo "  WARNING: system update failed"
+        if [[ $held -eq 1 ]]; then
+            echo "  Other packages already need Hyprland $available, which smplOS has not"
+            echo "  validated yet. System updates resume once an smplOS update supports it."
+        fi
+        UPDATE_FAILED=1
+    fi
+    if [[ "$(stack_versions)" != "$before" ]]; then
+        mark_reboot_pending
+        echo "  Hyprland, the kernel or the graphics driver changed — reboot when convenient."
+    fi
 }
 
 critical_bundle_prompt_and_apply() {
@@ -203,6 +276,7 @@ critical_bundle_prompt_and_apply() {
     local bundle_desc="${DESCRIPTION:-Critical stack update}"
     local bundle_reboot="${REBOOT_REQUIRED:-1}"
     local bundle_packages_raw="${PACKAGES:-}"
+    local optional_packages_raw="${PACKAGES_IF_INSTALLED:-}"
 
     [[ -n "$bundle_id" && -n "$bundle_packages_raw" ]] || return 0
 
@@ -211,7 +285,15 @@ critical_bundle_prompt_and_apply() {
     [[ -f "$APPLIED_BUNDLE_FILE" ]] && applied_id=$(<"$APPLIED_BUNDLE_FILE")
 
     if [[ "$applied_id" == "$bundle_id" ]]; then
-        # Bundle already applied → hyprland is at the pinned version.
+        return 0
+    fi
+
+    # Install only on a fully updated system, so new packages are built for
+    # the system libraries that are actually installed.
+    if [[ "${SYSTEM_UPGRADED:-0}" -ne 1 ]]; then
+        echo "── Critical bundle ──"
+        echo "  Skipped $bundle_id until the system update above completes."
+        echo
         return 0
     fi
 
@@ -220,6 +302,15 @@ critical_bundle_prompt_and_apply() {
     local bundle_packages=()
     read -r -a bundle_packages <<< "$bundle_packages_raw"
     [[ ${#bundle_packages[@]} -gt 0 ]] || return 0
+
+    # Refreshed only where installed under exactly that name: `pacman -Q`
+    # also matches a package that merely provides it (nvidia-580xx-utils
+    # provides nvidia-utils and conflicts with it).
+    local optional_packages=() optional
+    read -r -a optional_packages <<< "$optional_packages_raw"
+    for optional in "${optional_packages[@]}"; do
+        [[ "$(pacman -Qq "$optional" 2>/dev/null)" == "$optional" ]] && bundle_packages+=("$optional")
+    done
 
     echo "── Critical bundle ──"
     echo "  Applying $bundle_id: $bundle_desc"
@@ -234,10 +325,7 @@ critical_bundle_prompt_and_apply() {
         done
         echo "  ✓ Critical bundle applied: $bundle_id"
         if [[ "$bundle_reboot" == "1" ]]; then
-            # Write reboot-pending marker (boot_id so it self-expires on reboot)
-            mkdir -p "$(dirname "$STATE_DIR")/smplos"
-            cat /proc/sys/kernel/random/boot_id 2>/dev/null | tr -d '-' \
-                > "$STATE_DIR/reboot-pending" || true
+            mark_reboot_pending
             echo "  Reboot required — you will be reminded when you close this window."
         fi
     else
@@ -382,11 +470,11 @@ if [[ "$UPDATE_MODE" == "apps" ]]; then
         echo "  WARNING: pacman update failed (check internet/mirrors)"
     fi
 else
-    echo "── Pacman (excluding critical stack) ──"
+    echo "── Pacman ──"
     if [[ "$NETWORK_OK" -eq 0 ]]; then
         echo "  Skipped: no internet connection"
-    elif ! sudo pacman -Syu --noconfirm --ignore "$CRITICAL_IGNORE"; then
-        echo "  WARNING: pacman update failed (check internet/mirrors)"
+    else
+        system_upgrade
     fi
 fi
 echo
