@@ -130,28 +130,29 @@ Settings UI and the live layout cannot disagree silently.
   display; the catch-all applies only when no named rule matches. A full or
   disable line replaces an earlier rule with the identical selector and moves
   it to the end, as does a standalone `transform`.
-* **What Settings writes**: one full line per enabled physical display,
-  keyed by `desc:<make model serial>` when that description is unique and not
-  a prefix of another display's description (so the rule survives connector
+* **What Settings writes**: one full line per enabled physical display, keyed
+  by `desc:<make model serial>` when that description is unique and not a
+  prefix of another display's description (so the rule survives connector
   renames such as DP-3 becoming DP-4), otherwise by connector. Scale keeps up
-  to six decimals and transform keeps the exact value 0–7. Lines for
-  displays that are disconnected, disabled, mirrored or virtual (`HEADLESS-*`
-  outputs created for XR glasses), comments and the catch-all are preserved;
-  extra options and `addreserved` lines of a rewritten display are carried
-  over. The file is replaced atomically after a timestamped
-  `monitors.conf.bak-*` copy (newest five kept), then Settings runs
-  `hyprctl reload` and re-reads the live state to verify what Hyprland
+  to six decimals and transform keeps the exact value 0–7. Lines for displays
+  that are disconnected, disabled, mirrored or virtual (`HEADLESS-*` outputs
+  created for XR glasses), comments and the catch-all are preserved; valid
+  extra options (except `mirror`) and `addreserved` lines of a rewritten
+  display are carried over. Apply refuses when the displays or the file
+  changed since editing began. The file is replaced atomically after a
+  timestamped `monitors.conf.bak-*` copy (newest five kept), then Settings
+  runs `hyprctl reload` and re-reads the live state to verify what Hyprland
   applied.
 * **Loading**: under Lua, `monitors_loader.lua` turns the file into exactly
   one `hl.monitor()` call per selector, in last-definition order, with
   hyprlang's fresh-rule semantics (a later full line re-enables a display and
   resets its transform). Numeric scales are normalised as before. Invalid or
   unknown options and malformed modifier lines are logged and skipped rather
-  than handed to Hyprland, so an update cannot turn previously ignored
-  content into a config-error banner.
-  `hyprland.lua` isolates loader failures so bindings and autostart still
-  load. The hyprlang entry point sources the same file after its catch-all,
-  so a catch-all saved in `monitors.conf` wins under both providers.
+  than handed to Hyprland, so an update cannot turn previously ignored content
+  into a config-error banner. `hyprland.lua` isolates loader failures so
+  bindings and autostart still load. The hyprlang entry point sources the same
+  file after its catch-all, so a catch-all saved in `monitors.conf` wins under
+  both providers.
 * **Login guard**: `start-hyprland` runs `monitors-guard` first. Only a file
   that would leave every connected display disabled is treated as corrupt
   and restored from the newest usable backup or moved aside.
