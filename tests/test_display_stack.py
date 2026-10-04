@@ -102,13 +102,12 @@ class MonitorsLoaderTests(unittest.TestCase):
         self.assertEqual(logs, [])
         self.assertEqual([plain(call) for call in calls], [
             {"output": "HDMI-A-1", "mode": "2560x1440@59.95", "position": "0x0",
-             "scale": "1.00", "transform": 0, "disabled": False},
+             "scale": 1.0, "transform": 0, "disabled": False},
             {"output": "desc:Dell Inc. DELL P2412H KG49T35D59GU", "mode": "1920x1080@60.00",
-             "position": "2560x0", "scale": "1.333333", "transform": 1, "disabled": False},
+             "position": "2560x0", "scale": 1.333333, "transform": 1, "disabled": False},
         ])
         # Hyprland's integer fields reject Lua floats and strings.
         self.assertEqual(calls[1]["transform"][0], "integer")
-        self.assertEqual(calls[1]["scale"][0], "string")
 
     def test_inline_comments_follow_hyprlang(self):
         specs = self.specs("""\
@@ -128,7 +127,7 @@ class MonitorsLoaderTests(unittest.TestCase):
             """)
         self.assertEqual(specs, [
             {"output": "eDP-1", "disabled": True},
-            {"output": "HDMI-A-1", "mode": "2560x1440@60", "position": "0x0", "scale": "1",
+            {"output": "HDMI-A-1", "mode": "2560x1440@60", "position": "0x0", "scale": 1,
              "transform": 0, "disabled": False},
         ])
 
@@ -138,7 +137,7 @@ class MonitorsLoaderTests(unittest.TestCase):
             monitor = DP-3, 1920x1080@60, 0x0, 1
             """)
         self.assertEqual(specs, [{"output": "DP-3", "mode": "1920x1080@60", "position": "0x0",
-                                  "scale": "1", "transform": 0, "disabled": False}])
+                                  "scale": 1, "transform": 0, "disabled": False}])
 
     def test_standalone_transform_matches_hyprlang(self):
         specs, logs = self.load("""\
@@ -156,6 +155,20 @@ class MonitorsLoaderTests(unittest.TestCase):
         self.assertEqual(len(logs), 2)
         self.assertIn("eDP-1", logs[0])
         self.assertIn("invalid transform", logs[1])
+
+    def test_catch_all_transform_modifies_the_built_in_fallback(self):
+        # hyprland.lua and hyprland.conf both define the catch-all first, so
+        # hyprlang finds it; the loader must merge into it the same way.
+        self.assertEqual(self.specs("monitor = , transform, 1\n"), [{"output": "", "transform": 1}])
+
+    def test_numeric_scale_spellings_are_normalised(self):
+        specs = self.specs("""\
+            monitor = DP-1, preferred, auto, .5
+            monitor = DP-2, preferred, auto, 2.
+            monitor = DP-3, preferred, auto, auto
+            monitor = DP-4, preferred, auto,
+            """)
+        self.assertEqual([spec["scale"] for spec in specs], [0.5, 2.0, "auto", ""])
 
     def test_addreserved_modifies_in_place_or_creates_rule(self):
         specs, logs = self.load("""\
@@ -179,7 +192,7 @@ class MonitorsLoaderTests(unittest.TestCase):
             """)
         first, second = calls
         self.assertEqual(plain(first), {
-            "output": "DP-1", "mode": "3840x2160@144", "position": "0x0", "scale": "1.5",
+            "output": "DP-1", "mode": "3840x2160@144", "position": "0x0", "scale": 1.5,
             "transform": 0, "disabled": False, "vrr": 1, "bitdepth": 10, "cm": "hdr",
             "sdrbrightness": 1.2, "mirror": "DP-2"})
         self.assertEqual(first["vrr"][0], "integer")
@@ -194,9 +207,9 @@ class MonitorsLoaderTests(unittest.TestCase):
         # Like hyprlang, an empty value is rejected but reading continues; only
         # an empty KEY ends the option list.
         self.assertEqual([plain(call) for call in calls], [
-            {"output": "DP-3", "mode": "1920x1080@60", "position": "0x0", "scale": "1",
+            {"output": "DP-3", "mode": "1920x1080@60", "position": "0x0", "scale": 1,
              "transform": 0, "disabled": False, "bitdepth": 10},
-            {"output": "HDMI-A-1", "mode": "2560x1440@60", "position": "1920x0", "scale": "1",
+            {"output": "HDMI-A-1", "mode": "2560x1440@60", "position": "1920x0", "scale": 1,
              "transform": 0, "disabled": False},
         ])
         self.assertEqual(sum("skipped invalid option" in log for log in logs), 7)
@@ -348,11 +361,12 @@ class RotatedGeometryTests(unittest.TestCase):
                             {"id": 1, "x": 2560, "y": 0, "width": 1920, "height": 1080, "scale": 1.0, "transform": 1},
                         ]))
 
-    def snap(self, x, y, w, h, monitor=1):
+    def snap(self, x, y, w, h, monitor=1, **env):
         clients = [{"address": "0xabc", "floating": True, "workspace": {"id": 2}, "fullscreen": 0,
                     "at": [x, y], "size": [w, h], "monitor": monitor}]
         script = f'source "{BIN / "window-guard"}"\nsnap_window 0xabc\n'
-        subprocess.run(["bash", "-c", script], env=dict(self.env, CLIENTS=json.dumps(clients)),
+        self.calls.unlink(missing_ok=True)
+        subprocess.run(["bash", "-c", script], env=dict(self.env, CLIENTS=json.dumps(clients), **env),
                        check=True, timeout=10)
         return self.calls.read_text() if self.calls.exists() else ""
 
@@ -361,6 +375,13 @@ class RotatedGeometryTests(unittest.TestCase):
 
     def test_window_past_portrait_right_edge_is_pulled_back(self):
         self.assertIn("x=3240, y=100", self.snap(3400, 100, 400, 300))
+
+    def test_two_decimal_scale_recovers_the_exact_logical_size(self):
+        # 2880x1800 at 135/120 is 2560x1600 logical; hyprctl prints 1.12.
+        panel = json.dumps([{"id": 0, "x": 0, "y": 0, "width": 2880, "height": 1800,
+                             "scale": 1.12, "transform": 0}])
+        self.assertEqual(self.snap(2160, 0, 400, 300, monitor=0, MONITORS=panel), "")
+        self.assertIn("x=2160, y=0", self.snap(2175, 0, 400, 300, monitor=0, MONITORS=panel))
 
     @NEEDS_LUA
     def test_aspect_column_treats_mirrored_rotation_as_portrait(self):

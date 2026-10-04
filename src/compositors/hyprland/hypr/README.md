@@ -120,7 +120,7 @@ Settings UI and the live layout cannot disagree silently.
     `sdrsaturation`, `vrr` or `icc`; reading stops at the first empty KEY.
   * `SEL, disable` or `SEL, disabled` creates a fresh disabled rule.
   * `SEL, transform, N` changes an earlier rule with the identical selector
-    and is ignored when there is none.
+    (the built-in catch-all counts) and is ignored when there is none.
   * `SEL, addreserved, TOP, BOTTOM, LEFT, RIGHT` changes an earlier rule in
     place or creates one with that reserved area. (hyprlang drops the area
     when no rule exists; the Lua loader keeps it.)
@@ -145,9 +145,10 @@ Settings UI and the live layout cannot disagree silently.
 * **Loading**: under Lua, `monitors_loader.lua` turns the file into exactly
   one `hl.monitor()` call per selector, in last-definition order, with
   hyprlang's fresh-rule semantics (a later full line re-enables a display and
-  resets its transform). Invalid or unknown options and malformed modifier
-  lines are logged and skipped rather than handed to Hyprland, so an update
-  cannot turn previously ignored content into a config-error banner.
+  resets its transform). Numeric scales are normalised as before. Invalid or
+  unknown options and malformed modifier lines are logged and skipped rather
+  than handed to Hyprland, so an update cannot turn previously ignored
+  content into a config-error banner.
   `hyprland.lua` isolates loader failures so bindings and autostart still
   load. The hyprlang entry point sources the same file after its catch-all,
   so a catch-all saved in `monitors.conf` wins under both providers.

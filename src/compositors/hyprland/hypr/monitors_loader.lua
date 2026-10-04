@@ -19,7 +19,7 @@
 -- Other keywords, $variables and source= are not supported in this file.
 -- Invalid or unknown KEY/VALUE options are logged and skipped instead of being
 -- handed to Hyprland, so an OS update never turns a line the previous loader
--- ignored into a config-error banner. MODE/POSITION/SCALE pass through as-is.
+-- ignored into a config-error banner. MODE and POSITION pass through as-is.
 
 local M = {}
 
@@ -111,11 +111,14 @@ local function parse(path, f)
                 move_to_end(sel)
             elseif action == "transform" then
                 local transform = to_integer(p[3])
-                if not rules[sel] then
+                if not rules[sel] and sel ~= "" then
                     report(path, lineno, "transform for '" .. sel .. "' has no earlier rule; ignored as in hyprlang")
                 elseif not transform or transform < 0 or transform > 7 then
                     report(path, lineno, "invalid transform; previous value kept as in hyprlang")
                 else
+                    -- hyprland.lua/hyprland.conf define the catch-all before
+                    -- this file, so hyprlang always finds an earlier "" rule.
+                    rules[sel] = rules[sel] or {}
                     rules[sel].transform = transform
                     move_to_end(sel)
                 end
@@ -168,7 +171,10 @@ end
 local function spec_for(sel, rule)
     local spec = { output = sel }
     if rule.full then
-        spec.mode, spec.position, spec.scale = rule.mode, rule.position, rule.scale
+        -- Numeric scales are normalised as the previous loader did, so
+        -- spellings like ".5" keep working; "auto"/"" pass through.
+        spec.mode, spec.position = rule.mode, rule.position
+        spec.scale = tonumber(rule.scale) or rule.scale
         spec.disabled = false
         for _, pair in ipairs(rule.extras) do spec[pair[1]] = pair[2] end
     elseif rule.disabled then

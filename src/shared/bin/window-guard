@@ -70,15 +70,19 @@ snap_window() {
   mon_id=$(echo "$info" | jq -r '.mon')
 
   # Get the monitor's logical geometry. hyprctl reports the unrotated mode, so
-  # odd transforms (90°/270°, plain or mirrored) swap the axes. It prints the
-  # scale with two decimals; Hyprland's effective scale is a multiple of 1/120.
+  # odd transforms (90°/270°, plain or mirrored) swap the axes. Hyprland's scale
+  # is k/120 with a mode that divides cleanly, but hyprctl prints it with two
+  # decimals, which can be one step off; pick the neighbouring clean k.
   local mon_info
   mon_info=$(hyprctl -j monitors 2>/dev/null \
     | jq -e --argjson mid "$mon_id" '
         .[] | select(.id == $mid)
             | (if (.transform % 2) == 1 then [.height, .width] else [.width, .height] end) as [$w, $h]
-            | ((.scale * 120 | round) / 120) as $s
-            | { x, y, w: ($w / $s | round), h: ($h / $s | round) }' 2>/dev/null) || return 0
+            | (.scale * 120 | round) as $r
+            | ([$r, $r - 1, $r + 1]
+               | map(select(. > 0 and ($w * 120) % . == 0 and ($h * 120) % . == 0))
+               | first // $r) as $k
+            | { x, y, w: ($w * 120 / $k | round), h: ($h * 120 / $k | round) }' 2>/dev/null) || return 0
 
   local mon_x mon_y eff_w eff_h
   mon_x=$(echo "$mon_info" | jq -r '.x')
