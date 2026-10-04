@@ -61,10 +61,13 @@ case "${1:-}" in
         fi
         ;;
     *)
-        mapfile -t legacy < <(legacy_pids)
+        # Signal a resident first: scanning processes (pgrep) costs ~20 ms.
         if pid=$(resident_pid); then
             kill -USR1 "$pid"
-        elif [[ ${#legacy[@]} -gt 0 ]]; then
+            exit 0
+        fi
+        mapfile -t legacy < <(legacy_pids)
+        if [[ ${#legacy[@]} -gt 0 ]]; then
             kill "${legacy[@]}"   # a non-resident menu was open, now closed
         elif supports_resident; then
             launch --resident
