@@ -91,6 +91,13 @@ mv ~/.config/hypr/hyprland.conf.disabled ~/.config/hypr/hyprland.conf
   atomic replacement, and apply through `hypridle.service`; compositor reload
   alone does not apply idle rules. Stock DPMS commands use `smplos-hypr-dpms`,
   which selects syntax from the running provider rather than package version.
+* **Session services**: hypridle, voxtype and the XR watcher are
+  `WantedBy=graphical-session.target`. Hyprland starts without a session
+  manager, so both autostart trees run `smplos-session-services`, which
+  imports the environment and starts `smplos-session.target` (bound to
+  `graphical-session.target`). It then restarts any enabled session service
+  that is not running and notifies when one still fails (power timers at
+  every login). Never start these daemons bare from autostart.
 * **Keybindings**: edit `src/shared/configs/smplos/bindings.conf` (hyprlang).
   The Lua side reads the exact same file via `bindings_loader.lua`.
 * **Theme variables**: edit by running `theme-set <name>`. Both providers pick

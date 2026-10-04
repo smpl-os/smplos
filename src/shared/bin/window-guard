@@ -159,38 +159,52 @@ trap 'kill $SWEEP_PID 2>/dev/null; wait' EXIT
 SETTLE_DELAY=$(awk "BEGIN { printf \"%.3f\", ${SETTLE_MS}/1000 }")
 RECHECK_DELAY=$(awk "BEGIN { printf \"%.3f\", ${RECHECK_MS}/1000 }")
 
-socat -u "UNIX-CONNECT:${XDG_RUNTIME_DIR}/hypr/${HYPRLAND_INSTANCE_SIGNATURE}/.socket2.sock" - 2>/dev/null \
-| while IFS= read -r line; do
-  event="${line%%>>*}"
-  payload="${line#*>>}"
+# Autostart can run before Hyprland accepts event-socket connections, and the
+# stream can end; reconnect while this Hyprland is alive instead of exiting for
+# the rest of the session. Hyprland never removes its instance directory, so
+# liveness comes from the PID on line 1 of hyprland.lock (removed on clean exit).
+HYPR_INSTANCE_DIR="${XDG_RUNTIME_DIR}/hypr/${HYPRLAND_INSTANCE_SIGNATURE}"
+EVENT_SOCKET="$HYPR_INSTANCE_DIR/.socket2.sock"
+hyprland_alive() {
+  local pid
+  pid=$(head -n1 "$HYPR_INSTANCE_DIR/hyprland.lock" 2>/dev/null) || return 1
+  [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null
+}
+while hyprland_alive; do
+  socat -u "UNIX-CONNECT:$EVENT_SOCKET" - 2>/dev/null \
+  | while IFS= read -r line; do
+    event="${line%%>>*}"
+    payload="${line#*>>}"
 
-  case "$event" in
-    openwindow)
-      raw_addr="${payload%%,*}"
-      addr="0x${raw_addr}"
+    case "$event" in
+      openwindow)
+        raw_addr="${payload%%,*}"
+        addr="0x${raw_addr}"
 
-      # Quick check after window settles
-      sleep "$SETTLE_DELAY"
-      snap_window "$addr"
+        # Quick check after window settles
+        sleep "$SETTLE_DELAY"
+        snap_window "$addr"
 
-      # Deferred recheck — many apps (Electron, XWayland) restore their
-      # saved position a moment after the initial map.  A second pass
-      # catches those without being so aggressive that it fights the user.
-      ( sleep "$RECHECK_DELAY"; snap_window "$addr" ) &
-      ;;
+        # Deferred recheck — many apps (Electron, XWayland) restore their
+        # saved position a moment after the initial map.  A second pass
+        # catches those without being so aggressive that it fights the user.
+        ( sleep "$RECHECK_DELAY"; snap_window "$addr" ) &
+        ;;
 
-    movewindow|changefloatingmode)
-      raw_addr="${payload%%,*}"
-      addr="0x${raw_addr}"
-      sleep "$SETTLE_DELAY"
-      snap_window "$addr"
-      ;;
+      movewindow|changefloatingmode)
+        raw_addr="${payload%%,*}"
+        addr="0x${raw_addr}"
+        sleep "$SETTLE_DELAY"
+        snap_window "$addr"
+        ;;
 
-    monitoradded|monitorremoved)
-      # Layout changed — give Hyprland a moment to finish reconfiguring,
-      # then snap every floating window.
-      sleep 2
-      snap_all_floating
-      ;;
-  esac
+      monitoradded|monitorremoved)
+        # Layout changed — give Hyprland a moment to finish reconfiguring,
+        # then snap every floating window.
+        sleep 2
+        snap_all_floating
+        ;;
+    esac
+  done || true
+  sleep "${RECONNECT_DELAY:-1}"
 done

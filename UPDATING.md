@@ -127,6 +127,15 @@ from `hyprland.conf` or `hyprland.lua`. A Hyprland reload does not reload hyprid
 Previously overwritten choices cannot be recovered reliably; users must
 reselect those choices rather than have the updater guess them.
 
+Saved timers only work while `hypridle.service` runs. It is
+`WantedBy=graphical-session.target`, which nothing activated before
+`smplos-session.target`: the daemon ran only after Settings or an update
+restarted it, so timers silently stopped after every reboot. Every update
+installs the target into `~/.config/systemd/user` and starts it in a running
+session; at login `smplos-session-services` starts it and warns when power
+timers are not active (log: `~/.cache/smplos/session-services.log`). Verify
+power changes after a **reboot**, not only in the session that applied them.
+
 Known stock legacy/Lua DPMS commands are migrated to `smplos-hypr-dpms on|off`.
 The helper probes the **running** config provider with a bounded read-only
 request, including legacy pre-Lua sessions. It checks both IPC exit status and

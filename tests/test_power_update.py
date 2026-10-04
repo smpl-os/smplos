@@ -1,9 +1,12 @@
 import importlib.util
 import os
+import json
+import re
 from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+import textwrap
 import unittest
 from unittest import mock
 
@@ -355,7 +358,7 @@ CHECK_ONLY=0; MIGRATE_ONLY=0; SCRIPTS_ONLY=0; QUIET=1
 SELF_UPDATED=1; SELF_CANONICAL="$HOME/not-installed"
 pull_updates() { return 1; }
 sync_scripts() { :; }; sync_configs() { :; }; sync_themes() { :; }
-sync_apps() { :; }; run_migrations() { :; }; cleanup_shadow_bins() { :; }
+sync_apps() { :; }; sync_user_units() { :; }; run_migrations() { :; }; cleanup_shadow_bins() { :; }
 post_deploy() { :; }; rebuild-app-cache() { :; }
 """
         script = self.sync_script() + stubs + main
@@ -389,7 +392,7 @@ CHECK_ONLY=0; MIGRATE_ONLY=0; SCRIPTS_ONLY=0; QUIET=1
 SELF_UPDATED=1; SELF_CANONICAL="$HOME/not-installed"
 pull_updates() {{ return 1; }}
 sync_scripts() {{ :; }}; sync_configs() {{ :; }}; sync_themes() {{ :; }}
-sync_apps() {{ :; }}; cleanup_shadow_bins() {{ :; }}
+sync_apps() {{ :; }}; sync_user_units() {{ :; }}; cleanup_shadow_bins() {{ :; }}
 post_deploy() {{ :; }}; rebuild-app-cache() {{ :; }}
 run_migrations() {{ bash "{BIN / 'smplos-migrate'}"; }}
 """
@@ -526,3 +529,180 @@ sudo() {
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SessionServicesTests(unittest.TestCase):
+    """Session services must run after every login, not only after a restart.
+
+    hypridle (power timers), voxtype (dictation) and the XR watcher are
+    WantedBy=graphical-session.target, which a plain start-hyprland session
+    never activated: they ran only after Settings or an update restarted
+    them, so saved screen-off and suspend timeouts silently stopped working
+    after every reboot.
+    """
+
+    HYPR = ROOT / "src/compositors/hyprland/hypr"
+    SCRIPT = ROOT / "src/shared/bin/smplos-session-services"
+    TARGET = ROOT / "src/shared/configs/systemd/user/smplos-session.target"
+
+    # Fake systemctl keeping unit states in $STATE (JSON). BROKEN units never
+    # become active; START_FAILS makes the first target start fail.
+    SYSTEMCTL = textwrap.dedent("""\
+        #!/usr/bin/env python3
+        import json, os, sys
+        path = os.environ["STATE"]
+        state = json.load(open(path))
+        args = [a for a in sys.argv[1:] if a != "--user"]
+        with open(os.environ["CALLS"], "a") as out:
+            out.write(" ".join(args) + "\\n")
+        broken = os.environ.get("BROKEN", "").split()
+        units = state["units"]
+        def save():
+            json.dump(state, open(path, "w"))
+        if args[0] == "is-active":
+            sys.exit(0 if state["graphical"] else 3)
+        if args[0] == "stop":
+            state["graphical"] = False
+        elif args[0] == "start":
+            if state.get("start_fails", 0) > 0:
+                state["start_fails"] -= 1
+                save()
+                sys.exit(1)
+            state["graphical"] = True
+            for name, unit in units.items():
+                if not unit.get("skip"):
+                    unit["active"] = name not in broken
+        elif args[0] == "restart":
+            units[args[1]]["active"] = args[1] not in broken
+        elif args[0] == "show":
+            unit = units.get(args[1], {})
+            value = {"ActiveState": "active" if unit.get("active") else "failed",
+                     "ConditionResult": "no" if unit.get("skip") else "yes",
+                     "ConditionTimestamp": "Sun 2026-10-04" if unit.get("skip") else "",
+                     "Result": "exit-code", "Description": args[1]}[args[3]]
+            print(value)
+        save()
+        """)
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        root = Path(self.temp.name)
+        bin_dir = root / "bin"
+        bin_dir.mkdir()
+        (bin_dir / "systemctl").write_text(self.SYSTEMCTL)
+        (bin_dir / "notify-send").write_text(f'#!/bin/sh\necho "$*" >> {root}/notified\n')
+        for tool in ("systemctl", "notify-send"):
+            (bin_dir / tool).chmod(0o755)
+        wants = root / "config/systemd/user/graphical-session.target.wants"
+        wants.mkdir(parents=True)
+        for unit in ("hypridle.service", "voxtype.service", "xr-glasses.service"):
+            (wants / unit).touch()
+        self.root = root
+        self.calls = root / "calls"
+        self.notified = root / "notified"
+        self.state = root / "state.json"
+        self.env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}", STATE=str(self.state),
+                        CALLS=str(self.calls), XDG_CONFIG_HOME=str(root / "config"),
+                        XDG_STATE_HOME=str(root / "state"),
+                        XDG_CACHE_HOME=str(root / "cache"), SMPLOS_SYSTEM_USER_UNITS=str(root / "none"),
+                        SMPLOS_SESSION_SETTLE="0", SMPLOS_SESSION_RETRY="0")
+
+    def run_login(self, graphical=False, start_fails=0, skip=(), **env):
+        units = {u: {"active": False, "skip": u in skip}
+                 for u in ("hypridle.service", "voxtype.service", "xr-glasses.service")}
+        self.state.write_text(json.dumps({"graphical": graphical, "start_fails": start_fails, "units": units}))
+        result = subprocess.run(["bash", str(self.SCRIPT)], env=dict(self.env, **env),
+                                capture_output=True, text=True, timeout=20)
+        calls = self.calls.read_text().splitlines()
+        return result, calls
+
+    def test_both_config_trees_start_the_session_services_at_login(self):
+        lua = re.findall(r'hl\.exec_cmd\("smplos-session-services"\)', (self.HYPR / "autostart.lua").read_text())
+        conf = re.findall(r"^exec-once = smplos-session-services$",
+                          (self.HYPR / "autostart.conf").read_text(), re.MULTILINE)
+        self.assertEqual((len(lua), len(conf)), (1, 1))
+
+    def test_no_bare_idle_daemon_competes_with_the_service(self):
+        for name in ("autostart.lua", "autostart.conf"):
+            for line in (self.HYPR / name).read_text().splitlines():
+                code = line.split("--", 1)[0] if name.endswith(".lua") else line.split("#", 1)[0]
+                self.assertNotRegex(code, r"(exec_cmd\(\"|exec-once = )hypridle\b", name)
+
+    def test_target_activates_the_graphical_session(self):
+        lines = self.TARGET.read_text().splitlines()
+        self.assertIn("BindsTo=graphical-session.target", lines)
+        self.assertNotIn("RefuseManualStart=yes", lines)
+
+    def test_fresh_login_imports_the_environment_and_starts_everything(self):
+        result, calls = self.run_login()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(calls[0], "import-environment")
+        self.assertNotIn("stop graphical-session.target", calls)
+        self.assertIn("reset-failed hypridle.service voxtype.service xr-glasses.service", calls)
+        self.assertLess(calls.index("import-environment"), calls.index("start smplos-session.target"))
+        self.assertFalse(self.notified.exists())
+
+    def test_target_left_from_the_previous_login_is_restarted_for_this_session(self):
+        _, calls = self.run_login(graphical=True)
+        self.assertLess(calls.index("stop graphical-session.target"), calls.index("start smplos-session.target"))
+
+    def test_a_target_installed_after_the_manager_started_is_loaded(self):
+        result, calls = self.run_login(start_fails=1)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(calls.count("start smplos-session.target"), 2)
+        self.assertIn("daemon-reload", calls)
+
+    def test_a_service_that_will_not_run_is_retried_and_reported(self):
+        result, calls = self.run_login(BROKEN="hypridle.service")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("restart hypridle.service", calls)
+        self.assertIn("Power timers", self.notified.read_text())
+        self.assertIn("journalctl --user -u hypridle.service", self.notified.read_text())
+
+    def test_other_failures_are_announced_once_per_change_power_every_login(self):
+        state = dict(XDG_STATE_HOME=str(self.root / "state"))
+        self.run_login(BROKEN="voxtype.service", **state)
+        self.assertIn("Dictation", self.notified.read_text())
+        self.notified.unlink()
+        self.run_login(BROKEN="voxtype.service", **state)
+        self.assertFalse(self.notified.exists(), "an unchanged non-power failure must not nag")
+        for _ in range(2):
+            self.run_login(BROKEN="hypridle.service voxtype.service", **state)
+            self.assertIn("Power timers", self.notified.read_text())
+            self.notified.unlink()
+        result, _ = self.run_login(**state)
+        self.assertEqual(result.returncode, 0)
+        self.assertFalse((self.root / "state/smplos/session-services.failed").exists())
+
+    def test_a_service_skipped_by_its_own_condition_is_not_an_error(self):
+        result, calls = self.run_login(skip=("xr-glasses.service",))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("restart xr-glasses.service", calls)
+        self.assertFalse(self.notified.exists())
+
+    def test_update_installs_the_target_and_starts_it_in_the_running_session(self):
+        repo = self.root / "repo"
+        unit_dir = repo / "src/shared/configs/systemd/user"
+        unit_dir.mkdir(parents=True)
+        (unit_dir / "smplos-session.target").write_text(self.TARGET.read_text())
+        home = self.root / "home"
+        script = "\n".join([
+            "set -euo pipefail", "log() { :; }", "warn() { echo \"$*\" >&2; }", 'die() { exit 1; }',
+            'as_invoker() { "$@"; }', 'smplos_have_hyprland() { [[ "${SESSION:-1}" == 1 ]]; }',
+            'smplos_run_as_user() { echo "$*" >> "$CALLS"; }',
+            function("copy_user_config"), function("sync_user_units"),
+            "sync_user_units", "sync_user_units",
+        ])
+        env = dict(self.env, SMPLOS_REPO=str(repo), HOME=str(home))
+        subprocess.run(["bash", "-c", script], env=env, check=True, timeout=10)
+        installed = home / ".config/systemd/user/smplos-session.target"
+        self.assertEqual(installed.read_text(), self.TARGET.read_text())
+        self.assertEqual(installed.stat().st_mode & 0o777, 0o644)
+        # Reload only after a change; start in the running session each time.
+        self.assertEqual(self.calls.read_text().splitlines(), [
+            "systemctl --user daemon-reload", "systemctl --user start smplos-session.target",
+            "systemctl --user start smplos-session.target"])
+        self.calls.unlink()
+        subprocess.run(["bash", "-c", script], env=dict(env, SESSION="0"), check=True, timeout=10)
+        self.assertFalse(self.calls.exists())

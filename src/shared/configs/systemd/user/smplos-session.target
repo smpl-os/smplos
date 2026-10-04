@@ -1,0 +1,10 @@
+[Unit]
+Description=smplOS graphical session
+Documentation=https://www.freedesktop.org/software/systemd/man/latest/systemd.special.html
+# graphical-session.target refuses a manual start; a session manager starts a
+# target bound to it. smplOS launches Hyprland without one, so
+# smplos-session-services starts this at login. Services WantedBy the
+# graphical session (hypridle, voxtype, the XR glasses watcher) start with it.
+BindsTo=graphical-session.target
+Wants=graphical-session-pre.target
+After=graphical-session-pre.target

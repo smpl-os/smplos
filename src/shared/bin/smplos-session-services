@@ -1,0 +1,102 @@
+#!/bin/bash
+# smplOS: start the graphical session's user services and verify them.
+#
+# hypridle (screen-off, suspend and lock timers), voxtype (dictation) and the
+# XR glasses watcher are WantedBy=graphical-session.target. Hyprland is
+# launched without a session manager, so nothing activated that target: the
+# services ran only after Settings or an update happened to restart them and
+# silently stopped after every reboot. This runs once from Hyprland autostart
+# (both config trees), starts smplos-session.target (bound to
+# graphical-session.target) and reports any enabled service that is not
+# running instead of failing silently.
+
+set -uo pipefail
+
+TARGET=smplos-session.target
+LOG_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/smplos"
+LOG="$LOG_DIR/session-services.log"
+# Failing units are announced when the set changes; power timers every login.
+FAILED_FILE="${XDG_STATE_HOME:-$HOME/.local/state}/smplos/session-services.failed"
+ALWAYS_REPORT=(hypridle.service)
+mkdir -p "$LOG_DIR" "${FAILED_FILE%/*}" 2>/dev/null
+log() { printf '%s %s\n' "$(date '+%F %T')" "$*" >> "$LOG"; }
+sc() { systemctl --user "$@"; }
+prop() { sc show "$1" -p "$2" --value 2>/dev/null; }
+
+enabled_session_units() {
+    local dir
+    for dir in "${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user" "${SMPLOS_SYSTEM_USER_UNITS:-/etc/systemd/user}"; do
+        [[ -d "$dir/graphical-session.target.wants" ]] || continue
+        ls -1 "$dir/graphical-session.target.wants"
+    done | sort -u
+}
+
+# Not started because a unit condition failed on purpose (for example the
+# XR watcher's binary is not installed) - not an error.
+condition_skipped() {
+    [[ "$(prop "$1" ConditionResult)" == no && -n "$(prop "$1" ConditionTimestamp)" ]]
+}
+
+describe() {
+    case "$1" in
+        hypridle.service) echo "Power timers (screen off, suspend, lock)" ;;
+        voxtype.service) echo "Dictation" ;;
+        xr-glasses.service) echo "XR glasses watcher" ;;
+        *) prop "$1" Description ;;
+    esac
+}
+
+# Services need WAYLAND_DISPLAY (hypridle checks it) and portals need the rest.
+sc import-environment 2>/dev/null
+
+# A target left active by the previous login still binds its services to that
+# session's Wayland display; stop it so they start again for this one.
+if sc is-active --quiet graphical-session.target; then
+    log "stopping graphical-session.target left over from the previous session"
+    sc stop graphical-session.target
+fi
+
+mapfile -t units < <(enabled_session_units)
+# A service that crashed when the previous session ended may have hit its
+# start limit.
+[[ ${#units[@]} -gt 0 ]] && sc reset-failed "${units[@]}" 2>/dev/null
+
+if ! sc start "$TARGET" 2>>"$LOG"; then
+    # The unit may have been installed after this user manager started.
+    sc daemon-reload
+    sc start "$TARGET" 2>>"$LOG" || log "could not start $TARGET"
+fi
+
+sleep "${SMPLOS_SESSION_SETTLE:-5}"
+failed=()
+for unit in "${units[@]}"; do
+    [[ "$(prop "$unit" ActiveState)" == active ]] && continue
+    condition_skipped "$unit" && continue
+    log "$unit is $(prop "$unit" ActiveState); restarting"
+    sc restart "$unit" 2>>"$LOG"
+    sleep "${SMPLOS_SESSION_RETRY:-2}"
+    if [[ "$(prop "$unit" ActiveState)" == active ]]; then
+        log "$unit recovered"
+    else
+        failed+=("$unit")
+        log "$unit failed: $(prop "$unit" Result)"
+    fi
+done
+
+previous=$(cat "$FAILED_FILE" 2>/dev/null)
+current=$(printf '%s\n' "${failed[@]}" | sed '/^$/d')
+if [[ -n "$current" ]]; then
+    printf '%s\n' "$current" > "$FAILED_FILE"
+    always=0
+    for unit in "${ALWAYS_REPORT[@]}"; do
+        [[ " ${failed[*]} " == *" $unit "* ]] && always=1
+    done
+    if [[ "$current" != "$previous" || $always -eq 1 ]]; then
+        names=$(for unit in "${failed[@]}"; do describe "$unit"; done | paste -sd ',' - | sed 's/,/, /g')
+        notify-send -u critical "Some settings are not active" \
+            "$names did not start. Details: journalctl --user -u ${failed[0]}" 2>/dev/null || true
+    fi
+    exit 1
+fi
+rm -f "$FAILED_FILE"
+log "session services running: ${units[*]:-none}"

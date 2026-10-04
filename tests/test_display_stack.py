@@ -384,6 +384,41 @@ class RotatedGeometryTests(unittest.TestCase):
     def test_failed_move_does_not_stop_the_daemon(self):
         self.assertIn("x=3240, y=100", self.snap(3400, 100, 400, 300, FAIL_DISPATCH="1"))
 
+    def test_daemon_reconnects_until_the_event_socket_is_ready_and_exits_with_hyprland(self):
+        runtime = self.root / "runtime"
+        instance = runtime / "hypr/test-instance"
+        instance.mkdir(parents=True)
+        # Stands in for the compositor; Hyprland never deletes its instance
+        # directory, so the guard must follow this PID from hyprland.lock.
+        # Detached so it is reaped when killed, as start-hyprland reaps Hyprland.
+        pid = int(subprocess.run(["bash", "-c", "setsid sleep 60 >/dev/null 2>&1 & echo $!"],
+                                 capture_output=True, text=True, check=True).stdout)
+        self.addCleanup(subprocess.run, ["kill", str(pid)], capture_output=True)
+        (instance / "hyprland.lock").write_text(f"{pid}\nwayland-1\n")
+        socat = self.root / "bin/socat"
+        # 1st connect: socket not ready yet. 2nd: one event, then the stream
+        # ends. 3rd: the compositor has exited.
+        socat.write_text(textwrap.dedent(f"""\
+            #!/bin/bash
+            n=$(( $(cat "{self.root}/connects" 2>/dev/null || echo 0) + 1 ))
+            echo "$n" > "{self.root}/connects"
+            case "$n" in
+              1) exit 1 ;;
+              2) echo "openwindow>>abc,2,app,title" ;;
+              *) kill {pid}; exit 1 ;;
+            esac
+            """))
+        socat.chmod(0o755)
+        clients = [{"address": "0xabc", "floating": True, "workspace": {"id": 2}, "fullscreen": 0,
+                    "at": [3400, 100], "size": [400, 300], "monitor": 1}]
+        env = dict(self.env, CLIENTS=json.dumps(clients), XDG_RUNTIME_DIR=str(runtime),
+                   HYPRLAND_INSTANCE_SIGNATURE="test-instance", RECONNECT_DELAY="0.1")
+        subprocess.run(["bash", str(BIN / "window-guard")], env=env, check=True, timeout=20,
+                       capture_output=True)
+        self.assertEqual((self.root / "connects").read_text().strip(), "3")
+        self.assertTrue(instance.is_dir(), "the instance directory outlives Hyprland")
+        self.assertIn("x=3240, y=100", self.calls.read_text())
+
     def test_two_decimal_scale_recovers_the_exact_logical_size(self):
         # 2880x1800 at 135/120 is 2560x1600 logical; hyprctl prints 1.12.
         panel = json.dumps([{"id": 0, "x": 0, "y": 0, "width": 2880, "height": 1800,

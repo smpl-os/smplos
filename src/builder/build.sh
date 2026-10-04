@@ -1681,8 +1681,10 @@ SYNCSVC
     # The unit file itself is shipped by the `hypridle` Arch package to
     # /usr/lib/systemd/user/hypridle.service and declares
     # `WantedBy=graphical-session.target`, so the wants symlink must live in
-    # `graphical-session.target.wants` (NOT default.target.wants) to be picked
-    # up by systemd's user manager on session activation. Enabling it removes
+    # `graphical-session.target.wants` (NOT default.target.wants). Hyprland is
+    # started without a session manager: smplos-session-services (autostart)
+    # starts smplos-session.target, shipped to skel with the shared configs,
+    # which activates that target at every login. Enabling it removes
     # the historical failure mode where `exec-once = hypridle` fired once per
     # session and, if hypridle ever died, Settings would keep advertising
     # timeouts that never actually fired.

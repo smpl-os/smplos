@@ -549,7 +549,7 @@ header() { :; }; ok() { :; }; warn() { echo "$*" >&2; }
 die() { echo "$*" >&2; exit 1; }
 pull_updates() { return 1; }
 sync_scripts() { :; }; sync_configs() { :; }; sync_themes() { :; }
-sync_apps() { :; }; sync_hypr_configs() { :; }; run_migrations() { :; }
+sync_apps() { :; }; sync_hypr_configs() { :; }; sync_user_units() { :; }; run_migrations() { :; }
 sync_hypridle_config() { :; }
 cleanup_shadow_bins() { :; }; post_deploy() { :; }
 update_smpl_apps() { :; }; update_st_smpl() { :; }; update_nemo_smpl() { :; }

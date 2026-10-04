@@ -45,7 +45,10 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("bash -c 'pgrep -x brave >/dev/null || rm -f ~/.config/BraveSoftware/Brave-Browser/Singleton*'")
 
     -- Propagate full environment to systemd/dbus (portals, gnome-keyring, etc.)
-    hl.exec_cmd("systemctl --user import-environment")
+    -- and start the graphical session's user services (hypridle power timers,
+    -- dictation, XR watcher); a plain start-hyprland session never activates
+    -- graphical-session.target on its own. Reports services that fail.
+    hl.exec_cmd("smplos-session-services")
     hl.exec_cmd("dbus-update-activation-environment --systemd --all")
 
     -- Welcome notification with essential keybindings (first boot only)

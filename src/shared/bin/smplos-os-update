@@ -746,6 +746,36 @@ sync_hypr_configs() {
     fi
 }
 
+# ── Sync OS-owned systemd user units ────────────────────────────────────────
+# smplos-session.target activates graphical-session.target, which the
+# session's services (hypridle power timers, dictation, XR watcher) are
+# WantedBy. Without it they only ran after something restarted them and
+# stopped after every reboot. Installed on every update so existing machines
+# get it, then started in a running Hyprland session right away; at login
+# smplos-session-services starts it.
+sync_user_units() {
+    local unit_src="$SMPLOS_REPO/src/shared/configs/systemd/user"
+    local unit_dst="$HOME/.config/systemd/user"
+    local units=(smplos-session.target) unit changed=0
+    [[ -d "$unit_src" ]] || return 0
+
+    as_invoker mkdir -p "$unit_dst"
+    for unit in "${units[@]}"; do
+        [[ -f "$unit_src/$unit" ]] || continue
+        if ! cmp -s "$unit_src/$unit" "$unit_dst/$unit" 2>/dev/null; then
+            copy_user_config "$unit_src/$unit" "$unit_dst/$unit"
+            changed=1
+        fi
+    done
+    [[ $changed -eq 1 ]] && log "  + session services target installed"
+
+    if smplos_have_hyprland; then
+        [[ $changed -eq 1 ]] && smplos_run_as_user systemctl --user daemon-reload
+        smplos_run_as_user systemctl --user start smplos-session.target \
+            || warn "Could not start session services now; they start at the next login."
+    fi
+}
+
 # Run even without new commits: older Settings releases can reintroduce direct
 # dispatcher syntax after a one-shot migration has already completed.
 sync_hypridle_config() {
@@ -946,6 +976,7 @@ if [[ $SCRIPTS_ONLY -eq 0 ]]; then
     sync_themes
     sync_apps
     sync_hypr_configs
+    sync_user_units
     migrations_failed=0
     run_migrations || migrations_failed=1
     sync_hypridle_config
