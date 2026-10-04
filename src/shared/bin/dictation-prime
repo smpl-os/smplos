@@ -7,8 +7,8 @@
 # Idempotent: safe to call multiple times. Does nothing if already primed
 # or if no bundled models are present.
 #
-# Also ensures the voxtype systemd user service is enabled and the
-# default config exists.
+# Also ensures the voxtype systemd user service and the default config
+# exist; the service is enabled only once a voxtype model is present.
 
 set -euo pipefail
 
@@ -139,9 +139,21 @@ SVC
     fi
 fi
 
-# ── Enable the service (don't start — dictation-toggle handles that) ─────────
+# ── Enable the service only once voxtype has a model ─────────────────────────
+# voxtype loads its own model files (ggml), not the faster-whisper cache primed
+# above. Enabled without one it fails at every login. dictation-toggle starts
+# it on demand, and dictation-setup enables it after downloading a model.
+voxtype_has_model() {
+    local entry
+    for entry in "${XDG_DATA_HOME:-$HOME/.local/share}/voxtype/models"/*; do
+        [[ -e "$entry" && "${entry##*/}" != CACHEDIR.TAG ]] && return 0
+    done
+    return 1
+}
 systemctl --user daemon-reload 2>/dev/null || true
-systemctl --user enable voxtype.service 2>/dev/null || true
+if voxtype_has_model; then
+    systemctl --user enable voxtype.service 2>/dev/null || true
+fi
 
 # ── Mark as primed ────────────────────────────────────────────────────────────
 mkdir -p "$(dirname "$MARKER")"

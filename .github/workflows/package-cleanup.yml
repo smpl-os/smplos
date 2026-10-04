@@ -6,12 +6,16 @@ on:
       - ".github/workflows/package-cleanup.yml"
       - "migrations/**"
       - "tests/test_dropped_packages.py"
+      - "tests/test_dictation_autostart.py"
+      - "src/shared/bin/dictation-prime"
   push:
     branches: [main]
     paths:
       - ".github/workflows/package-cleanup.yml"
       - "migrations/**"
       - "tests/test_dropped_packages.py"
+      - "tests/test_dictation_autostart.py"
+      - "src/shared/bin/dictation-prime"
   workflow_dispatch:
 
 permissions:
@@ -29,3 +33,5 @@ jobs:
         run: for f in migrations/*.sh; do bash -n "$f"; done
       - name: Check cleanups remove only packages nothing needs
         run: python3 -m unittest discover -s tests -p 'test_dropped_packages.py' -v
+      - name: Check dictation starts at login only with a model
+        run: python3 -m unittest discover -s tests -p 'test_dictation_autostart.py' -v
