@@ -180,9 +180,7 @@ hl.window_rule({
     float = true,
     move = "2 (monitor_h-window_h-37)",
     no_shadow = true,
-    -- Appear instantly: the global windowsIn slide (~400 ms) made the menu
-    -- feel slow on every Super press.
-    no_anim = true,
+    animation = "slide left",
     stay_focused = true,
 })
 

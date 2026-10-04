@@ -134,10 +134,12 @@ class ToggleStartMenuTests(unittest.TestCase):
         self.assertIn("exec-once = bash -c 'sleep 2 && toggle-start-menu --preload'",
                       (HYPR / "autostart.conf").read_text())
 
-    def test_menu_appears_without_the_slide_animation(self):
+    def test_menu_keeps_its_slide_in(self):
+        # The delay was the process start, not the animation.
         self.assertRegex((HYPR / "windows.lua").read_text(),
-                         r'class = "\^\(start-menu\)\$" \},[^}]*no_anim = true')
-        self.assertIn("windowrule = no_anim on, match:class ^(start-menu)$", (HYPR / "windows.conf").read_text())
+                         r'class = "\^\(start-menu\)\$" \},[^}]*animation = "slide left"')
+        self.assertIn("windowrule = animation slide left, match:class ^(start-menu)$",
+                      (HYPR / "windows.conf").read_text())
 
 
 if __name__ == "__main__":
