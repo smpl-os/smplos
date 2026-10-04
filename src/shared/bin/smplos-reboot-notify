@@ -11,6 +11,8 @@
 # marker is stale — clear it silently.
 
 MARKER="$HOME/.local/state/smplos/reboot-pending"
+# Older smplos-update releases wrote it one directory deeper.
+[[ -f "$MARKER" ]] || MARKER="$HOME/.local/state/smplos/update/reboot-pending"
 
 # ── Check if a reboot is actually pending ────────────────────────────────────
 [[ -f "$MARKER" ]] || exit 0
@@ -35,7 +37,7 @@ if command -v dunstify &>/dev/null && pgrep -x dunst &>/dev/null; then
         -A "reboot,Restart Now" \
         -A "later,Remind me later" \
         "smplOS: Reboot required" \
-        "A system update was applied. Restart to activate the new kernel and drivers.")
+        "A system update was applied. Restart to use the new kernel, graphics driver and desktop.")
 
     case "$action" in
         reboot)
@@ -50,5 +52,5 @@ if command -v dunstify &>/dev/null && pgrep -x dunst &>/dev/null; then
 elif command -v notify-send &>/dev/null; then
     notify-send -u critical -i system-reboot \
         "smplOS: Reboot required" \
-        "A system update was applied. Restart to activate the new kernel and drivers."
+        "A system update was applied. Restart to use the new kernel, graphics driver and desktop."
 fi

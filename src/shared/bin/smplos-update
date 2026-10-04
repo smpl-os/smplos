@@ -187,7 +187,7 @@ load_critical_packages() {
     HYPRLAND_SERIES=""
     if [[ -f "$CRITICAL_BUNDLE_FILE" ]]; then
         HYPRLAND_SERIES=$(sed -n \
-            's/^HYPRLAND_SERIES="\{0,1\}\([0-9][0-9]*\.[0-9][0-9]*\)"\{0,1\}[[:space:]]*$/\1/p' \
+            's/^HYPRLAND_SERIES="\{0,1\}\([0-9][0-9]*\.[0-9][0-9]*\)"\{0,1\}[[:space:]]*\(#.*\)\{0,1\}$/\1/p' \
             "$CRITICAL_BUNDLE_FILE" | head -n1)
     fi
 }
@@ -208,10 +208,17 @@ stack_versions() {
         linux-zen nvidia-open-dkms nvidia-utils nvidia-580xx-dkms 2>/dev/null
 }
 
+# Read by smplos-reboot-notify (end of this run and at every login).
+REBOOT_MARKER="$HOME/.local/state/smplos/reboot-pending"
+
 mark_reboot_pending() {
-    mkdir -p "$STATE_DIR"
+    mkdir -p "${REBOOT_MARKER%/*}"
     # boot_id, so the marker expires by itself after a reboot.
-    tr -d '-' < /proc/sys/kernel/random/boot_id > "$STATE_DIR/reboot-pending" 2>/dev/null || true
+    tr -d '-' < /proc/sys/kernel/random/boot_id > "$REBOOT_MARKER" 2>/dev/null || return 0
+    if [[ -n "${SMPLOS_INVOKER_UID:-}" ]]; then
+        chown "$SMPLOS_INVOKER_UID" "$REBOOT_MARKER" 2>/dev/null || true
+    fi
+    return 0
 }
 
 # Upgrade the whole system in ONE transaction. While Arch ships the Hyprland
@@ -228,8 +235,13 @@ system_upgrade() {
         UPDATE_FAILED=1
         return 0
     fi
-    available=$(pacman -Si hyprland 2>/dev/null | awk '/^Version/ {print $3; exit}')
-    if [[ -n "$HYPRLAND_SERIES" && -n "$available" && "$available" != "$HYPRLAND_SERIES".* ]]; then
+    # pacman translates field labels; read them in the C locale.
+    available=$(LC_ALL=C pacman -Si hyprland 2>/dev/null | awk '/^Version/ {print $3; exit}')
+    if [[ -z "$HYPRLAND_SERIES" || -z "$available" ]]; then
+        # Without a known series or version, keep the previous behaviour.
+        held=1
+        echo "  Holding Hyprland: could not compare its version with the supported series."
+    elif [[ "$available" != "$HYPRLAND_SERIES".* ]]; then
         held=1
         echo "  Holding Hyprland $available: smplOS supports the $HYPRLAND_SERIES series."
     fi
@@ -604,11 +616,18 @@ echo
 echo "Closing in 3 seconds... (Ctrl+C to cancel)"
 sleep 3
 
-# After the terminal closes, fire a reboot notification if needed.
-# Running in background so the terminal window can close first.
-if [[ -f "$STATE_DIR/reboot-pending" ]] && command -v smplos-reboot-notify &>/dev/null; then
-    ( sleep 1; smplos-reboot-notify ) &
-    disown
+# After the terminal closes, fire a reboot notification if needed: detached so
+# closing the window cannot kill it, and as the user, whose session bus shows
+# notifications (root under pkexec has none).
+if [[ -f "$REBOOT_MARKER" ]] && command -v smplos-reboot-notify &>/dev/null; then
+    if [[ $EUID -eq 0 && -n "${SMPLOS_INVOKER_USER:-}" ]]; then
+        setsid -f runuser -u "$SMPLOS_INVOKER_USER" -- env \
+            XDG_RUNTIME_DIR="/run/user/$SMPLOS_INVOKER_UID" \
+            DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$SMPLOS_INVOKER_UID/bus" \
+            sh -c 'sleep 1; exec smplos-reboot-notify' >/dev/null 2>&1
+    else
+        setsid -f sh -c 'sleep 1; exec smplos-reboot-notify' >/dev/null 2>&1
+    fi
 fi
 [[ "$UPDATE_FAILED" -eq 0 ]]
 } 2>&1 | tee -a "$LOG_FILE"

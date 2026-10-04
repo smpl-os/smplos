@@ -54,7 +54,10 @@ PACMAN = textwrap.dedent("""\
     case "$1" in
       -Sy) [[ "${SY_FAIL:-0}" == 1 ]] && exit 1; exit 0 ;;
       -Su) [[ "${SU_FAIL:-0}" == 1 ]] && exit 1; touch "$state"; exit 0 ;;
-      -Si) echo "Version         : $AVAILABLE" ;;
+      -Si) [[ -n "${AVAILABLE:-}" ]] || exit 1
+           # pacman translates labels unless the C locale is forced.
+           if [[ "${LC_ALL:-}" == C ]]; then echo "Version         : $AVAILABLE"
+           else echo "Versión         : $AVAILABLE"; fi ;;
       -Qq) var="QQ_${2//-/_}"; [[ -n "${!var:-}" ]] || exit 1; echo "${!var}" ;;
       -Q)  if [[ -f "$state" ]]; then echo "hyprland ${INSTALLED_AFTER:-0.56.0-2}"
            else echo "hyprland 0.56.0-2"; fi ;;
@@ -76,7 +79,9 @@ class SystemUpgradeTests(unittest.TestCase):
         for tool in ("pacman", "sudo"):
             (bin_dir / tool).chmod(0o755)
         self.state = root / "state"
-        self.env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}", CALLS=str(self.calls))
+        self.home = root / "home"
+        self.env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}", CALLS=str(self.calls),
+                        HOME=str(self.home), LANG="es_ES.UTF-8", LC_ALL="")
 
     def run_updater_step(self, body, conf_extra="", **env):
         conf = Path(self.temp.name) / "critical-bundle.conf"
@@ -91,6 +96,7 @@ class SystemUpgradeTests(unittest.TestCase):
             f"CRITICAL_BUNDLE_FILE={shlex.quote(str(conf))}",
             f"CRITICAL_LIST_FILE={shlex.quote(str(POLICY / 'critical-packages.txt'))}",
             "DEFAULT_CRITICAL_PACKAGES=(hyprland)", "APPS_EXTRA_IGNORE=(pacman libalpm)",
+            'REBOOT_MARKER="$HOME/.local/state/smplos/reboot-pending"',
             *(function(name) for name in ("csv_join", "load_critical_packages", "refresh_bundle_snapshot",
                                           "stack_versions", "mark_reboot_pending", "system_upgrade",
                                           "critical_bundle_prompt_and_apply")),
@@ -107,14 +113,23 @@ class SystemUpgradeTests(unittest.TestCase):
         out, calls = self.run_updater_step("system_upgrade", AVAILABLE="0.56.2-4", INSTALLED_AFTER="0.56.2-4")
         self.assertEqual(calls, ["-Sy --noconfirm", "-Su --noconfirm"])
         self.assertIn("RESULT failed=0 upgraded=1 series=0.56", out)
-        self.assertTrue((self.state / "reboot-pending").exists(), "a new compositor needs a new session")
+        marker = self.home / ".local/state/smplos/reboot-pending"
+        self.assertTrue(marker.exists(), "a new compositor needs a new session")
+        # The reminder reads exactly this marker.
+        notifier = (ROOT / "src/shared/bin/smplos-reboot-notify").read_text()
+        self.assertIn('MARKER="$HOME/.local/state/smplos/reboot-pending"', notifier)
 
     def test_unvalidated_series_is_held(self):
         out, calls = self.run_updater_step("system_upgrade", AVAILABLE="0.57.0-1")
         self.assertEqual(calls, ["-Sy --noconfirm", "-Su --noconfirm --ignore hyprland,xdg-desktop-portal-hyprland"])
         self.assertIn("Holding Hyprland 0.57.0-1", out)
         self.assertIn("RESULT failed=0 upgraded=1", out)
-        self.assertFalse((self.state / "reboot-pending").exists())
+        self.assertFalse((self.home / ".local/state/smplos/reboot-pending").exists())
+
+    def test_an_unknown_version_is_held_like_before(self):
+        out, calls = self.run_updater_step("system_upgrade", AVAILABLE="")
+        self.assertEqual(calls, ["-Sy --noconfirm", "-Su --noconfirm --ignore hyprland,xdg-desktop-portal-hyprland"])
+        self.assertIn("could not compare", out)
 
     def test_held_series_that_blocks_the_upgrade_is_reported(self):
         out, _ = self.run_updater_step("system_upgrade", AVAILABLE="0.57.0-1", SU_FAIL="1")
@@ -142,7 +157,8 @@ class SystemUpgradeTests(unittest.TestCase):
         self.assertEqual((self.state / "critical-bundle-applied").read_text().strip(), "test-1")
 
     def test_series_parsing_ignores_anything_but_major_minor(self):
-        for line, expected in (('HYPRLAND_SERIES=0.57\n', "0.57"), ('HYPRLAND_SERIES="$(id)"\n', "")):
+        for line, expected in (('HYPRLAND_SERIES=0.57\n', "0.57"), ('HYPRLAND_SERIES="0.58"  # tested\n', "0.58"),
+                               ('HYPRLAND_SERIES="$(id)"\n', "")):
             conf = Path(self.temp.name) / "c.conf"
             conf.write_text(line)
             script = "\n".join([f"CRITICAL_BUNDLE_FILE={shlex.quote(str(conf))}",
@@ -152,6 +168,16 @@ class SystemUpgradeTests(unittest.TestCase):
                                 "load_critical_packages", 'printf "%s" "$HYPRLAND_SERIES"'])
             out = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=True).stdout
             self.assertEqual(out, expected)
+
+    def test_the_shipped_series_is_read_by_the_updater_itself(self):
+        _, series, _, _ = bundle()
+        script = "\n".join([f"CRITICAL_BUNDLE_FILE={shlex.quote(str(POLICY / 'critical-bundle.conf'))}",
+                            f"CRITICAL_LIST_FILE={shlex.quote(str(POLICY / 'critical-packages.txt'))}",
+                            "DEFAULT_CRITICAL_PACKAGES=(hyprland)", "APPS_EXTRA_IGNORE=()",
+                            function("csv_join"), function("load_critical_packages"),
+                            "load_critical_packages", 'printf "%s" "$HYPRLAND_SERIES"'])
+        out = subprocess.run(["bash", "-c", script], capture_output=True, text=True, check=True).stdout
+        self.assertEqual(out, series)
 
     def test_the_full_update_uses_the_one_transaction_step(self):
         step = UPDATER.split("# ── Step 2: Official repos", 1)[1].split("# ── Step 4", 1)[0]

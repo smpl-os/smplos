@@ -114,14 +114,14 @@ fix_qemu_gluster_blocker
 # Like smplos-update: hold the Hyprland stack only while Arch ships a series
 # smplOS has not validated (HYPRLAND_SERIES); otherwise holding it while its
 # libraries move is a partial upgrade that fails.
-_series=$(sed -n 's/^HYPRLAND_SERIES="\{0,1\}\([0-9][0-9]*\.[0-9][0-9]*\)"\{0,1\}[[:space:]]*$/\1/p' \
+_series=$(sed -n 's/^HYPRLAND_SERIES="\{0,1\}\([0-9][0-9]*\.[0-9][0-9]*\)"\{0,1\}[[:space:]]*\(#.*\)\{0,1\}$/\1/p' \
     "$CRITICAL_BUNDLE_FILE" | head -n1)
 _syu_ok=1
 if ! sudo pacman -Sy --noconfirm; then
     echo "  WARNING: catch-up could not refresh package databases"
     _syu_ok=0
 else
-    _available=$(pacman -Si hyprland 2>/dev/null | awk '/^Version/ {print $3; exit}')
+    _available=$(LC_ALL=C pacman -Si hyprland 2>/dev/null | awk '/^Version/ {print $3; exit}')
     if [[ -n "$_series" && -n "$_available" && "$_available" == "$_series".* ]]; then
         FRESH_IGNORE=""
     fi
