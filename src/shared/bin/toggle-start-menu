@@ -32,6 +32,13 @@ supports_resident() {
     "$BIN_PATH" --version 2>/dev/null | grep -q '^features:.*\bresident\b'
 }
 
+# Menus without --resident. A resident that has not written its pidfile yet
+# (preload still starting) must never be killed; `--resident` waits for it and
+# hands off instead.
+legacy_pids() {
+    pgrep -a -x "$APP_NAME" | awk '!/ --resident( |$)/ {print $1}'
+}
+
 launch() {
     "$BIN_PATH" "$@" &
     disown
@@ -49,14 +56,16 @@ case "${1:-}" in
         if pid=$(resident_pid); then
             kill -USR2 "$pid"
         else
-            pkill -x "$APP_NAME"
+            mapfile -t legacy < <(legacy_pids)
+            [[ ${#legacy[@]} -gt 0 ]] && kill "${legacy[@]}"
         fi
         ;;
     *)
+        mapfile -t legacy < <(legacy_pids)
         if pid=$(resident_pid); then
             kill -USR1 "$pid"
-        elif pkill -x "$APP_NAME" 2>/dev/null; then
-            : # a non-resident menu was open, now closed
+        elif [[ ${#legacy[@]} -gt 0 ]]; then
+            kill "${legacy[@]}"   # a non-resident menu was open, now closed
         elif supports_resident; then
             launch --resident
         else

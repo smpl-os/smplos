@@ -45,6 +45,7 @@ class ToggleStartMenuTests(unittest.TestCase):
             trap 'echo USR2 >> "$LOG"' USR2
             trap 'exit 0' TERM
             if [[ "${{1:-}}" == --resident ]]; then
+                sleep "${{PIDFILE_DELAY:-0}}"
                 mkdir -p "$XDG_RUNTIME_DIR/smplos"
                 echo $$ > "$XDG_RUNTIME_DIR/smplos/start-menu.pid"
             fi
@@ -102,6 +103,18 @@ class ToggleStartMenuTests(unittest.TestCase):
         while self.running() and time.monotonic() < deadline:
             time.sleep(0.02)
         self.assertFalse(self.running())
+
+    def test_a_resident_that_is_still_starting_is_never_killed(self):
+        self.write_fake(resident=True)
+        starting = subprocess.Popen([str(self.fake), "--resident", "--hidden"],
+                                    env=dict(self.env, PIDFILE_DELAY="3"))
+        self.addCleanup(starting.kill)
+        self.assertEqual(self.events(1), ["start --resident --hidden"])
+        self.toggle()
+        self.toggle("--hide")
+        time.sleep(0.3)
+        self.assertIsNone(starting.poll(), "the starting resident must survive")
+        self.assertIn("start --resident", self.events(2))
 
     def test_a_stale_pidfile_starts_a_new_resident_menu(self):
         self.write_fake(resident=True)
