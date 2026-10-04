@@ -16,8 +16,12 @@ package.path = (os.getenv("HOME") or "") .. "/.config/hypr/?.lua;"
 -- ── Monitors ───────────────────────────────────────────────────────────────
 -- Fallback so first boot (no monitors.conf yet) still gets a usable layout.
 hl.monitor({ output = "", mode = "preferred", position = "auto", scale = "auto" })
--- User-saved overrides (written by Settings → Display)
-require("monitors_loader").load((os.getenv("HOME") or "") .. "/.config/hypr/monitors.conf")
+-- User-saved overrides (written by Settings → Display). A loader failure must
+-- never abort the rest of the config (bindings, autostart), so it is isolated.
+local monitors_ok, monitors_err = pcall(function()
+    require("monitors_loader").load((os.getenv("HOME") or "") .. "/.config/hypr/monitors.conf")
+end)
+if not monitors_ok then print("monitors_loader failed: " .. tostring(monitors_err)) end
 require("workspace_policy")
 
 -- ── Configuration modules ──────────────────────────────────────────────────

@@ -25,10 +25,18 @@
 # WHAT IT DOES:
 #   1. If monitors.conf doesn't exist -> exit 0 (Hyprland will pick
 #      preferred defaults, safe).
-#   2. If monitors.conf has AT LEAST ONE real (non-disable) monitor
-#      line -> exit 0, everything's fine.
-#   3. If EVERY `monitor = ...` line is `disable` -> the file is
-#      corrupted. Roll back:
+#   2. Rules are read with hyprlang's rules: `#` starts a comment, `##` is a
+#      literal `#`, `disable` and `disabled` both disable, and the last
+#      definition of a selector wins. Standalone `transform`/`addreserved`
+#      lines modify a rule and are not rules themselves.
+#   3. If at least one rule enables a display -> exit 0, everything's fine.
+#   4. If EVERY rule disables a display, the file is corrupt only when no
+#      connected display (from /sys/class/drm) would still light up through
+#      the enabled catch-all. Disabling just the laptop panel while an
+#      external display stays connected is an intentional choice and is
+#      kept. Disabling via `desc:` or the catch-all cannot be checked before
+#      Hyprland starts, so those all-disabled files are treated as corrupt.
+#      Roll back a corrupt file:
 #        a. Look for the most recent monitors.conf.bak-* backup.
 #        b. If found, restore it and log.
 #        c. If not found, delete monitors.conf entirely so Hyprland
@@ -52,23 +60,94 @@ if [[ -f "$LOG" ]] && [[ $(stat -c%s "$LOG" 2>/dev/null || echo 0) -gt 102400 ]]
     tail -c 51200 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
 fi
 
+# Tests point this at a fake connector tree.
+DRM_SYSFS="${SMPLOS_DRM_SYSFS:-/sys/class/drm}"
+
+# Prints "<rules> <disabled> <unverifiable> <connector disabled by name>..."
+analyze() {
+    awk '
+    function trim(s) { gsub(/^[ \t\r]+|[ \t\r]+$/, "", s); return s }
+    # hyprlang: "#" starts a comment, "##" is a literal "#", and the search
+    # resumes two characters after an escape.
+    function strip_comment(s,    pos, resume, rest) {
+        s = trim(s)
+        if (substr(s, 1, 1) == "#") return ""
+        pos = index(s, "#")
+        while (pos > 0) {
+            if (substr(s, pos + 1, 1) == "#") {
+                resume = pos + 2
+                s = substr(s, 1, pos) substr(s, pos + 2)
+                rest = substr(s, resume)
+                pos = index(rest, "#")
+                if (pos > 0) pos += resume - 1
+            } else {
+                s = substr(s, 1, pos - 1)
+                break
+            }
+        }
+        return trim(s)
+    }
+    {
+        line = strip_comment($0)
+        if (line !~ /^monitor[ \t]*=/) next
+        sub(/^monitor[ \t]*=/, "", line)
+        n = split(line, f, ",")
+        sel = trim(f[1])
+        action = n >= 2 ? trim(f[2]) : ""
+        if (action == "transform" || action == "addreserved") next
+        if (!(sel in state)) order[++count] = sel
+        state[sel] = (action == "disable" || action == "disabled") ? "off" : "on"
+    }
+    END {
+        off = 0; unverifiable = 0; names = ""
+        for (i = 1; i <= count; i++) {
+            sel = order[i]
+            if (state[sel] != "off") continue
+            off++
+            if (sel == "" || sel ~ /^desc:/) unverifiable = 1
+            else names = names " " sel
+        }
+        printf "%d %d %d%s\n", count, off, unverifiable, names
+    }' "$1" 2>/dev/null
+}
+
+connected_connectors() {
+    local status name
+    for status in "$DRM_SYSFS"/card*-*/status; do
+        [[ -r "$status" && "$(<"$status")" == connected ]] || continue
+        name=${status%/status}
+        name=${name##*/}
+        printf '%s\n' "${name#card*-}"
+    done
+}
+
+# Succeeds when the file would leave no connected display enabled.
+all_disabled() {
+    local total disabled unverifiable names name
+    read -r total disabled unverifiable names <<<"$(analyze "$1")"
+    [[ "${total:-0}" -gt 0 && "${total:-0}" -eq "${disabled:-0}" ]] || return 1
+    [[ "${unverifiable:-0}" -eq 0 ]] || return 0
+    local -A off=()
+    for name in $names; do off[$name]=1; done
+    while IFS= read -r name; do
+        [[ -n "$name" && -z "${off[$name]:-}" ]] && return 1
+    done < <(connected_connectors)
+    return 0
+}
+
 [[ -f "$CONF" ]] || { log "no monitors.conf — Hyprland will use preferred defaults"; exit 0; }
 
-# Count total monitor lines vs disabled ones. Using awk (always exit 0)
-# instead of `grep -c ... || echo 0`, which double-emits when grep finds
-# zero matches (grep prints "0" AND exits 1, tripping the fallback).
-total=$(awk '/^[[:space:]]*monitor[[:space:]]*=/{c++} END{print c+0}' "$CONF" 2>/dev/null)
-disabled=$(awk '/^[[:space:]]*monitor[[:space:]]*=[[:space:]]*[^,]+,[[:space:]]*disable[[:space:]]*$/{c++} END{print c+0}' "$CONF" 2>/dev/null)
+read -r total disabled _ <<<"$(analyze "$CONF")"
 total=${total:-0}
 disabled=${disabled:-0}
 
 if [[ "$total" -eq 0 ]]; then
-    log "monitors.conf has zero monitor lines — nothing to check"
+    log "monitors.conf has zero monitor rules — nothing to check"
     exit 0
 fi
 
-if [[ "$total" -eq "$disabled" ]]; then
-    log "CORRUPT monitors.conf detected: $total/$total monitors set to 'disable'"
+if all_disabled "$CONF"; then
+    log "CORRUPT monitors.conf detected: $total/$total rules disable a display and no connected display stays on"
     log "  file dump:"
     sed 's/^/    /' "$CONF" >> "$LOG"
 
@@ -79,15 +158,12 @@ if [[ "$total" -eq "$disabled" ]]; then
         "$HOME/.config/hypr/monitors.conf.last-known-good"; do
         [[ -n "$cand" && -f "$cand" ]] || continue
         # Sanity: don't restore an also-corrupt backup.
-        bak_total=$(awk '/^[[:space:]]*monitor[[:space:]]*=/{c++} END{print c+0}' "$cand" 2>/dev/null)
-        bak_disabled=$(awk '/^[[:space:]]*monitor[[:space:]]*=[[:space:]]*[^,]+,[[:space:]]*disable[[:space:]]*$/{c++} END{print c+0}' "$cand" 2>/dev/null)
-        bak_total=${bak_total:-0}
-        bak_disabled=${bak_disabled:-0}
-        if [[ "$bak_total" -gt 0 && "$bak_total" -ne "$bak_disabled" ]]; then
+        read -r bak_total _ <<<"$(analyze "$cand")"
+        if [[ "${bak_total:-0}" -gt 0 ]] && ! all_disabled "$cand"; then
             cp "$cand" "$CONF" && log "  restored from backup: $cand"
             exit 0
         else
-            log "  candidate $cand is also corrupt ($bak_disabled/$bak_total disabled), skipping"
+            log "  candidate $cand is also unusable, skipping"
         fi
     done
 
@@ -102,9 +178,9 @@ fi
 
 # All good — some/all monitors are real entries.
 if [[ "$disabled" -gt 0 ]]; then
-    log "OK: $((total - disabled))/$total monitors active ($disabled disabled)"
+    log "OK: $((total - disabled))/$total rules enable a display ($disabled disabled)"
 else
-    log "OK: all $total monitors active"
+    log "OK: all $total rules enable a display"
 fi
 
 # Snapshot this valid state as last-known-good so the next boot after a

@@ -69,24 +69,22 @@ snap_window() {
   win_h=$(echo "$info" | jq -r '.h')
   mon_id=$(echo "$info" | jq -r '.mon')
 
-  # Get monitor geometry
+  # Get the monitor's logical geometry. hyprctl reports the unrotated mode, so
+  # odd transforms (90°/270°, plain or mirrored) swap the axes. It prints the
+  # scale with two decimals; Hyprland's effective scale is a multiple of 1/120.
   local mon_info
   mon_info=$(hyprctl -j monitors 2>/dev/null \
     | jq -e --argjson mid "$mon_id" '
         .[] | select(.id == $mid)
-            | { x, y, w: .width, h: .height, s: .scale }' 2>/dev/null) || return 0
+            | (if (.transform % 2) == 1 then [.height, .width] else [.width, .height] end) as [$w, $h]
+            | ((.scale * 120 | round) / 120) as $s
+            | { x, y, w: ($w / $s | round), h: ($h / $s | round) }' 2>/dev/null) || return 0
 
-  local mon_x mon_y mon_w mon_h scale
+  local mon_x mon_y eff_w eff_h
   mon_x=$(echo "$mon_info" | jq -r '.x')
   mon_y=$(echo "$mon_info" | jq -r '.y')
-  mon_w=$(echo "$mon_info" | jq -r '.w')
-  mon_h=$(echo "$mon_info" | jq -r '.h')
-  scale=$(echo "$mon_info" | jq -r '.s')
-
-  # Effective pixel area (accounts for fractional scaling)
-  local eff_w eff_h
-  eff_w=$(awk "BEGIN { printf \"%d\", ${mon_w}/${scale} }")
-  eff_h=$(awk "BEGIN { printf \"%d\", ${mon_h}/${scale} }")
+  eff_w=$(echo "$mon_info" | jq -r '.w')
+  eff_h=$(echo "$mon_info" | jq -r '.h')
 
   local mon_right=$(( mon_x + eff_w ))
   local mon_bottom=$(( mon_y + eff_h ))
@@ -129,6 +127,9 @@ snap_all_floating() {
     snap_window "$addr"
   done
 }
+
+# Sourcing (tests) defines the helpers above without starting the daemon.
+[[ "${BASH_SOURCE[0]}" != "$0" ]] && return 0
 
 # ── Periodic sweep (background) ─────────────────────────────────────────────
 periodic_sweep() {

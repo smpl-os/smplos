@@ -101,6 +101,60 @@ mv ~/.config/hypr/hyprland.conf.disabled ~/.config/hypr/hyprland.conf
   file is intentionally a one-to-one translation, so a diff between
   `windows.conf` and `windows.lua` should show only translation noise.
 
+## monitors.conf contract
+
+`~/.config/hypr/monitors.conf` is the saved display layout. Settings → Display
+and `monitors_loader.lua` both follow this contract, so the saved file, the
+Settings UI and the live layout cannot disagree silently.
+
+* **Location and ownership**: always `$HOME/.config/hypr/monitors.conf`
+  (`hyprland.conf` and `hyprland.lua` hard-code it; `XDG_CONFIG_HOME` is not
+  consulted). The user and Settings own it. Updates never replace it, the
+  ISO ships none, and a missing file means Hyprland's preferred defaults.
+* **Grammar**: hyprlang `monitor =` lines only. `#` starts a comment anywhere
+  on a line and `##` is a literal `#`. Fields are split on commas and trimmed.
+  `$variables`, `source =`, `monitorv2` blocks and other keywords are not
+  supported in this file.
+  * `SEL, MODE, POSITION, SCALE[, KEY, VALUE]...` creates a fresh rule.
+    KEY is `transform` (0–7), `mirror`, `bitdepth`, `cm`, `sdrbrightness`,
+    `sdrsaturation`, `vrr` or `icc`; reading stops at the first empty KEY.
+  * `SEL, disable` or `SEL, disabled` creates a fresh disabled rule.
+  * `SEL, transform, N` changes an earlier rule with the identical selector
+    and is ignored when there is none.
+  * `SEL, addreserved, TOP, BOTTOM, LEFT, RIGHT` changes an earlier rule in
+    place or creates one with that reserved area. (hyprlang drops the area
+    when no rule exists; the Lua loader keeps it.)
+* **Selectors and precedence**: SEL is a connector (`DP-3`), `desc:` followed
+  by a description prefix (`desc:Dell Inc. DELL P2412H KG49T35D59GU`), or
+  empty for the catch-all. Hyprland uses the **last** rule that matches a
+  display; the catch-all applies only when no named rule matches. A full or
+  disable line replaces an earlier rule with the identical selector and moves
+  it to the end, as does a standalone `transform`.
+* **What Settings writes**: one full line per enabled physical display,
+  keyed by `desc:<make model serial>` when that description is unique and not
+  a prefix of another display's description (so the rule survives connector
+  renames such as DP-3 becoming DP-4), otherwise by connector. Scale keeps up
+  to six decimals and transform keeps the exact value 0–7. Lines for
+  displays that are disconnected, disabled, mirrored or virtual (`HEADLESS-*`
+  outputs created for XR glasses), comments and the catch-all are preserved;
+  extra options and `addreserved` lines of a rewritten display are carried
+  over. The file is replaced atomically after a timestamped
+  `monitors.conf.bak-*` copy (newest five kept), then Settings runs
+  `hyprctl reload` and re-reads the live state to verify what Hyprland
+  applied.
+* **Loading**: under Lua, `monitors_loader.lua` turns the file into exactly
+  one `hl.monitor()` call per selector, in last-definition order, with
+  hyprlang's fresh-rule semantics (a later full line re-enables a display and
+  resets its transform). Invalid or unknown options and malformed modifier
+  lines are logged and skipped rather than handed to Hyprland, so an update
+  cannot turn previously ignored content into a config-error banner.
+  `hyprland.lua` isolates loader failures so bindings and autostart still
+  load. The hyprlang entry point sources the same file after its catch-all,
+  so a catch-all saved in `monitors.conf` wins under both providers.
+* **Login guard**: `start-hyprland` runs `monitors-guard` first. Only a file
+  that would leave every connected display disabled is treated as corrupt
+  and restored from the newest usable backup or moved aside.
+
 ## Long-term plan
 
 Once Lua has been verified stable across the install base (a release or two),

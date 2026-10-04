@@ -1,0 +1,47 @@
+name: Display stack
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/display.yml"
+      - "src/compositors/hyprland/hypr/**"
+      - "src/shared/bin/monitors-guard"
+      - "src/shared/bin/window-guard"
+      - "src/shared/bin/start-hyprland"
+      - "tests/test_display_stack.py"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/display.yml"
+      - "src/compositors/hyprland/hypr/**"
+      - "src/shared/bin/monitors-guard"
+      - "src/shared/bin/window-guard"
+      - "src/shared/bin/start-hyprland"
+      - "tests/test_display_stack.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  display-stack:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install test prerequisites
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends jq lua5.4
+          command -v lua >/dev/null || sudo ln -s "$(command -v lua5.4)" /usr/local/bin/lua
+          lua -v
+          jq --version
+      - name: Check shell syntax
+        run: |
+          bash -n src/shared/bin/monitors-guard
+          bash -n src/shared/bin/window-guard
+          bash -n src/shared/bin/start-hyprland
+      - name: Check monitors.conf loading, guarding and rotated geometry
+        run: python3 -m unittest discover -s tests -p 'test_display*.py' -v

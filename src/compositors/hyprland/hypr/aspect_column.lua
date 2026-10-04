@@ -20,14 +20,15 @@
 local M = {}
 
 -- Compute the visible aspect ratio for a monitor, accounting for rotation.
--- Hyprland reports width/height as the physical panel dimensions; transform
--- 1 and 3 are 90°/270° rotations that swap the logical axes.
+-- Hyprland reports width/height as the physical panel dimensions; odd
+-- transforms (1/3 and the mirrored 5/7) are 90°/270° rotations that swap the
+-- logical axes.
 local function visible_aspect(mon)
     if not mon or not mon.width or not mon.height or mon.height == 0 then
         return 16 / 9
     end
     local w, h = mon.width, mon.height
-    if mon.transform == 1 or mon.transform == 3 then
+    if (tonumber(mon.transform) or 0) % 2 == 1 then
         w, h = h, w
     end
     return w / h
