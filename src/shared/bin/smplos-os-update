@@ -771,8 +771,14 @@ sync_user_units() {
 
     if smplos_have_hyprland; then
         [[ $changed -eq 1 ]] && smplos_run_as_user systemctl --user daemon-reload
-        smplos_run_as_user systemctl --user start smplos-session.target \
-            || warn "Could not start session services now; they start at the next login."
+        if smplos_run_as_user systemctl --user start smplos-session.target; then
+            # Stops and reports services that cannot run instead of letting
+            # them restart-loop until the next login.
+            smplos_run_as_user smplos-session-services --verify \
+                || warn "Some session services are not running; see ~/.cache/smplos/session-services.log"
+        else
+            warn "Could not start session services now; they start at the next login."
+        fi
     fi
 }
 

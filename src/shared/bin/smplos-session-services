@@ -8,9 +8,16 @@
 # silently stopped after every reboot. This runs once from Hyprland autostart
 # (both config trees), starts smplos-session.target (bound to
 # graphical-session.target) and reports any enabled service that is not
-# running instead of failing silently.
+# running instead of failing silently. A service that still fails after a
+# retry is stopped so its Restart= policy cannot loop for the whole session.
+#
+# Usage: smplos-session-services            at login
+#        smplos-session-services --verify   only check (after an update started
+#                                           the target in a running session)
 
 set -uo pipefail
+
+MODE="${1:-login}"
 
 TARGET=smplos-session.target
 LOG_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/smplos"
@@ -46,25 +53,28 @@ describe() {
     esac
 }
 
-# Services need WAYLAND_DISPLAY (hypridle checks it) and portals need the rest.
-sc import-environment 2>/dev/null
-
-# A target left active by the previous login still binds its services to that
-# session's Wayland display; stop it so they start again for this one.
-if sc is-active --quiet graphical-session.target; then
-    log "stopping graphical-session.target left over from the previous session"
-    sc stop graphical-session.target
-fi
-
 mapfile -t units < <(enabled_session_units)
-# A service that crashed when the previous session ended may have hit its
-# start limit.
-[[ ${#units[@]} -gt 0 ]] && sc reset-failed "${units[@]}" 2>/dev/null
 
-if ! sc start "$TARGET" 2>>"$LOG"; then
-    # The unit may have been installed after this user manager started.
-    sc daemon-reload
-    sc start "$TARGET" 2>>"$LOG" || log "could not start $TARGET"
+if [[ "$MODE" != --verify ]]; then
+    # Services need WAYLAND_DISPLAY (hypridle checks it), portals the rest.
+    sc import-environment 2>/dev/null
+
+    # A target left active by the previous login still binds its services to
+    # that session's Wayland display; stop it so they start for this one.
+    if sc is-active --quiet graphical-session.target; then
+        log "stopping graphical-session.target left over from the previous session"
+        sc stop graphical-session.target
+    fi
+
+    # A service that crashed when the previous session ended may have hit its
+    # start limit.
+    [[ ${#units[@]} -gt 0 ]] && sc reset-failed "${units[@]}" 2>/dev/null
+
+    if ! sc start "$TARGET" 2>>"$LOG"; then
+        # The unit may have been installed after this user manager started.
+        sc daemon-reload
+        sc start "$TARGET" 2>>"$LOG" || log "could not start $TARGET"
+    fi
 fi
 
 sleep "${SMPLOS_SESSION_SETTLE:-5}"
@@ -79,7 +89,8 @@ for unit in "${units[@]}"; do
         log "$unit recovered"
     else
         failed+=("$unit")
-        log "$unit failed: $(prop "$unit" Result)"
+        log "$unit failed: $(prop "$unit" Result); stopped"
+        sc stop "$unit" 2>>"$LOG"
     fi
 done
 

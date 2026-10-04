@@ -657,6 +657,8 @@ class SessionServicesTests(unittest.TestCase):
         result, calls = self.run_login(BROKEN="hypridle.service")
         self.assertEqual(result.returncode, 1)
         self.assertIn("restart hypridle.service", calls)
+        self.assertLess(calls.index("restart hypridle.service"), calls.index("stop hypridle.service"),
+                        "a failing service is stopped so Restart= cannot loop")
         self.assertIn("Power timers", self.notified.read_text())
         self.assertIn("journalctl --user -u hypridle.service", self.notified.read_text())
 
@@ -674,6 +676,21 @@ class SessionServicesTests(unittest.TestCase):
         result, _ = self.run_login(**state)
         self.assertEqual(result.returncode, 0)
         self.assertFalse((self.root / "state/smplos/session-services.failed").exists())
+
+    def test_verify_mode_only_checks_the_running_session(self):
+        result, calls = self.run_login(graphical=True, BROKEN="voxtype.service")
+        self.calls.unlink()
+        self.notified.unlink(missing_ok=True)
+        state = json.loads(self.state.read_text())
+        state["units"]["voxtype.service"]["active"] = False
+        self.state.write_text(json.dumps(state))
+        result = subprocess.run(["bash", str(self.SCRIPT), "--verify"], env=dict(self.env, BROKEN="voxtype.service"),
+                                capture_output=True, text=True, timeout=20)
+        calls = self.calls.read_text().splitlines()
+        self.assertEqual(result.returncode, 1)
+        for forbidden in ("import-environment", "stop graphical-session.target", "start smplos-session.target"):
+            self.assertNotIn(forbidden, calls)
+        self.assertIn("stop voxtype.service", calls)
 
     def test_a_service_skipped_by_its_own_condition_is_not_an_error(self):
         result, calls = self.run_login(skip=("xr-glasses.service",))
@@ -702,7 +719,8 @@ class SessionServicesTests(unittest.TestCase):
         # Reload only after a change; start in the running session each time.
         self.assertEqual(self.calls.read_text().splitlines(), [
             "systemctl --user daemon-reload", "systemctl --user start smplos-session.target",
-            "systemctl --user start smplos-session.target"])
+            "smplos-session-services --verify",
+            "systemctl --user start smplos-session.target", "smplos-session-services --verify"])
         self.calls.unlink()
         subprocess.run(["bash", "-c", script], env=dict(env, SESSION="0"), check=True, timeout=10)
         self.assertFalse(self.calls.exists())

@@ -96,8 +96,9 @@ mv ~/.config/hypr/hyprland.conf.disabled ~/.config/hypr/hyprland.conf
   manager, so both autostart trees run `smplos-session-services`, which
   imports the environment and starts `smplos-session.target` (bound to
   `graphical-session.target`). It then restarts any enabled session service
-  that is not running and notifies when one still fails (power timers at
-  every login). Never start these daemons bare from autostart.
+  that is not running, stops one that still fails (so `Restart=` cannot loop)
+  and notifies (power timers at every login, others once per change). Never
+  start these daemons bare from autostart.
 * **Keybindings**: edit `src/shared/configs/smplos/bindings.conf` (hyprlang).
   The Lua side reads the exact same file via `bindings_loader.lua`.
 * **Theme variables**: edit by running `theme-set <name>`. Both providers pick
