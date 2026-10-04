@@ -352,6 +352,9 @@ class RotatedGeometryTests(unittest.TestCase):
             else:
                 with open(os.environ["CALLS"], "a") as out:
                     out.write(" ".join(args) + "\\n")
+                if os.environ.get("FAIL_DISPATCH"):
+                    print("error: window not found")
+                    sys.exit(7)
             """))
         hyprctl.chmod(0o755)
         self.env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}", CALLS=str(self.calls),
@@ -364,10 +367,12 @@ class RotatedGeometryTests(unittest.TestCase):
     def snap(self, x, y, w, h, monitor=1, **env):
         clients = [{"address": "0xabc", "floating": True, "workspace": {"id": 2}, "fullscreen": 0,
                     "at": [x, y], "size": [w, h], "monitor": monitor}]
-        script = f'source "{BIN / "window-guard"}"\nsnap_window 0xabc\n'
+        # The sourced script enables set -euo pipefail, as the daemon runs.
+        script = f'source "{BIN / "window-guard"}"\nsnap_window 0xabc\necho SURVIVED\n'
         self.calls.unlink(missing_ok=True)
-        subprocess.run(["bash", "-c", script], env=dict(self.env, CLIENTS=json.dumps(clients), **env),
-                       check=True, timeout=10)
+        result = subprocess.run(["bash", "-c", script], env=dict(self.env, CLIENTS=json.dumps(clients), **env),
+                                check=True, timeout=10, capture_output=True, text=True)
+        self.assertIn("SURVIVED", result.stdout)
         return self.calls.read_text() if self.calls.exists() else ""
 
     def test_window_inside_portrait_monitor_is_not_moved(self):
@@ -375,6 +380,9 @@ class RotatedGeometryTests(unittest.TestCase):
 
     def test_window_past_portrait_right_edge_is_pulled_back(self):
         self.assertIn("x=3240, y=100", self.snap(3400, 100, 400, 300))
+
+    def test_failed_move_does_not_stop_the_daemon(self):
+        self.assertIn("x=3240, y=100", self.snap(3400, 100, 400, 300, FAIL_DISPATCH="1"))
 
     def test_two_decimal_scale_recovers_the_exact_logical_size(self):
         # 2880x1800 at 135/120 is 2560x1600 logical; hyprctl prints 1.12.

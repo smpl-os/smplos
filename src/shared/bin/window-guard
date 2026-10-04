@@ -117,8 +117,10 @@ snap_window() {
   fi
 
   if [[ "$needs_move" == "true" ]]; then
+    # hyprctl exits non-zero when the move fails (e.g. the window just closed);
+    # under set -e that would end the whole daemon, so it is not fatal here.
     hyprctl dispatch "hl.dsp.window.move({window='address:$addr', x=$new_x, y=$new_y})" \
-      >/dev/null 2>&1
+      >/dev/null 2>&1 || true
   fi
 }
 
