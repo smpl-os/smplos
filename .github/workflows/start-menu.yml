@@ -1,0 +1,39 @@
+name: Start menu launcher
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/start-menu.yml"
+      - "src/shared/bin/toggle-start-menu"
+      - "src/shared/bin/start-menu-click-check"
+      - "src/compositors/hyprland/hypr/autostart.*"
+      - "src/compositors/hyprland/hypr/windows.*"
+      - "tests/test_start_menu_toggle.py"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/start-menu.yml"
+      - "src/shared/bin/toggle-start-menu"
+      - "src/shared/bin/start-menu-click-check"
+      - "src/compositors/hyprland/hypr/autostart.*"
+      - "src/compositors/hyprland/hypr/windows.*"
+      - "tests/test_start_menu_toggle.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  launcher:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check shell syntax
+        run: |
+          bash -n src/shared/bin/toggle-start-menu
+          bash -n src/shared/bin/start-menu-click-check
+      - name: Check resident and legacy menus are toggled correctly
+        run: python3 -m unittest discover -s tests -p 'test_start_menu_toggle.py' -v

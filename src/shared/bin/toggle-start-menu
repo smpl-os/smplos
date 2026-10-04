@@ -1,19 +1,66 @@
 #!/bin/bash
 # Toggle smplOS Start Menu.
 #
+# A start-menu whose `--version` reports "features: resident" stays running:
+# it is started hidden at login (--preload) and shown/hidden with signals
+# (SIGUSR1 toggle, SIGUSR2 hide), so a Super press no longer pays the
+# ~300 ms process start (system font database, GL driver) every time. Older
+# binaries keep the original launch-on-open / kill-on-close behavior; only
+# `--version` is probed because they open the UI for any other argument.
+#
 # Click-outside-to-dismiss is handled by a permanent non-consuming bind
-# in hypr/popup_watchers.lua (→ popup-click-check). We do NOT manipulate
-# binds at runtime: Hyprland 0.55+ rejects `hyprctl keyword bindn/unbind`
-# with "keyword can't work with non-legacy parsers. Use eval." — silent
-# failure that left the menu only dismissable via Esc.
+# in hypr/popup_watchers.lua (→ popup-click-check → --hide). We do NOT
+# manipulate binds at runtime: Hyprland 0.55+ rejects `hyprctl keyword
+# bindn/unbind` with "keyword can't work with non-legacy parsers. Use eval."
+# — silent failure that left the menu only dismissable via Esc.
+#
+# Usage: toggle-start-menu [--preload | --hide]
 
-APP_NAME="start-menu"
-BIN_PATH="/usr/local/bin/$APP_NAME"
+APP_NAME="${SMPL_START_MENU_NAME:-start-menu}"
+BIN_PATH="${SMPL_START_MENU_BIN:-/usr/local/bin/$APP_NAME}"
 [[ -f "$BIN_PATH" ]] || BIN_PATH="$HOME/Documents/sources/smplos/src/shared/apps/start-menu/target/release/$APP_NAME"
+PIDFILE="${XDG_RUNTIME_DIR:-/run/user/$UID}/smplos/start-menu.pid"
 
-if pkill -x "$APP_NAME" 2>/dev/null; then
-    : # was running, now closed
-else
-    "$BIN_PATH" &
+resident_pid() {
+    local pid
+    pid=$(cat "$PIDFILE" 2>/dev/null) || return 1
+    [[ "$pid" =~ ^[0-9]+$ && "$(cat "/proc/$pid/comm" 2>/dev/null)" == "$APP_NAME" ]] || return 1
+    echo "$pid"
+}
+
+supports_resident() {
+    "$BIN_PATH" --version 2>/dev/null | grep -q '^features:.*\bresident\b'
+}
+
+launch() {
+    "$BIN_PATH" "$@" &
     disown
-fi
+}
+
+case "${1:-}" in
+    --preload)
+        resident_pid >/dev/null && exit 0
+        pgrep -x "$APP_NAME" >/dev/null && exit 0
+        if supports_resident; then
+            launch --resident --hidden
+        fi
+        ;;
+    --hide)
+        if pid=$(resident_pid); then
+            kill -USR2 "$pid"
+        else
+            pkill -x "$APP_NAME"
+        fi
+        ;;
+    *)
+        if pid=$(resident_pid); then
+            kill -USR1 "$pid"
+        elif pkill -x "$APP_NAME" 2>/dev/null; then
+            : # a non-resident menu was open, now closed
+        elif supports_resident; then
+            launch --resident
+        else
+            launch
+        fi
+        ;;
+esac

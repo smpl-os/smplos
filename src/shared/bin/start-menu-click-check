@@ -10,7 +10,7 @@ CURSOR=$(hyprctl cursorpos -j 2>/dev/null | jq -r '"\(.x) \(.y)"')
 read -r cx cy <<< "$CURSOR"
 
 if (( cx < wx || cx > wx + ww || cy < wy || cy > wy + wh )); then
-    pkill -x start-menu
+    toggle-start-menu --hide
     # Force a fresh wl_pointer.enter on the bar after the window unmaps.
     # Hyprland 0.55 does not resend enter to the layer surface under a
     # stationary cursor when a toplevel unmaps, so eww-bar buttons go dead

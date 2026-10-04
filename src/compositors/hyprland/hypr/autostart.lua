@@ -23,6 +23,9 @@ hl.on("hyprland.start", function()
 
     -- Status bar (EWW) - launch after a short delay to ensure theme is ready
     hl.exec_cmd("bash -c 'sleep 0.5 && bar-ctl start'")
+    -- Keep a hidden Start Menu running so Super shows it instantly (no-op for
+    -- start-menu builds without resident support).
+    hl.exec_cmd("bash -c 'sleep 2 && toggle-start-menu --preload'")
 
     -- Window guard — snap floating windows that end up off-screen back into view
     hl.exec_cmd("window-guard")
