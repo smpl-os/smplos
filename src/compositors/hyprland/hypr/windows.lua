@@ -80,7 +80,7 @@ hl.window_rule({
 
 -- Media and special — always fully opaque
 hl.window_rule({
-    match = { class = "^(mpv|imv|vlc|zoom|org\\.kde\\.kdenlive|com\\.obsproject\\.Studio|com\\.github\\.PintaProject\\.Pinta|org\\.gnome\\.NautilusPreviewer|steam|qemu)$" },
+    match = { class = "^(mpv|imv|vlc|zoom|org\\.kde\\.kdenlive(\\.automation-preview)?|com\\.obsproject\\.Studio|com\\.github\\.PintaProject\\.Pinta|org\\.gnome\\.NautilusPreviewer|steam|qemu)$" },
     tag = "+compositor-opaque",
 })
 hl.window_rule({ match = { tag = "pip" },           tag = "+compositor-opaque" })
