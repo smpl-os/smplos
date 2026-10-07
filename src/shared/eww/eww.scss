@@ -676,3 +676,97 @@ window {
 
 /* Notification Hub */
 @import "notification-hub";
+
+/* ============================================================================
+   Macro keypad cheatsheet (pad-cheatsheet window, see KEYPAD.md)
+   Opacity applies to the background only (.o1 .. .o20 = 5% .. 100%);
+   text and borders stay opaque. State is carried by border shape, not color.
+   ============================================================================ */
+.pad-sheet {
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid $bg-lighter;
+  color: $fg;
+}
+
+@for $i from 1 through 20 {
+  .pad-sheet.o#{$i} {
+    background-color: rgba(darken($bg, 5%), $i / 20);
+  }
+}
+
+.pad-sheet-title {
+  font-size: 15px;
+  font-weight: bold;
+  color: $fg;
+}
+
+.pad-sheet-layer {
+  font-size: 11px;
+  padding: 1px 8px;
+  border-radius: 8px;
+  border: 1px solid $accent;
+  color: $accent;
+}
+
+.pad-sheet-notice {
+  font-size: 12px;
+  color: $warning;
+}
+
+.pad-sheet-key,
+.pad-sheet-knob {
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: 1px solid $bg-lighter;
+}
+
+.pad-sheet-knob {
+  border-radius: 14px;
+}
+
+.pad-sheet-key.on {
+  border: 1px solid $accent;
+}
+
+.pad-sheet-key.off,
+.pad-sheet-turn.off {
+  border: 1px dashed $fg-dim;
+  border-radius: 4px;
+}
+
+.pad-sheet-key.unbound {
+  border-color: transparent;
+}
+
+.pad-sheet-num {
+  font-size: 10px;
+  color: $fg-dim;
+}
+
+.pad-sheet-label {
+  font-size: 12px;
+  color: $fg;
+}
+
+.pad-sheet-key.off .pad-sheet-label,
+.pad-sheet-turn.off .pad-sheet-label,
+.pad-sheet-key.unbound .pad-sheet-label,
+.pad-sheet-turn.unbound .pad-sheet-label {
+  color: $fg-dim;
+}
+
+.pad-sheet-state {
+  font-size: 11px;
+  color: $accent;
+}
+
+.pad-sheet-turn {
+  padding: 1px 4px;
+}
+
+.pad-sheet-glyph {
+  font-size: 11px;
+  font-weight: bold;
+  color: $accent;
+}

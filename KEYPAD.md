@@ -183,6 +183,60 @@ the app until the other is replugged. The app drives one keypad anyway.
 runs `smplos-settings keypad`, which opens `settings --tab keypad`. There is no
 bootloader icon: the firmware wizard detects update mode itself.
 
+## Cheatsheet overlay
+
+A key or knob press mapped to `{"cheatsheet": "toggle"}` (or `"hold"`: shown
+while held) shows what every key and knob does right now: the focused app's
+profile, Kdenlive's context layers and mode states. It follows focus changes
+while shown, and an optional timeout hides it.
+
+It follows the same rule as the bar icon: **no listener process**. The daemon
+pushes its content into the running EWW, and only while it runs, which is only
+while a keypad is plugged in:
+
+* `(defvar pad_sheet '{"visible":false}')` holds the daemon's cheatsheet JSON
+  (`GetCheatsheet`; see its `docs/dbus-settings-api.md`).
+* On show, change and hide the daemon runs `eww update pad_sheet=…`. On show
+  and hide it also runs `eww open pad-cheatsheet --anchor …` and
+  `eww close pad-cheatsheet`; a failed update skips the open, so the daemon
+  never starts an EWW.
+* `pad-cheatsheet` is an `overlay` layer surface (namespace
+  `eww-pad-cheatsheet`, not focusable, blurred like the other EWW popups). It
+  is sized to its content and anchored by the `position` option. Neither
+  Hyprland 0.56 nor our EWW can make a surface click-through, so the overlay
+  is kept small rather than full-screen.
+* Keys sit in their real rows and columns; each knob lists turn left, press and
+  turn right. State is shown by shape: a solid border means the binding does
+  something now; a dashed border with dim text means it would do nothing now
+  (for example, Kdenlive's interface is off, explained in a notice line); no
+  border and a dot means unbound. The `opacity` option applies to the
+  background only (`.pad-sheet.o1` to `.o20`, 5% steps); text stays opaque.
+
+Settings (Keypad → Cheatsheet) edits the config's
+`"cheatsheet": {"opacity", "autoHideMs", "position"}` and keeps any other key
+there. It also adds:
+
+* **Show the cheatsheet** as a binding kind, with Toggle and Hold modes. It is
+  offered only for keys and knob presses, and only when the installed daemon's
+  `features --json` lists cheatsheet support.
+* a **Sheet label** for every binding (the binding's `"label"`, at most 40
+  characters). Short forms become objects when a label is set, such as
+  `{"keys": "ctrl+z", "label": "Undo"}`. Fields Settings doesn't edit, like a
+  Kdenlive action's `fallback`, are kept.
+* a **live preview** of the selected profile, including unsaved edits. It runs
+  `control-surfaced cheatsheet --json --window CLASS -c COPY` on a temporary
+  copy next to the config and falls back to the running app's
+  `GetCheatsheetFor`. Kdenlive profiles have a "Preview in" context picker
+  (timeline, monitors, colour wheels, effect parameter).
+* **Show on screen**, which calls the running app's `ShowCheatsheet` (it uses
+  the saved config).
+
+Pending in the daemon (requested): the `--anchor` on open, from the `position`
+option, and run-time flags (`--eww-window pad-cheatsheet --eww-config DIR`) so
+the push is on by default. smplOS will add those flags to the unit's
+`ExecStart` once they exist. Until then, the push can be turned on in the config:
+`"cheatsheet": {"eww": {"window": "pad-cheatsheet", "config": "~/.config/eww"}}`.
+
 ## Settings > Keypad
 
 ```mermaid

@@ -305,6 +305,44 @@ class LifecycleTests(unittest.TestCase):
         self.assertIn("exec settings --tab keypad", settings)
         self.assertIn("Keypad;smplos-settings keypad;settings;", (ROOT / "src/shared/bin/rebuild-app-cache").read_text())
 
+    def test_cheatsheet_overlay_is_pushed_not_listened_for(self):
+        yuck = (ROOT / "src/shared/eww/eww.yuck").read_text()
+        self.assertIn("""(defvar pad_sheet '{"visible":false}')""", yuck)
+        self.assertNotIn("cheatsheet --follow", yuck)
+        window = yuck[yuck.index("(defwindow pad-cheatsheet"):]
+        for needle in (':namespace "eww-pad-cheatsheet"', ':stacking "overlay"', ":focusable false", "(pad-sheet)"):
+            self.assertIn(needle, window)
+        sheet = yuck[yuck.index("(defwidget pad-sheet []"):yuck.index("(defwindow pad-cheatsheet")]
+        for field in ("pad_sheet.title", "pad_sheet.notice", "pad_sheet.keys", "pad_sheet.knobs",
+                      "pad_sheet.options?.opacity", "pad_sheet.layers"):
+            self.assertIn(field, sheet)
+        scss = (ROOT / "src/shared/eww/eww.scss").read_text()
+        self.assertIn(".pad-sheet.o#{$i}", scss)
+        self.assertIn("background-color: rgba(darken($bg, 5%), $i / 20)", scss)
+        self.assertIn("border: 1px dashed", scss, "inactive bindings differ by shape, not only color")
+        for path in ("windows.conf", "windows.lua"):
+            self.assertIn("eww-pad-cheatsheet", (ROOT / "src/compositors/hyprland/hypr" / path).read_text())
+
+    @unittest.skipUnless(shutil.which("eww"), "eww not installed")
+    def test_eww_parses_the_bar_config(self):
+        with tempfile.TemporaryDirectory(dir="/tmp", prefix="kpe") as temp:
+            config = Path(temp) / "eww"
+            shutil.copytree(ROOT / "src/shared/eww", config)
+            for script in (config / "scripts").iterdir():
+                script.write_text("#!/bin/sh\nexec sleep 30\n")
+                script.chmod(0o755)
+            run = Path(temp) / "run"
+            run.mkdir(mode=0o700)
+            env = {k: v for k, v in os.environ.items() if k not in (
+                "WAYLAND_DISPLAY", "DISPLAY", "HYPRLAND_INSTANCE_SIGNATURE", "XDG_SESSION_TYPE", "DBUS_SESSION_BUS_ADDRESS")}
+            env.update(HOME=temp, XDG_RUNTIME_DIR=str(run))
+            # Without a display the daemon can't start GTK, but the config is
+            # parsed first: a yuck error is reported before that.
+            result = subprocess.run(["eww", "--config", str(config), "daemon", "--no-daemonize"],
+                                    env=env, capture_output=True, text=True, timeout=30)
+            output = result.stdout + result.stderr
+            self.assertNotIn("error:", output.split("Failed to initialize GTK")[0].lower(), output)
+
     def test_pending_daemon_recipe_is_parked(self):
         self.assertTrue((ROOT / "src/shared/pkgbuilds/control-surface/PENDING").exists())
         self.assertIn('[[ -f "$dir/PENDING" ]]', (ROOT / "src/build-iso.sh").read_text())

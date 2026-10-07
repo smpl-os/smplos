@@ -49,6 +49,11 @@
 ;; and bar-ctl sets it once when the bar starts.
 (defvar keypad-present "no")
 
+;; Macro keypad cheatsheet: what every key and knob does right now. No listener
+;; either: control-surfaced (running only while a keypad is plugged in) sets
+;; pad_sheet to its cheatsheet JSON and opens/closes pad-cheatsheet itself.
+(defvar pad_sheet '{"visible":false}')
+
 ;; Printer (disabled -- not in tray)
 ;; (deflisten printer-data :initial '{"active":"no","count":"0","icon":""}' `scripts/printer-listener.sh`)
 
@@ -419,3 +424,62 @@
   :focusable false
   :geometry (geometry :x "0" :y "0" :width "380px" :height "140px" :anchor "center center")
   (mon-id-widget :label mon-id-label-3))
+
+;; ============================================================================
+;; MACRO KEYPAD CHEATSHEET  (pushed by control-surfaced; see KEYPAD.md)
+;; ============================================================================
+;; Keys row-major from pad_sheet.keys, knobs in a column on the right.
+;; State is shown by shape: solid border = does something now, dashed border
+;; + dim text = would do nothing now (e.g. Kdenlive's interface is off),
+;; no border and a dot = unbound.
+
+(defwidget pad-sheet-key [k]
+  (box :class "pad-sheet-key ${k.bound ? (k.active ? 'on' : 'off') : 'unbound'}"
+       :orientation "v" :space-evenly false :width 104 :height 58
+    (label :class "pad-sheet-num" :halign "start" :text {replace(k.control, "key", "")})
+    (label :class "pad-sheet-label" :text {k.bound ? k.label : "."}
+           :wrap true :justify "center" :limit-width 30 :lines 2)
+    (label :class "pad-sheet-state" :visible {k.state != ""} :text {k.state} :limit-width 14)))
+
+(defwidget pad-sheet-turn [e glyph]
+  (box :class "pad-sheet-turn ${e.bound ? (e.active ? 'on' : 'off') : 'unbound'}"
+       :orientation "h" :space-evenly false :spacing 4
+    (label :class "pad-sheet-glyph" :text glyph)
+    (label :class "pad-sheet-label" :halign "start" :hexpand true :xalign 0
+           :text {e.bound ? (e.state != "" ? "${e.label} (${e.state})" : e.label) : "."}
+           :limit-width 22)))
+
+(defwidget pad-sheet-knob [n]
+  (box :class "pad-sheet-knob" :orientation "v" :space-evenly false :width 180
+    (label :class "pad-sheet-num" :halign "start" :text "Knob ${replace(n.control, 'knob', '')}")
+    (pad-sheet-turn :e {n.ccw} :glyph "<")
+    (pad-sheet-turn :e {n.press} :glyph "o")
+    (pad-sheet-turn :e {n.cw} :glyph ">")))
+
+(defwidget pad-sheet []
+  (box :class "pad-sheet o${round((pad_sheet.options?.opacity ?: 0.85) * 20, 0)}"
+       :orientation "v" :space-evenly false :spacing 8
+    (box :class "pad-sheet-header" :orientation "h" :space-evenly false :spacing 8
+      (label :class "pad-sheet-title" :halign "start" :hexpand true :text {pad_sheet.title ?: ""} :limit-width 60)
+      (for layer in {pad_sheet.layers ?: []}
+        (label :class "pad-sheet-layer" :text layer)))
+    (label :class "pad-sheet-notice" :halign "start" :visible {(pad_sheet.notice ?: "") != ""}
+           :text "! ${pad_sheet.notice ?: ''}" :wrap true :limit-width 90)
+    (box :orientation "h" :space-evenly false :spacing 12
+      (box :orientation "v" :space-evenly false :spacing 6
+        (for row in {jq(pad_sheet.keys ?: [], "[group_by(.row)[] | sort_by(.column)]")}
+          (box :orientation "h" :space-evenly false :spacing 6
+            (for k in row
+              (pad-sheet-key :k k)))))
+      (box :orientation "v" :space-evenly false :spacing 6 :visible {arraylength(pad_sheet.knobs ?: []) > 0}
+        (for n in {pad_sheet.knobs ?: []}
+          (pad-sheet-knob :n n))))))
+
+;; Opened and closed by control-surfaced (with --anchor from the position option).
+(defwindow pad-cheatsheet
+  :monitor 0
+  :namespace "eww-pad-cheatsheet"
+  :geometry (geometry :anchor "center")
+  :stacking "overlay"
+  :focusable false
+  (pad-sheet))

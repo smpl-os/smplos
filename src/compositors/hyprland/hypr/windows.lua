@@ -13,6 +13,7 @@ local theme = require("theme")
 local eww_namespaces = {
     "eww-bar", "eww-calendar-popup", "eww-quick-settings",
     "eww-notification-hub", "eww-usb-popup", "eww-workspace-overview",
+    "eww-pad-cheatsheet",
 }
 for _, ns in ipairs(eww_namespaces) do
     hl.layer_rule({ match = { namespace = ns }, blur = true })
