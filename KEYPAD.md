@@ -109,8 +109,9 @@ The rules are the daemon's own (`usbinfo.cpp`):
 | `stock` | manufacturer `wch.cn` (product `CH552`) | Chosen in Settings |
 | `unknown` | any other `1189:8890` | Chosen in Settings |
 
-bcdDevice carries major and minor only, so firmware 2.0.1 shows as 2.0;
-`control-surfaced firmware-info` reads the full version over HID.
+bcdDevice carries major and minor only, so sysfs says 2.0 for firmware 2.0.1.
+Settings shows the full version from the running keypad app (`GetDevice`,
+read over HID); `control-surfaced firmware-info` reads it too.
 
 The WCH ROM bootloader (`4348:55e0`; newer WCH parts use `1a86:55e0`) is
 detected by the firmware wizard only. The bar doesn't show it.
@@ -231,11 +232,14 @@ there. It also adds:
 * **Show on screen**, which calls the running app's `ShowCheatsheet` (it uses
   the saved config).
 
-Pending in the daemon (requested): the `--anchor` on open, from the `position`
-option, and run-time flags (`--eww-window pad-cheatsheet --eww-config DIR`) so
-the push is on by default. smplOS will add those flags to the unit's
-`ExecStart` once they exist. Until then, the push can be turned on in the config:
-`"cheatsheet": {"eww": {"window": "pad-cheatsheet", "config": "~/.config/eww"}}`.
+The unit turns the push on with
+`ExecStart=/usr/bin/control-surfaced run --quiet --eww-window pad-cheatsheet --eww-config %h/.config/eww`
+(daemon b83980e or newer; the PKGBUILD refuses older sources). The daemon opens
+the window with `--anchor` from the `position` option and reopens it when the
+position changes. A keypad app started by hand without those flags doesn't
+push; Settings' **Show on screen** says so (it reads `GetStatus().cheatsheet.eww`).
+The config can still override the flags: `"cheatsheet": {"eww": false}` turns
+the push off.
 
 ## Settings > Keypad
 
@@ -263,8 +267,10 @@ appear in profiles with the Kdenlive plugin on.
   a CH552 keypad is plugged in, its firmware and version. Under it is the
   keypad app's state, from all of: the session bus name
   `org.smplos.ControlSurface`, a `control-surfaced run` process, and
-  `control-surface.service`'s state. So an app started by hand shows as
-  "running (started outside systemd)". **Start** (`systemctl --user start
+  `control-surface.service`'s state (the process is matched by `argv[0]`, as
+  `/proc/PID/comm` holds only 15 characters). So an app started by hand shows
+  as "running (started outside systemd)". With the app on the bus, the firmware
+  version is the full one from the keypad (`2.0.1`), else bcdDevice's (`2.0`). **Start** (`systemctl --user start
   control-surface.service`) appears only when a keypad is plugged in and the
   app isn't running. A missing package, a failed unit or a missing unit each
   get their own message.
@@ -276,8 +282,10 @@ appear in profiles with the Kdenlive plugin on.
   `generic-16k3e`. Each entry has a small schematic. **Custom…** sets keys
   (1–16), knobs (0–3) and columns (1–8). The choice is the config's
   `"layout"` (`"generic-12k2e"` or `{"keys", "knobs", "columns"}`); "Automatic"
-  removes it. The current daemon always uses a self-described layout over the
-  config's, and the tab says so when an override has no effect.
+  removes it. The config's layout wins over a self-described one (daemon
+  ebeabe8 or newer); with an older keypad app the tab says the override has no
+  effect yet. A custom grid may have 0 keys when it has knobs; without
+  `"columns"` the daemon uses 5 columns for 10 or more keys, else up to 4.
 * **Config source.** The file is `~/.config/control-surface/config.jsonc`
   (`$XDG_CONFIG_HOME` if set). With no file, Settings shows the daemon's
   built-in example (`control-surfaced example-config`), because that is what
@@ -400,7 +408,7 @@ keypad or runs wchisp against hardware.
 | 4 | Bundle wchisp in every ISO | Yes (offline-first, small); the alternative is installing it on demand from the wizard |
 | 5 | `uaccess` on `/dev/uinput` | Keep (same as Steam); the alternative is `input` group membership |
 | 6 | Default mapping without a config | The daemon's built-in example (Kdenlive, FL Studio, Global media keys), because the daemon runs it anyway |
-| 7 | Should a config `"layout"` override a self-described layout in the daemon? | Yes, as an explicit override (the daemon prefers the firmware's today; Settings warns) |
+| 7 | Should a config `"layout"` override a self-described layout in the daemon? | Yes; done in the daemon (ebeabe8) |
 
 ## Daemon API requests
 

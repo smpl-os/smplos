@@ -262,6 +262,10 @@ class LifecycleTests(unittest.TestCase):
         self.assertNotIn("WantedBy", unit)
         self.assertNotIn("Requisite=", unit)
         self.assertIn("ConditionPathExists=/usr/bin/control-surfaced", unit)
+        self.assertIn("ExecStart=/usr/bin/control-surfaced run --quiet --eww-window pad-cheatsheet "
+                      "--eww-config %h/.config/eww", unit)
+        self.assertIn('grep -q \'"eww-window"\'', (ROOT / "src/shared/pkgbuilds/control-surface/PKGBUILD").read_text(),
+                      "the package refuses daemon sources that lack the unit's flags")
         self.assertIn("ExecStartPost=-/usr/bin/eww --config %h/.config/eww update keypad-present=yes", unit)
         self.assertIn("ExecStopPost=-/usr/bin/eww --config %h/.config/eww update keypad-present=no", unit)
         build = (ROOT / "src/builder/build.sh").read_text()

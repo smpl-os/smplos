@@ -11,7 +11,9 @@ ConditionPathExists=/usr/bin/control-surfaced
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/control-surfaced run --quiet
+# --eww-*: the app pushes its cheatsheet into the bar's EWW (pad_sheet,
+# pad-cheatsheet) itself, only while it runs; no listener process.
+ExecStart=/usr/bin/control-surfaced run --quiet --eww-window pad-cheatsheet --eww-config %h/.config/eww
 # The bar icon is an EWW variable, set here instead of by a watcher process.
 # "-": no bar running yet is fine; bar-ctl sets it when the bar starts.
 ExecStartPost=-/usr/bin/eww --config %h/.config/eww update keypad-present=yes

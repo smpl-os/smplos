@@ -38,6 +38,10 @@ pkgver() {
 }
 
 build() {
+  # smplOS's control-surface.service passes --eww-window/--eww-config
+  # (cheatsheet push, upstream b83980e); refuse older sources.
+  grep -q '"eww-window"' "$pkgname/src/daemon/main.cpp" ||
+    { echo "control-surface is too old for smplOS's unit (needs --eww-window)" >&2; return 1; }
   cmake -S "$pkgname" -B build -G Ninja \
     -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_INSTALL_PREFIX=/usr \
