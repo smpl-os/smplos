@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
-"""Macro keypad support: detection, hotplug watch and firmware flashing.
+"""Macro keypad tools: detection and firmware flashing (run on demand only).
 
-Detection only reads sysfs attributes; it never opens the keypad. See KEYPAD.md.
+Detection only reads sysfs attributes; it never opens the keypad. Nothing here
+runs in the background: the bar icon follows control-surface.service, which
+udev starts and stops with the keypad. See KEYPAD.md.
 
     keypad-ctl status [--service]       one JSON line: keypads, bootloaders
-    keypad-ctl watch                    a JSON line now and after each USB change (EWW)
     keypad-ctl present [--bootloader]   exit 0 while a keypad (or its bootloader) is connected
-    keypad-ctl boards                   known board layouts (JSON)
-    keypad-ctl set-board ID|auto        override the layout of a keypad that cannot describe itself
     keypad-ctl open                     open Settings > Keypad
     keypad-ctl firmware list            installed firmware images (JSON)
     keypad-ctl firmware flash IMAGE [--execute]
@@ -20,12 +19,9 @@ import json
 import os
 from pathlib import Path
 import re
-import select
 import shutil
 import subprocess
 import sys
-import tempfile
-import time
 
 
 PAD_IDS = {("1189", "8890")}
@@ -36,19 +32,8 @@ SERVICE = "control-surface.service"
 CH552_CODE_FLASH = 14 * 1024
 WCHISP_ALLOWED = {"info", "flash"}
 
-BOARDS = [
-    {"id": "15+3", "name": "15 keys, 3 knobs (SY181 \"12+3\" board)", "keys": 15, "knobs": 3, "cols": 5},
-    {"id": "12+2", "name": "12 keys, 2 knobs", "keys": 12, "knobs": 2, "cols": 4},
-    {"id": "12+0", "name": "12 keys", "keys": 12, "knobs": 0, "cols": 4},
-    {"id": "10+0", "name": "10 keys", "keys": 10, "knobs": 0, "cols": 5},
-    {"id": "16+0", "name": "16 keys", "keys": 16, "knobs": 0, "cols": 4},
-    {"id": "3+1", "name": "3 keys, 1 knob", "keys": 3, "knobs": 1, "cols": 3},
-    {"id": "3+0", "name": "3 keys", "keys": 3, "knobs": 0, "cols": 3},
-]
-DEFAULT_BOARD = "15+3"
-# What the control-surface daemon can address (key1..key16, knob1..knob3).
-DAEMON_MAX_KEYS = 16
-DAEMON_MAX_KNOBS = 3
+# Board profiles a keypad names in its product string (the daemon's ids).
+FIRMWARE_BOARDS = {"Control Surface 15+3": "sy181-15k3e"}
 
 FIRMWARE_LABELS = {
     "stock": "Stock firmware",
@@ -57,17 +42,12 @@ FIRMWARE_LABELS = {
     "unknown": "Unknown firmware",
 }
 
+# Daemon-compatible type names (control-surfaced status / GetDevice).
+FIRMWARE_TYPES = {"stock": "stock", "open": "control-surface", "open-upstream": "openmacropad", "unknown": "unknown"}
+
 
 def sysfs_root():
     return Path(os.environ.get("SMPLOS_KEYPAD_SYSFS", "/sys/bus/usb/devices"))
-
-
-def config_home():
-    return Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
-
-
-def prefs_path():
-    return config_home() / "smplos/keypad.json"
 
 
 def read_attr(device, name):
@@ -77,52 +57,23 @@ def read_attr(device, name):
         return ""
 
 
-def atomic_write(path, content):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, delete=False) as stream:
-        temporary = Path(stream.name)
-        stream.write(content)
-    temporary.replace(path)
-
-
-# ── Layout ───────────────────────────────────────────────────────────────────
-
-def board(board_id):
-    return next((b for b in BOARDS if b["id"] == board_id), None)
-
-
-def columns_for(keys):
-    for cols in (5, 4, 3):
-        if keys % cols == 0:
-            return cols
-    return min(keys, 5) or 1
-
-
-def board_override():
-    try:
-        value = json.loads(prefs_path().read_text()).get("board", "")
-    except (OSError, ValueError, AttributeError):
-        return ""
-    return value if board(value) else ""
-
-
-def layout_of(firmware, product):
-    """Self-described layout from our firmware's product string, else a board profile."""
-    if firmware == "open":
-        match = re.search(r"(\d+)\s*\+\s*(\d+)", product)
-        if match:
-            keys, knobs = int(match.group(1)), int(match.group(2))
-            if 0 < keys <= 32 and 0 <= knobs <= 4:
-                return dict(board=f"{keys}+{knobs}", keys=keys, knobs=knobs,
-                            cols=columns_for(keys), source="device")
-    override = board_override()
-    chosen = board(override or DEFAULT_BOARD)
-    return dict(board=chosen["id"], keys=chosen["keys"], knobs=chosen["knobs"],
-                cols=chosen["cols"], source="user" if override else "default")
+def self_described_layout(firmware, product):
+    """The layout our firmware names in its product string ("Control Surface 15+3")."""
+    if firmware != "open":
+        return None
+    match = re.search(r"(\d+)\s*\+\s*(\d+)\s*$", product)
+    if not match:
+        return None
+    keys, knobs = int(match.group(1)), int(match.group(2))
+    if not (0 < keys <= 32 and 0 <= knobs <= 4):
+        return None
+    return {"board": FIRMWARE_BOARDS.get(product, ""), "keys": keys, "knobs": knobs}
 
 
 def classify(manufacturer, product, bcd):
-    if bcd == "0200" or manufacturer == "OpenMacroPad":
+    # Same rules as control-surfaced (usbinfo.cpp): our firmware says
+    # OpenMacroPad / "Control Surface ..."; EpicLPer's builds say SY181.
+    if manufacturer == "OpenMacroPad" and product.startswith("Control Surface"):
         return "open"
     if manufacturer == "wch.cn" and product == "CH552":
         return "stock"
@@ -152,8 +103,6 @@ def describe_pad(entry, vid, pid):
     product = read_attr(entry, "product")
     bcd = read_attr(entry, "bcdDevice").lower()
     firmware = classify(manufacturer, product, bcd)
-    layout = layout_of(firmware, product)
-    layout["supported"] = layout["keys"] <= DAEMON_MAX_KEYS and layout["knobs"] <= DAEMON_MAX_KNOBS
     return {
         "path": entry.name,
         "vid": vid,
@@ -163,8 +112,11 @@ def describe_pad(entry, vid, pid):
         "serial": read_attr(entry, "serial"),
         "bcd": bcd,
         "firmware": firmware,
+        "firmware_type": FIRMWARE_TYPES[firmware],
         "firmware_label": FIRMWARE_LABELS[firmware],
-        "layout": layout,
+        # Only what the keypad says about itself; otherwise the config's
+        # "layout" decides (Settings > Keypad > Variant).
+        "layout": self_described_layout(firmware, product),
     }
 
 
@@ -183,18 +135,6 @@ def service_state():
     return {"installed": installed, "state": state}
 
 
-def tooltip(pads, loaders):
-    if loaders and not pads:
-        return "Keypad in firmware update mode. Click to open Keypad settings."
-    if not pads:
-        return ""
-    pad = pads[0]
-    layout = pad["layout"]
-    parts = [f"{layout['keys']} keys"] + ([f"{layout['knobs']} knobs"] if layout["knobs"] else [])
-    more = f" (+{len(pads) - 1} more)" if len(pads) > 1 else ""
-    return f"Macro keypad{more}: {', '.join(parts)} - {pad['firmware_label']}. Click to configure."
-
-
 def status(with_service=False):
     pads, loaders = [], []
     for entry, vid, pid in usb_devices():
@@ -202,12 +142,8 @@ def status(with_service=False):
             pads.append(describe_pad(entry, vid, pid))
         elif (vid, pid) in BOOTLOADER_IDS:
             loaders.append(describe_bootloader(entry, vid, pid))
-    # EWW compares strings, so the bar-facing fields are strings.
     result = {
-        "present": "yes" if pads or loaders else "no",
         "state": "ready" if pads else "bootloader" if loaders else "absent",
-        "count": str(len(pads)),
-        "tooltip": tooltip(pads, loaders),
         "devices": pads,
         "bootloaders": loaders,
     }
@@ -218,42 +154,6 @@ def status(with_service=False):
 
 def emit(data):
     print(json.dumps(data, separators=(",", ":")), flush=True)
-
-
-def watch(poll=3.0, settle=0.4):
-    """Emit on start and whenever the result changes after a USB uevent."""
-    last = None
-
-    def publish():
-        nonlocal last
-        current = status()
-        if current != last:
-            emit(current)
-            last = current
-
-    publish()
-    monitor = None
-    if shutil.which("udevadm") and not os.environ.get("SMPLOS_KEYPAD_SYSFS"):
-        monitor = subprocess.Popen(["udevadm", "monitor", "--udev", "--subsystem-match=usb"],
-                                   stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
-    while True:
-        if monitor is None or monitor.poll() is not None:
-            time.sleep(poll)
-            publish()
-            continue
-        ready, _, _ = select.select([monitor.stdout], [], [], 30)
-        if not ready:
-            continue
-        if not monitor.stdout.readline():
-            monitor = None
-            continue
-        # One plug produces a burst of events; rescan once it settles.
-        deadline = time.monotonic() + settle
-        while (remaining := deadline - time.monotonic()) > 0:
-            more, _, _ = select.select([monitor.stdout], [], [], remaining)
-            if more and not monitor.stdout.readline():
-                break
-        publish()
 
 
 # ── Firmware ─────────────────────────────────────────────────────────────────
@@ -407,12 +307,8 @@ def main(argv=None):
     sub = parser.add_subparsers(dest="command", required=True)
     st = sub.add_parser("status")
     st.add_argument("--service", action="store_true", help="include the daemon's service state")
-    sub.add_parser("watch")
     pr = sub.add_parser("present")
     pr.add_argument("--bootloader", action="store_true")
-    sub.add_parser("boards")
-    sb = sub.add_parser("set-board")
-    sb.add_argument("board")
     sub.add_parser("open")
     fw = sub.add_parser("firmware").add_subparsers(dest="action", required=True)
     fw.add_parser("list")
@@ -424,31 +320,9 @@ def main(argv=None):
 
     if args.command == "status":
         emit(status(args.service))
-    elif args.command == "watch":
-        try:
-            watch()
-        except (KeyboardInterrupt, BrokenPipeError):
-            return 0
     elif args.command == "present":
         data = status()
         return 0 if data["devices"] or (args.bootloader and data["bootloaders"]) else 1
-    elif args.command == "boards":
-        emit(BOARDS)
-    elif args.command == "set-board":
-        if args.board != "auto" and not board(args.board):
-            print(f"unknown board {args.board!r}; see `keypad-ctl boards`", file=sys.stderr)
-            return 2
-        prefs = {}
-        try:
-            prefs = json.loads(prefs_path().read_text())
-        except (OSError, ValueError):
-            pass
-        if not isinstance(prefs, dict):
-            prefs = {}
-        prefs.pop("board", None)
-        if args.board != "auto":
-            prefs["board"] = args.board
-        atomic_write(prefs_path(), json.dumps(prefs, indent=2) + "\n")
     elif args.command == "open":
         os.execvp("smplos-settings", ["smplos-settings", "keypad"])
     elif args.action == "list":

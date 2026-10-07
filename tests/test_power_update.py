@@ -560,6 +560,8 @@ class SessionServicesTests(unittest.TestCase):
         def save():
             json.dump(state, open(path, "w"))
         if args[0] == "is-active":
+            if args[-1].endswith(".device"):
+                sys.exit(3)  # no macro keypad plugged in
             sys.exit(0 if state["graphical"] else 3)
         if args[0] == "stop":
             state["graphical"] = False

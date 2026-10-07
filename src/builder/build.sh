@@ -1693,11 +1693,9 @@ SYNCSVC
     ln -sf /usr/lib/systemd/user/hypridle.service \
         "$user_graphical_wants/hypridle.service" 2>/dev/null || true
 
-    # Macro keypad daemon (control-surface). The unit ships with the shared
-    # configs; its conditions skip it until the daemon is installed and a
-    # keypad is plugged in, and the keypad udev rule starts it on plug-in.
-    ln -sf ../control-surface.service \
-        "$user_graphical_wants/control-surface.service" 2>/dev/null || true
+    # Macro keypad app (control-surface.service) ships with the shared configs
+    # but is deliberately NOT enabled: udev starts it when a keypad is plugged
+    # in and BindsTo= stops it on unplug (KEYPAD.md).
 }
 
 setup_helper_scripts() {

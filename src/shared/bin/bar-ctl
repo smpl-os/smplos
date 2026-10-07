@@ -41,6 +41,7 @@ eww_start() {
     # if the IPC socket wasn't ready between the two commands.
     echo "$(date '+%H:%M:%S') Opening: $BAR_NAME" >> "$LOG"
     eww --config "$EWW_CONFIG" open "$BAR_NAME" >> "$LOG" 2>&1
+    eww_sync_keypad
 
     # Apply saved bar settings (workspace count, position, etc.)
     eww_apply || return
@@ -102,7 +103,16 @@ eww_reload() {
     eww --config "$EWW_CONFIG" reload || return
     # eww reload resets all defvar to defaults — re-apply saved settings
     sleep 0.3
+    eww_sync_keypad
     eww_apply
+}
+
+# Macro keypad icon: control-surface.service (running only while a keypad is
+# plugged in) sets keypad-present on start/stop. A bar that starts or reloads
+# after it learns the current state once here; nothing polls. See KEYPAD.md.
+eww_sync_keypad() {
+    systemctl --user is-active --quiet control-surface.service 2>/dev/null || return 0
+    eww --config "$EWW_CONFIG" update keypad-present=yes >> "$LOG" 2>&1 || true
 }
 
 # Apply bar settings from ~/.config/smplos/bar.conf to running EWW instance.

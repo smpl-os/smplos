@@ -1,22 +1,20 @@
 [Unit]
-Description=Macro keypad daemon (control-surface) for CH552 keypads
+Description=Macro keypad app (control-surface) for CH552 keypads
 Documentation=https://github.com/smpl-os/smplos/blob/main/KEYPAD.md
-# Runs inside the graphical session: it follows the focused Hyprland window and
-# launches "command" bindings as ordinary desktop processes (so no sandboxing).
-PartOf=graphical-session.target
-After=graphical-session.target
-Requisite=graphical-session.target
-# Inert until the daemon is installed, and skipped (not failed) at login when
-# no keypad is plugged in. The udev rule creates /dev/smplos-keypad-* and asks
-# the user manager for this unit on plug-in (SYSTEMD_USER_WANTS).
+# Runs only while a keypad is plugged in. The keypad's udev rule starts it
+# (SYSTEMD_USER_WANTS); BindsTo= + After= on the keypad's device unit stop it
+# when the keypad is unplugged. It is deliberately not enabled for any target,
+# so with no keypad nothing keypad related runs. See KEYPAD.md.
+BindsTo=smplos-keypad.device
+After=smplos-keypad.device graphical-session.target
 ConditionPathExists=/usr/bin/control-surfaced
-ConditionPathExistsGlob=/dev/smplos-keypad-*
 
 [Service]
 Type=simple
 ExecStart=/usr/bin/control-surfaced run --quiet
+# The bar icon is an EWW variable, set here instead of by a watcher process.
+# "-": no bar running yet is fine; bar-ctl sets it when the bar starts.
+ExecStartPost=-/usr/bin/eww --config %h/.config/eww update keypad-present=yes
+ExecStopPost=-/usr/bin/eww --config %h/.config/eww update keypad-present=no
 Restart=on-failure
 RestartSec=2
-
-[Install]
-WantedBy=graphical-session.target

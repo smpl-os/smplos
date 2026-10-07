@@ -1,21 +1,23 @@
 # CH552 macro keypads (USB 1189:8890, stock or open firmware). See KEYPAD.md.
 #
-# - uaccess: the seated user's control-surface daemon reads the keypad (evdev +
-#   hidraw) without the input group; Settings > Keypad reads it too.
-# - /dev/smplos-keypad-*: presence marker for the user unit's
-#   ConditionPathExistsGlob (removed again on unplug).
-# - SYSTEMD_USER_WANTS: plugging the keypad in starts control-surface.service.
+# - uaccess: the seated user's keypad app (control-surfaced) reads the keypad
+#   (evdev + hidraw) without the input group; Settings > Keypad reads it too.
+# - TAG+="systemd" + SYSTEMD_ALIAS: the user manager tracks the keypad as
+#   smplos-keypad.device (systemd-escape --path --suffix=device /smplos/keypad).
+# - SYSTEMD_USER_WANTS: plugging the keypad in starts control-surface.service;
+#   its BindsTo=smplos-keypad.device stops it again on unplug. Nothing keypad
+#   related runs while no keypad is plugged in.
 #
 # Matches this one VID:PID only; other keyboards are never touched.
 # Canonical copy lives in the smplOS repo (deployed by build.sh, install.sh and
 # the keypad migration). After editing:
 #   sudo udevadm control --reload-rules && sudo udevadm trigger --subsystem-match=usb
 
-SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="1189", ATTR{idProduct}=="8890", TAG+="uaccess", SYMLINK+="smplos-keypad-%k", TAG+="systemd", ENV{SYSTEMD_USER_WANTS}+="control-surface.service"
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="1189", ATTR{idProduct}=="8890", TAG+="uaccess", TAG+="systemd", ENV{SYSTEMD_ALIAS}="/smplos/keypad", ENV{SYSTEMD_USER_WANTS}+="control-surface.service"
 SUBSYSTEM=="hidraw", ATTRS{idVendor}=="1189", ATTRS{idProduct}=="8890", TAG+="uaccess"
 SUBSYSTEM=="input", KERNEL=="event*", ATTRS{idVendor}=="1189", ATTRS{idProduct}=="8890", TAG+="uaccess"
 
-# The daemon types mapped shortcuts through one virtual keyboard (uinput).
+# The keypad app types mapped shortcuts through one virtual keyboard (uinput).
 # Same grant the Steam and xr-workspace input rules use: the seated user may
 # create virtual input devices.
 KERNEL=="uinput", SUBSYSTEM=="misc", TAG+="uaccess", OPTIONS+="static_node=uinput"

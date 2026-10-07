@@ -75,6 +75,14 @@ if [[ "$MODE" != --verify ]]; then
         sc daemon-reload
         sc start "$TARGET" 2>>"$LOG" || log "could not start $TARGET"
     fi
+
+    # A macro keypad plugged in before login started its app when the user
+    # manager came up, before this session's environment was imported. Restart
+    # it once so its command bindings reach this session (and start it if that
+    # was missed). Only while the keypad is plugged in; see KEYPAD.md.
+    if sc is-active --quiet smplos-keypad.device 2>/dev/null; then
+        sc restart control-surface.service 2>>"$LOG" || log "could not restart control-surface.service"
+    fi
 fi
 
 sleep "${SMPLOS_SESSION_SETTLE:-5}"

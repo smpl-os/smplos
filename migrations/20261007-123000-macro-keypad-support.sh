@@ -1,19 +1,25 @@
 #!/bin/bash
 # Migration: Macro keypad support (CH552 keypads, Settings > Keypad).
 #
-# Context: smplOS gained support for cheap CH552 macro keypads (USB 1189:8890):
-#          udev access + hotplug rules, the control-surface user unit, an EWW
-#          tray icon and the keypad-ctl helper. See KEYPAD.md.
+# Context: smplOS supports cheap CH552 macro keypads (USB 1189:8890): udev
+#          rules, the control-surface user unit, a bar icon and keypad-ctl.
+#          See KEYPAD.md.
 #
-#          smplos-os-update already delivers keypad-ctl (sync_scripts), the
-#          EWW widget/listener (sync_configs) and drops the unit file when the
-#          user has none. Three things need a one-time action:
-#            1. The udev rules must reach /etc/udev/rules.d (root).
-#            2. The new tray icons must be baked with the current theme
-#               (theme-set only bakes templates it already has).
-#            3. The user unit must be enabled. A different unit of the same
-#               name (e.g. a developer install of control-surface) is left
-#               alone and not enabled: it may lack the keypad-present condition.
+#          Nothing keypad related runs while no keypad is plugged in: udev
+#          starts control-surface.service on plug-in, BindsTo= stops it on
+#          unplug, and the bar icon is an EWW variable the unit sets.
+#
+#          smplos-os-update already delivers keypad-ctl (sync_scripts), the EWW
+#          config (sync_configs) and drops the unit file when the user has none.
+#          This migration does what those generic steps can't:
+#            1. Install the udev rules into /etc/udev/rules.d (root).
+#            2. Bake the tray icon with the current theme (theme-set only bakes
+#               templates it already has).
+#            3. Update a unit file that an earlier smplOS version installed
+#               (recognised by its Documentation= line), and remove an old
+#               enablement link: the unit must not start at login on its own.
+#               Any other unit of the same name (e.g. a developer install of
+#               control-surface) is left alone.
 #
 #          The daemon itself arrives as the control-surface package; the unit's
 #          ConditionPathExists keeps it inert until then.
@@ -39,7 +45,7 @@ UNIT_NAME=control-surface.service
 UNIT_SRC="$REPO/src/shared/configs/systemd/user/$UNIT_NAME"
 UNIT_DIR="$HOME/.config/systemd/user"
 UNIT="$UNIT_DIR/$UNIT_NAME"
-WANTS="$UNIT_DIR/graphical-session.target.wants/$UNIT_NAME"
+OURS="Documentation=https://github.com/smpl-os/smplos/blob/main/KEYPAD.md"
 
 n_changes=0
 changed() { echo "  $*"; ((n_changes++)) || true; }
@@ -62,7 +68,7 @@ for rule in 70-ch552-macropad.rules 71-wch-isp-bootloader.rules; do
 done
 if [[ $rules_changed -eq 1 ]]; then
     sudo udevadm control --reload-rules 2>/dev/null || true
-    # Re-apply access only to connected keypads and /dev/uinput, not every device.
+    # Re-apply the rules only to connected keypads and /dev/uinput, not every device.
     for dev in "$SYSFS"/*; do
         [[ "$(cat "$dev/idVendor" 2>/dev/null)" == 1189 && "$(cat "$dev/idProduct" 2>/dev/null)" == 8890 ]] || continue
         sudo udevadm trigger --action=change --parent-match="$(readlink -f "$dev")" 2>/dev/null || true
@@ -70,50 +76,45 @@ if [[ $rules_changed -eq 1 ]]; then
     sudo udevadm trigger --action=change /sys/devices/virtual/misc/uinput 2>/dev/null || true
 fi
 
-# ── 2. Tray icons: templates + bake with the current theme's accent ──────────
+# ── 2. Tray icon: template + bake with the current theme's accent ─────────────
 TPL_DIR="$HOME/.local/share/smplos/icons/status"
 EWW_ICONS="$HOME/.config/eww/icons/status"
 accent=$(grep '^accent' "$HOME/.config/smplos/current/theme/colors.toml" 2>/dev/null | head -1 | sed 's/.*"\(#[^"]*\)".*/\1/' || true)
-for icon in keypad.svg keypad-bootloader.svg; do
-    src="$REPO/src/shared/icons/status/$icon"
-    [[ -f "$src" ]] || continue
-    if ! cmp -s "$src" "$TPL_DIR/$icon" 2>/dev/null; then
+src="$REPO/src/shared/icons/status/keypad.svg"
+if [[ -f "$src" ]]; then
+    if ! cmp -s "$src" "$TPL_DIR/keypad.svg" 2>/dev/null; then
         mkdir -p "$TPL_DIR"
-        cp "$src" "$TPL_DIR/$icon"
-        changed "Installed icon template $icon"
+        cp "$src" "$TPL_DIR/keypad.svg"
+        changed "Installed icon template keypad.svg"
     fi
-    if [[ -d "$EWW_ICONS" || -d "$HOME/.config/eww" ]]; then
+    if [[ -d "$HOME/.config/eww" ]]; then
         mkdir -p "$EWW_ICONS"
         baked=$(sed "s/{{accent}}/${accent:-#888888}/g" "$src")
-        if [[ "$baked" != "$(cat "$EWW_ICONS/$icon" 2>/dev/null)" ]]; then
-            printf '%s\n' "$baked" > "$EWW_ICONS/$icon"
-            changed "Baked tray icon $icon"
+        if [[ "$baked" != "$(cat "$EWW_ICONS/keypad.svg" 2>/dev/null)" ]]; then
+            printf '%s\n' "$baked" > "$EWW_ICONS/keypad.svg"
+            changed "Baked tray icon keypad.svg"
         fi
     fi
-done
+fi
 
-# ── 3. Install + enable the user unit ────────────────────────────────────────
+# ── 3. User unit: install or update ours, never enable it ────────────────────
 if [[ ! -f "$UNIT_SRC" ]]; then
     echo "  $UNIT_NAME not found in repo, skipping"
+elif [[ -f "$UNIT" ]] && ! grep -qxF "$OURS" "$UNIT"; then
+    echo "  $UNIT is a custom unit; left as is"
 else
-    if [[ ! -f "$UNIT" ]]; then
+    if ! cmp -s "$UNIT_SRC" "$UNIT" 2>/dev/null; then
         mkdir -p "$UNIT_DIR"
         cp "$UNIT_SRC" "$UNIT"
-        changed "Installed $UNIT_NAME"
+        changed "Installed $UNIT_NAME (started by udev while a keypad is plugged in)"
     fi
-    if ! cmp -s "$UNIT_SRC" "$UNIT"; then
-        echo "  $UNIT is a custom unit; left as is and not enabled"
-    elif [[ -L "$WANTS" ]]; then
-        echo "  $UNIT_NAME already enabled"
-    else
-        mkdir -p "$(dirname "$WANTS")"
-        ln -sf "../$UNIT_NAME" "$WANTS"
-        changed "Enabled $UNIT_NAME (starts while a keypad is plugged in)"
-        # Best effort for the running session; inert without the daemon/keypad.
-        if smplos_have_user_bus; then
-            smplos_run_as_user systemctl --user daemon-reload 2>/dev/null || true
-            smplos_run_as_user systemctl --user start "$UNIT_NAME" 2>/dev/null || true
-        fi
+    for wants in "$UNIT_DIR"/*.wants/"$UNIT_NAME"; do
+        [[ -L "$wants" ]] || continue
+        rm -f "$wants"
+        changed "Removed the old login start of $UNIT_NAME (${wants#"$UNIT_DIR"/})"
+    done
+    if [[ $n_changes -gt 0 ]] && smplos_have_user_bus; then
+        smplos_run_as_user systemctl --user daemon-reload 2>/dev/null || true
     fi
 fi
 

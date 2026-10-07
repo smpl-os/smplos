@@ -1,4 +1,5 @@
-"""Macro keypad support: detection, firmware dry run, bar/udev/unit wiring, migration.
+"""Macro keypad support: detection, firmware dry run, device-bound lifecycle,
+bar wiring and migration.
 
 Everything runs against a fake sysfs tree and fake tools; nothing here opens a
 USB device, runs wchisp or talks to the user's session.
@@ -18,7 +19,8 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 KEYPAD_CTL = ROOT / "src/shared/bin/keypad-ctl"
-LISTENER = ROOT / "src/shared/eww/scripts/keypad-listener.sh"
+BAR_CTL = ROOT / "src/shared/bin/bar-ctl"
+SESSION_SERVICES = ROOT / "src/shared/bin/smplos-session-services"
 MIGRATION = ROOT / "migrations/20261007-123000-macro-keypad-support.sh"
 UDEV = ROOT / "src/shared/system/udev"
 UNIT = ROOT / "src/shared/configs/systemd/user/control-surface.service"
@@ -26,7 +28,7 @@ UNIT = ROOT / "src/shared/configs/systemd/user/control-surface.service"
 STOCK = dict(idVendor="1189", idProduct="8890", manufacturer="wch.cn", product="CH552",
              serial="key153", bcdDevice="0100")
 UPSTREAM = dict(STOCK, manufacturer="SY181", product="Macropad 12+3", serial="CH552GPAD")
-OPEN = dict(STOCK, manufacturer="OpenMacroPad", product="Control Surface 12+2", bcdDevice="0200")
+OPEN = dict(STOCK, manufacturer="OpenMacroPad", product="Control Surface 15+3", bcdDevice="0201")
 BOOTLOADER = dict(idVendor="4348", idProduct="55e0", busnum="3", devnum="9")
 KEYBOARD = dict(idVendor="0c45", idProduct="760a", manufacturer="SONiX", product="USB Keyboard")
 
@@ -62,16 +64,6 @@ class KeypadCase(unittest.TestCase):
         path.chmod(0o755)
         return path
 
-    def spawn(self, *args, env=None):
-        process = subprocess.Popen(list(args), env=env or self.env, stdout=subprocess.PIPE, text=True)
-
-        def stop():
-            process.kill()
-            process.wait()
-            process.stdout.close()
-        self.addCleanup(stop)
-        return process
-
     def calls_made(self):
         return self.calls.read_text().splitlines() if self.calls.exists() else []
 
@@ -90,68 +82,48 @@ class DetectionTests(KeypadCase):
     def test_absent_without_keypads_and_ignores_other_keyboards(self):
         self.device("1-1", KEYBOARD)
         data = self.status()
-        self.assertEqual((data["present"], data["state"], data["count"]), ("no", "absent", "0"))
-        self.assertEqual(data["devices"], [])
+        self.assertEqual((data["state"], data["devices"], data["bootloaders"]), ("absent", [], []))
         self.assertEqual(self.ctl("present", check=False).returncode, 1)
 
-    def test_stock_keypad_uses_the_default_board_profile(self):
+    def test_stock_keypad_has_no_self_described_layout(self):
         self.device("1-2", STOCK)
         self.device("1-2:1.0", {})  # interfaces are skipped
         data = self.status()
-        self.assertEqual((data["present"], data["state"], data["count"]), ("yes", "ready", "1"))
+        self.assertEqual(data["state"], "ready")
         pad = data["devices"][0]
-        self.assertEqual((pad["firmware"], pad["serial"], pad["path"]), ("stock", "key153", "1-2"))
-        self.assertEqual(pad["layout"], dict(board="15+3", keys=15, knobs=3, cols=5,
-                                             source="default", supported=True))
-        self.assertIn("15 keys, 3 knobs", data["tooltip"])
+        self.assertEqual((pad["firmware"], pad["firmware_type"], pad["serial"], pad["path"]),
+                         ("stock", "stock", "key153", "1-2"))
+        self.assertIsNone(pad["layout"])
         self.assertEqual(self.ctl("present", check=False).returncode, 0)
 
     def test_upstream_open_firmware_is_not_trusted_for_layout(self):
         self.device("1-5", UPSTREAM)
         pad = self.status()["devices"][0]
-        self.assertEqual(pad["firmware"], "open-upstream")
-        self.assertEqual(pad["layout"]["board"], "15+3")
+        self.assertEqual((pad["firmware"], pad["firmware_type"]), ("open-upstream", "openmacropad"))
+        self.assertIsNone(pad["layout"])
 
     def test_our_firmware_describes_its_own_layout(self):
         self.device("1-5", OPEN)
         pad = self.status()["devices"][0]
-        self.assertEqual(pad["firmware"], "open")
-        self.assertEqual(pad["layout"], dict(board="12+2", keys=12, knobs=2, cols=4,
-                                             source="device", supported=True))
+        self.assertEqual((pad["firmware"], pad["firmware_type"]), ("open", "control-surface"))
+        self.assertEqual(pad["layout"], {"board": "sy181-15k3e", "keys": 15, "knobs": 3})
+        self.device("1-6", dict(OPEN, product="Control Surface 12+2"))
+        other = self.status()["devices"][1]
+        self.assertEqual(other["layout"], {"board": "", "keys": 12, "knobs": 2})
 
-    def test_bootloader_alone_shows_update_mode(self):
+    def test_bootloader_alone(self):
         self.device("3-1", BOOTLOADER)
         data = self.status()
-        self.assertEqual((data["present"], data["state"]), ("yes", "bootloader"))
+        self.assertEqual(data["state"], "bootloader")
         self.assertEqual(data["bootloaders"][0]["vid"], "4348")
-        self.assertIn("firmware update mode", data["tooltip"])
         self.assertEqual(self.ctl("present", check=False).returncode, 1)
         self.assertEqual(self.ctl("present", "--bootloader", check=False).returncode, 0)
 
-    def test_board_override_round_trip(self):
-        self.device("1-2", STOCK)
-        self.ctl("set-board", "16+0")
-        layout = self.status()["devices"][0]["layout"]
-        self.assertEqual((layout["board"], layout["source"], layout["supported"]), ("16+0", "user", True))
-        self.assertEqual(self.ctl("set-board", "bogus", check=False).returncode, 2)
-        self.ctl("set-board", "auto")
-        self.assertEqual(self.status()["devices"][0]["layout"]["source"], "default")
-        boards = json.loads(self.ctl("boards").stdout)
-        self.assertIn("15+3", [b["id"] for b in boards])
-
-    def test_watch_emits_on_start_and_after_a_change(self):
-        process = self.spawn("python3", str(KEYPAD_CTL), "watch")
-        first = json.loads(process.stdout.readline())
-        self.assertEqual(first["present"], "no")
-        self.device("1-2", STOCK)
-        second = json.loads(process.stdout.readline())
-        self.assertEqual(second["state"], "ready")
-        self.assertNotIn("\n", json.dumps(second))
-
-    def test_listener_falls_back_when_keypad_ctl_is_missing(self):
-        env = dict(self.env, PATH=f"{self.bin}:/usr/bin:/bin")
-        process = self.spawn("bash", str(LISTENER), env=env)
-        self.assertEqual(json.loads(process.stdout.readline())["present"], "no")
+    def test_no_background_commands(self):
+        help_text = self.ctl("--help").stdout
+        for gone in ("watch", "set-board", "boards"):
+            self.assertNotIn(gone, help_text)
+            self.assertNotEqual(self.ctl(gone, check=False).returncode, 0)
 
 
 class FirmwareTests(KeypadCase):
@@ -243,8 +215,18 @@ class FirmwareTests(KeypadCase):
                 module["run_wchisp"](str(self.wchisp), args, lambda line: None)
 
 
-class WiringTests(unittest.TestCase):
-    def test_udev_rules_match_only_the_keypad_and_start_the_unit(self):
+def escape_device(path):
+    return subprocess.run(["systemd-escape", "--path", "--suffix=device", path],
+                          capture_output=True, text=True, check=True).stdout.strip()
+
+
+class LifecycleTests(unittest.TestCase):
+    """Nothing keypad related runs without a keypad; the unit follows the device."""
+
+    def unit(self):
+        return UNIT.read_text()
+
+    def test_udev_rule_matches_only_the_keypad_and_names_its_device_unit(self):
         rules = (UDEV / "70-ch552-macropad.rules").read_text()
         active = [line for line in rules.splitlines() if line and not line.startswith("#")]
         for line in active:
@@ -252,32 +234,73 @@ class WiringTests(unittest.TestCase):
                 self.assertIn('ATTR{idVendor}=="1189"' if "usb_device" in line else 'ATTRS{idVendor}=="1189"', line)
                 self.assertIn("8890", line)
         self.assertNotIn("0c45", rules)
-        self.assertIn('ENV{SYSTEMD_USER_WANTS}+="control-surface.service"', rules)
-        symlink = re.search(r'SYMLINK\+="([^"%]+)%k"', rules).group(1)
-        self.assertIn(f"ConditionPathExistsGlob=/dev/{symlink}*", UNIT.read_text())
+        usb = next(line for line in active if "usb_device" in line)
+        self.assertIn('TAG+="systemd"', usb)
+        self.assertIn('ENV{SYSTEMD_USER_WANTS}+="control-surface.service"', usb)
+        alias = re.search(r'ENV\{SYSTEMD_ALIAS\}="([^"]+)"', usb).group(1)
+        self.assertTrue(alias.startswith("/"), "SYSTEMD_ALIAS must be an absolute path")
+        self.assertNotIn("%", alias, "the alias must not vary, so BindsTo= can name it")
+        self.assertNotIn("SYMLINK", rules)
         loader = (UDEV / "71-wch-isp-bootloader.rules").read_text()
         self.assertIn('ATTR{idVendor}=="4348", ATTR{idProduct}=="55e0", TAG+="uaccess"', loader)
 
-    def test_unit_is_inert_without_daemon_or_keypad(self):
-        unit = UNIT.read_text()
+    @unittest.skipUnless(shutil.which("systemd-escape"), "systemd-escape not installed")
+    def test_unit_binds_to_the_alias_device_unit(self):
+        rules = (UDEV / "70-ch552-macropad.rules").read_text()
+        alias = re.search(r'ENV\{SYSTEMD_ALIAS\}="([^"]+)"', rules).group(1)
+        device = escape_device(alias)
+        self.assertEqual(device, "smplos-keypad.device")
+        unit = self.unit()
+        self.assertIn(f"BindsTo={device}\n", unit)
+        after = re.search(r"^After=(.*)$", unit, re.M).group(1).split()
+        self.assertIn(device, after, "BindsTo= needs After= to stop with the device")
+        self.assertIn("smplos-keypad.device", (ROOT / "src/shared/bin/smplos-session-services").read_text())
+
+    def test_unit_is_never_enabled_and_drives_the_bar_variable(self):
+        unit = self.unit()
+        self.assertNotIn("[Install]", unit)
+        self.assertNotIn("WantedBy", unit)
+        self.assertNotIn("Requisite=", unit)
         self.assertIn("ConditionPathExists=/usr/bin/control-surfaced", unit)
-        self.assertIn("ExecStart=/usr/bin/control-surfaced run --quiet", unit)
-        self.assertIn("WantedBy=graphical-session.target", unit)
+        self.assertIn("ExecStartPost=-/usr/bin/eww --config %h/.config/eww update keypad-present=yes", unit)
+        self.assertIn("ExecStopPost=-/usr/bin/eww --config %h/.config/eww update keypad-present=no", unit)
         build = (ROOT / "src/builder/build.sh").read_text()
-        self.assertIn('"$user_graphical_wants/control-surface.service"', build)
+        self.assertNotIn('wants/control-surface.service"', build)
+        self.assertNotIn("enable control-surface", MIGRATION.read_text())
+
+    @unittest.skipUnless(shutil.which("systemd-analyze"), "systemd-analyze not installed")
+    def test_unit_passes_systemd_analyze_verify(self):
+        with tempfile.TemporaryDirectory() as temp:
+            unit = Path(temp) / "control-surface.service"
+            # The binaries don't exist on a build host; everything else is checked.
+            unit.write_text(self.unit().replace("/usr/bin/control-surfaced", "/usr/bin/true")
+                            .replace("/usr/bin/eww", "/usr/bin/true"))
+            env = {k: v for k, v in os.environ.items() if k != "DBUS_SESSION_BUS_ADDRESS"}
+            env.update(XDG_RUNTIME_DIR=temp, SYSTEMD_UNIT_PATH=f"{temp}:")
+            result = subprocess.run(["systemd-analyze", "--user", "--man=no", "verify", str(unit)],
+                                    env=env, capture_output=True, text=True, timeout=30)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_bar_has_no_keypad_watcher(self):
+        yuck = (ROOT / "src/shared/eww/eww.yuck").read_text()
+        for line in yuck.splitlines():
+            if re.match(r"\s*\((deflisten|defpoll)\b", line):
+                self.assertNotIn("keypad", line)
+        self.assertIn('(defvar keypad-present "no")', yuck)
+        self.assertFalse(list((ROOT / "src/shared/eww/scripts").glob("*keypad*")))
+        self.assertNotIn("bootloader", yuck[yuck.index("(defwidget tray-keypad"):])
 
     def test_bar_icon_and_settings_entry(self):
         yuck = (ROOT / "src/shared/eww/eww.yuck").read_text()
-        self.assertIn("`scripts/keypad-listener.sh`", yuck)
         widget = yuck[yuck.index("(defwidget tray-keypad"):]
         widget = widget[:widget.index("\n\n")]
-        self.assertIn(':visible {keypad-data.present == "yes"}', widget)
+        self.assertIn(':visible {keypad-present == "yes"}', widget)
         self.assertIn(':onclick "smplos-settings keypad &"', widget)
         tray = yuck[yuck.index("(defwidget tray []"):]
         self.assertIn("(tray-keypad)", tray[:tray.index("\n\n")])
         self.assertIn(".tray-keypad", (ROOT / "src/shared/eww/eww.scss").read_text())
-        for icon in ("keypad.svg", "keypad-bootloader.svg"):
-            self.assertIn("{{accent}}", (ROOT / "src/shared/icons/status" / icon).read_text())
+        self.assertIn("{{accent}}", (ROOT / "src/shared/icons/status/keypad.svg").read_text())
+        self.assertFalse((ROOT / "src/shared/icons/status/keypad-bootloader.svg").exists())
         settings = (ROOT / "src/shared/bin/smplos-settings").read_text()
         self.assertIn("exec settings --tab keypad", settings)
         self.assertIn("Keypad;smplos-settings keypad;settings;", (ROOT / "src/shared/bin/rebuild-app-cache").read_text())
@@ -288,6 +311,54 @@ class WiringTests(unittest.TestCase):
         aur = (ROOT / "src/shared/packages-aur.txt").read_text().splitlines()
         self.assertIn("wchisp", aur)
         self.assertIn("# control-surface", aur)
+
+
+class OneShotSyncTests(KeypadCase):
+    """The bar learns the state once at start/reload; login restarts the app once."""
+
+    def setUp(self):
+        super().setUp()
+        self.tool("systemctl", 'echo "systemctl $*" >> "$CALLS"\n'
+                  'case "$*" in\n'
+                  '  *"is-active --quiet control-surface.service"*) [ -n "$APP_ACTIVE" ];;\n'
+                  '  *"is-active --quiet smplos-keypad.device"*) [ -n "$KEYPAD" ];;\n'
+                  '  *is-active*) exit 3;;\n'
+                  'esac\n')
+        self.tool("eww", 'echo "eww $*" >> "$CALLS"\n')
+        self.tool("notify-send", "exit 0\n")
+        (self.home / ".config/eww").mkdir(parents=True)
+        for name in ("eww.yuck", "eww.scss", "theme-colors.scss"):
+            (self.home / ".config/eww" / name).touch()
+        self.bar_ctl = self.root / "bar-ctl"
+        self.bar_ctl.write_text(BAR_CTL.read_text().replace('LOG="/tmp/eww-startup.log"',
+                                                           f'LOG="{self.root / "bar.log"}"'))
+
+    def reload_bar(self, **env):
+        self.calls.unlink(missing_ok=True)
+        subprocess.run(["bash", str(self.bar_ctl), "reload"], env=dict(self.env, **env),
+                       capture_output=True, text=True, timeout=20)
+        return [c for c in self.calls_made() if "keypad" in c]
+
+    def test_bar_reload_sets_the_icon_only_while_the_app_runs(self):
+        config = self.home / ".config/eww"
+        self.assertEqual(self.reload_bar(APP_ACTIVE="1"),
+                         [f"eww --config {config} update keypad-present=yes"])
+        self.assertEqual(self.reload_bar(), [], "inactive: the defvar default already says no")
+
+    def login(self, **env):
+        self.calls.unlink(missing_ok=True)
+        env = dict(self.env, XDG_CONFIG_HOME=str(self.root / "cfg"), XDG_STATE_HOME=str(self.root / "state"),
+                   XDG_CACHE_HOME=str(self.root / "cache"), SMPLOS_SYSTEM_USER_UNITS=str(self.root / "none"),
+                   SMPLOS_SESSION_SETTLE="0", SMPLOS_SESSION_RETRY="0", **env)
+        subprocess.run(["bash", str(SESSION_SERVICES)], env=env, capture_output=True, text=True, timeout=20)
+        return self.calls_made()
+
+    def test_login_restarts_the_app_once_only_with_a_keypad(self):
+        calls = self.login(KEYPAD="1")
+        self.assertIn("systemctl --user restart control-surface.service", calls)
+        self.assertLess(calls.index("systemctl --user start smplos-session.target"),
+                        calls.index("systemctl --user restart control-surface.service"))
+        self.assertNotIn("systemctl --user restart control-surface.service", self.login())
 
 
 class MigrationTests(KeypadCase):
@@ -316,21 +387,20 @@ class MigrationTests(KeypadCase):
         self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
         return result.stdout
 
-    def test_fresh_migration_installs_everything_once(self):
+    def test_fresh_migration_installs_but_never_enables(self):
         pad = self.device("1-5", STOCK)
         output = self.migrate()
         for rule in ("70-ch552-macropad.rules", "71-wch-isp-bootloader.rules"):
             self.assertEqual((self.udev / rule).read_text(), (UDEV / rule).read_text())
         self.assertEqual((self.units / "control-surface.service").read_text(), UNIT.read_text())
-        wants = self.units / "graphical-session.target.wants/control-surface.service"
-        self.assertTrue(wants.is_symlink())
+        self.assertFalse(list(self.units.glob("*.wants/control-surface.service")))
         baked = (self.home / ".config/eww/icons/status/keypad.svg").read_text()
         self.assertIn('stroke="#123abc"', baked)
-        self.assertTrue((self.home / ".local/share/smplos/icons/status/keypad-bootloader.svg").exists())
         calls = self.calls_made()
         self.assertIn("udevadm control --reload-rules", calls)
         self.assertIn(f"udevadm trigger --action=change --parent-match={pad.resolve()}", calls)
-        self.assertIn("session systemctl --user start control-surface.service", calls)
+        self.assertIn("session systemctl --user daemon-reload", calls)
+        self.assertFalse(any("start" in call or "enable" in call for call in calls))
         self.assertFalse(any("subsystem-match" in call for call in calls), "only targeted triggers")
         self.assertIn("configured", output)
 
@@ -338,13 +408,30 @@ class MigrationTests(KeypadCase):
         self.assertIn("already configured", self.migrate())
         self.assertEqual(self.calls_made(), [])
 
+    def test_an_earlier_smplos_unit_is_updated_and_no_longer_starts_at_login(self):
+        self.units.mkdir(parents=True)
+        old = ("[Unit]\nDocumentation=https://github.com/smpl-os/smplos/blob/main/KEYPAD.md\n"
+               "[Service]\nExecStart=/usr/bin/control-surfaced run --quiet\n"
+               "[Install]\nWantedBy=graphical-session.target\n")
+        (self.units / "control-surface.service").write_text(old)
+        wants = self.units / "graphical-session.target.wants"
+        wants.mkdir()
+        (wants / "control-surface.service").symlink_to("../control-surface.service")
+        output = self.migrate()
+        self.assertEqual((self.units / "control-surface.service").read_text(), UNIT.read_text())
+        self.assertFalse((wants / "control-surface.service").is_symlink())
+        self.assertIn("Removed the old login start", output)
+
     def test_custom_unit_is_left_alone(self):
         self.units.mkdir(parents=True)
         custom = "[Service]\nExecStart=%h/.local/bin/control-surfaced run --quiet\n"
         (self.units / "control-surface.service").write_text(custom)
+        wants = self.units / "graphical-session.target.wants"
+        wants.mkdir()
+        (wants / "control-surface.service").symlink_to("../control-surface.service")
         output = self.migrate()
         self.assertEqual((self.units / "control-surface.service").read_text(), custom)
-        self.assertFalse((self.units / "graphical-session.target.wants/control-surface.service").exists())
+        self.assertTrue((wants / "control-surface.service").is_symlink())
         self.assertIn("custom unit", output)
 
 

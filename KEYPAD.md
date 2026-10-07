@@ -11,7 +11,9 @@ See [open decisions](#open-decisions) and the
 smplOS supports the family of cheap CH552 macro keypads (3 to 16 keys, 0 to 3
 knobs; USB `1189:8890`). Plug one in and:
 
-* it works: the keypad daemon starts on its own and applies your mapping;
+* it works: udev starts the keypad app (`control-surfaced`), which applies your
+  mapping. Unplug it and the app stops again. **With no keypad plugged in,
+  nothing keypad related runs** (see [footprint](#lifecycle-and-footprint));
 * a keypad icon appears in the EWW bar while it is connected. Click it to open
   **Settings → Keypad**;
 * Settings maps keys and knobs at three levels:
@@ -26,24 +28,45 @@ knobs; USB `1189:8890`). Plug one in and:
 * a step-by-step wizard installs the open firmware: unplug, hold the top-left
   key, plug in, flash, replug, test every input.
 
+## Which keypads work
+
+Only **CH552-based macro keypads with USB ID `1189:8890`**: the inexpensive
+"MINI KeyBoard"-style pads sold under many names, with 3 to 16 keys and up to 3
+knobs, usually configured on Windows with a "MINI KeyBoard" vendor app. To tell
+whether yours is one, plug it in and open **Settings → Keypad**: a supported
+keypad shows as connected (and the bar shows the keypad icon). In a terminal:
+
+```bash
+keypad-ctl present && echo "supported keypad connected"
+# or, with usbutils installed (not part of smplOS by default):
+lsusb -d 1189:8890
+```
+
+`lsusb` lists it as `1189:8890` (vendor "Acer Communications & Multimedia" in
+the USB ID database; the product name varies). The ID is what counts. Pads with other IDs
+(for example the CH57x-based `1189:8840`/`8842` boards, QMK/VIA keypads or
+Stream Deck-style devices) are not handled and don't appear in Settings. The
+Settings tab states this at the top and links here.
+
 ## Architecture
 
 ```mermaid
 flowchart LR
-  pad["CH552 keypad\n1189:8890"] -- "udev: uaccess, /dev/smplos-keypad-*,\nSYSTEMD_USER_WANTS" --> unit["control-surface.service\n(user unit)"]
+  pad["CH552 keypad\n1189:8890"] -- "udev: uaccess, smplos-keypad.device,\nSYSTEMD_USER_WANTS" --> unit["control-surface.service\n(BindsTo the device)"]
   unit --> daemon["control-surfaced\n(control-surface repo)"]
+  unit -- "ExecStartPost / ExecStopPost:\neww update keypad-present" --> eww["EWW tray icon"]
+  barctl["bar-ctl start / reload"] -- "once: is-active?" --> eww
   daemon -- "evdev grab" --> pad
   daemon -- "uinput keys" --> desktop[Focused app]
   daemon -- "D-Bus ControlSurface1" --> kdenlive[Kdenlive]
   hypr[Hyprland IPC] -- focused window --> daemon
   cfg["~/.config/control-surface/config.jsonc"] -- hot reload --> daemon
-  ctl["keypad-ctl\n(sysfs only)"] -- "watch: JSON lines" --> eww["EWW tray icon"]
   eww -- click --> settings["Settings > Keypad\n(smpl-apps)"]
-  settings -- "status, boards, firmware" --> ctl
+  settings -- "sysfs scan (while open)" --> pad
   settings -- "check-config, example-config,\nfeatures, list-actions" --> daemon
-  daemon -- "D-Bus InputEvent\n(SetIdentify held)" --> settings
+  daemon -- "D-Bus InputEvent, GetLayout\n(SetIdentify held)" --> settings
   settings -- "validated write + backup" --> cfg
-  settings -- "firmware flash (dry run)" --> ctl
+  settings -- "firmware flash (dry run)" --> ctl["keypad-ctl\n(on demand)"]
   ctl -- "wchisp info / flash" --> loader["WCH ROM bootloader\n4348:55e0"]
 ```
 
@@ -51,97 +74,120 @@ flowchart LR
 |---|---|---|
 | `control-surfaced` | control-surface repository (separate) | Grabs only `1189:8890`, follows the focused window, applies JSONC profiles, Kdenlive plugin |
 | Open firmware | control-surface `firmware/` (fork of CH552-OpenMacroPad, CC BY-SA 3.0) | Self-describing keypad firmware, same VID:PID |
-| `keypad-ctl` | `src/shared/bin/keypad-ctl` | Detection, hotplug watch, board override, firmware list and flash |
-| udev rules | `src/shared/system/udev/70-ch552-macropad.rules`, `71-wch-isp-bootloader.rules` | Access, presence marker, start on plug-in |
-| User unit | `src/shared/configs/systemd/user/control-surface.service` | Runs the daemon in the graphical session |
-| Bar icon | `src/shared/eww/eww.yuck` (`tray-keypad`), `scripts/keypad-listener.sh`, `icons/status/keypad*.svg` | Visible only while a keypad is plugged in |
+| `keypad-ctl` | `src/shared/bin/keypad-ctl` | On-demand tool: detection (`status`, `present`) and firmware list and flash. Never runs in the background |
+| udev rules | `src/shared/system/udev/70-ch552-macropad.rules`, `71-wch-isp-bootloader.rules` | Access, the `smplos-keypad.device` unit, start on plug-in |
+| User unit | `src/shared/configs/systemd/user/control-surface.service` | Runs the keypad app only while a keypad is plugged in; sets the bar icon |
+| Bar icon | `src/shared/eww/eww.yuck` (`defvar keypad-present`, `tray-keypad`), `bar-ctl`, `icons/status/keypad.svg` | Visible only while the keypad app runs |
 | Settings tab | smpl-apps `settings/src/keypad/`, `settings/ui/main.slint` (tab 11) | Status, layout, mapping editor, firmware wizard |
 | Packaging | `src/shared/pkgbuilds/control-surface/`, `packages-aur.txt` (`wchisp`) | Daemon recipe (parked) and the flasher |
-| Migration | `migrations/20261007-123000-macro-keypad-support.sh` | Existing installs: udev rules, icons, unit enablement |
+| Migration | `migrations/20261007-123000-macro-keypad-support.sh` | Existing installs: udev rules, icon, unit (never enabled) |
 
 Settings code lives in smpl-apps, like every native app. This repository
 carries the system integration only, and never vendors the daemon's source.
 
 ## Detection and firmware identity
 
-`keypad-ctl status` reads sysfs attributes only (`/sys/bus/usb/devices`). It
-never opens a keypad, and never touches any other device. It reports one JSON
-line:
+Detection reads sysfs attributes only (`/sys/bus/usb/devices`): it never opens
+a keypad and never touches any other device. Settings does it itself while its
+Keypad tab is open; `keypad-ctl status` does the same for scripts:
 
 ```json
-{"present":"yes","state":"ready","count":"1","tooltip":"...",
+{"state":"ready",
  "devices":[{"path":"1-5","vid":"1189","pid":"8890","manufacturer":"OpenMacroPad",
    "product":"Control Surface 15+3","serial":"key153","bcd":"0200","firmware":"open",
-   "firmware_label":"Open firmware (control-surface)",
-   "layout":{"board":"15+3","keys":15,"knobs":3,"cols":5,"source":"device","supported":true}}],
+   "firmware_type":"control-surface","firmware_label":"Open firmware (control-surface)",
+   "layout":{"board":"sy181-15k3e","keys":15,"knobs":3}}],
  "bootloaders":[]}
 ```
 
-| Firmware | How it's recognized | Layout source |
+The rules are the daemon's own (`usbinfo.cpp`):
+
+| Firmware (daemon name) | How it's recognized | Layout |
 |---|---|---|
-| `stock` | manufacturer `wch.cn`, product `CH552` (serial `key153`) | Board profile (default `15+3`, user can pick another) |
-| `open` (ours) | `bcdDevice 0x0200` or manufacturer `OpenMacroPad` (product `Control Surface 15+3`) | Self-described: `K+N` in the product string |
-| `open-upstream` | manufacturer `SY181` or "Macropad" in the product (e.g. EpicLPer's discovery build) | Board profile; its "12+3" naming is not a reliable key count |
-| `unknown` | any other `1189:8890` | Board profile |
+| `control-surface` (ours) | manufacturer `OpenMacroPad`, product `Control Surface K+N` | Self-described: `K+N` in the product string (`15+3` is `sy181-15k3e`); version from bcdDevice |
+| `openmacropad` | manufacturer `SY181` (EpicLPer's builds) | Chosen in Settings |
+| `stock` | manufacturer `wch.cn` (product `CH552`) | Chosen in Settings |
+| `unknown` | any other `1189:8890` | Chosen in Settings |
 
-The bootloader is the WCH ROM bootloader, `4348:55e0` (newer WCH parts use
-`1a86:55e0`). Its `state` is `bootloader`, shown with its own bar icon.
+bcdDevice carries major and minor only, so firmware 2.0.1 shows as 2.0;
+`control-surfaced firmware-info` reads the full version over HID.
 
-The board catalog (`keypad-ctl boards`) covers the common variants: 15+3, 12+2,
-12+0, 10+0, 16+0, 3+1 and 3+0. Settings > Keypad > Board saves an override to
-`~/.config/smplos/keypad.json`. The daemon addresses `key1..key15` and
-`knob1..knob3` today. Larger layouts are drawn, but their extra controls show
-"n/a" until the daemon supports them (request R4).
+The WCH ROM bootloader (`4348:55e0`; newer WCH parts use `1a86:55e0`) is
+detected by the firmware wizard only. The bar doesn't show it.
 
-## Hotplug and the daemon's lifecycle
+## Lifecycle and footprint
 
-`70-ch552-macropad.rules` does three things, for `1189:8890` only:
+smplOS stays light, so the keypad support adds **no always-on process**. With
+no keypad plugged in, nothing keypad related runs: no watcher, no listener, no
+daemon. Everything is driven by the device:
+
+1. **Plug in.** `70-ch552-macropad.rules` matches the USB device `1189:8890`
+   only. It tags it `systemd` and gives it `SYSTEMD_ALIAS=/smplos/keypad`, so
+   the user manager tracks it as `smplos-keypad.device`
+   (`systemd-escape --path --suffix=device /smplos/keypad`).
+   `SYSTEMD_USER_WANTS=control-surface.service` starts the keypad app when that
+   device appears.
+2. **Running.** `control-surface.service` has `BindsTo=smplos-keypad.device`
+   and `After=smplos-keypad.device`. `ExecStartPost` runs
+   `eww update keypad-present=yes`, and the bar shows the icon.
+3. **Unplug.** The device unit goes away, `BindsTo=` stops the service, and
+   `ExecStopPost` runs `eww update keypad-present=no`.
+
+The unit has no `[Install]` section and is never enabled for a target. udev is
+the only thing that starts it (Settings' Start button and the login step below
+only act while a keypad is present).
+
+Two one-shot checks cover the cases the events can't:
+
+* **Bar starts or reloads after the keypad app** (login with the keypad already
+  plugged in, `theme-set`'s reload, which resets EWW variables): `bar-ctl
+  start`/`reload` runs `systemctl --user is-active control-surface.service`
+  once and sets `keypad-present=yes`. Nothing polls.
+* **Keypad plugged in before login.** udev starts the app when the user manager
+  comes up, before the session's environment is imported. At login,
+  `smplos-session-services` restarts it once, only if `smplos-keypad.device` is
+  active, so `command` bindings run in the session.
+
+`ExecStartPost`/`ExecStopPost` are `-` prefixed: with no bar running, `eww
+update` fails in about a second and never starts an EWW daemon.
+
+Measured on the development machine:
+
+| | Processes | Memory |
+|---|---|---|
+| No keypad plugged in | **0** | 0 |
+| Keypad plugged in | 1 (`control-surfaced`) | about 5.5–5.9 MB RSS, almost all shared library pages (320 kB or less anonymous) |
+| For comparison, the first draft (EWW `deflisten` → `keypad-ctl watch` + `udevadm monitor`) | 2, on every machine | about 31.9 MB RSS |
+
+The "no keypad" row was measured by starting the bar config on a private Xvfb
+display and listing the EWW daemon's descendants: the old config started
+`keypad-ctl watch` (25.4 MB) and `udevadm monitor` (6.4 MB); the new one starts
+no keypad processes.
+
+Access rules, in the same file, apply to `1189:8890` only:
 
 * `TAG+="uaccess"` on the USB device and its `hidraw` and `input` nodes, so the
-  seat user's daemon can read the keypad without the `input` group;
-* `SYMLINK+="smplos-keypad-%k"`: a presence marker under `/dev`, removed again
-  on unplug;
-* `TAG+="systemd", ENV{SYSTEMD_USER_WANTS}+="control-surface.service"` starts
-  the user unit on plug-in.
+  seat user's keypad app reads the keypad without the `input` group;
+* `uaccess` on `/dev/uinput`, because the app types through one virtual
+  keyboard (Steam's and xr-workspace's rules make the same grant).
 
-The same file grants `uaccess` on `/dev/uinput`, because the daemon types
-through one virtual keyboard. Steam's and xr-workspace's rules make the same
-grant. `71-wch-isp-bootloader.rules` grants `uaccess` on the bootloader only.
+`71-wch-isp-bootloader.rules` grants `uaccess` on the bootloader only.
 
-The user unit is enabled for `graphical-session.target`, which
-`smplos-session-services` starts at every login. Its conditions make it inert
-when it can't run:
-
-* `ConditionPathExists=/usr/bin/control-surfaced`: skipped until the package is
-  installed;
-* `ConditionPathExistsGlob=/dev/smplos-keypad-*`: skipped at login when no
-  keypad is plugged in. A skipped condition is not reported as a failure by
-  `smplos-session-services`.
-
-Plugging a keypad in mid-session starts the unit through udev. A keypad that is
-plugged in before login is picked up when the session target starts. After an
-unplug, the daemon is expected to keep running and pick the keypad up again on
-replug (request R6 asks the daemon to confirm this and to idle without a
-keypad).
+With two keypads plugged in, both carry the same alias; unplugging one may stop
+the app until the other is replugged. The app drives one keypad anyway.
 
 ## Bar icon
 
-`(deflisten keypad-data ... scripts/keypad-listener.sh)` runs `keypad-ctl watch`.
-That emits a line at start and after each USB uevent burst (`udevadm monitor
---udev --subsystem-match=usb`, settled for 0.4 s), only when the result changes.
-It falls back to polling every 3 s.
-
-`tray-keypad` is visible only while `present == "yes"`. Its shape shows its
-state: a keypad outline when the keypad is ready, and a download arrow in a
-pill when it is in firmware update mode. The tooltip names the layout and the
-firmware. Clicking it runs `smplos-settings keypad`, which opens
-`settings --tab keypad`.
+`(defvar keypad-present "no")`; `tray-keypad` is visible only while it is
+`"yes"`. The unit and `bar-ctl` set it as described above. Clicking the icon
+runs `smplos-settings keypad`, which opens `settings --tab keypad`. There is no
+bootloader icon: the firmware wizard detects update mode itself.
 
 ## Settings > Keypad
 
 ```mermaid
 flowchart TD
-  open[Open tab] --> status["Device card: keypad, firmware,\nservice state, board picker"]
+  open[Open tab] --> status["Scope note, device card (sysfs),\nkeypad app state + Start, variant"]
   status --> layout["Layout: keys grid + knobs,\nbinding summaries"]
   layout -- "click, or press on the keypad\n(Press to identify)" --> select[Selected control / knob event]
   select --> editor["Action: Not set, Do nothing, Shortcut,\nMedia key, Mouse*, Command, Kdenlive action*"]
@@ -157,6 +203,27 @@ flowchart TD
 binding. Settings asks `check-config` once, with a probe file. Kdenlive actions
 appear in profiles with the Kdenlive plugin on.
 
+* **Scope.** The top of the tab says which keypads are supported and links to
+  [Which keypads work](#which-keypads-work).
+* **Keypad and app status.** The device card shows what sysfs reports: whether
+  a CH552 keypad is plugged in, its firmware and version. Under it is the
+  keypad app's state, from all of: the session bus name
+  `org.smplos.ControlSurface`, a `control-surfaced run` process, and
+  `control-surface.service`'s state. So an app started by hand shows as
+  "running (started outside systemd)". **Start** (`systemctl --user start
+  control-surface.service`) appears only when a keypad is plugged in and the
+  app isn't running. A missing package, a failed unit or a missing unit each
+  get their own message.
+* **Variant.** A keypad with our firmware names its layout; the tab shows it as
+  "Detected from the keypad", read-only, with **Override…**. For other
+  firmware, a dropdown lists the daemon's board profiles (`features --json`,
+  else the built-in list): `sy181-15k3e`, `generic-3k`, `generic-3k1e`,
+  `generic-6k1e`, `generic-10k`, `generic-12k2e`, `generic-12k3e`,
+  `generic-16k3e`. Each entry has a small schematic. **Custom…** sets keys
+  (1–16), knobs (0–3) and columns (1–8). The choice is the config's
+  `"layout"` (`"generic-12k2e"` or `{"keys", "knobs", "columns"}`); "Automatic"
+  removes it. The current daemon always uses a self-described layout over the
+  config's, and the tab says so when an override has no effect.
 * **Config source.** The file is `~/.config/control-surface/config.jsonc`
   (`$XDG_CONFIG_HOME` if set). With no file, Settings shows the daemon's
   built-in example (`control-surfaced example-config`), because that is what
@@ -185,8 +252,8 @@ appear in profiles with the Kdenlive plugin on.
   it never opens the keypad. While identifying (and during the wizard's input
   test) it holds `SetIdentify(true)` on one long-lived bus connection, so
   mapped actions are paused. Leaving the tab or closing Settings ends it; the
-  daemon also ends it when that connection closes. Without the daemon on the
-  bus, the tab asks you to start the keypad service.
+  daemon also ends it when that connection closes. Without the keypad app on
+  the bus, the tab says live input needs it running.
 * **Limits and catalogs.** `control-surfaced features --json` gives the
   addressable keys and knobs (16 and 3 today) and whether mouse bindings exist.
   Older daemons fall back to 15 keys, 3 knobs and a `check-config` probe.
@@ -240,15 +307,15 @@ keypad or runs wchisp against hardware.
 * **udev rules:** deployed by the generic udev step of `build.sh` and
   `install.sh`, and by the migration on existing installs, with a targeted
   `udevadm trigger` for connected keypads and `/dev/uinput`.
-* **User unit:** copied to skel with the shared configs and enabled through
-  `graphical-session.target.wants` in `build.sh`. For existing users,
-  `smplos-os-update`'s `sync_configs` adds it when it's missing (that step copies
-  any file from `src/shared/configs` the user doesn't have), and the migration
-  installs it too and enables it. A
-  different unit of the same name, such as a developer's
-  `install-user.sh` unit, is left alone and not enabled.
+* **User unit:** copied to skel with the shared configs and never enabled. For
+  existing users, `smplos-os-update`'s `sync_configs` adds it when it's missing
+  (that step copies any file from `src/shared/configs` the user doesn't have).
+  The migration installs or updates a unit an earlier smplOS draft installed
+  (recognised by its `Documentation=` line) and removes that draft's
+  `*.wants` link. A different unit of the same name, such as a developer's
+  `install-user.sh` unit, is left alone.
 * **Bar and scripts:** delivered by `smplos-os-update` (scripts, EWW config).
-  The migration bakes the two new tray icons with the current theme's accent.
+  The migration bakes the tray icon with the current theme's accent.
 * **Settings tab:** ships in the next smpl-apps release. There is no new
   binary.
 
@@ -257,9 +324,10 @@ keypad or runs wchisp against hardware.
 | Decision | Choice | Why |
 |---|---|---|
 | Where the UI lives | Settings tab in smpl-apps; system glue here | smplOS rule: app code only in smpl-apps; one settings app |
-| Detection | sysfs strings only, in `keypad-ctl` | No device I/O, so it's safe with the daemon's grab; one source of truth for the bar and Settings |
-| Watcher | `keypad-ctl watch` on `udevadm monitor` | Same mechanism as `usb-listener.sh`; one JSON line per change, as `deflisten` needs |
-| Start on plug | udev `SYSTEMD_USER_WANTS` + `ConditionPathExistsGlob` on a udev symlink | Event-driven start without a resident watcher; no failure reports without a keypad |
+| Detection | sysfs strings only, with the daemon's rules; in Settings while it's open, and `keypad-ctl` on demand | No device I/O, so it's safe with the daemon's grab |
+| Watcher | None. The unit sets an EWW variable on start/stop; `bar-ctl` checks once | Zero processes without a keypad (the first draft's watcher cost about 32 MB on every machine) |
+| Lifecycle | udev `SYSTEMD_USER_WANTS`, `SYSTEMD_ALIAS` and `BindsTo=` on the alias device unit | Starts on plug-in and stops on unplug, without a resident process |
+| Variant | The config's `"layout"`, from the daemon's board profiles or a custom grid | One source of truth that the daemon reads; no smplOS-only override file |
 | Access | `uaccess` for this VID:PID and `/dev/uinput` | No group membership; other keyboards untouched |
 | Config format | Edit the daemon's JSONC directly | No second config; the daemon validates and hot-reloads |
 | Validation | Settings' checks and `check-config` before writing; backup; atomic rename | An invalid file is never written; the old one is always recoverable |
@@ -278,8 +346,7 @@ keypad or runs wchisp against hardware.
 | 4 | Bundle wchisp in every ISO | Yes (offline-first, small); the alternative is installing it on demand from the wizard |
 | 5 | `uaccess` on `/dev/uinput` | Keep (same as Steam); the alternative is `input` group membership |
 | 6 | Default mapping without a config | The daemon's built-in example (Kdenlive, FL Studio, Global media keys), because the daemon runs it anyway |
-| 7 | Board catalog for stock firmware | Keep it small and let self-description (R4) replace guessing |
-| 8 | Stop the daemon on unplug | No: it idles and picks the keypad up again; revisit if its idle cost matters |
+| 7 | Should a config `"layout"` override a self-described layout in the daemon? | Yes, as an explicit override (the daemon prefers the firmware's today; Settings warns) |
 
 ## Daemon API requests
 
@@ -292,9 +359,9 @@ machine. Settings works with either.
 | R1 | Live input and an identify mode that pauses actions | `InputEvent` signal, `SetIdentify(b)` (ends when the caller leaves the bus, 10-minute safety net), `monitor --json` | Uses the signal and holds `SetIdentify`. It doesn't use `monitor`, because without a daemon that command grabs the keypad itself |
 | R2 | Machine-readable validation | `check-config --json`, `ValidateConfig` | Still parses the text form (works with old and new daemons); next step |
 | R3 | Mouse bindings | `{"mouse": "left|right|middle|back|forward|wheel-up|wheel-down|wheel-left|wheel-right"}` | Offered when `features` lists mouse names |
-| R4 | Layouts for the family | `key16`, `"layout"` in the config, built-in board profiles, `GetLayout` | Uses the limits; the board picker still writes smplOS's own override (follow-up below) |
+| R4 | Layouts for the family | `key16`, `"layout"` in the config, built-in board profiles, `GetLayout` | Variant picker writes `"layout"`; limits from `features`; detected layout from sysfs or `GetLayout` |
 | R5 | Any pad, raw-HID input | Empty `device.serial` drives the first pad; raw report-5 backend | Nothing to do |
-| R6 | Start before the compositor, idle without a keypad | Waits for Hyprland, a valid config and uinput | Matches the udev start |
+| R6 | Start before the compositor, idle without a keypad | Waits for Hyprland, a valid config and uinput | Matches the udev start; the unit now also stops on unplug |
 | R7 | Offline Kdenlive catalog | `list-actions --json`, `GetCatalog` | Used when no Kdenlive is running |
 | R8 | Firmware delivery | Release images with metadata, `firmware-info`, `enter-bootloader`, `StartFlash` (dry run always; real flash only with `--allow-flash`) | The wizard still flashes through `keypad-ctl` (follow-up below) |
 | R9 | Feature discovery | `features --json`, `GetFeatures` | Used |
@@ -304,10 +371,7 @@ Follow-ups now that the API exists, in order:
 1. Save through `ValidateConfig` and `SetConfig(text, expectedHash)` when the
    daemon is on the bus. It is hash-checked and leaves `<path>.bak`. Keep the
    direct write for when the daemon isn't running.
-2. The board picker should write the config's `"layout": "<id>"`, using the
-   daemon's board profiles, instead of `~/.config/smplos/keypad.json`. Then
-   `keypad-ctl`'s small board catalog only serves the bar tooltip.
-3. Drive the wizard through `StartFlash` and `FlashProgress` when the daemon
+2. Drive the wizard through `StartFlash` and `FlashProgress` when the daemon
    runs. It releases its grab and enters the bootloader by itself on the open
    firmware. Keep `keypad-ctl firmware flash` for when no daemon is running.
    Both keep dry run as the default until real flashing is enabled.
@@ -316,7 +380,8 @@ Follow-ups now that the API exists, in order:
 
 | Variable | Effect |
 |---|---|
-| `SMPLOS_KEYPAD_SYSFS=DIR` | `keypad-ctl` reads a fake `/sys/bus/usb/devices` (and polls instead of `udevadm`) |
+| `SMPLOS_KEYPAD_SYSFS=DIR` | Settings and `keypad-ctl` read a fake `/sys/bus/usb/devices` |
+| `SMPLOS_KEYPAD_PROC=DIR` | Settings looks for a hand-started keypad app in a fake `/proc` |
 | `SMPLOS_KEYPAD_FIRMWARE_DIRS=A:B` | Firmware image directories |
 | `SMPLOS_WCHISP=PATH` | wchisp binary (tests use a fake) |
 | `SMPLOS_KEYPAD_CTL=PATH` | `keypad-ctl` used by Settings |
@@ -332,10 +397,14 @@ cd smpl-apps && cargo test -p settings --bin settings  # keypad::{json,config,�
 ```
 
 `test_keypad.py` uses a fake sysfs, a fake wchisp and a private HOME. It covers
-detection of each firmware, the board override, the watcher, dry-run flashing
-(wchisp is never called), refusal of a missing or second bootloader, a bad
-size, a bad checksum and a non-CH552 chip, the wchisp allowlist, the udev and
-unit contract, the bar wiring and both migration paths.
+detection of each firmware, dry-run flashing (wchisp is never called), refusal
+of a missing or second bootloader, a bad size, a bad checksum and a non-CH552
+chip, and the wchisp allowlist. Its lifecycle tests check that the udev alias
+and the unit's `BindsTo=`/`After=` name the same device unit (via
+`systemd-escape`), that the unit has no `[Install]` and passes `systemd-analyze
+verify`, that no EWW `deflisten`/`defpoll` or script is keypad related, the
+one-shot `bar-ctl` and login steps, and the migration paths (fresh, an earlier
+draft's enabled unit, a custom unit).
 
 To test live input and identify mode end to end, run the daemon's
 `mock-control-surfaced` on a private session bus (`dbus-daemon --session

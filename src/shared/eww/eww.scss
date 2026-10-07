@@ -449,13 +449,6 @@ window {
   border-radius: 10px;
 }
 
-/* Macro keypad: icon shape changes in firmware update mode (download arrow);
-   a persistent pill marks that transient state (the stroke stays accent). */
-.tray-keypad.bootloader {
-  background-color: $bg-light;
-  border-radius: 10px;
-}
-
 /* Sync Center: spinning arrows icon -- only visible while syncing.
    Pulses accent background + spins icon to show in-progress activity. */
 @keyframes sync-spin {
