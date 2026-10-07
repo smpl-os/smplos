@@ -1,0 +1,8 @@
+# WCH ROM bootloader (CH55x: USB 4348:55e0; newer WCH parts: 1a86:55e0).
+# Present only while a keypad is in firmware update mode (top-left key held
+# while plugging in). Lets the seated user flash it with wchisp, without root.
+# Flashing goes through `keypad-ctl firmware flash`, which only ever runs
+# `wchisp info` and `wchisp flash` and refuses anything but a CH552. See KEYPAD.md.
+
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="4348", ATTR{idProduct}=="55e0", TAG+="uaccess"
+SUBSYSTEM=="usb", ENV{DEVTYPE}=="usb_device", ATTR{idVendor}=="1a86", ATTR{idProduct}=="55e0", TAG+="uaccess"

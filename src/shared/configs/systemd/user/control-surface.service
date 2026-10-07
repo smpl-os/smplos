@@ -1,0 +1,22 @@
+[Unit]
+Description=Macro keypad daemon (control-surface) for CH552 keypads
+Documentation=https://github.com/smpl-os/smplos/blob/main/KEYPAD.md
+# Runs inside the graphical session: it follows the focused Hyprland window and
+# launches "command" bindings as ordinary desktop processes (so no sandboxing).
+PartOf=graphical-session.target
+After=graphical-session.target
+Requisite=graphical-session.target
+# Inert until the daemon is installed, and skipped (not failed) at login when
+# no keypad is plugged in. The udev rule creates /dev/smplos-keypad-* and asks
+# the user manager for this unit on plug-in (SYSTEMD_USER_WANTS).
+ConditionPathExists=/usr/bin/control-surfaced
+ConditionPathExistsGlob=/dev/smplos-keypad-*
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/control-surfaced run --quiet
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical-session.target

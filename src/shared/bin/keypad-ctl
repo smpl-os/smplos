@@ -1,0 +1,471 @@
+#!/usr/bin/env python3
+"""Macro keypad support: detection, hotplug watch and firmware flashing.
+
+Detection only reads sysfs attributes; it never opens the keypad. See KEYPAD.md.
+
+    keypad-ctl status [--service]       one JSON line: keypads, bootloaders
+    keypad-ctl watch                    a JSON line now and after each USB change (EWW)
+    keypad-ctl present [--bootloader]   exit 0 while a keypad (or its bootloader) is connected
+    keypad-ctl boards                   known board layouts (JSON)
+    keypad-ctl set-board ID|auto        override the layout of a keypad that cannot describe itself
+    keypad-ctl open                     open Settings > Keypad
+    keypad-ctl firmware list            installed firmware images (JSON)
+    keypad-ctl firmware flash IMAGE [--execute]
+                                        dry run by default; --execute runs wchisp
+"""
+
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import re
+import select
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+
+
+PAD_IDS = {("1189", "8890")}
+# WCH ROM bootloaders. CH55x boards enumerate as 4348:55e0; newer WCH parts use 1a86:55e0.
+BOOTLOADER_IDS = {("4348", "55e0"), ("1a86", "55e0")}
+SERVICE = "control-surface.service"
+# CH552: 16 KiB code flash, of which the top 2 KiB hold the ROM bootloader.
+CH552_CODE_FLASH = 14 * 1024
+WCHISP_ALLOWED = {"info", "flash"}
+
+BOARDS = [
+    {"id": "15+3", "name": "15 keys, 3 knobs (SY181 \"12+3\" board)", "keys": 15, "knobs": 3, "cols": 5},
+    {"id": "12+2", "name": "12 keys, 2 knobs", "keys": 12, "knobs": 2, "cols": 4},
+    {"id": "12+0", "name": "12 keys", "keys": 12, "knobs": 0, "cols": 4},
+    {"id": "10+0", "name": "10 keys", "keys": 10, "knobs": 0, "cols": 5},
+    {"id": "16+0", "name": "16 keys", "keys": 16, "knobs": 0, "cols": 4},
+    {"id": "3+1", "name": "3 keys, 1 knob", "keys": 3, "knobs": 1, "cols": 3},
+    {"id": "3+0", "name": "3 keys", "keys": 3, "knobs": 0, "cols": 3},
+]
+DEFAULT_BOARD = "15+3"
+# What the control-surface daemon can address (key1..key16, knob1..knob3).
+DAEMON_MAX_KEYS = 16
+DAEMON_MAX_KNOBS = 3
+
+FIRMWARE_LABELS = {
+    "stock": "Stock firmware",
+    "open": "Open firmware (control-surface)",
+    "open-upstream": "Open firmware (OpenMacroPad)",
+    "unknown": "Unknown firmware",
+}
+
+
+def sysfs_root():
+    return Path(os.environ.get("SMPLOS_KEYPAD_SYSFS", "/sys/bus/usb/devices"))
+
+
+def config_home():
+    return Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+
+
+def prefs_path():
+    return config_home() / "smplos/keypad.json"
+
+
+def read_attr(device, name):
+    try:
+        return (device / name).read_text(errors="replace").strip()
+    except OSError:
+        return ""
+
+
+def atomic_write(path, content):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, delete=False) as stream:
+        temporary = Path(stream.name)
+        stream.write(content)
+    temporary.replace(path)
+
+
+# ── Layout ───────────────────────────────────────────────────────────────────
+
+def board(board_id):
+    return next((b for b in BOARDS if b["id"] == board_id), None)
+
+
+def columns_for(keys):
+    for cols in (5, 4, 3):
+        if keys % cols == 0:
+            return cols
+    return min(keys, 5) or 1
+
+
+def board_override():
+    try:
+        value = json.loads(prefs_path().read_text()).get("board", "")
+    except (OSError, ValueError, AttributeError):
+        return ""
+    return value if board(value) else ""
+
+
+def layout_of(firmware, product):
+    """Self-described layout from our firmware's product string, else a board profile."""
+    if firmware == "open":
+        match = re.search(r"(\d+)\s*\+\s*(\d+)", product)
+        if match:
+            keys, knobs = int(match.group(1)), int(match.group(2))
+            if 0 < keys <= 32 and 0 <= knobs <= 4:
+                return dict(board=f"{keys}+{knobs}", keys=keys, knobs=knobs,
+                            cols=columns_for(keys), source="device")
+    override = board_override()
+    chosen = board(override or DEFAULT_BOARD)
+    return dict(board=chosen["id"], keys=chosen["keys"], knobs=chosen["knobs"],
+                cols=chosen["cols"], source="user" if override else "default")
+
+
+def classify(manufacturer, product, bcd):
+    if bcd == "0200" or manufacturer == "OpenMacroPad":
+        return "open"
+    if manufacturer == "wch.cn" and product == "CH552":
+        return "stock"
+    if manufacturer == "SY181" or "macropad" in product.lower():
+        return "open-upstream"
+    return "unknown"
+
+
+# ── Detection ────────────────────────────────────────────────────────────────
+
+def usb_devices():
+    root = sysfs_root()
+    try:
+        entries = sorted(root.iterdir())
+    except OSError:
+        return
+    for entry in entries:
+        if ":" in entry.name:
+            continue  # interfaces carry no idVendor
+        vid, pid = read_attr(entry, "idVendor").lower(), read_attr(entry, "idProduct").lower()
+        if vid and pid:
+            yield entry, vid, pid
+
+
+def describe_pad(entry, vid, pid):
+    manufacturer = read_attr(entry, "manufacturer")
+    product = read_attr(entry, "product")
+    bcd = read_attr(entry, "bcdDevice").lower()
+    firmware = classify(manufacturer, product, bcd)
+    layout = layout_of(firmware, product)
+    layout["supported"] = layout["keys"] <= DAEMON_MAX_KEYS and layout["knobs"] <= DAEMON_MAX_KNOBS
+    return {
+        "path": entry.name,
+        "vid": vid,
+        "pid": pid,
+        "manufacturer": manufacturer,
+        "product": product,
+        "serial": read_attr(entry, "serial"),
+        "bcd": bcd,
+        "firmware": firmware,
+        "firmware_label": FIRMWARE_LABELS[firmware],
+        "layout": layout,
+    }
+
+
+def describe_bootloader(entry, vid, pid):
+    return {"path": entry.name, "vid": vid, "pid": pid,
+            "busnum": read_attr(entry, "busnum"), "devnum": read_attr(entry, "devnum")}
+
+
+def service_state():
+    installed = shutil.which("control-surfaced") is not None
+    try:
+        state = subprocess.run(["systemctl", "--user", "is-active", SERVICE], capture_output=True,
+                               text=True, timeout=3).stdout.strip() or "unknown"
+    except (OSError, subprocess.TimeoutExpired):
+        state = "unknown"
+    return {"installed": installed, "state": state}
+
+
+def tooltip(pads, loaders):
+    if loaders and not pads:
+        return "Keypad in firmware update mode. Click to open Keypad settings."
+    if not pads:
+        return ""
+    pad = pads[0]
+    layout = pad["layout"]
+    parts = [f"{layout['keys']} keys"] + ([f"{layout['knobs']} knobs"] if layout["knobs"] else [])
+    more = f" (+{len(pads) - 1} more)" if len(pads) > 1 else ""
+    return f"Macro keypad{more}: {', '.join(parts)} - {pad['firmware_label']}. Click to configure."
+
+
+def status(with_service=False):
+    pads, loaders = [], []
+    for entry, vid, pid in usb_devices():
+        if (vid, pid) in PAD_IDS:
+            pads.append(describe_pad(entry, vid, pid))
+        elif (vid, pid) in BOOTLOADER_IDS:
+            loaders.append(describe_bootloader(entry, vid, pid))
+    # EWW compares strings, so the bar-facing fields are strings.
+    result = {
+        "present": "yes" if pads or loaders else "no",
+        "state": "ready" if pads else "bootloader" if loaders else "absent",
+        "count": str(len(pads)),
+        "tooltip": tooltip(pads, loaders),
+        "devices": pads,
+        "bootloaders": loaders,
+    }
+    if with_service:
+        result["service"] = service_state()
+    return result
+
+
+def emit(data):
+    print(json.dumps(data, separators=(",", ":")), flush=True)
+
+
+def watch(poll=3.0, settle=0.4):
+    """Emit on start and whenever the result changes after a USB uevent."""
+    last = None
+
+    def publish():
+        nonlocal last
+        current = status()
+        if current != last:
+            emit(current)
+            last = current
+
+    publish()
+    monitor = None
+    if shutil.which("udevadm") and not os.environ.get("SMPLOS_KEYPAD_SYSFS"):
+        monitor = subprocess.Popen(["udevadm", "monitor", "--udev", "--subsystem-match=usb"],
+                                   stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+    while True:
+        if monitor is None or monitor.poll() is not None:
+            time.sleep(poll)
+            publish()
+            continue
+        ready, _, _ = select.select([monitor.stdout], [], [], 30)
+        if not ready:
+            continue
+        if not monitor.stdout.readline():
+            monitor = None
+            continue
+        # One plug produces a burst of events; rescan once it settles.
+        deadline = time.monotonic() + settle
+        while (remaining := deadline - time.monotonic()) > 0:
+            more, _, _ = select.select([monitor.stdout], [], [], remaining)
+            if more and not monitor.stdout.readline():
+                break
+        publish()
+
+
+# ── Firmware ─────────────────────────────────────────────────────────────────
+
+def firmware_dirs():
+    override = os.environ.get("SMPLOS_KEYPAD_FIRMWARE_DIRS")
+    if override:
+        return [Path(p) for p in override.split(":") if p]
+    data_home = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local/share")
+    return [Path("/usr/share/control-surface/firmware"), data_home / "control-surface/firmware"]
+
+
+def sha256(path):
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def describe_image(path):
+    manifest = {}
+    try:
+        manifest = json.loads(path.with_suffix(".json").read_text())
+    except (OSError, ValueError):
+        pass
+    if not isinstance(manifest, dict):
+        manifest = {}
+    digest = sha256(path)
+    expected = str(manifest.get("sha256", "")).lower()
+    return {
+        "path": str(path),
+        "name": manifest.get("name") or path.stem,
+        "version": str(manifest.get("version", "")),
+        "board": manifest.get("board", ""),
+        "license": manifest.get("license", ""),
+        "description": manifest.get("description", ""),
+        "size": path.stat().st_size,
+        "sha256": digest,
+        # True: the manifest's checksum matches. False: no manifest checksum.
+        "verified": bool(expected) and expected == digest,
+        "mismatch": bool(expected) and expected != digest,
+    }
+
+
+def list_images():
+    images = []
+    for directory in firmware_dirs():
+        for path in sorted(directory.glob("*.bin")) if directory.is_dir() else []:
+            try:
+                images.append(describe_image(path))
+            except OSError:
+                continue
+    return images
+
+
+class FlashError(Exception):
+    pass
+
+
+def wchisp_binary():
+    return os.environ.get("SMPLOS_WCHISP") or shutil.which("wchisp")
+
+
+def run_wchisp(binary, args, on_line):
+    """The only path to wchisp: info and flash, never config or eeprom commands."""
+    if not args or args[0] not in WCHISP_ALLOWED or any(a.startswith("--no-") for a in args):
+        raise FlashError(f"refusing wchisp {' '.join(args)}")
+    output = []
+    with subprocess.Popen([binary, *args], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True) as process:
+        for line in process.stdout:
+            line = line.rstrip()
+            output.append(line)
+            on_line(line)
+    return process.returncode, output
+
+
+def flash_steps(line):
+    text = line.lower()
+    if "erasing" in text:
+        return "erase", "running"
+    if "erase done" in text or "erased" in text:
+        return "erase", "ok"
+    if "writing" in text:
+        return "program", "running"
+    if "written" in text:
+        return "program", "ok"
+    if "verifying" in text:
+        return "verify", "running"
+    if "verify ok" in text:
+        return "verify", "ok"
+    return None
+
+
+def preflight(image_path):
+    path = Path(image_path).resolve()
+    if not path.is_file():
+        raise FlashError(f"firmware image not found: {path}")
+    if path.suffix != ".bin":
+        raise FlashError("only raw .bin images are accepted")
+    image = describe_image(path)
+    if image["size"] == 0 or image["size"] > CH552_CODE_FLASH:
+        raise FlashError(f"image is {image['size']} bytes; a CH552 holds at most {CH552_CODE_FLASH}")
+    if image["mismatch"]:
+        raise FlashError("image checksum does not match its manifest")
+    loaders = status()["bootloaders"]
+    if not loaders:
+        raise FlashError("no keypad in firmware update mode: unplug it, hold the top-left key and plug it back in")
+    if len(loaders) > 1:
+        raise FlashError("more than one device is in firmware update mode; connect only the keypad")
+    return image, loaders[0]
+
+
+def flash(image_path, execute, report):
+    image, loader = preflight(image_path)
+    report("preflight", "ok", f"{image['name']} ({image['size']} bytes, sha256 {image['sha256'][:12]}) "
+                              f"-> bootloader {loader['vid']}:{loader['pid']} at {loader['path']}")
+    binary = wchisp_binary()
+    if not execute:
+        report("chip", "skipped", "dry run: would run `wchisp info` and require a CH552")
+        report("erase", "simulated", "dry run: `wchisp flash IMAGE` would erase the code flash")
+        report("program", "simulated", f"dry run: would write {image['size']} bytes")
+        report("verify", "simulated", "dry run: would read the code flash back and compare it")
+        report("done", "ok", "dry run finished; nothing was written. Config registers are never touched.")
+        return 0
+    if not binary:
+        raise FlashError("wchisp is not installed")
+    code, output = run_wchisp(binary, ["info"], lambda line: None)
+    chip = next((re.search(r"Chip:\s*(\S+)", line) for line in output if "Chip:" in line), None)
+    if code != 0 or not chip:
+        raise FlashError("wchisp could not identify the chip; replug in update mode and retry")
+    if not chip.group(1).upper().startswith("CH552"):
+        raise FlashError(f"refusing to flash {chip.group(1)}: this tool only flashes CH552 keypads")
+    report("chip", "ok", chip.group(1))
+
+    seen = {}
+
+    def on_line(line):
+        step = flash_steps(line)
+        if step and seen.get(step[0]) != step[1]:
+            seen[step[0]] = step[1]
+            report(step[0], step[1], line)
+
+    code, output = run_wchisp(binary, ["flash", image["path"]], on_line)
+    if code != 0 or seen.get("verify") != "ok":
+        raise FlashError("flashing failed: " + (output[-1] if output else f"wchisp exit {code}"))
+    report("done", "ok", "flashed and verified; unplug the keypad and plug it back in")
+    return 0
+
+
+# ── CLI ──────────────────────────────────────────────────────────────────────
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(prog="keypad-ctl", description=__doc__.splitlines()[0])
+    sub = parser.add_subparsers(dest="command", required=True)
+    st = sub.add_parser("status")
+    st.add_argument("--service", action="store_true", help="include the daemon's service state")
+    sub.add_parser("watch")
+    pr = sub.add_parser("present")
+    pr.add_argument("--bootloader", action="store_true")
+    sub.add_parser("boards")
+    sb = sub.add_parser("set-board")
+    sb.add_argument("board")
+    sub.add_parser("open")
+    fw = sub.add_parser("firmware").add_subparsers(dest="action", required=True)
+    fw.add_parser("list")
+    fl = fw.add_parser("flash")
+    fl.add_argument("image")
+    fl.add_argument("--execute", action="store_true", help="really flash (default: dry run)")
+    fl.add_argument("--json", action="store_true", help="one JSON object per step")
+    args = parser.parse_args(argv)
+
+    if args.command == "status":
+        emit(status(args.service))
+    elif args.command == "watch":
+        try:
+            watch()
+        except (KeyboardInterrupt, BrokenPipeError):
+            return 0
+    elif args.command == "present":
+        data = status()
+        return 0 if data["devices"] or (args.bootloader and data["bootloaders"]) else 1
+    elif args.command == "boards":
+        emit(BOARDS)
+    elif args.command == "set-board":
+        if args.board != "auto" and not board(args.board):
+            print(f"unknown board {args.board!r}; see `keypad-ctl boards`", file=sys.stderr)
+            return 2
+        prefs = {}
+        try:
+            prefs = json.loads(prefs_path().read_text())
+        except (OSError, ValueError):
+            pass
+        if not isinstance(prefs, dict):
+            prefs = {}
+        prefs.pop("board", None)
+        if args.board != "auto":
+            prefs["board"] = args.board
+        atomic_write(prefs_path(), json.dumps(prefs, indent=2) + "\n")
+    elif args.command == "open":
+        os.execvp("smplos-settings", ["smplos-settings", "keypad"])
+    elif args.action == "list":
+        emit(list_images())
+    elif args.action == "flash":
+        def report(step, state, detail):
+            if args.json:
+                emit({"step": step, "status": state, "detail": detail, "dry_run": not args.execute})
+            else:
+                print(f"{step:9} {state:9} {detail}", flush=True)
+        try:
+            return flash(args.image, args.execute, report)
+        except FlashError as error:
+            report("error", "failed", str(error))
+            return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

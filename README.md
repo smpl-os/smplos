@@ -177,6 +177,10 @@ A keyboard layout and input configuration panel with two tabs. The **Keyboard** 
 
 <a href="images/8-keyboard.png"><img src="images/8-keyboard.png" width="720" /></a>
 
+#### Macro Keypads
+
+Cheap CH552 macro keypads (USB `1189:8890`, 3 to 16 keys, up to 3 knobs) work as soon as they're plugged in. A keypad icon appears in the bar while one is connected; click it to open **Settings → Keypad**. There you can map keys and knobs to shortcuts, media keys or commands, give apps their own profiles, and turn on API plugins such as Kdenlive's control-surface interface. A guided wizard installs the open firmware. See [KEYPAD.md](KEYPAD.md).
+
 ---
 
 ### Design Decisions

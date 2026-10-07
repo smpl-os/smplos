@@ -372,6 +372,11 @@ build_custom_packages() {
         [[ -f "$dir/PKGBUILD" ]] || continue
         local pkg
         pkg=$(basename "$dir")
+        # A PENDING file parks a recipe whose source is not published yet.
+        if [[ -f "$dir/PENDING" ]]; then
+            log_info "Skipping custom package $pkg: $(head -1 "$dir/PENDING")"
+            continue
+        fi
 
         # Read the expected version from the PKGBUILD
         local pkgver pkgrel

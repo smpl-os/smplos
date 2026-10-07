@@ -39,5 +39,13 @@ voxtype-bin
 # Daemon is enabled at boot; kill-switch service is opt-in (see .install).
 mullvad-vpn-bin
 
+# WCH ISP flasher for Settings > Keypad > Firmware (CH552 macro keypads).
+# Only `keypad-ctl firmware flash` drives it (info + flash, never config).
+wchisp
+
+# Macro keypad daemon (src/shared/pkgbuilds/control-surface). Parked by its
+# PENDING file until the source repository is published; see KEYPAD.md.
+# control-surface
+
 # Hyprland plugins/extras (optional)
 # hyprland-plugins-git

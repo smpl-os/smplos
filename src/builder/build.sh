@@ -1692,6 +1692,12 @@ SYNCSVC
     mkdir -p "$user_graphical_wants"
     ln -sf /usr/lib/systemd/user/hypridle.service \
         "$user_graphical_wants/hypridle.service" 2>/dev/null || true
+
+    # Macro keypad daemon (control-surface). The unit ships with the shared
+    # configs; its conditions skip it until the daemon is installed and a
+    # keypad is plugged in, and the keypad udev rule starts it on plug-in.
+    ln -sf ../control-surface.service \
+        "$user_graphical_wants/control-surface.service" 2>/dev/null || true
 }
 
 setup_helper_scripts() {

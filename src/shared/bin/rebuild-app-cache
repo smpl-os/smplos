@@ -157,6 +157,7 @@ Settings;settings;settings;preferences-system
 Appearance;smplos-settings appearance;settings;preferences-desktop-theme
 Display;smplos-settings display;settings;preferences-desktop-display
 Keyboard;smplos-settings keyboard;settings;preferences-desktop-keyboard
+Keypad;smplos-settings keypad;settings;input-keyboard
 Network;smplos-settings network;settings;preferences-system-network
 Wi-Fi;smplos-settings wifi;settings;network-wireless
 Bluetooth;smplos-settings bluetooth;settings;bluetooth

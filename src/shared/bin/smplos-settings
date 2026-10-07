@@ -56,6 +56,11 @@ case "${1:-}" in
     die "Settings app not found"
     ;;
 
+  keypad)
+    command -v settings &>/dev/null && exec settings --tab keypad
+    die "Settings app not found (Keypad needs smpl-apps with the Keypad tab)"
+    ;;
+
   dictation)
     command -v settings &>/dev/null && exec settings --tab dictation
     # Fall back to standalone script if settings unavailable
@@ -88,7 +93,7 @@ case "${1:-}" in
     ;;
 
   *)
-    echo "Usage: smplos-settings {appearance|display|keyboard|network|wifi|bluetooth|audio|dictation|power|about|keybindings|taskbar}" >&2
+    echo "Usage: smplos-settings {appearance|display|keyboard|keypad|network|wifi|bluetooth|audio|dictation|power|about|keybindings|taskbar}" >&2
     exit 1
     ;;
 esac

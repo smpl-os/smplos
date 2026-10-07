@@ -394,6 +394,7 @@ window {
 .tray-internet,
 .tray-notifications,
 .tray-usb,
+.tray-keypad,
 .tray-keyboard,
 .tray-dictation,
 .tray-sync,
@@ -410,6 +411,7 @@ window {
 .tray-internet:hover,
 .tray-notifications:hover,
 .tray-usb:hover,
+.tray-keypad:hover,
 .tray-keyboard:hover,
 .tray-dictation:hover,
 .tray-sync:hover,
@@ -444,6 +446,13 @@ window {
    unmissable -- shape change (outlined vs filled mic SVG) + background. */
 .tray-dictation.recording {
   background-color: $accent;
+  border-radius: 10px;
+}
+
+/* Macro keypad: icon shape changes in firmware update mode (download arrow);
+   a persistent pill marks that transient state (the stroke stays accent). */
+.tray-keypad.bootloader {
+  background-color: $bg-light;
   border-radius: 10px;
 }
 

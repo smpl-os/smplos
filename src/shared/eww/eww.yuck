@@ -44,6 +44,10 @@
 ;; USB storage (event-driven via udevadm)
 (deflisten usb-data :initial '{"present":"no","count":"0","icon":"","mounted":"0","devices":[]}' `scripts/usb-listener.sh`)
 
+;; Macro keypad (event-driven via udevadm; see KEYPAD.md). Visible only while a
+;; compatible CH552 keypad, or one in firmware update mode, is plugged in.
+(deflisten keypad-data :initial '{"present":"no","state":"absent","count":"0","tooltip":"","devices":[],"bootloaders":[]}' `scripts/keypad-listener.sh`)
+
 ;; Printer (disabled -- not in tray)
 ;; (deflisten printer-data :initial '{"active":"no","count":"0","icon":""}' `scripts/printer-listener.sh`)
 
@@ -218,6 +222,17 @@
           :visible {usb-data.present == "yes"}
     (label :class "icon" :text {usb-data.icon})))
 
+;; Macro keypad indicator (only visible while a compatible keypad is connected).
+;; Click opens Settings > Keypad (mapping, per-app profiles, firmware).
+;; Shape conveys state: keypad outline = ready, download arrow = firmware update mode.
+(defwidget tray-keypad []
+  (button :class "tray-keypad ${keypad-data.state == 'bootloader' ? 'bootloader' : ''}"
+          :onclick "smplos-settings keypad &"
+          :tooltip {keypad-data.tooltip}
+          :visible {keypad-data.present == "yes"}
+    (image :path {keypad-data.state == "bootloader" ? "icons/status/keypad-bootloader.svg" : "icons/status/keypad.svg"}
+           :image-width 14 :image-height 14)))
+
 ;; Keyboard layout indicator (only visible when multiple layouts are configured)
 (defwidget tray-keyboard []
   (button :class "tray-keyboard"
@@ -263,6 +278,7 @@
 (defwidget tray []
   (box :class "tray" :orientation "h" :space-evenly false :spacing 6
     (tray-usb)
+    (tray-keypad)
     (tray-sync)
     (tray-dictation)
     (tray-keyboard)
