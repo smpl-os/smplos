@@ -1,8 +1,10 @@
-# features.cheatsheet.icons.auto of control-surface a920ddd: every icon the keypad
+# features.cheatsheet.icons.auto of control-surface c271522: every icon the keypad
 # app picks by itself. All must be in icons.txt (tests/test_keypad.py). Refresh with
 #   control-surfaced features --json | jq -r '.cheatsheet.icons.auto[]'
 adjustments-horizontal
 arrow-back-up
+arrow-bar-left
+arrow-bar-right
 arrow-bar-to-left
 arrow-bar-to-right
 arrow-down
@@ -40,18 +42,35 @@ cut
 device-floppy
 eraser
 eye-off
+file-plus
 folder
 headphones
 help-circle
+info-circle
 keyframe
+layout-board
+layout-grid
+layout-rows
 link
 list-check
 list-details
 lock
+magnet
+maximize
 microphone-off
 mouse
 movie
+number-1
+number-2
+number-3
+number-4
+number-5
+number-6
+number-7
+number-8
+number-9
 pencil
+photo
 player-pause
 player-play
 player-skip-back
@@ -71,18 +90,26 @@ select-all
 settings
 space
 space-off
+sparkles
 square
 square-check
 square-plus
 stack-2
 switch-horizontal
+tag
 target
 terminal
 terminal-2
+transition-right
 trash
+unlink
+video
 volume
 volume-2
 volume-3
+volume-off
+wand
+wave-sine
 world
 x
 zoom-in

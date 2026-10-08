@@ -3055,6 +3055,21 @@
    ]
   },
   {
+   "name": "unlink",
+   "codepoint": "eb46",
+   "category": "Editing",
+   "tags": [
+    "unlink",
+    "broken-link",
+    "remove-link",
+    "disconnect",
+    "detach",
+    "url",
+    "hyperlink",
+    "chain"
+   ]
+  },
+  {
    "name": "maximize",
    "codepoint": "eaea",
    "category": "Editing",
@@ -3450,6 +3465,22 @@
    ]
   },
   {
+   "name": "tag",
+   "codepoint": "10096",
+   "category": "Editing",
+   "tags": [
+    "label",
+    "price-tag",
+    "price",
+    "sale",
+    "discount",
+    "shopping",
+    "category",
+    "tagging",
+    "tag"
+   ]
+  },
+  {
    "name": "brackets-contain-start",
    "codepoint": "f1e4",
    "category": "Video editing",
@@ -3775,6 +3806,35 @@
     "legal",
     "equality",
     "scale"
+   ]
+  },
+  {
+   "name": "wave-sine",
+   "codepoint": "ecd4",
+   "category": "Video editing",
+   "tags": [
+    "sine",
+    "wave",
+    "waveform",
+    "signal",
+    "oscillator",
+    "audio",
+    "frequency",
+    "sound-wave"
+   ]
+  },
+  {
+   "name": "layout-board",
+   "codepoint": "ef95",
+   "category": "Video editing",
+   "tags": [
+    "board",
+    "layout",
+    "grid",
+    "dashboard",
+    "tiles",
+    "template",
+    "ui"
    ]
   },
   {

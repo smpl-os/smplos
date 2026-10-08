@@ -42,17 +42,17 @@ lock lock-open power logout
 
 [Editing]
 copy clipboard cut scissors trash device-floppy file file-plus plus minus x check
-edit pencil eraser replace refresh reload restore zoom-in zoom-out zoom-reset
+edit pencil eraser replace refresh reload restore zoom-in zoom-out zoom-reset unlink
 maximize minimize arrows-maximize arrows-minimize bold italic underline link
 square-plus square-x square square-check select-all list-check tabs layout-sidebar
 focus-2 target crosshair eye eye-off
-pin flag star heart
+pin flag star heart tag
 
 [Video editing]
 brackets-contain-start brackets-contain-end column-insert-right column-insert-left
 blade keyframe keyframes keyframe-align-center timeline timeline-event
 color-filter adjustments-horizontal arrow-autofit-width transition-right
-layers-intersect wand ruler-measure magnet list-details scale
+layers-intersect wand ruler-measure magnet list-details scale wave-sine layout-board
 brackets-contain column-remove ripple space space-off bookmark-off
 arrow-bar-to-left arrow-bar-to-right arrow-left-bar arrow-right-bar
 

@@ -259,12 +259,12 @@ opaque, recoloured by the theme like any label.
 
 * **Set:** [Tabler Icons](https://tabler.io/icons) 3.49.0, outline style
   (MIT, copyright Paweł Kuna). `src/shared/fonts/keypad-icons/icons.txt` lists
-  the 250 icons smplOS bundles, by category; `build.py` there downloads the
+  the 254 icons smplOS bundles, by category; `build.py` there downloads the
   pinned npm packages (checked by sha256), subsets the outline font to them
   and writes everything below. The outputs are committed, so builds need
   neither the network nor fontTools:
   * `src/shared/fonts/smplos-keypad-icons.ttf`: family "smplOS Keypad Icons"
-    (68 KB);
+    (70 KB);
   * `src/shared/fonts/keypad-icons.json`: name, codepoint, category, tags;
   * `src/shared/eww/pad-icons.yuck`: `(defvar pad_icons '{name: glyph}')`;
   * `src/shared/fonts/keypad-icons/LICENSE-tabler-icons.txt`, installed beside
@@ -276,8 +276,8 @@ opaque, recoloured by the theme like any label.
   `"icon": "player-play"` or `"icon": "none"`; without it the keypad app picks
   one automatically. The overlay looks the name up in `pad_icons`. An empty or
   unknown name shows the label alone. The keypad app has done this since
-  a920ddd (R11). `daemon-auto.txt` pins its `features.cheatsheet.icons.auto`,
-  the 87 names it picks by itself, and a test fails unless `icons.txt`
+  a920ddd (R11). `daemon-auto.txt` pins its `features.cheatsheet.icons.auto`
+  (114 names as of c271522), and a test fails unless `icons.txt`
   covers them all; with a keypad app on `PATH` (or `SMPLOS_CONTROL_SURFACED`)
   the test checks its live list too. A daemon update that adds automatic
   icons means: add them to `icons.txt`, run `build.py --apps …`, refresh
@@ -591,7 +591,7 @@ app on the bus there is nothing to switch.
 | Cheatsheet look | 35% background with blur; text and borders opaque | Shows what's behind it without fading the labels |
 | Dismissing the cheatsheet | Click anywhere, the 8 s auto-hide, or the key; no Escape | The overlay never takes keyboard focus, so it can't steal keys from the app |
 | Click-through cheatsheet | Optional second window with EWW `:passthrough`, off by default | Hyprland 0.56 has no input-passthrough layer rule; clicking to close stays the simple default |
-| Cheatsheet icons | Tabler Icons outline, subset to a 68 KB font, drawn as text | One consistent outline style, MIT, theme colour through CSS, opaque like labels; SVGs can't be recoloured by eww (`fill-svg` replaces fills, Tabler strokes) |
+| Cheatsheet icons | Tabler Icons outline, subset to a 70 KB font, drawn as text | One consistent outline style, MIT, theme colour through CSS, opaque like labels; SVGs can't be recoloured by eww (`fill-svg` replaces fills, Tabler strokes) |
 | Icon names | Tabler's names, no mapping layer | eww, Settings and the keypad app share one vocabulary |
 | Font not yet seen by EWW | Labels only, flag set once by `bar-ctl` | No misleading fallback glyphs and no bar restart from the updater |
 
