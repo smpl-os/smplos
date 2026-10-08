@@ -189,7 +189,8 @@ bootloader icon: the firmware wizard detects update mode itself.
 A key or knob press mapped to `{"cheatsheet": "toggle"}` (or `"hold"`: shown
 while held) shows what every key and knob does right now: the focused app's
 profile, Kdenlive's context layers and mode states. It follows focus changes
-while shown, and an optional timeout hides it.
+while shown, and hides itself after 8 s without keypad input unless the config
+says otherwise (a held "hold" key keeps it up).
 
 It follows the same rule as the bar icon: **no listener process**. The daemon
 pushes its content into the running EWW, and only while it runs, which is only
@@ -198,24 +199,60 @@ while a keypad is plugged in:
 * `(defvar pad_sheet '{"visible":false}')` holds the daemon's cheatsheet JSON
   (`GetCheatsheet`; see its `docs/dbus-settings-api.md`).
 * On show, change and hide the daemon runs `eww update pad_sheet=…`. On show
-  and hide it also runs `eww open pad-cheatsheet --anchor …` and
-  `eww close pad-cheatsheet`; a failed update skips the open, so the daemon
-  never starts an EWW.
+  and hide it also runs `eww open WINDOW --anchor …` and `eww close WINDOW`;
+  a failed update skips the open, so the daemon never starts an EWW.
 * `pad-cheatsheet` is an `overlay` layer surface (namespace
   `eww-pad-cheatsheet`, not focusable, blurred like the other EWW popups). It
-  is sized to its content and anchored by the `position` option. Neither
-  Hyprland 0.56 nor our EWW can make a surface click-through, so the overlay
-  is kept small rather than full-screen.
+  is sized to its content and anchored by the `position` option.
 * Keys sit in their real rows and columns; each knob lists turn left, press and
   turn right. State is shown by shape: a solid border means the binding does
   something now; a dashed border with dim text means it would do nothing now
   (for example, Kdenlive's interface is off, explained in a notice line); no
-  border and a dot means unbound. The `opacity` option applies to the
-  background only (`.pad-sheet.o1` to `.o20`, 5% steps); text stays opaque.
+  border and a dot means unbound.
+
+**See-through, never faded text.** Only the background is translucent: the
+`opacity` option picks `.pad-sheet.o1` to `.o20` (5% steps) on the background
+box, the overlay's only translucent color. Text, key borders and the outline
+stay fully opaque, with a halo in the background color so labels stay legible
+over anything. Without an `opacity` in the content, EWW falls back to 0.35.
+Hyprland blurs what's behind it (`blur on`, `ignore_alpha 0.1` so the clear
+rounded corners aren't blurred, `xray off`); no layer rule changes its alpha.
+Measured on a private X server with an RGBA visual: background alpha 0.349 at
+0.35 (0.851 at the old 0.85 default, which looked solid), text and borders
+1.0.
+
+**Dismissing it.** The overlay never takes keyboard focus, so a click is the
+way to close it:
+
+* A click anywhere on `pad-cheatsheet` runs `scripts/pad-sheet-hide.sh`
+  from the EWW config (EWW runs commands there, so it ships with the overlay
+  and needs nothing else on `PATH`). It calls the daemon's `HideCheatsheet`;
+  if no daemon answers within 2 s it runs
+  `eww close pad-cheatsheet pad-cheatsheet-passthrough` on its own EWW config
+  and sets `pad_sheet` to hidden itself. A "Click to close" line says so.
+* Unless a hold key holds it, the daemon hides the sheet after `autoHideMs`
+  without pad input. Unset means 8 s (daemon 738e334 and newer); 0 means until
+  hidden. That covers toggle keys and the `ShowCheatsheet` D-Bus call.
+* Settings' **Show on screen** hides the sheet itself after 8 s when the saved
+  setting is "until hidden", so a preview never stays up.
+* The cheatsheet key itself (toggle) hides it.
+
+**Click-through (optional, off by default).** `pad-cheatsheet-passthrough` is
+the same overlay with `:passthrough true`, an EWW property from
+`smpl-os/eww` branch `work-window-passthrough` (an empty input region: the
+XShape input region on X11, `wl_surface.set_input_region` on Wayland). Clicks
+reach the window below, so its hint reads "Hides after N s or with your
+cheatsheet key" instead. Settings' **Click-through overlay** toggle sets
+`"cheatsheet": {"eww": {"window": "pad-cheatsheet-passthrough"}}`. The daemon
+closes the old window when that changes. Settings never combines it with
+"until hidden". An EWW without the patch only warns about the unknown
+property and keeps the window clickable, so the window ships before the
+patched EWW does.
 
 Settings (Keypad → Cheatsheet) edits the config's
-`"cheatsheet": {"opacity", "autoHideMs", "position"}` and keeps any other key
-there. It also adds:
+`"cheatsheet": {"opacity", "autoHideMs", "position"}` and the click-through
+window, and keeps any other key there. Options the config leaves out show
+what the daemon uses (its `features`). It also adds:
 
 * **Show the cheatsheet** as a binding kind, with Toggle and Hold modes. It is
   offered only for keys and knob presses, and only when the installed daemon's
@@ -230,7 +267,8 @@ there. It also adds:
   `GetCheatsheetFor`. Kdenlive profiles have a "Preview in" context picker
   (timeline, monitors, colour wheels, effect parameter).
 * **Show on screen**, which calls the running app's `ShowCheatsheet` (it uses
-  the saved config).
+  the saved config) and takes the sheet down after 8 s if the saved setting
+  is "until hidden".
 
 The unit turns the push on with
 `ExecStart=/usr/bin/control-surfaced run --quiet --eww-window pad-cheatsheet --eww-config %h/.config/eww`
@@ -397,6 +435,9 @@ keypad or runs wchisp against hardware.
 | Flasher | wchisp through a two-command allowlist, dry run by default | Never touches config registers; nothing can flash by accident |
 | Daemon packaging | Build recipe referencing its repository; no vendoring | Its repository and remote are not decided yet |
 | Sidebar | "Keypad" right after "Keyboard"; tab index 11 | Related settings stay together; existing indices are unchanged |
+| Cheatsheet look | 35% background with blur; text and borders opaque | Shows what's behind it without fading the labels |
+| Dismissing the cheatsheet | Click anywhere, the 8 s auto-hide, or the key; no Escape | The overlay never takes keyboard focus, so it can't steal keys from the app |
+| Click-through cheatsheet | Optional second window with EWW `:passthrough`, off by default | Hyprland 0.56 has no input-passthrough layer rule; clicking to close stays the simple default |
 
 ## Open decisions
 
@@ -409,12 +450,13 @@ keypad or runs wchisp against hardware.
 | 5 | `uaccess` on `/dev/uinput` | Keep (same as Steam); the alternative is `input` group membership |
 | 6 | Default mapping without a config | The daemon's built-in example (Kdenlive, FL Studio, Global media keys), because the daemon runs it anyway |
 | 7 | Should a config `"layout"` override a self-described layout in the daemon? | Yes; done in the daemon (ebeabe8) |
+| 8 | Ship EWW `:passthrough` | Publish `work-window-passthrough` to `smpl-os/eww`, bump `_commit` in `pkgbuilds/eww-smplos` and add the usual migration; until then click-through stays clickable |
+| 9 | Cheatsheet opacity default | 0.35 in the daemon (requested); Settings and EWW already show 0.35 when the daemon reports none |
 
 ## Daemon API requests
 
-Sent to the keypad daemon's owner. All of them are in the daemon's current
-source (`5f420d0`), but not yet in the daemon installed on the development
-machine. Settings works with either.
+Sent to the keypad daemon's owner. R1 to R9 are in the daemon's source since
+`5f420d0`; R10 is partly done. Settings works with older and newer daemons.
 
 | # | Request | Daemon now | Settings |
 |---|---|---|---|
@@ -427,6 +469,8 @@ machine. Settings works with either.
 | R7 | Offline Kdenlive catalog | `list-actions --json`, `GetCatalog` | Used when no Kdenlive is running |
 | R8 | Firmware delivery | Release images with metadata, `firmware-info`, `enter-bootloader`, `StartFlash` (dry run always; real flash only with `--allow-flash`) | The wizard still flashes through `keypad-ctl` (follow-up below) |
 | R9 | Feature discovery | `features --json`, `GetFeatures` | Used |
+
+| R10 | Cheatsheet defaults for a light overlay | 738e334: unset `autoHideMs` = 8 s, `HideCheatsheet` always clears EWW. Still requested: opacity default 0.35 (now 0.85) and a structured `features.cheatsheet.defaults` | Reads the structured defaults when present, else the option descriptions |
 
 Follow-ups now that the API exists, in order:
 
@@ -466,7 +510,18 @@ and the unit's `BindsTo=`/`After=` name the same device unit (via
 `systemd-escape`), that the unit has no `[Install]` and passes `systemd-analyze
 verify`, that no EWW `deflisten`/`defpoll` or script is keypad related, the
 one-shot `bar-ctl` and login steps, and the migration paths (fresh, an earlier
-draft's enabled unit, a custom unit).
+draft's enabled unit, a custom unit). Its overlay tests check both cheatsheet
+windows (only the click-through one has `:passthrough`), the click-to-close
+handler, the 0.35 fallback and that the background is the only translucent
+color. `pad-sheet-hide.sh` is tested with a fake `busctl` and `eww`.
+
+Done by hand on a private X server, never the desktop: the patched EWW's
+click-through window has an empty XShape input region, and an XTEST click
+reaches the window below it (a normal window still catches it). With a
+stand-in compositor selection, GTK picks the RGBA visual, and the window's own
+pixels give the alpha numbers above. Wayland wasn't run: the only compositor
+here is the live Hyprland. GTK 3.24 sends an empty `wl_surface.set_input_region`
+for an empty input shape (`gdk_wayland_set_input_region_if_empty`).
 
 To test live input and identify mode end to end, run the daemon's
 `mock-control-surfaced` on a private session bus (`dbus-daemon --session

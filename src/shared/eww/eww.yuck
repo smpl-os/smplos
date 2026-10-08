@@ -456,30 +456,56 @@
     (pad-sheet-turn :e {n.press} :glyph "o")
     (pad-sheet-turn :e {n.cw} :glyph ">")))
 
-(defwidget pad-sheet []
-  (box :class "pad-sheet o${round((pad_sheet.options?.opacity ?: 0.85) * 20, 0)}"
-       :orientation "v" :space-evenly false :spacing 8
-    (box :class "pad-sheet-header" :orientation "h" :space-evenly false :spacing 8
-      (label :class "pad-sheet-title" :halign "start" :hexpand true :text {pad_sheet.title ?: ""} :limit-width 60)
-      (for layer in {pad_sheet.layers ?: []}
-        (label :class "pad-sheet-layer" :text layer)))
-    (label :class "pad-sheet-notice" :halign "start" :visible {(pad_sheet.notice ?: "") != ""}
-           :text "! ${pad_sheet.notice ?: ''}" :wrap true :limit-width 90)
-    (box :orientation "h" :space-evenly false :spacing 12
-      (box :orientation "v" :space-evenly false :spacing 6
-        (for row in {jq(pad_sheet.keys ?: [], "[group_by(.row)[] | sort_by(.column)]")}
-          (box :orientation "h" :space-evenly false :spacing 6
-            (for k in row
-              (pad-sheet-key :k k)))))
-      (box :orientation "v" :space-evenly false :spacing 6 :visible {arraylength(pad_sheet.knobs ?: []) > 0}
-        (for n in {pad_sheet.knobs ?: []}
-          (pad-sheet-knob :n n))))))
+(defwidget pad-sheet-hint [through]
+  (label :class "pad-sheet-hint" :halign "start"
+         :text {!through ? "Click to close"
+                : ((pad_sheet.options?.autoHideMs ?: 8000) > 0
+                   ? "Hides after ${round((pad_sheet.options?.autoHideMs ?: 8000) / 1000, 0)} s or with your cheatsheet key"
+                   : "Press your cheatsheet key to close")}))
 
-;; Opened and closed by control-surfaced (with --anchor from the position option).
+;; A click anywhere hides it (scripts/pad-sheet-hide.sh: the daemon, else eww).
+;; Background opacity (default 0.35) is a class on the background box only.
+(defwidget pad-sheet [through]
+  (eventbox :onclick "sh scripts/pad-sheet-hide.sh &" :cursor "pointer"
+    (box :class "pad-sheet o${round((pad_sheet.options?.opacity ?: 0.35) * 20, 0)}"
+         :orientation "v" :space-evenly false :spacing 8
+      (box :class "pad-sheet-header" :orientation "h" :space-evenly false :spacing 8
+        (label :class "pad-sheet-title" :halign "start" :hexpand true :text {pad_sheet.title ?: ""} :limit-width 60)
+        (for layer in {pad_sheet.layers ?: []}
+          (label :class "pad-sheet-layer" :text layer)))
+      (label :class "pad-sheet-notice" :halign "start" :visible {(pad_sheet.notice ?: "") != ""}
+             :text "! ${pad_sheet.notice ?: ''}" :wrap true :limit-width 90)
+      (box :orientation "h" :space-evenly false :spacing 12
+        (box :orientation "v" :space-evenly false :spacing 6
+          (for row in {jq(pad_sheet.keys ?: [], "[group_by(.row)[] | sort_by(.column)]")}
+            (box :orientation "h" :space-evenly false :spacing 6
+              (for k in row
+                (pad-sheet-key :k k)))))
+        (box :orientation "v" :space-evenly false :spacing 6 :visible {arraylength(pad_sheet.knobs ?: []) > 0}
+          (for n in {pad_sheet.knobs ?: []}
+            (pad-sheet-knob :n n))))
+      (pad-sheet-hint :through through))))
+
+;; Opened and closed by control-surfaced (with --anchor from the position
+;; option); cheatsheet.eww.window in its config picks which one. Neither takes
+;; keyboard focus, so a click is the way to dismiss pad-cheatsheet.
 (defwindow pad-cheatsheet
   :monitor 0
   :namespace "eww-pad-cheatsheet"
   :geometry (geometry :anchor "center")
   :stacking "overlay"
   :focusable false
-  (pad-sheet))
+  (pad-sheet :through false))
+
+;; Click-through variant (Settings > Keypad > Click-through overlay): clicks
+;; reach the window below, so it hides by its timeout or the cheatsheet key.
+;; :passthrough needs eww-smplos with the passthrough patch; older eww only
+;; warns about it and keeps the window clickable.
+(defwindow pad-cheatsheet-passthrough
+  :monitor 0
+  :namespace "eww-pad-cheatsheet"
+  :geometry (geometry :anchor "center")
+  :stacking "overlay"
+  :focusable false
+  :passthrough true
+  (pad-sheet :through true))

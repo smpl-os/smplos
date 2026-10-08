@@ -24,6 +24,7 @@ SESSION_SERVICES = ROOT / "src/shared/bin/smplos-session-services"
 MIGRATION = ROOT / "migrations/20261007-123000-macro-keypad-support.sh"
 UDEV = ROOT / "src/shared/system/udev"
 UNIT = ROOT / "src/shared/configs/systemd/user/control-surface.service"
+SHEET_HIDE = ROOT / "src/shared/eww/scripts/pad-sheet-hide.sh"
 
 STOCK = dict(idVendor="1189", idProduct="8890", manufacturer="wch.cn", product="CH552",
              serial="key153", bcdDevice="0100")
@@ -220,6 +221,38 @@ def escape_device(path):
                           capture_output=True, text=True, check=True).stdout.strip()
 
 
+class SheetHideTests(KeypadCase):
+    """scripts/pad-sheet-hide.sh: what a click on the cheatsheet overlay runs.
+    EWW runs it from its config directory, so it needs nothing on PATH but
+    busctl and eww."""
+
+    def setUp(self):
+        super().setUp()
+        self.tool("eww", 'echo "eww $*" >> "$CALLS"\n')
+        self.config = self.root / "eww"
+        (self.config / "scripts").mkdir(parents=True)
+        shutil.copy(SHEET_HIDE, self.config / "scripts")
+
+    def hide(self):
+        result = subprocess.run(["sh", "scripts/pad-sheet-hide.sh"], cwd=self.config, env=self.env,
+                                capture_output=True, text=True, timeout=20)
+        self.assertEqual((result.returncode, result.stdout, result.stderr), (0, "", ""))
+
+    def test_asks_the_daemon_first(self):
+        self.tool("busctl", 'echo "busctl $*" >> "$CALLS"\n')
+        self.hide()
+        self.assertEqual(self.calls_made(), [
+            "busctl --user --timeout=2 call org.smplos.ControlSurface /org/smplos/ControlSurface "
+            "org.smplos.ControlSurface1 HideCheatsheet"])
+
+    def test_closes_it_in_its_own_eww_without_a_daemon(self):
+        self.tool("busctl", 'echo "busctl $*" >> "$CALLS"\nexit 1\n')
+        self.hide()
+        self.assertEqual(self.calls_made()[1:], [
+            f"eww --config {self.config} close pad-cheatsheet pad-cheatsheet-passthrough",
+            f'eww --config {self.config} update pad_sheet={{"visible":false}}'])
+
+
 class LifecycleTests(unittest.TestCase):
     """Nothing keypad related runs without a keypad; the unit follows the device."""
 
@@ -290,6 +323,7 @@ class LifecycleTests(unittest.TestCase):
         for line in yuck.splitlines():
             if re.match(r"\s*\((deflisten|defpoll)\b", line):
                 self.assertNotIn("keypad", line)
+                self.assertNotIn("pad-sheet", line, "the overlay's click handler runs only on a click")
         self.assertIn('(defvar keypad-present "no")', yuck)
         self.assertFalse(list((ROOT / "src/shared/eww/scripts").glob("*keypad*")))
         self.assertNotIn("bootloader", yuck[yuck.index("(defwidget tray-keypad"):])
@@ -313,17 +347,30 @@ class LifecycleTests(unittest.TestCase):
         yuck = (ROOT / "src/shared/eww/eww.yuck").read_text()
         self.assertIn("""(defvar pad_sheet '{"visible":false}')""", yuck)
         self.assertNotIn("cheatsheet --follow", yuck)
-        window = yuck[yuck.index("(defwindow pad-cheatsheet"):]
-        for needle in (':namespace "eww-pad-cheatsheet"', ':stacking "overlay"', ":focusable false", "(pad-sheet)"):
-            self.assertIn(needle, window)
-        sheet = yuck[yuck.index("(defwidget pad-sheet []"):yuck.index("(defwindow pad-cheatsheet")]
+        windows = dict(re.findall(r"\(defwindow (pad-cheatsheet\S*)\n(.*?)\n\n", yuck + "\n\n", re.S))
+        self.assertEqual(sorted(windows), ["pad-cheatsheet", "pad-cheatsheet-passthrough"])
+        self.assertIn("close " + " ".join(sorted(windows)), SHEET_HIDE.read_text(),
+                      "a click closes every overlay window")
+        for name, window in windows.items():
+            for needle in (':namespace "eww-pad-cheatsheet"', ':stacking "overlay"', ":focusable false"):
+                self.assertIn(needle, window)
+            through = name.endswith("-passthrough")
+            self.assertEqual(":passthrough true" in window, through)
+            self.assertIn(f"(pad-sheet :through {str(through).lower()})", window)
+        sheet = yuck[yuck.index("(defwidget pad-sheet-hint"):yuck.index("(defwindow pad-cheatsheet")]
         for field in ("pad_sheet.title", "pad_sheet.notice", "pad_sheet.keys", "pad_sheet.knobs",
-                      "pad_sheet.options?.opacity", "pad_sheet.layers"):
+                      "pad_sheet.options?.opacity", "pad_sheet.layers", "pad_sheet.options?.autoHideMs"):
             self.assertIn(field, sheet)
+        self.assertIn('(eventbox :onclick "sh scripts/pad-sheet-hide.sh &"', sheet, "a click anywhere dismisses it")
+        self.assertIn('"Click to close"', sheet)
+        self.assertIn("(pad_sheet.options?.opacity ?: 0.35) * 20", sheet, "see-through by default")
         scss = (ROOT / "src/shared/eww/eww.scss").read_text()
         self.assertIn(".pad-sheet.o#{$i}", scss)
         self.assertIn("background-color: rgba(darken($bg, 5%), $i / 20)", scss)
         self.assertIn("border: 1px dashed", scss, "inactive bindings differ by shape, not only color")
+        styles = scss[scss.index("Macro keypad cheatsheet"):]
+        self.assertNotRegex(styles, r"(?<!-)opacity\s*:", "alpha only on the background, never on text")
+        self.assertEqual(styles.count("rgba("), 1, "the background loop is the only translucent color")
         for path in ("windows.conf", "windows.lua"):
             self.assertIn("eww-pad-cheatsheet", (ROOT / "src/compositors/hyprland/hypr" / path).read_text())
 
