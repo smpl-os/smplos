@@ -412,6 +412,24 @@ appear in profiles with the Kdenlive plugin on.
   * **Overlay switch:** "Draw the cheatsheet overlay through the bar"
     (`cheatsheet.eww`: off writes `false`, or `"enabled": false` beside a
     click-through window).
+  * **Straight to the keypad app.** When the keypad app is on the bus with
+    `SetOption` (control-surface c266f02) and runs on the same file
+    (`GetStatus().config.path`), the simple options apply at once, without
+    Save:
+    * `input`;
+    * `cheatsheet.opacity`, `cheatsheet.autoHideMs`, `cheatsheet.position`
+      and `cheatsheet.eww`;
+    * `settings.accelFactor`, `settings.accelWindowMs` and
+      `settings.keyRateHz`.
+
+    The keypad app changes that one value in place, keeps comments, writes
+    `.bak`, validates the whole file and applies it; sliders send once a
+    drag pauses. Everything else keeps the file path and Save: options it
+    doesn't list (`features.options`), click-through (a window name), the
+    Kdenlive timings, an older keypad app or none. A refused value stays an
+    unsaved change with the keypad app's reason. The file `SetOption` wrote
+    becomes Save's baseline, so Save still refuses to overwrite someone
+    else's edit.
 * **What Settings keeps.** Everything else is kept verbatim, in its key order
   and number spelling: layers, modes, continuous controls with their `scale`
   and `accel`, cycles, requests, hardware and unknown keys. Such bindings show
@@ -423,7 +441,12 @@ appear in profiles with the Kdenlive plugin on.
   to choose.
 * **Knobs.** Knobs offer Turn left, Turn right and Press. Setting left or right
   removes the knob's continuous `turn` at that level, which would otherwise win,
-  and says so.
+  and says so. "Turn while pressed" (`shift`) bindings are shown, but marked:
+  the firmware ignores turns while a knob is pressed, so they never fire, and
+  they delay that knob's press until release. Settings flags them in the
+  binding list with "!" and "never fires", and explains them per profile
+  (own bindings and layers) with **Remove them**. This holds while
+  `features --json` reports `slots.shiftSupported: false` or nothing.
 * **Kdenlive plugin.** "API plugin: Kdenlive (D-Bus API)" sets
   `"kdenlive": true`. "Load recommended layout" copies the Kdenlive profile,
   with its context layers, from the daemon's example. A toggle maps
@@ -473,6 +496,13 @@ and `flash` and rejects every `--no-*` flag, so it never runs `config`,
 Settings passes `--execute` only when `SMPLOS_KEYPAD_REAL_FLASH=1` is set; it
 shows a **Dry run** badge otherwise. Nothing in development touches the real
 keypad or runs wchisp against hardware.
+
+While the keypad app reads the pad raw it holds the firmware's raw session,
+and its own flash-and-verify refuses to start. So from "Unplug the keypad"
+on, the wizard switches the keypad app to Keymap input
+(`SetOption("input", "evdev")`). It puts the previous mode back
+(`auto` when unset) when the wizard closes or finishes. Without the keypad
+app on the bus there is nothing to switch.
 
 ## Packaging
 
