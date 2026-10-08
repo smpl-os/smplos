@@ -118,6 +118,8 @@ def main():
         shutil.copy(fonts / "smplos-keypad-icons.ttf", assets / "keypad-icons.ttf")
         shutil.copy(fonts / "keypad-icons.json", assets / "keypad-icons.json")
         shutil.copy(source / "wf/package/LICENSE", assets / "TABLER-ICONS-LICENSE.txt")
+    if not args.source:
+        shutil.rmtree(source)
     print(f"{len(icons)} icons, {(fonts / 'smplos-keypad-icons.ttf').stat().st_size} bytes")
 
 

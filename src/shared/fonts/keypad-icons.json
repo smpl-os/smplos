@@ -1459,6 +1459,24 @@
    ]
   },
   {
+   "name": "arrows-left-right",
+   "codepoint": "edb0",
+   "category": "Navigation",
+   "tags": [
+    "left-right",
+    "horizontal",
+    "swap",
+    "exchange",
+    "bidirectional",
+    "pointer",
+    "navigation",
+    "direction",
+    "arrows",
+    "left",
+    "right"
+   ]
+  },
+  {
    "name": "arrows-move",
    "codepoint": "f22f",
    "category": "Navigation",
@@ -3198,6 +3216,63 @@
    ]
   },
   {
+   "name": "square",
+   "codepoint": "eb2c",
+   "category": "Editing",
+   "tags": [
+    "box",
+    "rectangle",
+    "shape",
+    "geometry",
+    "stop",
+    "checkbox",
+    "square"
+   ]
+  },
+  {
+   "name": "square-check",
+   "codepoint": "eb28",
+   "category": "Editing",
+   "tags": [
+    "checkbox",
+    "checked",
+    "check",
+    "done",
+    "task",
+    "selected",
+    "tick",
+    "square"
+   ]
+  },
+  {
+   "name": "select-all",
+   "codepoint": "f9f7",
+   "category": "Editing",
+   "tags": [
+    "check-all",
+    "select-all",
+    "selection",
+    "highlight",
+    "checkbox",
+    "all"
+   ]
+  },
+  {
+   "name": "list-check",
+   "codepoint": "eb6a",
+   "category": "Editing",
+   "tags": [
+    "checklist",
+    "todo",
+    "to-do",
+    "tasks",
+    "list",
+    "check",
+    "done",
+    "completed"
+   ]
+  },
+  {
    "name": "tabs",
    "codepoint": "10287",
    "category": "Editing",
@@ -3700,6 +3775,176 @@
     "legal",
     "equality",
     "scale"
+   ]
+  },
+  {
+   "name": "brackets-contain",
+   "codepoint": "f1e5",
+   "category": "Video editing",
+   "tags": [
+    "regex",
+    "select",
+    "selection",
+    "find-word",
+    "text-selection",
+    "code",
+    "square-brackets",
+    "wrap",
+    "brackets",
+    "contain"
+   ]
+  },
+  {
+   "name": "column-remove",
+   "codepoint": "faf4",
+   "category": "Video editing",
+   "tags": [
+    "remove-column",
+    "delete-column",
+    "column",
+    "table",
+    "spreadsheet",
+    "grid",
+    "cells",
+    "x"
+   ]
+  },
+  {
+   "name": "ripple",
+   "codepoint": "ed82",
+   "category": "Video editing",
+   "tags": [
+    "wave",
+    "water",
+    "waves",
+    "ocean",
+    "sea",
+    "ripples",
+    "ripple"
+   ]
+  },
+  {
+   "name": "space",
+   "codepoint": "ec0c",
+   "category": "Video editing",
+   "tags": [
+    "spacebar",
+    "space-bar",
+    "keyboard",
+    "key",
+    "whitespace",
+    "space"
+   ]
+  },
+  {
+   "name": "space-off",
+   "codepoint": "f1aa",
+   "category": "Video editing",
+   "tags": [
+    "spacebar",
+    "keyboard",
+    "whitespace",
+    "space-bar",
+    "key",
+    "disabled",
+    "unavailable",
+    "inactive",
+    "hidden",
+    "space",
+    "off"
+   ]
+  },
+  {
+   "name": "bookmark-off",
+   "codepoint": "eced",
+   "category": "Video editing",
+   "tags": [
+    "save",
+    "saved",
+    "favorite",
+    "read-later",
+    "tag",
+    "marker",
+    "unsave",
+    "disabled",
+    "bookmark",
+    "off"
+   ]
+  },
+  {
+   "name": "arrow-bar-to-left",
+   "codepoint": "ec89",
+   "category": "Video editing",
+   "tags": [
+    "direction",
+    "west",
+    "previous",
+    "back",
+    "to-edge",
+    "limit",
+    "end",
+    "first",
+    "start",
+    "collapse-sidebar",
+    "arrow",
+    "bar",
+    "left"
+   ]
+  },
+  {
+   "name": "arrow-bar-to-right",
+   "codepoint": "ec8a",
+   "category": "Video editing",
+   "tags": [
+    "direction",
+    "east",
+    "next",
+    "forward",
+    "to-edge",
+    "limit",
+    "end",
+    "last",
+    "expand-sidebar",
+    "logout",
+    "arrow",
+    "bar",
+    "right"
+   ]
+  },
+  {
+   "name": "arrow-left-bar",
+   "codepoint": "ed9c",
+   "category": "Video editing",
+   "tags": [
+    "direction",
+    "west",
+    "previous",
+    "back",
+    "drag",
+    "line",
+    "pointer",
+    "navigation",
+    "arrow",
+    "left",
+    "bar"
+   ]
+  },
+  {
+   "name": "arrow-right-bar",
+   "codepoint": "eda1",
+   "category": "Video editing",
+   "tags": [
+    "direction",
+    "east",
+    "next",
+    "forward",
+    "drag",
+    "line",
+    "pointer",
+    "navigation",
+    "arrow",
+    "right",
+    "bar"
    ]
   },
   {

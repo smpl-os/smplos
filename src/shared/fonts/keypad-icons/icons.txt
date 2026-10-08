@@ -25,7 +25,7 @@ arrow-up arrow-down arrow-left arrow-right
 arrow-big-up arrow-big-down arrow-big-left arrow-big-right
 arrow-back-up arrow-forward-up arrow-back arrow-forward
 arrow-bar-up arrow-bar-down arrow-bar-left arrow-bar-right
-arrows-vertical arrows-horizontal arrows-move arrows-move-horizontal
+arrows-vertical arrows-horizontal arrows-left-right arrows-move arrows-move-horizontal
 chevron-up chevron-down chevron-left chevron-right
 chevrons-up chevrons-down chevrons-left chevrons-right
 mouse mouse-2 pointer hand-finger hand-grab hand-move swipe home
@@ -44,7 +44,8 @@ lock lock-open power logout
 copy clipboard cut scissors trash device-floppy file file-plus plus minus x check
 edit pencil eraser replace refresh reload restore zoom-in zoom-out zoom-reset
 maximize minimize arrows-maximize arrows-minimize bold italic underline link
-square-plus square-x tabs layout-sidebar focus-2 target crosshair eye eye-off
+square-plus square-x square square-check select-all list-check tabs layout-sidebar
+focus-2 target crosshair eye eye-off
 pin flag star heart
 
 [Video editing]
@@ -52,6 +53,8 @@ brackets-contain-start brackets-contain-end column-insert-right column-insert-le
 blade keyframe keyframes keyframe-align-center timeline timeline-event
 color-filter adjustments-horizontal arrow-autofit-width transition-right
 layers-intersect wand ruler-measure magnet list-details scale
+brackets-contain column-remove ripple space space-off bookmark-off
+arrow-bar-to-left arrow-bar-to-right arrow-left-bar arrow-right-bar
 
 [System]
 clock alarm bell bell-off wifi bluetooth battery plug screen-share

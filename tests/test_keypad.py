@@ -256,17 +256,13 @@ class SheetHideTests(KeypadCase):
 
 FONTS = ROOT / "src/shared/fonts"
 PAD_ICONS = ROOT / "src/shared/eww/pad-icons.yuck"
-# What the keypad app's automatic icons may name (proposed to its owner; see
-# KEYPAD.md): all of them must be in the bundled font.
-AUTO_ICONS = """help-circle player-play player-pause player-stop player-track-next player-track-prev
-player-skip-back player-skip-forward volume volume-2 volume-3 microphone-off brightness-up
-brightness-down mouse arrow-left arrow-right arrow-up arrow-down world brand-github movie
-chart-dots-3 terminal-2 terminal folder settings brand-spotify arrow-back-up arrow-forward-up
-copy clipboard cut device-floppy square-plus x refresh chevron-left chevron-right link restore
-brackets-contain-start brackets-contain-end column-insert-right replace scissors trash bookmark
-pointer blade zoom-reset switch-horizontal repeat arrows-horizontal chevrons-right zoom-in
-arrows-vertical stack-2 headphones lock target eye-off arrows-move-horizontal keyframe
-color-filter rotate adjustments-horizontal list-details""".split()
+# Every icon the keypad app picks by itself (features.cheatsheet.icons.auto),
+# pinned from its build: all of them must be in the bundled font.
+DAEMON_AUTO = FONTS / "keypad-icons/daemon-auto.txt"
+
+
+def names_in(path):
+    return [w for line in path.read_text().splitlines() for w in line.split("#")[0].split()]
 
 
 def icon_vocabulary():
@@ -304,10 +300,27 @@ class KeypadIconTests(unittest.TestCase):
 
     def test_every_automatic_and_overlay_icon_is_bundled(self):
         names = set(icon_vocabulary())
-        self.assertFalse(set(AUTO_ICONS) - names)
+        auto = names_in(DAEMON_AUTO)
+        self.assertGreaterEqual(len(auto), 87)
+        self.assertEqual(sorted(set(auto) - names), [], "the keypad app's automatic icons need glyphs")
         yuck = (ROOT / "src/shared/eww/eww.yuck").read_text()
         for direction in re.findall(r':dir "([a-z0-9-]+)"', yuck):
             self.assertIn(direction, names)
+
+    def test_a_built_keypad_app_picks_only_bundled_icons(self):
+        """With SMPLOS_CONTROL_SURFACED or control-surfaced on PATH (a build
+        with icons), its live features --json must also be covered."""
+        daemon = os.environ.get("SMPLOS_CONTROL_SURFACED") or shutil.which("control-surfaced")
+        if not daemon:
+            self.skipTest("no keypad app to ask")
+        with tempfile.TemporaryDirectory() as home:
+            result = subprocess.run([daemon, "features", "--json"], env=dict(os.environ, HOME=home),
+                                    capture_output=True, text=True, timeout=20)
+        icons = json.loads(result.stdout or "{}").get("cheatsheet", {}).get("icons") if result.returncode == 0 else None
+        if not icons:
+            self.skipTest("this keypad app predates icons")
+        self.assertEqual((icons["set"], icons["version"]), ("tabler-outline", self.table()["source"].split()[2]))
+        self.assertEqual(sorted(set(icons["auto"]) - set(icon_vocabulary())), [])
 
     def test_font_has_every_glyph_under_its_family_name(self):
         try:

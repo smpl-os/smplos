@@ -259,12 +259,12 @@ opaque, recoloured by the theme like any label.
 
 * **Set:** [Tabler Icons](https://tabler.io/icons) 3.49.0, outline style
   (MIT, copyright Paweł Kuna). `src/shared/fonts/keypad-icons/icons.txt` lists
-  the 235 icons smplOS bundles, by category; `build.py` there downloads the
+  the 250 icons smplOS bundles, by category; `build.py` there downloads the
   pinned npm packages (checked by sha256), subsets the outline font to them
   and writes everything below. The outputs are committed, so builds need
   neither the network nor fontTools:
   * `src/shared/fonts/smplos-keypad-icons.ttf`: family "smplOS Keypad Icons"
-    (64 KB);
+    (68 KB);
   * `src/shared/fonts/keypad-icons.json`: name, codepoint, category, tags;
   * `src/shared/eww/pad-icons.yuck`: `(defvar pad_icons '{name: glyph}')`;
   * `src/shared/fonts/keypad-icons/LICENSE-tabler-icons.txt`, installed beside
@@ -275,7 +275,13 @@ opaque, recoloured by the theme like any label.
   name (`player-play`, `brand-github`, `folder`). A binding may set
   `"icon": "player-play"` or `"icon": "none"`; without it the keypad app picks
   one automatically. The overlay looks the name up in `pad_icons`. An empty or
-  unknown name shows the label alone. Requested from the keypad app as R11.
+  unknown name shows the label alone. The keypad app has done this since
+  a920ddd (R11). `daemon-auto.txt` pins its `features.cheatsheet.icons.auto`,
+  the 87 names it picks by itself, and a test fails unless `icons.txt`
+  covers them all; with a keypad app on `PATH` (or `SMPLOS_CONTROL_SURFACED`)
+  the test checks its live list too. A daemon update that adds automatic
+  icons means: add them to `icons.txt`, run `build.py --apps …`, refresh
+  `daemon-auto.txt`.
 * **Font delivery:** `~/.local/share/fonts/smplos/`, from the ISO's skel,
   `install.sh` and `smplos-os-update` (which runs `fc-cache` when the font
   changes). EWW finds it by family name. A running EWW never sees a font
@@ -482,7 +488,7 @@ keypad or runs wchisp against hardware.
 | Cheatsheet look | 35% background with blur; text and borders opaque | Shows what's behind it without fading the labels |
 | Dismissing the cheatsheet | Click anywhere, the 8 s auto-hide, or the key; no Escape | The overlay never takes keyboard focus, so it can't steal keys from the app |
 | Click-through cheatsheet | Optional second window with EWW `:passthrough`, off by default | Hyprland 0.56 has no input-passthrough layer rule; clicking to close stays the simple default |
-| Cheatsheet icons | Tabler Icons outline, subset to a 64 KB font, drawn as text | One consistent outline style, MIT, theme colour through CSS, opaque like labels; SVGs can't be recoloured by eww (`fill-svg` replaces fills, Tabler strokes) |
+| Cheatsheet icons | Tabler Icons outline, subset to a 68 KB font, drawn as text | One consistent outline style, MIT, theme colour through CSS, opaque like labels; SVGs can't be recoloured by eww (`fill-svg` replaces fills, Tabler strokes) |
 | Icon names | Tabler's names, no mapping layer | eww, Settings and the keypad app share one vocabulary |
 | Font not yet seen by EWW | Labels only, flag set once by `bar-ctl` | No misleading fallback glyphs and no bar restart from the updater |
 
@@ -520,7 +526,7 @@ Sent to the keypad daemon's owner. R1 to R9 are in the daemon's source since
 | R9 | Feature discovery | `features --json`, `GetFeatures` | Used |
 
 | R10 | Cheatsheet defaults for a light overlay | 738e334: unset `autoHideMs` = 8 s, `HideCheatsheet` always clears EWW. Still requested: opacity default 0.35 (now 0.85) and a structured `features.cheatsheet.defaults` | Reads the structured defaults when present, else the option descriptions |
-| R11 | Icons | Proposed: binding `"icon"` (Tabler outline name or `"none"`, never rejected), `"icon"` on every cheatsheet key and knob event (resolved, or empty), automatic icons (media, mouse, launchers by command word, common shortcuts, Kdenlive actions), and `features.cheatsheet.icons` `{set, version, auto}`. Today the field is accepted and ignored | Picker, layout, list and preview use it; `auto` must stay inside `icons.txt` (tested) |
+| R11 | Icons | Done in a920ddd, as proposed: binding `"icon"` (Tabler outline name or `"none"`, never rejected), `"icon"` on every cheatsheet key and knob event (resolved, or empty), automatic icons (media, mouse, launchers by command word, common shortcuts, Kdenlive actions), and `features.cheatsheet.icons` `{set, version, auto}` (87 names, plus more Kdenlive actions) | Picker, layout, list and preview use it; `auto` must stay inside `icons.txt` (tested) |
 
 Follow-ups now that the API exists, in order:
 
@@ -566,8 +572,9 @@ handler, the 0.35 fallback and that the background is the only translucent
 color. `pad-sheet-hide.sh` is tested with a fake `busctl` and `eww`.
 
 Icon tests check that `icons.txt`, the JSON and `pad-icons.yuck` agree, that the
-font has every codepoint under its family name, that the proposed automatic
-icons are bundled, that every glyph lookup in the overlay is gated, the
+font has every codepoint under its family name, that the keypad app's
+automatic icons are bundled (pinned list, and a live keypad app when one is
+installed), that every glyph lookup in the overlay is gated, the
 `bar-ctl` flag (font older or newer than EWW, no font) and that the updater
 installs the font and table before `eww.yuck`.
 
