@@ -259,7 +259,7 @@ opaque, recoloured by the theme like any label.
 
 * **Set:** [Tabler Icons](https://tabler.io/icons) 3.49.0, outline style
   (MIT, copyright Paweł Kuna). `src/shared/fonts/keypad-icons/icons.txt` lists
-  the 254 icons smplOS bundles, by category; `build.py` there downloads the
+  the 256 icons smplOS bundles, by category; `build.py` there downloads the
   pinned npm packages (checked by sha256), subsets the outline font to them
   and writes everything below. The outputs are committed, so builds need
   neither the network nor fontTools:
@@ -277,7 +277,7 @@ opaque, recoloured by the theme like any label.
   one automatically. The overlay looks the name up in `pad_icons`. An empty or
   unknown name shows the label alone. The keypad app has done this since
   a920ddd (R11). `daemon-auto.txt` pins its `features.cheatsheet.icons.auto`
-  (114 names as of c271522), and a test fails unless `icons.txt`
+  (121 names as of af559d1), and a test fails unless `icons.txt`
   covers them all; with a keypad app on `PATH` (or `SMPLOS_CONTROL_SURFACED`)
   the test checks its live list too. A daemon update that adds automatic
   icons means: add them to `icons.txt`, run `build.py --apps …`, refresh

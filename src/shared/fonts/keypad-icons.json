@@ -3070,6 +3070,41 @@
    ]
   },
   {
+   "name": "filter",
+   "codepoint": "eaa5",
+   "category": "Editing",
+   "tags": [
+    "filter",
+    "funnel",
+    "filtering",
+    "sort",
+    "refine",
+    "narrow",
+    "search-options",
+    "query",
+    "conditions"
+   ]
+  },
+  {
+   "name": "filter-off",
+   "codepoint": "ed2c",
+   "category": "Editing",
+   "tags": [
+    "funnel",
+    "filtering",
+    "sort",
+    "refine",
+    "narrow",
+    "disabled",
+    "inactive",
+    "unavailable",
+    "slash",
+    "turn-off",
+    "filter",
+    "off"
+   ]
+  },
+  {
    "name": "maximize",
    "codepoint": "eaea",
    "category": "Editing",

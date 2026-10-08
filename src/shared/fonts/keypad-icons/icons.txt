@@ -42,7 +42,7 @@ lock lock-open power logout
 
 [Editing]
 copy clipboard cut scissors trash device-floppy file file-plus plus minus x check
-edit pencil eraser replace refresh reload restore zoom-in zoom-out zoom-reset unlink
+edit pencil eraser replace refresh reload restore zoom-in zoom-out zoom-reset unlink filter filter-off
 maximize minimize arrows-maximize arrows-minimize bold italic underline link
 square-plus square-x square square-check select-all list-check tabs layout-sidebar
 focus-2 target crosshair eye eye-off

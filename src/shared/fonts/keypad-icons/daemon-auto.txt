@@ -1,4 +1,4 @@
-# features.cheatsheet.icons.auto of control-surface c271522: every icon the keypad
+# features.cheatsheet.icons.auto of control-surface af559d1: every icon the keypad
 # app picks by itself. All must be in icons.txt (tests/test_keypad.py). Refresh with
 #   control-surfaced features --json | jq -r '.cheatsheet.icons.auto[]'
 adjustments-horizontal
@@ -43,12 +43,15 @@ device-floppy
 eraser
 eye-off
 file-plus
+filter
+filter-off
 folder
 headphones
 help-circle
 info-circle
 keyframe
 layout-board
+layout-columns
 layout-grid
 layout-rows
 link
@@ -85,6 +88,7 @@ replace
 restore
 ripple
 rotate
+scale
 scissors
 select-all
 settings
@@ -95,11 +99,14 @@ square
 square-check
 square-plus
 stack-2
+star
 switch-horizontal
 tag
 target
 terminal
 terminal-2
+toggle-left
+toggle-right
 transition-right
 trash
 unlink

@@ -301,7 +301,7 @@ class KeypadIconTests(unittest.TestCase):
     def test_every_automatic_and_overlay_icon_is_bundled(self):
         names = set(icon_vocabulary())
         auto = names_in(DAEMON_AUTO)
-        self.assertGreaterEqual(len(auto), 114)
+        self.assertGreaterEqual(len(auto), 121)
         self.assertEqual(sorted(set(auto) - names), [], "the keypad app's automatic icons need glyphs")
         yuck = (ROOT / "src/shared/eww/eww.yuck").read_text()
         for direction in re.findall(r':dir "([a-z0-9-]+)"', yuck):
