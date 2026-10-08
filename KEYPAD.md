@@ -452,20 +452,37 @@ appear in profiles with the Kdenlive plugin on.
   point).
 * **While holding a key.** With a keypad app that has held layers
   (`features.heldLayers`), a profile can have layers that apply while a key
-  (or knob press) is held. They are written as `"when": {"held": "key1"}`
-  and win over every other binding meanwhile.
+  (or knob press) is held. They are written as `"when": {"held": "key1"}`.
+  `"held"` is a condition like any other (control-surface d78e2bf): layers
+  apply in list order, and the first matching one that maps an input wins,
+  then the profile's own bindings, then Global's. So Global's held layers
+  cover only what an app profile leaves unbound.
   * **Layer list:** "Normal (no key held)" plus one entry per held layer.
     **Hold a key…** then a click on the layout, or a press while
     identifying, adds the layer for that key, or opens the one there is.
   * **Editing:** the editor, binding list and layout show that layer. The
     held control reads "held" and can't be mapped in its own layer.
-    Controls left unset keep their normal binding. The cheatsheet preview
-    asks the keypad app with `"$held"` in its context. On the normal
-    layout, controls that have layers carry a small outline hand.
+    Controls left unset do what the next layer or their normal binding
+    says. The cheatsheet preview asks the keypad app with `"$held"` in its
+    context. On the normal layout, controls that have layers carry a small
+    outline hand (an app profile's layout marks Global's too).
+  * **Order:** a new held layer goes before the profile's context layers,
+    after any held layers already at the top. The layer note names layers
+    listed before it, which win where they map the same input while
+    active, and offers **Move first**.
+  * **What this pad can hold:** key 1 has its own pin; keys 2–15 and the
+    knob presses go through the TM1650, which reads one at a time (the
+    layout's `oneAtATime`). So only a layer held on key 1 combines with
+    every other key; one held on key 5 takes key 1 and the knob turns.
+    **Hold a key…** marks and recommends key 1. In a layer held on another
+    key, the keys that can't fire read "can't, held", with an editor hint
+    and a layer note. Settings runs `check-config --json` on the config as
+    edited (a temporary copy, only when it changed) and shows its warnings
+    on the binding rows and layers they name.
   * **Converting shift bindings:** **Convert** moves turn-while-pressed
     bindings into "turn while holding key N" (Key 1 by default). A context
     layer's bindings (for example Kdenlive's timeline) go to a held layer
-    with the same conditions, placed first so it wins over the plain one.
+    with the same conditions, listed first: it is the more specific one.
     Knobs the target layer maps already keep theirs, and Settings says so.
   * **Hand-written forms:** alternatives (`["key1", "key13"]`), chords
     (`"key1+knob3"`) and extra conditions are shown with a readable title
