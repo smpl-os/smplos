@@ -446,7 +446,30 @@ appear in profiles with the Kdenlive plugin on.
   they delay that knob's press until release. Settings flags them in the
   binding list with "!" and "never fires", and explains them per profile
   (own bindings and layers) with **Remove them**. This holds while
-  `features --json` reports `slots.shiftSupported: false` or nothing.
+  `features --json` reports `slots.shiftSupported: false` or nothing. On
+  knobs 1 and 2 of this pad, press-and-turn is physically impossible
+  (pressing pins an encoder line), so holding a key replaces it (next
+  point).
+* **While holding a key.** With a keypad app that has held layers
+  (`features.heldLayers`), a profile can have layers that apply while a key
+  (or knob press) is held. They are written as `"when": {"held": "key1"}`
+  and win over every other binding meanwhile.
+  * **Layer list:** "Normal (no key held)" plus one entry per held layer.
+    **Hold a key…** then a click on the layout, or a press while
+    identifying, adds the layer for that key, or opens the one there is.
+  * **Editing:** the editor, binding list and layout show that layer. The
+    held control reads "held" and can't be mapped in its own layer.
+    Controls left unset keep their normal binding. The cheatsheet preview
+    asks the keypad app with `"$held"` in its context. On the normal
+    layout, controls that have layers carry a small outline hand.
+  * **Converting shift bindings:** **Convert** moves turn-while-pressed
+    bindings into "turn while holding key N" (Key 1 by default). A context
+    layer's bindings (for example Kdenlive's timeline) go to a held layer
+    with the same conditions, placed first so it wins over the plain one.
+    Knobs the target layer maps already keep theirs, and Settings says so.
+  * **Hand-written forms:** alternatives (`["key1", "key13"]`), chords
+    (`"key1+knob3"`) and extra conditions are shown with a readable title
+    and kept as written.
 * **Kdenlive plugin.** "API plugin: Kdenlive (D-Bus API)" sets
   `"kdenlive": true`. "Load recommended layout" copies the Kdenlive profile,
   with its context layers, from the daemon's example. A toggle maps
