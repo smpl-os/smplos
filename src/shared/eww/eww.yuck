@@ -5,6 +5,7 @@
 (include "./quick-settings.yuck")
 (include "./notification-hub.yuck")
 (include "./workspace-overview.yuck")
+(include "./pad-icons.yuck")
 
 ;; ============================================================================
 ;; VARIABLES
@@ -53,6 +54,10 @@
 ;; either: control-surfaced (running only while a keypad is plugged in) sets
 ;; pad_sheet to its cheatsheet JSON and opens/closes pad-cheatsheet itself.
 (defvar pad_sheet '{"visible":false}')
+;; "yes" once bar-ctl has seen that this EWW started with the icon font
+;; installed: a running EWW never picks up a font added later, and other
+;; fonts would draw wrong glyphs for its codepoints. Labels only until then.
+(defvar pad_icons_font "no")
 
 ;; Printer (disabled -- not in tray)
 ;; (deflisten printer-data :initial '{"active":"no","count":"0","icon":""}' `scripts/printer-listener.sh`)
@@ -429,32 +434,40 @@
 ;; MACRO KEYPAD CHEATSHEET  (pushed by control-surfaced; see KEYPAD.md)
 ;; ============================================================================
 ;; Keys row-major from pad_sheet.keys, knobs in a column on the right.
+;; Each binding shows its icon (the keypad app's "icon": a name in
+;; pad-icons.yuck, drawn with the "smplOS Keypad Icons" outline font) with its
+;; label under it in small type; without a known icon, the label alone.
 ;; State is shown by shape: solid border = does something now, dashed border
 ;; + dim text = would do nothing now (e.g. Kdenlive's interface is off),
 ;; no border and a dot = unbound.
 
-(defwidget pad-sheet-key [k]
+(defwidget pad-sheet-key [k glyph]
   (box :class "pad-sheet-key ${k.bound ? (k.active ? 'on' : 'off') : 'unbound'}"
-       :orientation "v" :space-evenly false :width 104 :height 58
+       :orientation "v" :space-evenly false :width 104 :height 92
     (label :class "pad-sheet-num" :halign "start" :text {replace(k.control, "key", "")})
-    (label :class "pad-sheet-label" :text {k.bound ? k.label : "."}
+    (label :class "pad-sheet-icon" :visible {k.bound && glyph != ""} :text glyph)
+    (label :class "pad-sheet-label${k.bound && glyph != '' ? ' under' : ''}" :text {k.bound ? k.label : "."}
            :wrap true :justify "center" :limit-width 30 :lines 2)
     (label :class "pad-sheet-state" :visible {k.state != ""} :text {k.state} :limit-width 14)))
 
-(defwidget pad-sheet-turn [e glyph]
+;; One knob event: direction (turn left, press, turn right), its icon, its label.
+(defwidget pad-sheet-turn [e dir glyph]
   (box :class "pad-sheet-turn ${e.bound ? (e.active ? 'on' : 'off') : 'unbound'}"
-       :orientation "h" :space-evenly false :spacing 4
-    (label :class "pad-sheet-glyph" :text glyph)
+       :orientation "h" :space-evenly false :spacing 6
+    (label :class "pad-sheet-dir" :visible {pad_icons_font == "yes"} :text {pad_icons[dir]})
+    (label :class "pad-sheet-glyph" :visible {pad_icons_font != "yes"}
+           :text {dir == "rotate" ? "<" : (dir == "circle-dot" ? "o" : ">")})
+    (label :class "pad-sheet-turn-icon" :visible {pad_icons_font == "yes"} :width 18 :text {e.bound ? glyph : ""})
     (label :class "pad-sheet-label" :halign "start" :hexpand true :xalign 0
            :text {e.bound ? (e.state != "" ? "${e.label} (${e.state})" : e.label) : "."}
-           :limit-width 22)))
+           :limit-width 20)))
 
 (defwidget pad-sheet-knob [n]
-  (box :class "pad-sheet-knob" :orientation "v" :space-evenly false :width 180
+  (box :class "pad-sheet-knob" :orientation "v" :space-evenly false :width 196
     (label :class "pad-sheet-num" :halign "start" :text "Knob ${replace(n.control, 'knob', '')}")
-    (pad-sheet-turn :e {n.ccw} :glyph "<")
-    (pad-sheet-turn :e {n.press} :glyph "o")
-    (pad-sheet-turn :e {n.cw} :glyph ">")))
+    (pad-sheet-turn :e {n.ccw} :dir "rotate" :glyph {pad_icons_font == "yes" ? (pad_icons[n.ccw?.icon ?: ""] ?: "") : ""})
+    (pad-sheet-turn :e {n.press} :dir "circle-dot" :glyph {pad_icons_font == "yes" ? (pad_icons[n.press?.icon ?: ""] ?: "") : ""})
+    (pad-sheet-turn :e {n.cw} :dir "rotate-clockwise" :glyph {pad_icons_font == "yes" ? (pad_icons[n.cw?.icon ?: ""] ?: "") : ""})))
 
 (defwidget pad-sheet-hint [through]
   (label :class "pad-sheet-hint" :halign "start"
@@ -480,7 +493,7 @@
           (for row in {jq(pad_sheet.keys ?: [], "[group_by(.row)[] | sort_by(.column)]")}
             (box :orientation "h" :space-evenly false :spacing 6
               (for k in row
-                (pad-sheet-key :k k)))))
+                (pad-sheet-key :k k :glyph {pad_icons_font == "yes" ? (pad_icons[k?.icon ?: ""] ?: "") : ""})))))
         (box :orientation "v" :space-evenly false :spacing 6 :visible {arraylength(pad_sheet.knobs ?: []) > 0}
           (for n in {pad_sheet.knobs ?: []}
             (pad-sheet-knob :n n))))

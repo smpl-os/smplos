@@ -14,6 +14,7 @@ import runpy
 import shutil
 import subprocess
 import tempfile
+import time
 import unittest
 
 
@@ -253,6 +254,126 @@ class SheetHideTests(KeypadCase):
             f'eww --config {self.config} update pad_sheet={{"visible":false}}'])
 
 
+FONTS = ROOT / "src/shared/fonts"
+PAD_ICONS = ROOT / "src/shared/eww/pad-icons.yuck"
+# What the keypad app's automatic icons may name (proposed to its owner; see
+# KEYPAD.md): all of them must be in the bundled font.
+AUTO_ICONS = """help-circle player-play player-pause player-stop player-track-next player-track-prev
+player-skip-back player-skip-forward volume volume-2 volume-3 microphone-off brightness-up
+brightness-down mouse arrow-left arrow-right arrow-up arrow-down world brand-github movie
+chart-dots-3 terminal-2 terminal folder settings brand-spotify arrow-back-up arrow-forward-up
+copy clipboard cut device-floppy square-plus x refresh chevron-left chevron-right link restore
+brackets-contain-start brackets-contain-end column-insert-right replace scissors trash bookmark
+pointer blade zoom-reset switch-horizontal repeat arrows-horizontal chevrons-right zoom-in
+arrows-vertical stack-2 headphones lock target eye-off arrows-move-horizontal keyframe
+color-filter rotate adjustments-horizontal list-details""".split()
+
+
+def icon_vocabulary():
+    names = []
+    for line in (FONTS / "keypad-icons/icons.txt").read_text().splitlines():
+        line = line.split("#")[0].strip()
+        if line and not line.startswith("["):
+            names += line.split()
+    return names
+
+
+class KeypadIconTests(unittest.TestCase):
+    """The cheatsheet's outline icons: icons.txt -> font, JSON and eww table."""
+
+    def table(self):
+        return json.loads((FONTS / "keypad-icons.json").read_text())
+
+    def eww_glyphs(self):
+        text = PAD_ICONS.read_text()
+        literal = re.search(r"\(defvar pad_icons '(.*)'\)", text).group(1)
+        # yuck strings drop one backslash; eww then parses the JSON.
+        return json.loads(literal.replace("\\\\", "\\"))
+
+    def test_icons_txt_json_and_eww_table_agree(self):
+        names = icon_vocabulary()
+        self.assertEqual(len(names), len(set(names)))
+        table = self.table()
+        self.assertEqual(table["family"], "smplOS Keypad Icons")
+        self.assertEqual([i["name"] for i in table["icons"]], names)
+        glyphs = self.eww_glyphs()
+        self.assertEqual(list(glyphs), names)
+        for icon in table["icons"]:
+            self.assertEqual(glyphs[icon["name"]], chr(int(icon["codepoint"], 16)), icon["name"])
+        self.assertTrue(PAD_ICONS.read_text().isascii(), "generated, but readable and diffable")
+
+    def test_every_automatic_and_overlay_icon_is_bundled(self):
+        names = set(icon_vocabulary())
+        self.assertFalse(set(AUTO_ICONS) - names)
+        yuck = (ROOT / "src/shared/eww/eww.yuck").read_text()
+        for direction in re.findall(r':dir "([a-z0-9-]+)"', yuck):
+            self.assertIn(direction, names)
+
+    def test_font_has_every_glyph_under_its_family_name(self):
+        try:
+            from fontTools.ttLib import TTFont
+        except ImportError:
+            self.skipTest("fontTools not installed")
+        font = TTFont(FONTS / "smplos-keypad-icons.ttf")
+        cmap = font.getBestCmap()
+        for icon in self.table()["icons"]:
+            self.assertIn(int(icon["codepoint"], 16), cmap, icon["name"])
+        self.assertEqual(font["name"].getDebugName(1), "smplOS Keypad Icons")
+        self.assertLess((FONTS / "smplos-keypad-icons.ttf").stat().st_size, 100_000, "a subset, not all of Tabler")
+
+    def test_overlay_draws_icons_with_the_bundled_font(self):
+        yuck = (ROOT / "src/shared/eww/eww.yuck").read_text()
+        self.assertIn('(include "./pad-icons.yuck")', yuck)
+        self.assertIn('(pad-sheet-key :k k :glyph {pad_icons_font == "yes" ? (pad_icons[k?.icon ?: ""] ?: "") : ""})', yuck)
+        for event in ("ccw", "press", "cw"):
+            self.assertIn(f':glyph {{pad_icons_font == "yes" ? (pad_icons[n.{event}?.icon ?: ""] ?: "") : ""}}', yuck)
+        key = yuck[yuck.index("(defwidget pad-sheet-key"):yuck.index("(defwidget pad-sheet-turn")]
+        self.assertIn('(label :class "pad-sheet-icon" :visible {k.bound && glyph != ""} :text glyph)', key)
+        scss = (ROOT / "src/shared/eww/eww.scss").read_text()
+        icons = scss[scss.index(".pad-sheet-icon,"):]
+        self.assertIn(f'font-family: "{self.table()["family"]}";', icons)
+        self.assertNotRegex(icons, r"(?<!-)opacity\s*:", "icons are as opaque as text")
+
+    def test_licence_ships_with_the_font(self):
+        licence = (FONTS / "keypad-icons/LICENSE-tabler-icons.txt").read_text()
+        self.assertTrue(licence.startswith("MIT License"))
+        self.assertIn("Paweł Kuna", licence)
+        build = (ROOT / "src/builder/build.sh").read_text()
+        self.assertIn('"$SRC_DIR/shared/fonts/keypad-icons/LICENSE-tabler-icons.txt"', build)
+        self.assertIn('$skel/.local/share/fonts/smplos/', build)
+        install = (ROOT / "src/shared/installer/install.sh").read_text()
+        self.assertIn('"$HOME/.local/share/fonts/smplos" "$SMPLOS_PATH/fonts/"*.ttf "$SMPLOS_PATH/fonts/"LICENSE-*.txt', install)
+        self.assertIn("Tabler Icons", (ROOT / "KEYPAD.md").read_text())
+
+
+class IconSyncTests(KeypadCase):
+    """smplos-os-update delivers the font and the eww icon table."""
+
+    def test_update_installs_the_font_and_table_before_the_bar(self):
+        updater = (ROOT / "src/shared/bin/smplos-os-update").read_text()
+        function = lambda name: f"{name}() {{" + updater.split(f"{name}() {{", 1)[1].split("\n}\n", 1)[0] + "\n}\n"
+        repo = self.root / "repo"
+        for rel in ("src/shared/eww/eww.yuck", "src/shared/eww/pad-icons.yuck", "src/shared/eww/eww.scss",
+                    "src/shared/fonts/smplos-keypad-icons.ttf", "src/shared/fonts/keypad-icons/LICENSE-tabler-icons.txt"):
+            (repo / rel).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(ROOT / rel, repo / rel)
+        self.tool("fc-cache", 'echo "fc-cache $*" >> "$CALLS"\n')
+        script = ("set -euo pipefail\nheader() { :; }\nok() { :; }\ndie() { echo \"$*\" >&2; exit 1; }\n"
+                  "as_invoker() { [[ $1 == mv ]] && echo \"mv ${@: -1}\" >> \"$CALLS\"; \"$@\"; }\n"
+                  + function("copy_user_config") + function("sync_configs") + "sync_configs\n")
+        env = dict(self.env, SMPLOS_REPO=str(repo))
+        for _ in range(2):
+            subprocess.run(["bash", "-c", script], env=env, check=True, capture_output=True, text=True, timeout=20)
+        fonts = self.home / ".local/share/fonts/smplos"
+        self.assertEqual((fonts / "smplos-keypad-icons.ttf").read_bytes(), (FONTS / "smplos-keypad-icons.ttf").read_bytes())
+        self.assertTrue((fonts / "LICENSE-tabler-icons.txt").exists())
+        calls = self.calls_made()
+        self.assertEqual([c for c in calls if c.startswith("fc-cache")], [f"fc-cache -f {fonts}"], "once, only on change")
+        moved = [c for c in calls if c.startswith("mv ")]
+        self.assertLess(moved.index(f"mv {self.home}/.config/eww/pad-icons.yuck"),
+                        moved.index(f"mv {self.home}/.config/eww/eww.yuck"), "the include lands first")
+
+
 class LifecycleTests(unittest.TestCase):
     """Nothing keypad related runs without a keypad; the unit follows the device."""
 
@@ -433,6 +554,29 @@ class OneShotSyncTests(KeypadCase):
         self.assertEqual(self.reload_bar(APP_ACTIVE="1"),
                          [f"eww --config {config} update keypad-present=yes"])
         self.assertEqual(self.reload_bar(), [], "inactive: the defvar default already says no")
+
+    def icons_flag(self, font_age, eww_age, installed=True):
+        """bar-ctl reload with an icon font installed font_age s ago and an
+        EWW daemon started eww_age s ago."""
+        font = self.root / "fonts/smplos-keypad-icons.ttf"
+        font.parent.mkdir(exist_ok=True)
+        font.touch()
+        os.utime(font, (time.time() - font_age,) * 2)
+        self.tool("fc-list", f'[ -n "{"1" if installed else ""}" ] && echo "{font}"\nexit 0\n')
+        self.tool("pgrep", 'echo 4242\n')
+        self.tool("ps", f'echo "{eww_age}"\n')
+        self.calls.unlink(missing_ok=True)
+        subprocess.run(["bash", str(self.bar_ctl), "reload"], env=self.env, capture_output=True, text=True, timeout=20)
+        return [c for c in self.calls_made() if "pad_icons_font" in c]
+
+    def test_icons_only_for_an_eww_that_started_with_the_font(self):
+        config = self.home / ".config/eww"
+        self.assertEqual(self.icons_flag(font_age=600, eww_age=60), [f"eww --config {config} update pad_icons_font=yes"])
+        self.assertEqual(self.icons_flag(font_age=60, eww_age=600), [], "font installed after EWW started")
+        self.assertEqual(self.icons_flag(font_age=600, eww_age=60, installed=False), [], "no font")
+        yuck = (ROOT / "src/shared/eww/eww.yuck").read_text()
+        self.assertIn('(defvar pad_icons_font "no")', yuck)
+        self.assertEqual(yuck.count('pad_icons_font == "yes" ? (pad_icons['), 4, "every glyph lookup is gated")
 
     def login(self, **env):
         self.calls.unlink(missing_ok=True)

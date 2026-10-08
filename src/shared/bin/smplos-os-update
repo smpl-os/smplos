@@ -353,7 +353,7 @@ sync_configs() {
         as_invoker mkdir -p "$eww_dst"
         # Publish included fragments before the entry point so live reloads
         # never see an include that has not reached disk yet.
-        for f in workspace-overview.yuck eww.scss eww.yuck; do
+        for f in workspace-overview.yuck pad-icons.yuck eww.scss eww.yuck; do
             if [[ -f "$eww_src/$f" ]] && ! cmp -s "$eww_src/$f" "$eww_dst/$f" 2>/dev/null; then
                 copy_user_config "$eww_src/$f" "$eww_dst/$f"
                 ((n_updated++)) || true
@@ -373,6 +373,22 @@ sync_configs() {
                 fi
             done
         fi
+    fi
+
+    # smplOS fonts (keypad cheatsheet icons; EWW draws them by family name)
+    local fonts_src="$SMPLOS_REPO/src/shared/fonts" fonts_dst="$HOME/.local/share/fonts/smplos"
+    local font fonts_changed=0
+    for font in "$fonts_src/"*.ttf "$fonts_src/keypad-icons/LICENSE-tabler-icons.txt"; do
+        [[ -f "$font" ]] || continue
+        if ! cmp -s "$font" "$fonts_dst/$(basename "$font")" 2>/dev/null; then
+            as_invoker mkdir -p "$fonts_dst"
+            copy_user_config "$font" "$fonts_dst/$(basename "$font")"
+            fonts_changed=1
+            ((n_updated++)) || true
+        fi
+    done
+    if [[ $fonts_changed -eq 1 ]]; then
+        as_invoker fc-cache -f "$fonts_dst" >/dev/null 2>&1 || true
     fi
 
     # Shared configs (hyprshell, smplos, etc.) — only add new files, don't overwrite user edits

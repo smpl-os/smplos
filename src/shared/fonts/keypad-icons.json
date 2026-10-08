@@ -1,0 +1,3885 @@
+{
+ "family": "smplOS Keypad Icons",
+ "source": "Tabler Icons 3.49.0 (outline), MIT",
+ "icons": [
+  {
+   "name": "help-circle",
+   "codepoint": "f91d",
+   "category": "Keypad",
+   "tags": [
+    "help",
+    "question",
+    "support",
+    "faq",
+    "question-mark",
+    "circle",
+    "info",
+    "assistance",
+    "unknown"
+   ]
+  },
+  {
+   "name": "info-circle",
+   "codepoint": "eac5",
+   "category": "Keypad",
+   "tags": [
+    "info",
+    "information",
+    "about",
+    "details",
+    "help",
+    "tip",
+    "i",
+    "circle",
+    "notice"
+   ]
+  },
+  {
+   "name": "question-mark",
+   "codepoint": "ec9d",
+   "category": "Keypad",
+   "tags": [
+    "help",
+    "question",
+    "faq",
+    "unknown",
+    "ask",
+    "support",
+    "info",
+    "query",
+    "mark"
+   ]
+  },
+  {
+   "name": "keyboard",
+   "codepoint": "ebd6",
+   "category": "Keypad",
+   "tags": [
+    "keyboard",
+    "typing",
+    "input",
+    "keys",
+    "computer",
+    "hardware",
+    "device",
+    "type"
+   ]
+  },
+  {
+   "name": "layout-grid",
+   "codepoint": "edba",
+   "category": "Keypad",
+   "tags": [
+    "grid",
+    "layout",
+    "apps",
+    "tiles",
+    "gallery",
+    "thumbnails",
+    "grid-view",
+    "ui"
+   ]
+  },
+  {
+   "name": "grid-dots",
+   "codepoint": "eaba",
+   "category": "Keypad",
+   "tags": [
+    "dots",
+    "grid",
+    "apps",
+    "app-launcher",
+    "menu",
+    "waffle",
+    "layout",
+    "pattern",
+    "dot-grid"
+   ]
+  },
+  {
+   "name": "apps",
+   "codepoint": "ebb6",
+   "category": "Keypad",
+   "tags": [
+    "applications",
+    "grid",
+    "launcher",
+    "menu",
+    "dashboard",
+    "app-drawer",
+    "modules",
+    "widgets",
+    "apps"
+   ]
+  },
+  {
+   "name": "rotate",
+   "codepoint": "eb16",
+   "category": "Keypad",
+   "tags": [
+    "rotate",
+    "rotation",
+    "refresh",
+    "reload",
+    "spin",
+    "redo",
+    "counterclockwise",
+    "arrow"
+   ]
+  },
+  {
+   "name": "rotate-clockwise",
+   "codepoint": "eb15",
+   "category": "Keypad",
+   "tags": [
+    "rotate",
+    "rotation",
+    "clockwise",
+    "refresh",
+    "reload",
+    "spin",
+    "redo",
+    "arrow"
+   ]
+  },
+  {
+   "name": "circle-dot",
+   "codepoint": "efb1",
+   "category": "Keypad",
+   "tags": [
+    "radio",
+    "radio-button",
+    "selected",
+    "record",
+    "target",
+    "bullseye",
+    "dot",
+    "point",
+    "circle",
+    "round"
+   ]
+  },
+  {
+   "name": "point",
+   "codepoint": "eb0c",
+   "category": "Keypad",
+   "tags": [
+    "dot",
+    "circle",
+    "bullet",
+    "marker",
+    "spot",
+    "small-circle",
+    "point"
+   ]
+  },
+  {
+   "name": "hand-click",
+   "codepoint": "ef4f",
+   "category": "Keypad",
+   "tags": [
+    "hand",
+    "click",
+    "tap",
+    "touch",
+    "pointer",
+    "cursor",
+    "finger",
+    "press",
+    "gesture",
+    "select"
+   ]
+  },
+  {
+   "name": "click",
+   "codepoint": "ebbc",
+   "category": "Keypad",
+   "tags": [
+    "click",
+    "tap",
+    "select",
+    "cursor",
+    "pointer",
+    "mouse",
+    "touch",
+    "press",
+    "interaction"
+   ]
+  },
+  {
+   "name": "toggle-left",
+   "codepoint": "eb3e",
+   "category": "Keypad",
+   "tags": [
+    "toggle",
+    "switch",
+    "off",
+    "on-off",
+    "checkbox",
+    "setting",
+    "control",
+    "disabled",
+    "left"
+   ]
+  },
+  {
+   "name": "toggle-right",
+   "codepoint": "eb3f",
+   "category": "Keypad",
+   "tags": [
+    "toggle",
+    "switch",
+    "on",
+    "on-off",
+    "checkbox",
+    "setting",
+    "control",
+    "enabled",
+    "right"
+   ]
+  },
+  {
+   "name": "number-1",
+   "codepoint": "edf1",
+   "category": "Keypad",
+   "tags": [
+    "one",
+    "number",
+    "digit",
+    "numeral",
+    "count",
+    "first",
+    "numeric",
+    "character"
+   ]
+  },
+  {
+   "name": "number-2",
+   "codepoint": "edf2",
+   "category": "Keypad",
+   "tags": [
+    "two",
+    "number",
+    "digit",
+    "numeral",
+    "count",
+    "second",
+    "numeric",
+    "character"
+   ]
+  },
+  {
+   "name": "number-3",
+   "codepoint": "edf3",
+   "category": "Keypad",
+   "tags": [
+    "three",
+    "number",
+    "digit",
+    "numeral",
+    "count",
+    "third",
+    "numeric",
+    "character"
+   ]
+  },
+  {
+   "name": "number-4",
+   "codepoint": "edf4",
+   "category": "Keypad",
+   "tags": [
+    "four",
+    "number",
+    "digit",
+    "numeral",
+    "count",
+    "fourth",
+    "numeric",
+    "character"
+   ]
+  },
+  {
+   "name": "number-5",
+   "codepoint": "edf5",
+   "category": "Keypad",
+   "tags": [
+    "five",
+    "number",
+    "digit",
+    "numeral",
+    "count",
+    "fifth",
+    "numeric",
+    "character"
+   ]
+  },
+  {
+   "name": "number-6",
+   "codepoint": "edf6",
+   "category": "Keypad",
+   "tags": [
+    "six",
+    "number",
+    "digit",
+    "numeral",
+    "count",
+    "sixth",
+    "numeric",
+    "character"
+   ]
+  },
+  {
+   "name": "number-7",
+   "codepoint": "edf7",
+   "category": "Keypad",
+   "tags": [
+    "seven",
+    "number",
+    "digit",
+    "numeral",
+    "count",
+    "seventh",
+    "numeric",
+    "character"
+   ]
+  },
+  {
+   "name": "number-8",
+   "codepoint": "edf8",
+   "category": "Keypad",
+   "tags": [
+    "eight",
+    "number",
+    "digit",
+    "numeral",
+    "count",
+    "eighth",
+    "numeric",
+    "character"
+   ]
+  },
+  {
+   "name": "number-9",
+   "codepoint": "edf9",
+   "category": "Keypad",
+   "tags": [
+    "nine",
+    "number",
+    "digit",
+    "numeral",
+    "count",
+    "ninth",
+    "numeric",
+    "character"
+   ]
+  },
+  {
+   "name": "number-0",
+   "codepoint": "edf0",
+   "category": "Keypad",
+   "tags": [
+    "zero",
+    "number",
+    "digit",
+    "numeral",
+    "count",
+    null,
+    "nil",
+    "numeric",
+    "character"
+   ]
+  },
+  {
+   "name": "letter-a",
+   "codepoint": "ec50",
+   "category": "Keypad",
+   "tags": [
+    "letter",
+    "character",
+    "alphabet",
+    "uppercase",
+    "capital",
+    "initial",
+    "text",
+    "typography",
+    "font",
+    "glyph",
+    "a"
+   ]
+  },
+  {
+   "name": "letter-b",
+   "codepoint": "ec51",
+   "category": "Keypad",
+   "tags": [
+    "letter",
+    "character",
+    "alphabet",
+    "uppercase",
+    "capital",
+    "initial",
+    "text",
+    "typography",
+    "font",
+    "glyph",
+    "b"
+   ]
+  },
+  {
+   "name": "letter-c",
+   "codepoint": "ec52",
+   "category": "Keypad",
+   "tags": [
+    "letter",
+    "character",
+    "alphabet",
+    "uppercase",
+    "capital",
+    "initial",
+    "text",
+    "typography",
+    "font",
+    "glyph",
+    "c"
+   ]
+  },
+  {
+   "name": "letter-x",
+   "codepoint": "ec67",
+   "category": "Keypad",
+   "tags": [
+    "letter",
+    "character",
+    "alphabet",
+    "uppercase",
+    "capital",
+    "initial",
+    "text",
+    "typography",
+    "font",
+    "glyph",
+    "x"
+   ]
+  },
+  {
+   "name": "letter-y",
+   "codepoint": "ec68",
+   "category": "Keypad",
+   "tags": [
+    "letter",
+    "character",
+    "alphabet",
+    "uppercase",
+    "capital",
+    "initial",
+    "text",
+    "typography",
+    "font",
+    "glyph",
+    "y"
+   ]
+  },
+  {
+   "name": "letter-z",
+   "codepoint": "ec69",
+   "category": "Keypad",
+   "tags": [
+    "letter",
+    "character",
+    "alphabet",
+    "uppercase",
+    "capital",
+    "initial",
+    "text",
+    "typography",
+    "font",
+    "glyph",
+    "z"
+   ]
+  },
+  {
+   "name": "stack-2",
+   "codepoint": "eef7",
+   "category": "Keypad",
+   "tags": [
+    "layers",
+    "stack",
+    "pile",
+    "layout",
+    "elements",
+    "components",
+    "levels",
+    "z-order",
+    "stacked"
+   ]
+  },
+  {
+   "name": "layers-subtract",
+   "codepoint": "eaca",
+   "category": "Keypad",
+   "tags": [
+    "layers",
+    "subtract",
+    "minus-front",
+    "boolean",
+    "pathfinder",
+    "remove",
+    "shape",
+    "vector",
+    "design"
+   ]
+  },
+  {
+   "name": "switch-horizontal",
+   "codepoint": "eb31",
+   "category": "Keypad",
+   "tags": [
+    "swap",
+    "exchange",
+    "arrows",
+    "left-right",
+    "transfer",
+    "horizontal",
+    "toggle",
+    "flip",
+    "switch"
+   ]
+  },
+  {
+   "name": "arrows-exchange",
+   "codepoint": "f1f4",
+   "category": "Keypad",
+   "tags": [
+    "swap",
+    "switch",
+    "transfer",
+    "trade",
+    "horizontal",
+    "pointer",
+    "navigation",
+    "direction",
+    "arrows",
+    "exchange"
+   ]
+  },
+  {
+   "name": "player-play",
+   "codepoint": "ed46",
+   "category": "Media",
+   "tags": [
+    "play",
+    "start",
+    "run",
+    "media",
+    "video",
+    "audio",
+    "music",
+    "resume",
+    "triangle",
+    "controls",
+    "button",
+    "player"
+   ]
+  },
+  {
+   "name": "player-pause",
+   "codepoint": "ed45",
+   "category": "Media",
+   "tags": [
+    "pause",
+    "media",
+    "audio",
+    "video",
+    "music",
+    "hold",
+    "controls",
+    "button",
+    "player"
+   ]
+  },
+  {
+   "name": "player-stop",
+   "codepoint": "ed4a",
+   "category": "Media",
+   "tags": [
+    "stop",
+    "square",
+    "halt",
+    "end",
+    "media",
+    "music",
+    "video",
+    "audio",
+    "controls",
+    "button",
+    "player"
+   ]
+  },
+  {
+   "name": "player-record",
+   "codepoint": "ed47",
+   "category": "Media",
+   "tags": [
+    "record",
+    "rec",
+    "recording",
+    "circle",
+    "dot",
+    "media",
+    "video",
+    "audio",
+    "live",
+    "capture",
+    "controls",
+    "player"
+   ]
+  },
+  {
+   "name": "player-eject",
+   "codepoint": "efbc",
+   "category": "Media",
+   "tags": [
+    "eject",
+    "media",
+    "cd",
+    "dvd",
+    "disk",
+    "unmount",
+    "open",
+    "button",
+    "controls",
+    "player"
+   ]
+  },
+  {
+   "name": "player-track-next",
+   "codepoint": "ed4b",
+   "category": "Media",
+   "tags": [
+    "next",
+    "next-track",
+    "skip",
+    "fast-forward",
+    "forward",
+    "media",
+    "music",
+    "audio",
+    "controls",
+    "player",
+    "track"
+   ]
+  },
+  {
+   "name": "player-track-prev",
+   "codepoint": "ed4c",
+   "category": "Media",
+   "tags": [
+    "previous",
+    "prev",
+    "previous-track",
+    "rewind",
+    "back",
+    "media",
+    "music",
+    "audio",
+    "controls",
+    "player",
+    "track"
+   ]
+  },
+  {
+   "name": "player-skip-forward",
+   "codepoint": "ed49",
+   "category": "Media",
+   "tags": [
+    "skip-forward",
+    "next",
+    "skip",
+    "forward",
+    "end",
+    "media",
+    "music",
+    "video",
+    "controls",
+    "player"
+   ]
+  },
+  {
+   "name": "player-skip-back",
+   "codepoint": "ed48",
+   "category": "Media",
+   "tags": [
+    "skip-back",
+    "previous",
+    "prev",
+    "back",
+    "rewind",
+    "beginning",
+    "media",
+    "music",
+    "video",
+    "controls",
+    "player",
+    "skip"
+   ]
+  },
+  {
+   "name": "repeat",
+   "codepoint": "eb72",
+   "category": "Media",
+   "tags": [
+    "loop",
+    "repeat-all",
+    "replay",
+    "cycle",
+    "redo",
+    "again",
+    "music",
+    "playlist",
+    "repeat"
+   ]
+  },
+  {
+   "name": "repeat-once",
+   "codepoint": "eb71",
+   "category": "Media",
+   "tags": [
+    "loop",
+    "repeat-one",
+    "replay",
+    "single",
+    "once",
+    "music",
+    "repeat"
+   ]
+  },
+  {
+   "name": "arrows-shuffle",
+   "codepoint": "f000",
+   "category": "Media",
+   "tags": [
+    "random",
+    "mix",
+    "playlist",
+    "music",
+    "crossing",
+    "pointer",
+    "navigation",
+    "direction",
+    "arrows",
+    "shuffle"
+   ]
+  },
+  {
+   "name": "playlist",
+   "codepoint": "eec0",
+   "category": "Media",
+   "tags": [
+    "queue",
+    "music",
+    "songs",
+    "tracks",
+    "list",
+    "library",
+    "album",
+    "spotify",
+    "audio",
+    "media",
+    "playlist"
+   ]
+  },
+  {
+   "name": "music",
+   "codepoint": "eafc",
+   "category": "Media",
+   "tags": [
+    "song",
+    "audio",
+    "sound",
+    "note",
+    "melody",
+    "track",
+    "mp3",
+    "playlist",
+    "player",
+    "tune",
+    "media",
+    "spotify",
+    "music"
+   ]
+  },
+  {
+   "name": "headphones",
+   "codepoint": "eabd",
+   "category": "Media",
+   "tags": [
+    "headphones",
+    "headset",
+    "earphones",
+    "audio",
+    "music",
+    "sound",
+    "listen",
+    "podcast"
+   ]
+  },
+  {
+   "name": "headphones-off",
+   "codepoint": "ed1d",
+   "category": "Media",
+   "tags": [
+    "headphones",
+    "headset",
+    "earphones",
+    "audio",
+    "sound",
+    "mute",
+    "disabled",
+    "off-state",
+    "off"
+   ]
+  },
+  {
+   "name": "volume",
+   "codepoint": "eb51",
+   "category": "Media",
+   "tags": [
+    "volume",
+    "sound",
+    "speaker",
+    "audio",
+    "loud",
+    "unmute",
+    "loudness",
+    "speaker-on"
+   ]
+  },
+  {
+   "name": "volume-2",
+   "codepoint": "eb4f",
+   "category": "Media",
+   "tags": [
+    "volume",
+    "sound",
+    "speaker",
+    "audio",
+    "low",
+    "quiet",
+    "loudness",
+    "speaker-low"
+   ]
+  },
+  {
+   "name": "volume-3",
+   "codepoint": "eb50",
+   "category": "Media",
+   "tags": [
+    "volume",
+    "mute",
+    "muted",
+    "sound-off",
+    "speaker",
+    "audio",
+    "silent",
+    "loudness"
+   ]
+  },
+  {
+   "name": "volume-off",
+   "codepoint": "f1c3",
+   "category": "Media",
+   "tags": [
+    "volume",
+    "mute",
+    "muted",
+    "sound-off",
+    "speaker",
+    "audio",
+    "silent",
+    "disabled",
+    "off"
+   ]
+  },
+  {
+   "name": "microphone",
+   "codepoint": "eaf0",
+   "category": "Media",
+   "tags": [
+    "mic",
+    "record",
+    "voice",
+    "audio",
+    "sound",
+    "speak",
+    "podcast",
+    "recording",
+    "dictation",
+    "input",
+    "microphone"
+   ]
+  },
+  {
+   "name": "microphone-off",
+   "codepoint": "ed16",
+   "category": "Media",
+   "tags": [
+    "mic",
+    "mute",
+    "muted",
+    "unmute",
+    "voice",
+    "audio",
+    "no-sound",
+    "disabled",
+    "slash",
+    "microphone",
+    "off"
+   ]
+  },
+  {
+   "name": "radio",
+   "codepoint": "ef2d",
+   "category": "Media",
+   "tags": [
+    "fm",
+    "am",
+    "radio-station",
+    "tuner",
+    "broadcast",
+    "music",
+    "news",
+    "audio",
+    "receiver",
+    "radio"
+   ]
+  },
+  {
+   "name": "disc",
+   "codepoint": "ea90",
+   "category": "Media",
+   "tags": [
+    "cd",
+    "dvd",
+    "disc",
+    "disk",
+    "compact-disc",
+    "album",
+    "music",
+    "media",
+    "optical",
+    "vinyl"
+   ]
+  },
+  {
+   "name": "brightness-up",
+   "codepoint": "eb7e",
+   "category": "Display",
+   "tags": [
+    "brightness",
+    "light",
+    "display",
+    "screen",
+    "sun",
+    "luminosity",
+    "contrast",
+    "increase",
+    "brighter",
+    "higher",
+    "plus",
+    "up"
+   ]
+  },
+  {
+   "name": "brightness-down",
+   "codepoint": "eb7d",
+   "category": "Display",
+   "tags": [
+    "brightness",
+    "light",
+    "display",
+    "screen",
+    "sun",
+    "luminosity",
+    "contrast",
+    "decrease",
+    "dim",
+    "darker",
+    "lower",
+    "minus",
+    "down"
+   ]
+  },
+  {
+   "name": "sun",
+   "codepoint": "eb30",
+   "category": "Display",
+   "tags": [
+    "light-mode",
+    "light",
+    "theme",
+    "day",
+    "brightness",
+    "weather",
+    "sunny",
+    "bright",
+    "sun"
+   ]
+  },
+  {
+   "name": "moon",
+   "codepoint": "eaf8",
+   "category": "Display",
+   "tags": [
+    "night",
+    "dark-mode",
+    "dark",
+    "theme",
+    "crescent",
+    "sleep",
+    "lunar",
+    "evening",
+    "moon"
+   ]
+  },
+  {
+   "name": "contrast",
+   "codepoint": "ec4e",
+   "category": "Display",
+   "tags": [
+    "contrast",
+    "brightness",
+    "dark-mode",
+    "theme",
+    "half-circle",
+    "accessibility",
+    "a11y",
+    "high-contrast",
+    "photo",
+    "edit"
+   ]
+  },
+  {
+   "name": "screenshot",
+   "codepoint": "f201",
+   "category": "Display",
+   "tags": [
+    "screen-capture",
+    "capture",
+    "snapshot",
+    "crop",
+    "print-screen",
+    "screenshot"
+   ]
+  },
+  {
+   "name": "camera",
+   "codepoint": "ea54",
+   "category": "Display",
+   "tags": [
+    "camera",
+    "photo",
+    "photography",
+    "picture",
+    "video",
+    "lens",
+    "image",
+    "snapshot"
+   ]
+  },
+  {
+   "name": "video",
+   "codepoint": "ed22",
+   "category": "Display",
+   "tags": [
+    "video",
+    "camera",
+    "camcorder",
+    "recording",
+    "movie",
+    "film",
+    "record",
+    "vlog"
+   ]
+  },
+  {
+   "name": "device-desktop",
+   "codepoint": "ea89",
+   "category": "Display",
+   "tags": [
+    "desktop",
+    "monitor",
+    "computer",
+    "screen",
+    "pc",
+    "display",
+    "workstation",
+    "device",
+    "imac"
+   ]
+  },
+  {
+   "name": "device-tv",
+   "codepoint": "ea8d",
+   "category": "Display",
+   "tags": [
+    "tv",
+    "television",
+    "smart-tv",
+    "screen",
+    "display",
+    "monitor",
+    "video",
+    "movie",
+    "streaming",
+    "device"
+   ]
+  },
+  {
+   "name": "bulb",
+   "codepoint": "ea51",
+   "category": "Display",
+   "tags": [
+    "bulb",
+    "lightbulb",
+    "light",
+    "idea",
+    "lamp",
+    "tip",
+    "hint",
+    "creativity",
+    "innovation"
+   ]
+  },
+  {
+   "name": "arrow-up",
+   "codepoint": "ea25",
+   "category": "Navigation",
+   "tags": [
+    "direction",
+    "north",
+    "upward",
+    "top",
+    "upload",
+    "ascend",
+    "sort",
+    "pointer",
+    "arrow"
+   ]
+  },
+  {
+   "name": "arrow-down",
+   "codepoint": "ea16",
+   "category": "Navigation",
+   "tags": [
+    "direction",
+    "south",
+    "downward",
+    "bottom",
+    "download",
+    "descend",
+    "sort",
+    "pointer",
+    "arrow",
+    "down"
+   ]
+  },
+  {
+   "name": "arrow-left",
+   "codepoint": "ea19",
+   "category": "Navigation",
+   "tags": [
+    "direction",
+    "west",
+    "previous",
+    "back",
+    "go-back",
+    "return",
+    "pointer",
+    "navigation",
+    "arrow",
+    "left"
+   ]
+  },
+  {
+   "name": "arrow-right",
+   "codepoint": "ea1f",
+   "category": "Navigation",
+   "tags": [
+    "direction",
+    "east",
+    "next",
+    "forward",
+    "continue",
+    "proceed",
+    "go",
+    "pointer",
+    "arrow",
+    "right"
+   ]
+  },
+  {
+   "name": "arrow-big-up",
+   "codepoint": "eddd",
+   "category": "Navigation",
+   "tags": [
+    "large",
+    "bold",
+    "thick",
+    "direction",
+    "north",
+    "upward",
+    "top",
+    "shift",
+    "upvote",
+    "arrow",
+    "big"
+   ]
+  },
+  {
+   "name": "arrow-big-down",
+   "codepoint": "edda",
+   "category": "Navigation",
+   "tags": [
+    "large",
+    "bold",
+    "thick",
+    "direction",
+    "south",
+    "downward",
+    "bottom",
+    "downvote",
+    "download",
+    "arrow",
+    "big",
+    "down"
+   ]
+  },
+  {
+   "name": "arrow-big-left",
+   "codepoint": "eddb",
+   "category": "Navigation",
+   "tags": [
+    "large",
+    "bold",
+    "thick",
+    "direction",
+    "west",
+    "previous",
+    "back",
+    "pointer",
+    "arrow",
+    "big",
+    "left"
+   ]
+  },
+  {
+   "name": "arrow-big-right",
+   "codepoint": "eddc",
+   "category": "Navigation",
+   "tags": [
+    "large",
+    "bold",
+    "thick",
+    "direction",
+    "east",
+    "next",
+    "forward",
+    "pointer",
+    "arrow",
+    "big",
+    "right"
+   ]
+  },
+  {
+   "name": "arrow-back-up",
+   "codepoint": "eb77",
+   "category": "Navigation",
+   "tags": [
+    "undo",
+    "return",
+    "revert",
+    "previous",
+    "reply",
+    "history",
+    "pointer",
+    "navigation",
+    "arrow",
+    "back"
+   ]
+  },
+  {
+   "name": "arrow-forward-up",
+   "codepoint": "eb78",
+   "category": "Navigation",
+   "tags": [
+    "redo",
+    "share",
+    "next",
+    "repeat",
+    "send",
+    "pointer",
+    "navigation",
+    "direction",
+    "arrow",
+    "forward"
+   ]
+  },
+  {
+   "name": "arrow-back",
+   "codepoint": "ea0c",
+   "category": "Navigation",
+   "tags": [
+    "return",
+    "undo",
+    "previous",
+    "left",
+    "go-back",
+    "navigation",
+    "pointer",
+    "direction",
+    "arrow",
+    "back"
+   ]
+  },
+  {
+   "name": "arrow-forward",
+   "codepoint": "ea17",
+   "category": "Navigation",
+   "tags": [
+    "redo",
+    "next",
+    "right",
+    "navigation",
+    "proceed",
+    "pointer",
+    "direction",
+    "arrow",
+    "forward"
+   ]
+  },
+  {
+   "name": "arrow-bar-up",
+   "codepoint": "ea10",
+   "category": "Navigation",
+   "tags": [
+    "direction",
+    "north",
+    "upward",
+    "top",
+    "line",
+    "upload",
+    "expand",
+    "pointer",
+    "arrow",
+    "bar"
+   ]
+  },
+  {
+   "name": "arrow-bar-down",
+   "codepoint": "ea0d",
+   "category": "Navigation",
+   "tags": [
+    "direction",
+    "south",
+    "downward",
+    "bottom",
+    "line",
+    "download",
+    "collapse",
+    "pointer",
+    "arrow",
+    "bar",
+    "down"
+   ]
+  },
+  {
+   "name": "arrow-bar-left",
+   "codepoint": "ea0e",
+   "category": "Navigation",
+   "tags": [
+    "direction",
+    "west",
+    "previous",
+    "back",
+    "line",
+    "pointer",
+    "navigation",
+    "arrow",
+    "bar",
+    "left"
+   ]
+  },
+  {
+   "name": "arrow-bar-right",
+   "codepoint": "ea0f",
+   "category": "Navigation",
+   "tags": [
+    "direction",
+    "east",
+    "next",
+    "forward",
+    "line",
+    "pointer",
+    "navigation",
+    "arrow",
+    "bar",
+    "right"
+   ]
+  },
+  {
+   "name": "arrows-vertical",
+   "codepoint": "eb5b",
+   "category": "Navigation",
+   "tags": [
+    "up-down",
+    "height",
+    "resize",
+    "expand",
+    "pointer",
+    "navigation",
+    "direction",
+    "arrows",
+    "vertical"
+   ]
+  },
+  {
+   "name": "arrows-horizontal",
+   "codepoint": "eb59",
+   "category": "Navigation",
+   "tags": [
+    "left-right",
+    "width",
+    "resize",
+    "expand",
+    "pointer",
+    "navigation",
+    "direction",
+    "arrows",
+    "horizontal"
+   ]
+  },
+  {
+   "name": "arrows-move",
+   "codepoint": "f22f",
+   "category": "Navigation",
+   "tags": [
+    "drag",
+    "pan",
+    "reposition",
+    "all-directions",
+    "cross",
+    "pointer",
+    "navigation",
+    "direction"
+   ]
+  },
+  {
+   "name": "arrows-move-horizontal",
+   "codepoint": "f22d",
+   "category": "Navigation",
+   "tags": [
+    "drag",
+    "pan",
+    "left-right",
+    "resize-horizontal",
+    "width",
+    "pointer",
+    "navigation",
+    "direction",
+    "arrows",
+    "move",
+    "horizontal"
+   ]
+  },
+  {
+   "name": "chevron-up",
+   "codepoint": "ea62",
+   "category": "Navigation",
+   "tags": [
+    "chevron",
+    "arrow",
+    "up",
+    "collapse",
+    "less",
+    "close",
+    "hide",
+    "accordion",
+    "caret-up",
+    "arrow-up",
+    "direction",
+    "navigation",
+    "angle"
+   ]
+  },
+  {
+   "name": "chevron-down",
+   "codepoint": "ea5f",
+   "category": "Navigation",
+   "tags": [
+    "chevron",
+    "arrow",
+    "down",
+    "expand",
+    "dropdown",
+    "open",
+    "more",
+    "accordion",
+    "show",
+    "caret-down",
+    "arrow-down",
+    "direction",
+    "navigation",
+    "angle"
+   ]
+  },
+  {
+   "name": "chevron-left",
+   "codepoint": "ea60",
+   "category": "Navigation",
+   "tags": [
+    "chevron",
+    "arrow",
+    "left",
+    "back",
+    "previous",
+    "prev",
+    "return",
+    "caret-left",
+    "arrow-left",
+    "direction",
+    "navigation",
+    "angle"
+   ]
+  },
+  {
+   "name": "chevron-right",
+   "codepoint": "ea61",
+   "category": "Navigation",
+   "tags": [
+    "chevron",
+    "arrow",
+    "right",
+    "next",
+    "forward",
+    "more",
+    "caret-right",
+    "arrow-right",
+    "direction",
+    "navigation",
+    "angle"
+   ]
+  },
+  {
+   "name": "chevrons-up",
+   "codepoint": "ea66",
+   "category": "Navigation",
+   "tags": [
+    "chevrons",
+    "double-chevron",
+    "up",
+    "collapse-all",
+    "scroll-top",
+    "back-to-top",
+    "double-arrow",
+    "angles-up",
+    "arrow-up",
+    "direction",
+    "navigation",
+    "arrows"
+   ]
+  },
+  {
+   "name": "chevrons-down",
+   "codepoint": "ea63",
+   "category": "Navigation",
+   "tags": [
+    "chevrons",
+    "double-chevron",
+    "down",
+    "expand-all",
+    "scroll-down",
+    "double-arrow",
+    "angles-down",
+    "arrow-down",
+    "direction",
+    "navigation",
+    "arrows"
+   ]
+  },
+  {
+   "name": "chevrons-left",
+   "codepoint": "ea64",
+   "category": "Navigation",
+   "tags": [
+    "chevrons",
+    "double-chevron",
+    "left",
+    "first",
+    "rewind",
+    "back",
+    "double-arrow",
+    "angles-left",
+    "previous",
+    "direction",
+    "navigation",
+    "arrows"
+   ]
+  },
+  {
+   "name": "chevrons-right",
+   "codepoint": "ea65",
+   "category": "Navigation",
+   "tags": [
+    "chevrons",
+    "double-chevron",
+    "right",
+    "last",
+    "fast-forward",
+    "skip",
+    "double-arrow",
+    "angles-right",
+    "next",
+    "direction",
+    "navigation",
+    "arrows"
+   ]
+  },
+  {
+   "name": "mouse",
+   "codepoint": "eaf9",
+   "category": "Navigation",
+   "tags": [
+    "computer-mouse",
+    "pointer",
+    "click",
+    "cursor",
+    "peripheral",
+    "device",
+    "scroll",
+    "mouse"
+   ]
+  },
+  {
+   "name": "mouse-2",
+   "codepoint": "f1d7",
+   "category": "Navigation",
+   "tags": [
+    "computer-mouse",
+    "pointer",
+    "click",
+    "cursor",
+    "peripheral",
+    "device",
+    "scroll",
+    "mouse"
+   ]
+  },
+  {
+   "name": "pointer",
+   "codepoint": "f265",
+   "category": "Navigation",
+   "tags": [
+    "cursor",
+    "mouse-pointer",
+    "mouse",
+    "arrow",
+    "click",
+    "select",
+    "cursor-arrow",
+    "pointer"
+   ]
+  },
+  {
+   "name": "hand-finger",
+   "codepoint": "ee94",
+   "category": "Navigation",
+   "tags": [
+    "hand",
+    "finger",
+    "pointing",
+    "point",
+    "pointer",
+    "cursor",
+    "index-finger",
+    "gesture",
+    "touch",
+    "tap",
+    "up"
+   ]
+  },
+  {
+   "name": "hand-grab",
+   "codepoint": "f091",
+   "category": "Navigation",
+   "tags": [
+    "grab",
+    "grabbing",
+    "hand",
+    "fist",
+    "drag",
+    "move",
+    "pan",
+    "hold",
+    "grasp",
+    "cursor"
+   ]
+  },
+  {
+   "name": "hand-move",
+   "codepoint": "ef50",
+   "category": "Navigation",
+   "tags": [
+    "hand",
+    "move",
+    "pan",
+    "drag",
+    "gesture",
+    "swipe",
+    "scroll",
+    "grab",
+    "navigate"
+   ]
+  },
+  {
+   "name": "swipe",
+   "codepoint": "f551",
+   "category": "Navigation",
+   "tags": [
+    "gesture",
+    "touch",
+    "swipe",
+    "slide",
+    "drag",
+    "hand",
+    "mobile",
+    "finger"
+   ]
+  },
+  {
+   "name": "home",
+   "codepoint": "eac1",
+   "category": "Navigation",
+   "tags": [
+    "home",
+    "house",
+    "homepage",
+    "main",
+    "start",
+    "dashboard",
+    "building",
+    "residence",
+    "real-estate"
+   ]
+  },
+  {
+   "name": "terminal",
+   "codepoint": "ebdc",
+   "category": "Apps",
+   "tags": [
+    "console",
+    "command-line",
+    "cli",
+    "shell",
+    "prompt",
+    "bash",
+    "cmd",
+    "command",
+    "code",
+    "terminal"
+   ]
+  },
+  {
+   "name": "terminal-2",
+   "codepoint": "ebef",
+   "category": "Apps",
+   "tags": [
+    "console",
+    "command-line",
+    "cli",
+    "shell",
+    "prompt",
+    "bash",
+    "cmd",
+    "command",
+    "window",
+    "code",
+    "terminal"
+   ]
+  },
+  {
+   "name": "folder",
+   "codepoint": "eaad",
+   "category": "Apps",
+   "tags": [
+    "folder",
+    "directory",
+    "dir",
+    "files",
+    "archive",
+    "project",
+    "category",
+    "organize",
+    "storage"
+   ]
+  },
+  {
+   "name": "folder-open",
+   "codepoint": "faf7",
+   "category": "Apps",
+   "tags": [
+    "folder-open",
+    "open-folder",
+    "directory",
+    "open",
+    "browse",
+    "files",
+    "explore",
+    "expand",
+    "dir"
+   ]
+  },
+  {
+   "name": "files",
+   "codepoint": "edef",
+   "category": "Apps",
+   "tags": [
+    "files",
+    "documents",
+    "multiple",
+    "copy",
+    "duplicate",
+    "pages",
+    "stack",
+    "papers",
+    "collection"
+   ]
+  },
+  {
+   "name": "settings",
+   "codepoint": "eb20",
+   "category": "Apps",
+   "tags": [
+    "cog",
+    "gear",
+    "preferences",
+    "configuration",
+    "options",
+    "config",
+    "setup",
+    "control",
+    "settings"
+   ]
+  },
+  {
+   "name": "adjustments",
+   "codepoint": "ea03",
+   "category": "Apps",
+   "tags": [
+    "settings",
+    "sliders",
+    "equalizer",
+    "controls",
+    "filter",
+    "options",
+    "tune",
+    "preferences",
+    "mixer",
+    "configure",
+    "adjustments"
+   ]
+  },
+  {
+   "name": "world",
+   "codepoint": "eb54",
+   "category": "Apps",
+   "tags": [
+    "globe",
+    "earth",
+    "world",
+    "internet",
+    "global",
+    "web",
+    "international",
+    "language",
+    "planet"
+   ]
+  },
+  {
+   "name": "world-www",
+   "codepoint": "f38f",
+   "category": "Apps",
+   "tags": [
+    "www",
+    "website",
+    "web",
+    "internet",
+    "url",
+    "domain",
+    "browser",
+    "globe",
+    "world"
+   ]
+  },
+  {
+   "name": "browser",
+   "codepoint": "ebb7",
+   "category": "Apps",
+   "tags": [
+    "browser",
+    "window",
+    "web",
+    "internet",
+    "webpage",
+    "website",
+    "tab",
+    "app"
+   ]
+  },
+  {
+   "name": "brand-github",
+   "codepoint": "ec1c",
+   "category": "Apps",
+   "tags": [
+    "github",
+    "git",
+    "repository",
+    "code",
+    "hosting",
+    "version-control",
+    "octocat",
+    "microsoft",
+    "developer",
+    "logo",
+    "brand"
+   ]
+  },
+  {
+   "name": "brand-github-copilot",
+   "codepoint": "f4a8",
+   "category": "Apps",
+   "tags": [
+    "github-copilot",
+    "copilot",
+    "ai",
+    "assistant",
+    "autocomplete",
+    "coding",
+    "github",
+    "logo",
+    "brand"
+   ]
+  },
+  {
+   "name": "brand-git",
+   "codepoint": "ef6f",
+   "category": "Apps",
+   "tags": [
+    "git",
+    "version-control",
+    "vcs",
+    "repository",
+    "source-control",
+    "commit",
+    "branch",
+    "logo",
+    "brand"
+   ]
+  },
+  {
+   "name": "brand-firefox",
+   "codepoint": "ecfd",
+   "category": "Apps",
+   "tags": [
+    "firefox",
+    "mozilla",
+    "browser",
+    "web",
+    "internet",
+    "logo",
+    "brand",
+    "open-source",
+    "fox"
+   ]
+  },
+  {
+   "name": "brand-chrome",
+   "codepoint": "ec18",
+   "category": "Apps",
+   "tags": [
+    "chrome",
+    "google-chrome",
+    "browser",
+    "google",
+    "web",
+    "internet",
+    "logo",
+    "brand"
+   ]
+  },
+  {
+   "name": "brand-vscode",
+   "codepoint": "f3a0",
+   "category": "Apps",
+   "tags": [
+    "vscode",
+    "visual-studio-code",
+    "microsoft",
+    "code",
+    "editor",
+    "ide",
+    "programming",
+    "logo",
+    "brand"
+   ]
+  },
+  {
+   "name": "brand-discord",
+   "codepoint": "ece3",
+   "category": "Apps",
+   "tags": [
+    "discord",
+    "chat",
+    "messaging",
+    "voice",
+    "gaming",
+    "community",
+    "server",
+    "logo",
+    "brand"
+   ]
+  },
+  {
+   "name": "brand-telegram",
+   "codepoint": "ec26",
+   "category": "Apps",
+   "tags": [
+    "telegram",
+    "messenger",
+    "messaging",
+    "chat",
+    "message",
+    "paper-plane",
+    "logo",
+    "brand"
+   ]
+  },
+  {
+   "name": "brand-whatsapp",
+   "codepoint": "ec74",
+   "category": "Apps",
+   "tags": [
+    "whatsapp",
+    "meta",
+    "messenger",
+    "messaging",
+    "chat",
+    "phone",
+    "message",
+    "logo",
+    "brand"
+   ]
+  },
+  {
+   "name": "brand-slack",
+   "codepoint": "ec72",
+   "category": "Apps",
+   "tags": [
+    "slack",
+    "chat",
+    "messaging",
+    "team",
+    "communication",
+    "workspace",
+    "channels",
+    "salesforce",
+    "logo",
+    "brand"
+   ]
+  },
+  {
+   "name": "brand-youtube",
+   "codepoint": "ec90",
+   "category": "Apps",
+   "tags": [
+    "youtube",
+    "google",
+    "video",
+    "streaming",
+    "channel",
+    "player",
+    "play",
+    "youtuber",
+    "logo",
+    "brand"
+   ]
+  },
+  {
+   "name": "brand-spotify",
+   "codepoint": "ed03",
+   "category": "Apps",
+   "tags": [
+    "spotify",
+    "music",
+    "streaming",
+    "podcast",
+    "playlist",
+    "audio",
+    "songs",
+    "logo",
+    "brand"
+   ]
+  },
+  {
+   "name": "brand-steam",
+   "codepoint": "ed6f",
+   "category": "Apps",
+   "tags": [
+    "steam",
+    "valve",
+    "games",
+    "gaming",
+    "store",
+    "pc",
+    "video-game",
+    "logo",
+    "brand"
+   ]
+  },
+  {
+   "name": "brand-blender",
+   "codepoint": "f326",
+   "category": "Apps",
+   "tags": [
+    "blender",
+    "3d",
+    "modeling",
+    "animation",
+    "rendering",
+    "open-source",
+    "software",
+    "logo",
+    "brand"
+   ]
+  },
+  {
+   "name": "brand-zoom",
+   "codepoint": "f215",
+   "category": "Apps",
+   "tags": [
+    "zoom",
+    "video-call",
+    "meeting",
+    "video-conference",
+    "call",
+    "chat",
+    "logo",
+    "brand"
+   ]
+  },
+  {
+   "name": "movie",
+   "codepoint": "eafa",
+   "category": "Apps",
+   "tags": [
+    "film",
+    "video",
+    "cinema",
+    "movies",
+    "clapperboard",
+    "filmstrip",
+    "theater",
+    "media",
+    "movie"
+   ]
+  },
+  {
+   "name": "photo",
+   "codepoint": "eb0a",
+   "category": "Apps",
+   "tags": [
+    "image",
+    "picture",
+    "gallery",
+    "img",
+    "photography",
+    "media",
+    "thumbnail",
+    "landscape",
+    "jpg",
+    "png",
+    "wallpaper",
+    "photo"
+   ]
+  },
+  {
+   "name": "palette",
+   "codepoint": "eb01",
+   "category": "Apps",
+   "tags": [
+    "color",
+    "colour",
+    "palette-colors",
+    "paint",
+    "art",
+    "painter",
+    "theme",
+    "swatch",
+    "palette"
+   ]
+  },
+  {
+   "name": "chart-dots-3",
+   "codepoint": "f098",
+   "category": "Apps",
+   "tags": [
+    "chart",
+    "graph",
+    "statistics",
+    "analytics",
+    "data",
+    "report",
+    "diagram",
+    "dots",
+    "scatter",
+    "plot",
+    "points",
+    "visualization"
+   ]
+  },
+  {
+   "name": "chart-dots",
+   "codepoint": "ee2f",
+   "category": "Apps",
+   "tags": [
+    "chart",
+    "graph",
+    "statistics",
+    "analytics",
+    "data",
+    "report",
+    "diagram",
+    "dots",
+    "scatter",
+    "plot",
+    "points",
+    "visualization"
+   ]
+  },
+  {
+   "name": "chart-line",
+   "codepoint": "ea5c",
+   "category": "Apps",
+   "tags": [
+    "chart",
+    "graph",
+    "statistics",
+    "analytics",
+    "data",
+    "report",
+    "diagram",
+    "line-chart",
+    "trend",
+    "growth",
+    "visualization",
+    "line"
+   ]
+  },
+  {
+   "name": "graph",
+   "codepoint": "f288",
+   "category": "Apps",
+   "tags": [
+    "chart",
+    "line-chart",
+    "analytics",
+    "statistics",
+    "stats",
+    "report",
+    "trend",
+    "data",
+    "diagram",
+    "plot",
+    "graph"
+   ]
+  },
+  {
+   "name": "affiliate",
+   "codepoint": "edff",
+   "category": "Apps",
+   "tags": [
+    "network",
+    "connections",
+    "affiliate-marketing",
+    "referral",
+    "partners",
+    "hub",
+    "nodes",
+    "share",
+    "social",
+    "affiliate"
+   ]
+  },
+  {
+   "name": "topology-star-3",
+   "codepoint": "f5e1",
+   "category": "Apps",
+   "tags": [
+    "topology",
+    "network",
+    "star",
+    "hub",
+    "nodes",
+    "connection",
+    "diagram",
+    "infrastructure",
+    "lan"
+   ]
+  },
+  {
+   "name": "notes",
+   "codepoint": "eb6e",
+   "category": "Apps",
+   "tags": [
+    "notepad",
+    "memo",
+    "document",
+    "list",
+    "text",
+    "to-do",
+    "writing",
+    "page",
+    "notes"
+   ]
+  },
+  {
+   "name": "notebook",
+   "codepoint": "eb96",
+   "category": "Apps",
+   "tags": [
+    "notepad",
+    "journal",
+    "diary",
+    "book",
+    "notes",
+    "writing",
+    "study",
+    "planner",
+    "notebook"
+   ]
+  },
+  {
+   "name": "note",
+   "codepoint": "eb6d",
+   "category": "Apps",
+   "tags": [
+    "sticky-note",
+    "memo",
+    "post-it",
+    "notes",
+    "reminder",
+    "text",
+    "paper",
+    "annotation",
+    "note"
+   ]
+  },
+  {
+   "name": "calculator",
+   "codepoint": "eb80",
+   "category": "Apps",
+   "tags": [
+    "calculator",
+    "math",
+    "calculate",
+    "calculation",
+    "accounting",
+    "arithmetic",
+    "numbers",
+    "finance"
+   ]
+  },
+  {
+   "name": "calendar",
+   "codepoint": "ea53",
+   "category": "Apps",
+   "tags": [
+    "calendar",
+    "date",
+    "schedule",
+    "event",
+    "day",
+    "month",
+    "planner",
+    "agenda",
+    "appointment",
+    "calender"
+   ]
+  },
+  {
+   "name": "mail",
+   "codepoint": "eae5",
+   "category": "Apps",
+   "tags": [
+    "mail",
+    "email",
+    "envelope",
+    "message",
+    "inbox",
+    "letter",
+    "e-mail",
+    "contact"
+   ]
+  },
+  {
+   "name": "message",
+   "codepoint": "eaef",
+   "category": "Apps",
+   "tags": [
+    "chat",
+    "comment",
+    "speech-bubble",
+    "conversation",
+    "sms",
+    "text-message",
+    "reply",
+    "communication",
+    "dm",
+    "messaging",
+    "feedback",
+    "inbox",
+    "message"
+   ]
+  },
+  {
+   "name": "messages",
+   "codepoint": "eb6c",
+   "category": "Apps",
+   "tags": [
+    "chat",
+    "conversation",
+    "comments",
+    "discussion",
+    "dialogue",
+    "thread",
+    "speech-bubbles",
+    "forum",
+    "group-chat",
+    "communication",
+    "messages"
+   ]
+  },
+  {
+   "name": "code",
+   "codepoint": "ea77",
+   "category": "Apps",
+   "tags": [
+    "brackets",
+    "angle-brackets",
+    "html",
+    "source",
+    "programming",
+    "developer",
+    "coding",
+    "embed",
+    "markup",
+    "tag",
+    "code"
+   ]
+  },
+  {
+   "name": "app-window",
+   "codepoint": "efe6",
+   "category": "Apps",
+   "tags": [
+    "browser",
+    "application",
+    "interface",
+    "webpage",
+    "website",
+    "desktop",
+    "program",
+    "software",
+    "screen",
+    "app",
+    "window"
+   ]
+  },
+  {
+   "name": "device-gamepad-2",
+   "codepoint": "f1d2",
+   "category": "Apps",
+   "tags": [
+    "gamepad",
+    "controller",
+    "game-controller",
+    "gaming",
+    "joystick",
+    "joypad",
+    "console",
+    "play",
+    "video-game",
+    "device"
+   ]
+  },
+  {
+   "name": "robot",
+   "codepoint": "f00b",
+   "category": "Apps",
+   "tags": [
+    "bot",
+    "ai",
+    "android",
+    "automation",
+    "machine",
+    "assistant",
+    "chatbot",
+    "droid",
+    "robot"
+   ]
+  },
+  {
+   "name": "sparkles",
+   "codepoint": "f6d7",
+   "category": "Apps",
+   "tags": [
+    "stars",
+    "shine",
+    "glitter",
+    "magic",
+    "ai",
+    "new",
+    "clean",
+    "sparkles"
+   ]
+  },
+  {
+   "name": "brain",
+   "codepoint": "f59f",
+   "category": "Apps",
+   "tags": [
+    "mind",
+    "thinking",
+    "intelligence",
+    "idea",
+    "neuroscience",
+    "psychology",
+    "mental-health",
+    "organ",
+    "smart",
+    "brain"
+   ]
+  },
+  {
+   "name": "book",
+   "codepoint": "ea39",
+   "category": "Apps",
+   "tags": [
+    "read",
+    "reading",
+    "library",
+    "education",
+    "study",
+    "literature",
+    "novel",
+    "ebook",
+    "book"
+   ]
+  },
+  {
+   "name": "bookmark",
+   "codepoint": "ea3a",
+   "category": "Apps",
+   "tags": [
+    "save",
+    "saved",
+    "favorite",
+    "read-later",
+    "tag",
+    "marker",
+    "bookmarks",
+    "ribbon",
+    "bookmark"
+   ]
+  },
+  {
+   "name": "search",
+   "codepoint": "eb1c",
+   "category": "Apps",
+   "tags": [
+    "find",
+    "magnifier",
+    "magnifying-glass",
+    "lookup",
+    "zoom",
+    "explore",
+    "query",
+    "browse",
+    "search"
+   ]
+  },
+  {
+   "name": "lock",
+   "codepoint": "eae2",
+   "category": "Apps",
+   "tags": [
+    "lock",
+    "padlock",
+    "locked",
+    "security",
+    "secure",
+    "password",
+    "private",
+    "protected"
+   ]
+  },
+  {
+   "name": "lock-open",
+   "codepoint": "eae1",
+   "category": "Apps",
+   "tags": [
+    "unlock",
+    "unlocked",
+    "open",
+    "lock",
+    "padlock",
+    "security",
+    "access"
+   ]
+  },
+  {
+   "name": "power",
+   "codepoint": "eb0d",
+   "category": "Apps",
+   "tags": [
+    "power-button",
+    "power-off",
+    "on-off",
+    "shutdown",
+    "turn-off",
+    "turn-on",
+    "switch",
+    "standby",
+    "restart",
+    "toggle",
+    "power"
+   ]
+  },
+  {
+   "name": "logout",
+   "codepoint": "eba8",
+   "category": "Apps",
+   "tags": [
+    "logout",
+    "log-out",
+    "sign-out",
+    "signout",
+    "exit",
+    "leave",
+    "arrow-right-from-bracket",
+    "account"
+   ]
+  },
+  {
+   "name": "copy",
+   "codepoint": "ea7a",
+   "category": "Editing",
+   "tags": [
+    "copy",
+    "duplicate",
+    "clone",
+    "clipboard",
+    "paste",
+    "copy-paste",
+    "files",
+    "documents"
+   ]
+  },
+  {
+   "name": "clipboard",
+   "codepoint": "ea6f",
+   "category": "Editing",
+   "tags": [
+    "clipboard",
+    "paste",
+    "copy",
+    "document",
+    "task",
+    "notes",
+    "checklist",
+    "board"
+   ]
+  },
+  {
+   "name": "cut",
+   "codepoint": "ea86",
+   "category": "Editing",
+   "tags": [
+    "cut",
+    "scissors",
+    "clip",
+    "trim",
+    "snip",
+    "cut-paste",
+    "clipboard",
+    "edit"
+   ]
+  },
+  {
+   "name": "scissors",
+   "codepoint": "eb1b",
+   "category": "Editing",
+   "tags": [
+    "cut",
+    "clipboard",
+    "cutting",
+    "crop",
+    "trim",
+    "tool",
+    "scissors"
+   ]
+  },
+  {
+   "name": "trash",
+   "codepoint": "eb41",
+   "category": "Editing",
+   "tags": [
+    "delete",
+    "remove",
+    "bin",
+    "garbage",
+    "rubbish",
+    "waste-basket",
+    "trash-can",
+    "recycle-bin",
+    "trash"
+   ]
+  },
+  {
+   "name": "device-floppy",
+   "codepoint": "eb62",
+   "category": "Editing",
+   "tags": [
+    "floppy",
+    "floppy-disk",
+    "save",
+    "disk",
+    "diskette",
+    "storage",
+    "file",
+    "retro",
+    "device"
+   ]
+  },
+  {
+   "name": "file",
+   "codepoint": "eaa4",
+   "category": "Editing",
+   "tags": [
+    "file",
+    "document",
+    "page",
+    "paper",
+    "doc",
+    "sheet",
+    "blank",
+    "new-file",
+    "draft"
+   ]
+  },
+  {
+   "name": "file-plus",
+   "codepoint": "eaa0",
+   "category": "Editing",
+   "tags": [
+    "add",
+    "new",
+    "create",
+    "new-file",
+    "document",
+    "file",
+    "plus",
+    "insert",
+    "blank"
+   ]
+  },
+  {
+   "name": "plus",
+   "codepoint": "eb0b",
+   "category": "Editing",
+   "tags": [
+    "add",
+    "new",
+    "create",
+    "insert",
+    "more",
+    "plus-sign",
+    "increase",
+    "positive",
+    "math",
+    "cross",
+    "plus"
+   ]
+  },
+  {
+   "name": "minus",
+   "codepoint": "eaf2",
+   "category": "Editing",
+   "tags": [
+    "subtract",
+    "remove",
+    "less",
+    "negative",
+    "dash",
+    "hyphen",
+    "minimize",
+    "collapse",
+    "delete",
+    "minus"
+   ]
+  },
+  {
+   "name": "x",
+   "codepoint": "eb55",
+   "category": "Editing",
+   "tags": [
+    "close",
+    "cancel",
+    "remove",
+    "delete",
+    "dismiss",
+    "exit",
+    "clear",
+    "cross",
+    "times",
+    "multiply",
+    "x"
+   ]
+  },
+  {
+   "name": "check",
+   "codepoint": "ea5e",
+   "category": "Editing",
+   "tags": [
+    "check",
+    "checkmark",
+    "tick",
+    "done",
+    "yes",
+    "ok",
+    "confirm",
+    "success",
+    "approve",
+    "correct",
+    "complete"
+   ]
+  },
+  {
+   "name": "edit",
+   "codepoint": "ea98",
+   "category": "Editing",
+   "tags": [
+    "edit",
+    "pencil",
+    "write",
+    "modify",
+    "change",
+    "update",
+    "rename",
+    "compose",
+    "pen",
+    "draw"
+   ]
+  },
+  {
+   "name": "pencil",
+   "codepoint": "eb04",
+   "category": "Editing",
+   "tags": [
+    "edit",
+    "write",
+    "draw",
+    "modify",
+    "pen",
+    "compose",
+    "update",
+    "change",
+    "rename",
+    "sketch",
+    "annotate",
+    "pencil"
+   ]
+  },
+  {
+   "name": "eraser",
+   "codepoint": "eb8b",
+   "category": "Editing",
+   "tags": [
+    "eraser",
+    "erase",
+    "rubber",
+    "delete",
+    "clear",
+    "remove",
+    "clean",
+    "wipe",
+    "clear-formatting"
+   ]
+  },
+  {
+   "name": "replace",
+   "codepoint": "ebc7",
+   "category": "Editing",
+   "tags": [
+    "swap",
+    "exchange",
+    "switch",
+    "substitute",
+    "change",
+    "move",
+    "replace"
+   ]
+  },
+  {
+   "name": "refresh",
+   "codepoint": "eb13",
+   "category": "Editing",
+   "tags": [
+    "reload",
+    "sync",
+    "update",
+    "reset",
+    "arrows",
+    "loader",
+    "spinner",
+    "restart",
+    "refresh"
+   ]
+  },
+  {
+   "name": "reload",
+   "codepoint": "f3ae",
+   "category": "Editing",
+   "tags": [
+    "refresh",
+    "sync",
+    "update",
+    "repeat",
+    "restart",
+    "rotate",
+    "arrow",
+    "reload"
+   ]
+  },
+  {
+   "name": "restore",
+   "codepoint": "fafd",
+   "category": "Editing",
+   "tags": [
+    "recover",
+    "restore-backup",
+    "undo",
+    "reset",
+    "revert",
+    "history",
+    "retrieve",
+    "backup"
+   ]
+  },
+  {
+   "name": "zoom-in",
+   "codepoint": "eb56",
+   "category": "Editing",
+   "tags": [
+    "zoom-in",
+    "magnify",
+    "enlarge",
+    "plus",
+    "magnifier",
+    "magnifying-glass",
+    "scale",
+    "zooming",
+    "zoom",
+    "in"
+   ]
+  },
+  {
+   "name": "zoom-out",
+   "codepoint": "eb57",
+   "category": "Editing",
+   "tags": [
+    "zoom-out",
+    "shrink",
+    "reduce",
+    "minus",
+    "magnifier",
+    "magnifying-glass",
+    "scale",
+    "zooming",
+    "zoom",
+    "out"
+   ]
+  },
+  {
+   "name": "zoom-reset",
+   "codepoint": "f295",
+   "category": "Editing",
+   "tags": [
+    "zoom-reset",
+    "reset-zoom",
+    "default",
+    "refresh",
+    "magnifier",
+    "fit",
+    "zooming",
+    "actual-size",
+    "zoom",
+    "reset"
+   ]
+  },
+  {
+   "name": "maximize",
+   "codepoint": "eaea",
+   "category": "Editing",
+   "tags": [
+    "fullscreen",
+    "expand",
+    "enlarge",
+    "resize",
+    "full-screen",
+    "corners",
+    "zoom-in",
+    "window",
+    "maximize"
+   ]
+  },
+  {
+   "name": "minimize",
+   "codepoint": "eaf1",
+   "category": "Editing",
+   "tags": [
+    "shrink",
+    "collapse",
+    "exit-fullscreen",
+    "reduce",
+    "smaller",
+    "corners",
+    "window",
+    "compress",
+    "minimize"
+   ]
+  },
+  {
+   "name": "arrows-maximize",
+   "codepoint": "ea28",
+   "category": "Editing",
+   "tags": [
+    "expand",
+    "fullscreen",
+    "enlarge",
+    "resize",
+    "zoom",
+    "pointer",
+    "navigation",
+    "direction",
+    "arrows",
+    "maximize"
+   ]
+  },
+  {
+   "name": "arrows-minimize",
+   "codepoint": "ea29",
+   "category": "Editing",
+   "tags": [
+    "collapse",
+    "shrink",
+    "exit-fullscreen",
+    "reduce",
+    "pointer",
+    "navigation",
+    "direction",
+    "arrows",
+    "minimize"
+   ]
+  },
+  {
+   "name": "bold",
+   "codepoint": "eb7b",
+   "category": "Editing",
+   "tags": [
+    "text",
+    "format",
+    "formatting",
+    "typography",
+    "font",
+    "strong",
+    "bold-text",
+    "heavy",
+    "weight",
+    "bold"
+   ]
+  },
+  {
+   "name": "italic",
+   "codepoint": "eb93",
+   "category": "Editing",
+   "tags": [
+    "italic",
+    "text-editor",
+    "typography",
+    "font",
+    "text-format",
+    "emphasis",
+    "style",
+    "slanted"
+   ]
+  },
+  {
+   "name": "underline",
+   "codepoint": "eba2",
+   "category": "Editing",
+   "tags": [
+    "underline",
+    "text",
+    "formatting",
+    "editor",
+    "typography",
+    "font",
+    "underscore",
+    "emphasis"
+   ]
+  },
+  {
+   "name": "link",
+   "codepoint": "eade",
+   "category": "Editing",
+   "tags": [
+    "link",
+    "url",
+    "hyperlink",
+    "chain",
+    "anchor",
+    "connection",
+    "href",
+    "attach"
+   ]
+  },
+  {
+   "name": "square-plus",
+   "codepoint": "eb2a",
+   "category": "Editing",
+   "tags": [
+    "add",
+    "create",
+    "new",
+    "insert",
+    "plus",
+    "button",
+    "square",
+    "box",
+    "expand"
+   ]
+  },
+  {
+   "name": "square-x",
+   "codepoint": "eb2b",
+   "category": "Editing",
+   "tags": [
+    "close",
+    "cancel",
+    "delete",
+    "remove",
+    "dismiss",
+    "exit",
+    "clear",
+    "cross",
+    "times",
+    "square",
+    "box"
+   ]
+  },
+  {
+   "name": "tabs",
+   "codepoint": "10287",
+   "category": "Editing",
+   "tags": [
+    "tabs",
+    "browser",
+    "tabbed",
+    "panel",
+    "navigation",
+    "window",
+    "ui",
+    "tab",
+    "tabbed-navigation"
+   ]
+  },
+  {
+   "name": "layout-sidebar",
+   "codepoint": "eada",
+   "category": "Editing",
+   "tags": [
+    "sidebar",
+    "side-panel",
+    "drawer",
+    "left",
+    "layout",
+    "ui",
+    "navigation"
+   ]
+  },
+  {
+   "name": "focus-2",
+   "codepoint": "ebd3",
+   "category": "Editing",
+   "tags": [
+    "focus",
+    "target",
+    "bullseye",
+    "aim",
+    "center",
+    "camera",
+    "crosshair",
+    "precision",
+    "goal"
+   ]
+  },
+  {
+   "name": "target",
+   "codepoint": "eb35",
+   "category": "Editing",
+   "tags": [
+    "bullseye",
+    "aim",
+    "goal",
+    "focus",
+    "objective",
+    "crosshair",
+    "target",
+    "goals"
+   ]
+  },
+  {
+   "name": "crosshair",
+   "codepoint": "ec3e",
+   "category": "Editing",
+   "tags": [
+    "crosshair",
+    "target",
+    "aim",
+    "reticle",
+    "crosshairs",
+    "focus",
+    "select",
+    "precision",
+    "center"
+   ]
+  },
+  {
+   "name": "eye",
+   "codepoint": "ea9a",
+   "category": "Editing",
+   "tags": [
+    "eye",
+    "view",
+    "visibility",
+    "show",
+    "see",
+    "preview",
+    "visible",
+    "watch",
+    "vision",
+    "password-show"
+   ]
+  },
+  {
+   "name": "eye-off",
+   "codepoint": "ecf0",
+   "category": "Editing",
+   "tags": [
+    "hide",
+    "hidden",
+    "invisible",
+    "visibility-off",
+    "eye-slash",
+    "unseen",
+    "password-hide",
+    "private",
+    "not-visible",
+    "eye",
+    "off"
+   ]
+  },
+  {
+   "name": "pin",
+   "codepoint": "ec9c",
+   "category": "Editing",
+   "tags": [
+    "pushpin",
+    "thumbtack",
+    "tack",
+    "pinned",
+    "attach",
+    "sticky",
+    "keep",
+    "bookmark",
+    "noticeboard",
+    "pin"
+   ]
+  },
+  {
+   "name": "flag",
+   "codepoint": "eaa6",
+   "category": "Editing",
+   "tags": [
+    "flag",
+    "report",
+    "banner",
+    "milestone",
+    "mark",
+    "country",
+    "goal",
+    "nation",
+    "finish"
+   ]
+  },
+  {
+   "name": "star",
+   "codepoint": "eb2e",
+   "category": "Editing",
+   "tags": [
+    "favorite",
+    "rating",
+    "rate",
+    "review",
+    "bookmark",
+    "like",
+    "featured",
+    "favourite",
+    "star"
+   ]
+  },
+  {
+   "name": "heart",
+   "codepoint": "eabe",
+   "category": "Editing",
+   "tags": [
+    "heart",
+    "love",
+    "like",
+    "favorite",
+    "favourite",
+    "wishlist",
+    "valentine",
+    "emotion",
+    "health"
+   ]
+  },
+  {
+   "name": "brackets-contain-start",
+   "codepoint": "f1e4",
+   "category": "Video editing",
+   "tags": [
+    "regex",
+    "select",
+    "selection",
+    "find-word",
+    "text-selection",
+    "code",
+    "square-brackets",
+    "wrap",
+    "brackets",
+    "contain",
+    "start"
+   ]
+  },
+  {
+   "name": "brackets-contain-end",
+   "codepoint": "f1e3",
+   "category": "Video editing",
+   "tags": [
+    "regex",
+    "select",
+    "selection",
+    "find-word",
+    "text-selection",
+    "code",
+    "square-brackets",
+    "wrap",
+    "brackets",
+    "contain",
+    "end"
+   ]
+  },
+  {
+   "name": "column-insert-right",
+   "codepoint": "ee45",
+   "category": "Video editing",
+   "tags": [
+    "insert-column",
+    "add-column",
+    "column",
+    "right",
+    "table",
+    "spreadsheet",
+    "grid",
+    "cells",
+    "after",
+    "insert"
+   ]
+  },
+  {
+   "name": "column-insert-left",
+   "codepoint": "ee44",
+   "category": "Video editing",
+   "tags": [
+    "insert-column",
+    "add-column",
+    "column",
+    "left",
+    "table",
+    "spreadsheet",
+    "grid",
+    "cells",
+    "before",
+    "insert"
+   ]
+  },
+  {
+   "name": "blade",
+   "codepoint": "f4bd",
+   "category": "Video editing",
+   "tags": [
+    "razor",
+    "shave",
+    "shaving",
+    "barber",
+    "cut",
+    "razor-blade",
+    "grooming",
+    "beard",
+    "sharp",
+    "blade"
+   ]
+  },
+  {
+   "name": "keyframe",
+   "codepoint": "f576",
+   "category": "Video editing",
+   "tags": [
+    "keyframe",
+    "animation",
+    "timeline",
+    "motion",
+    "diamond",
+    "video-editing",
+    "frame",
+    "after-effects",
+    "tween"
+   ]
+  },
+  {
+   "name": "keyframes",
+   "codepoint": "f585",
+   "category": "Video editing",
+   "tags": [
+    "keyframes",
+    "keyframe",
+    "animation",
+    "timeline",
+    "motion",
+    "diamond",
+    "video-editing",
+    "frame",
+    "sequence",
+    "after-effects"
+   ]
+  },
+  {
+   "name": "keyframe-align-center",
+   "codepoint": "f582",
+   "category": "Video editing",
+   "tags": [
+    "keyframe",
+    "animation",
+    "timeline",
+    "motion",
+    "diamond",
+    "video-editing",
+    "frame",
+    "align",
+    "center",
+    "middle"
+   ]
+  },
+  {
+   "name": "timeline",
+   "codepoint": "f031",
+   "category": "Video editing",
+   "tags": [
+    "timeline",
+    "history",
+    "roadmap",
+    "progress",
+    "events",
+    "process",
+    "steps",
+    "chronology"
+   ]
+  },
+  {
+   "name": "timeline-event",
+   "codepoint": "f553",
+   "category": "Video editing",
+   "tags": [
+    "timeline",
+    "event",
+    "milestone",
+    "history",
+    "roadmap",
+    "schedule",
+    "events",
+    "chronology"
+   ]
+  },
+  {
+   "name": "color-filter",
+   "codepoint": "f5a8",
+   "category": "Video editing",
+   "tags": [
+    "color-filter",
+    "colour",
+    "filter",
+    "rgb",
+    "blend",
+    "channels",
+    "hue",
+    "overlay",
+    "effects",
+    "palette",
+    "color"
+   ]
+  },
+  {
+   "name": "adjustments-horizontal",
+   "codepoint": "ec38",
+   "category": "Video editing",
+   "tags": [
+    "settings",
+    "sliders",
+    "equalizer",
+    "controls",
+    "filter",
+    "options",
+    "tune",
+    "preferences",
+    "mixer",
+    "configure",
+    "adjustments",
+    "horizontal"
+   ]
+  },
+  {
+   "name": "arrow-autofit-width",
+   "codepoint": "ef37",
+   "category": "Video editing",
+   "tags": [
+    "fit-width",
+    "resize",
+    "horizontal",
+    "expand",
+    "layout",
+    "pointer",
+    "navigation",
+    "direction",
+    "arrow",
+    "autofit",
+    "width"
+   ]
+  },
+  {
+   "name": "transition-right",
+   "codepoint": "f2b4",
+   "category": "Video editing",
+   "tags": [
+    "transition",
+    "animation",
+    "slide",
+    "move",
+    "right",
+    "effect",
+    "slide-right",
+    "slide-in"
+   ]
+  },
+  {
+   "name": "layers-intersect",
+   "codepoint": "eac9",
+   "category": "Video editing",
+   "tags": [
+    "layers",
+    "intersect",
+    "intersection",
+    "boolean",
+    "pathfinder",
+    "overlap",
+    "shape",
+    "vector",
+    "design"
+   ]
+  },
+  {
+   "name": "wand",
+   "codepoint": "ebcb",
+   "category": "Video editing",
+   "tags": [
+    "magic",
+    "magic-wand",
+    "wizard",
+    "auto",
+    "ai",
+    "sparkle",
+    "tool",
+    "magic-trick",
+    "wand"
+   ]
+  },
+  {
+   "name": "ruler-measure",
+   "codepoint": "f291",
+   "category": "Video editing",
+   "tags": [
+    "measure",
+    "measurement",
+    "dimensions",
+    "distance",
+    "size",
+    "length",
+    "width",
+    "ruler"
+   ]
+  },
+  {
+   "name": "magnet",
+   "codepoint": "eae3",
+   "category": "Video editing",
+   "tags": [
+    "magnet",
+    "magnetic",
+    "attract",
+    "attraction",
+    "physics",
+    "pull",
+    "snap"
+   ]
+  },
+  {
+   "name": "list-details",
+   "codepoint": "ef40",
+   "category": "Video editing",
+   "tags": [
+    "list",
+    "details",
+    "list-view",
+    "items",
+    "rows",
+    "thumbnails",
+    "menu"
+   ]
+  },
+  {
+   "name": "scale",
+   "codepoint": "ebc2",
+   "category": "Video editing",
+   "tags": [
+    "balance",
+    "scales",
+    "justice",
+    "law",
+    "weigh",
+    "libra",
+    "legal",
+    "equality",
+    "scale"
+   ]
+  },
+  {
+   "name": "clock",
+   "codepoint": "ea70",
+   "category": "System",
+   "tags": [
+    "time",
+    "watch",
+    "hour",
+    "schedule",
+    "timer",
+    "clock-face",
+    "history",
+    "pending",
+    "wall-clock",
+    "minutes",
+    "clock"
+   ]
+  },
+  {
+   "name": "alarm",
+   "codepoint": "ea04",
+   "category": "System",
+   "tags": [
+    "alarm-clock",
+    "clock",
+    "time",
+    "wake-up",
+    "reminder",
+    "timer",
+    "ring",
+    "morning",
+    "alarm"
+   ]
+  },
+  {
+   "name": "bell",
+   "codepoint": "ea35",
+   "category": "System",
+   "tags": [
+    "notification",
+    "alert",
+    "reminder",
+    "notify",
+    "alarm",
+    "notifications",
+    "ring",
+    "inbox",
+    "subscribe",
+    "bell"
+   ]
+  },
+  {
+   "name": "bell-off",
+   "codepoint": "ece9",
+   "category": "System",
+   "tags": [
+    "notification",
+    "alert",
+    "reminder",
+    "notify",
+    "alarm",
+    "mute",
+    "silent",
+    "do-not-disturb",
+    "disabled",
+    "notifications-off",
+    "bell",
+    "off"
+   ]
+  },
+  {
+   "name": "wifi",
+   "codepoint": "eb52",
+   "category": "System",
+   "tags": [
+    "wifi",
+    "wi-fi",
+    "wireless",
+    "internet",
+    "network",
+    "signal",
+    "connection",
+    "hotspot"
+   ]
+  },
+  {
+   "name": "bluetooth",
+   "codepoint": "ea37",
+   "category": "System",
+   "tags": [
+    "wireless",
+    "connection",
+    "pairing",
+    "headphones",
+    "devices",
+    "bt",
+    "wireless-connection",
+    "bluetooth-on",
+    "audio",
+    "pair",
+    "bluetooth"
+   ]
+  },
+  {
+   "name": "battery",
+   "codepoint": "ea34",
+   "category": "System",
+   "tags": [
+    "power",
+    "energy",
+    "charge",
+    "level",
+    "phone",
+    "mobile",
+    "empty",
+    "battery"
+   ]
+  },
+  {
+   "name": "plug",
+   "codepoint": "ebd9",
+   "category": "System",
+   "tags": [
+    "power-plug",
+    "electricity",
+    "power",
+    "socket",
+    "outlet",
+    "charger",
+    "connect",
+    "connection",
+    "electric",
+    "cable",
+    "plug"
+   ]
+  },
+  {
+   "name": "screen-share",
+   "codepoint": "ed18",
+   "category": "System",
+   "tags": [
+    "screen-sharing",
+    "share-screen",
+    "cast",
+    "airplay",
+    "mirroring",
+    "presentation",
+    "monitor",
+    "stream",
+    "screen",
+    "share"
+   ]
+  },
+  {
+   "name": "layout-columns",
+   "codepoint": "ead4",
+   "category": "System",
+   "tags": [
+    "columns",
+    "two-columns",
+    "split-view",
+    "layout",
+    "grid",
+    "ui"
+   ]
+  },
+  {
+   "name": "layout-rows",
+   "codepoint": "ead8",
+   "category": "System",
+   "tags": [
+    "rows",
+    "layout",
+    "split",
+    "horizontal",
+    "grid",
+    "ui"
+   ]
+  }
+ ]
+}

@@ -42,6 +42,7 @@ eww_start() {
     echo "$(date '+%H:%M:%S') Opening: $BAR_NAME" >> "$LOG"
     eww --config "$EWW_CONFIG" open "$BAR_NAME" >> "$LOG" 2>&1
     eww_sync_keypad
+    eww_sync_icons
 
     # Apply saved bar settings (workspace count, position, etc.)
     eww_apply || return
@@ -104,6 +105,7 @@ eww_reload() {
     # eww reload resets all defvar to defaults — re-apply saved settings
     sleep 0.3
     eww_sync_keypad
+    eww_sync_icons
     eww_apply
 }
 
@@ -113,6 +115,19 @@ eww_reload() {
 eww_sync_keypad() {
     systemctl --user is-active --quiet control-surface.service 2>/dev/null || return 0
     eww --config "$EWW_CONFIG" update keypad-present=yes >> "$LOG" 2>&1 || true
+}
+
+# Keypad cheatsheet icons: only an EWW that started after the icon font was
+# installed can draw them (fontconfig is read once per process; other fonts
+# would draw wrong glyphs). Checked once here; nothing polls. See KEYPAD.md.
+eww_sync_icons() {
+    local font pid age
+    font=$(fc-list -f '%{file}\n' 'smplOS Keypad Icons' 2>/dev/null | head -n1)
+    pid=$(pgrep -o -u "$UID" -x eww 2>/dev/null) || return 0
+    age=$(ps -o etimes= -p "$pid" 2>/dev/null) || return 0
+    [[ -f "$font" ]] || return 0
+    (( $(stat -c %Y "$font") < $(date +%s) - age )) || return 0
+    eww --config "$EWW_CONFIG" update pad_icons_font=yes >> "$LOG" 2>&1 || true
 }
 
 # Apply bar settings from ~/.config/smplos/bar.conf to running EWW instance.

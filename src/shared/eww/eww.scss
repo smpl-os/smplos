@@ -768,10 +768,44 @@ window {
   padding: 1px 4px;
 }
 
+/* Outline icons (smplOS Keypad Icons: Tabler Icons, MIT), opaque like text. */
+.pad-sheet-icon,
+.pad-sheet-dir,
+.pad-sheet-turn-icon {
+  font-family: "smplOS Keypad Icons";
+  font-weight: normal;
+  font-style: normal;
+}
+
+.pad-sheet-icon {
+  font-size: 32px;
+  margin: 0 0 2px 0;
+  color: $accent;
+}
+
+.pad-sheet-label.under {
+  font-size: 11px;
+}
+
+.pad-sheet-dir {
+  font-size: 13px;
+  color: $fg-dim;
+}
+
+.pad-sheet-turn-icon {
+  font-size: 17px;
+  color: $accent;
+}
+
 .pad-sheet-glyph {
   font-size: 11px;
   font-weight: bold;
-  color: $accent;
+  color: $fg-dim;
+}
+
+.pad-sheet-key.off .pad-sheet-icon,
+.pad-sheet-turn.off .pad-sheet-turn-icon {
+  color: $fg-dim;
 }
 
 .pad-sheet-hint {

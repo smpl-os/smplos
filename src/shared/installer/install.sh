@@ -51,6 +51,12 @@ if [[ -d "$SMPLOS_PATH/config" ]]; then
   ls -la "$HOME/.config/eww/" 2>/dev/null || echo "    WARNING: eww config dir missing!"
 fi
 
+# smplOS fonts (keypad cheatsheet icons: Tabler Icons subset, MIT; see KEYPAD.md)
+if compgen -G "$SMPLOS_PATH/fonts/*.ttf" >/dev/null; then
+  install -Dm644 -t "$HOME/.local/share/fonts/smplos" "$SMPLOS_PATH/fonts/"*.ttf "$SMPLOS_PATH/fonts/"LICENSE-*.txt
+  fc-cache -f "$HOME/.local/share/fonts/smplos" >/dev/null 2>&1 || true
+fi
+
 # Add user to optional groups (created by packages like realtime-privileges)
 for grp in realtime plugdev uucp; do
   if getent group "$grp" &>/dev/null; then

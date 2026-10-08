@@ -1236,6 +1236,17 @@ DCONF_PROFILE
         cp -r "$SRC_DIR/shared/icons/"* "$airootfs/root/smplos/icons/" 2>/dev/null || true
     fi
 
+    # smplOS fonts (keypad cheatsheet icons): the live user's font dir, and
+    # the installer's copy (install.sh -> ~/.local/share/fonts/smplos/)
+    if compgen -G "$SRC_DIR/shared/fonts/*.ttf" >/dev/null; then
+        log_info "Copying smplOS fonts"
+        local _font
+        for _font in "$SRC_DIR/shared/fonts/"*.ttf "$SRC_DIR/shared/fonts/keypad-icons/LICENSE-tabler-icons.txt"; do
+            install -Dm644 "$_font" "$skel/.local/share/fonts/smplos/$(basename "$_font")"
+            install -Dm644 "$_font" "$airootfs/root/smplos/fonts/$(basename "$_font")"
+        done
+    fi
+
     # Deploy default wallpaper (catppuccin theme)
     if [[ -d "$SRC_DIR/shared/themes/catppuccin/backgrounds" ]]; then
         log_info "Deploying default wallpaper"

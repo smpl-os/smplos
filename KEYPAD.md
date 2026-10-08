@@ -249,6 +249,42 @@ closes the old window when that changes. Settings never combines it with
 property and keeps the window clickable, so the window ships before the
 patched EWW does.
 
+### Icons
+
+Every key and knob action on the overlay shows an **outline icon**, large,
+with its label under it in small type; knob lines start with outline
+turn-left, press and turn-right marks. All icons come from one outline set,
+so they look alike, and are drawn as text in the theme's accent: fully
+opaque, recoloured by the theme like any label.
+
+* **Set:** [Tabler Icons](https://tabler.io/icons) 3.49.0, outline style
+  (MIT, copyright Paweł Kuna). `src/shared/fonts/keypad-icons/icons.txt` lists
+  the 235 icons smplOS bundles, by category; `build.py` there downloads the
+  pinned npm packages (checked by sha256), subsets the outline font to them
+  and writes everything below. The outputs are committed, so builds need
+  neither the network nor fontTools:
+  * `src/shared/fonts/smplos-keypad-icons.ttf`: family "smplOS Keypad Icons"
+    (64 KB);
+  * `src/shared/fonts/keypad-icons.json`: name, codepoint, category, tags;
+  * `src/shared/eww/pad-icons.yuck`: `(defvar pad_icons '{name: glyph}')`;
+  * `src/shared/fonts/keypad-icons/LICENSE-tabler-icons.txt`, installed beside
+    the font;
+  * with `--apps DIR`, the same font, JSON and licence for Settings
+    (smpl-apps `settings/ui/assets/`). Regenerate both repositories together.
+* **Names:** the keypad app's `"icon"` per key and knob event is a Tabler
+  name (`player-play`, `brand-github`, `folder`). A binding may set
+  `"icon": "player-play"` or `"icon": "none"`; without it the keypad app picks
+  one automatically. The overlay looks the name up in `pad_icons`. An empty or
+  unknown name shows the label alone. Requested from the keypad app as R11.
+* **Font delivery:** `~/.local/share/fonts/smplos/`, from the ISO's skel,
+  `install.sh` and `smplos-os-update` (which runs `fc-cache` when the font
+  changes). EWW finds it by family name. A running EWW never sees a font
+  installed after it started, and other fonts would draw wrong glyphs for its
+  codepoints. So the overlay draws icons only when `pad_icons_font` is `yes`.
+  `bar-ctl` sets that once at start and reload, if the font file is older
+  than the EWW daemon; until then the overlay shows labels and `< o >`.
+  Nothing polls.
+
 Settings (Keypad → Cheatsheet) edits the config's
 `"cheatsheet": {"opacity", "autoHideMs", "position"}` and the click-through
 window, and keeps any other key there. Options the config leaves out show
@@ -261,6 +297,14 @@ what the daemon uses (its `features`). It also adds:
   characters). Short forms become objects when a label is set, such as
   `{"keys": "ctrl+z", "label": "Undo"}`. Fields Settings doesn't edit, like a
   Kdenlive action's `fallback`, are kept.
+* an **Icon** for every binding that has a label: "Automatic" (no `"icon"`;
+  the row names what the keypad app chose, from the preview), "No icon"
+  (`"none"`), or one picked from a searchable grid of the bundled outline icons
+  (name first, then Tabler's tags: "git" finds the GitHub icons). Settings
+  embeds the same font, and shows the icons in the layout, the binding list
+  and the preview. With a keypad app that doesn't draw icons yet
+  (`features` has no `cheatsheet.icons`), Settings says that chosen icons are
+  saved for later; that app ignores the field.
 * a **live preview** of the selected profile, including unsaved edits. It runs
   `control-surfaced cheatsheet --json --window CLASS -c COPY` on a temporary
   copy next to the config and falls back to the running app's
@@ -438,6 +482,9 @@ keypad or runs wchisp against hardware.
 | Cheatsheet look | 35% background with blur; text and borders opaque | Shows what's behind it without fading the labels |
 | Dismissing the cheatsheet | Click anywhere, the 8 s auto-hide, or the key; no Escape | The overlay never takes keyboard focus, so it can't steal keys from the app |
 | Click-through cheatsheet | Optional second window with EWW `:passthrough`, off by default | Hyprland 0.56 has no input-passthrough layer rule; clicking to close stays the simple default |
+| Cheatsheet icons | Tabler Icons outline, subset to a 64 KB font, drawn as text | One consistent outline style, MIT, theme colour through CSS, opaque like labels; SVGs can't be recoloured by eww (`fill-svg` replaces fills, Tabler strokes) |
+| Icon names | Tabler's names, no mapping layer | eww, Settings and the keypad app share one vocabulary |
+| Font not yet seen by EWW | Labels only, flag set once by `bar-ctl` | No misleading fallback glyphs and no bar restart from the updater |
 
 ## Open decisions
 
@@ -452,6 +499,8 @@ keypad or runs wchisp against hardware.
 | 7 | Should a config `"layout"` override a self-described layout in the daemon? | Yes; done in the daemon (ebeabe8) |
 | 8 | Ship EWW `:passthrough` | Publish `work-window-passthrough` to `smpl-os/eww`, bump `_commit` in `pkgbuilds/eww-smplos` and add the usual migration; until then click-through stays clickable |
 | 9 | Cheatsheet opacity default | 0.35 in the daemon (requested); Settings and EWW already show 0.35 when the daemon reports none |
+| 10 | Brave and Kdenlive have no Tabler brand icon | `world` for browsers and `movie` for Kdenlive; revisit if Tabler adds them |
+| 11 | Icons on installs updated while the bar runs | They appear after the next login or `bar-ctl start` with a fresh EWW; an explicit bar restart from the updater was rejected as risky |
 
 ## Daemon API requests
 
@@ -471,6 +520,7 @@ Sent to the keypad daemon's owner. R1 to R9 are in the daemon's source since
 | R9 | Feature discovery | `features --json`, `GetFeatures` | Used |
 
 | R10 | Cheatsheet defaults for a light overlay | 738e334: unset `autoHideMs` = 8 s, `HideCheatsheet` always clears EWW. Still requested: opacity default 0.35 (now 0.85) and a structured `features.cheatsheet.defaults` | Reads the structured defaults when present, else the option descriptions |
+| R11 | Icons | Proposed: binding `"icon"` (Tabler outline name or `"none"`, never rejected), `"icon"` on every cheatsheet key and knob event (resolved, or empty), automatic icons (media, mouse, launchers by command word, common shortcuts, Kdenlive actions), and `features.cheatsheet.icons` `{set, version, auto}`. Today the field is accepted and ignored | Picker, layout, list and preview use it; `auto` must stay inside `icons.txt` (tested) |
 
 Follow-ups now that the API exists, in order:
 
@@ -514,6 +564,12 @@ draft's enabled unit, a custom unit). Its overlay tests check both cheatsheet
 windows (only the click-through one has `:passthrough`), the click-to-close
 handler, the 0.35 fallback and that the background is the only translucent
 color. `pad-sheet-hide.sh` is tested with a fake `busctl` and `eww`.
+
+Icon tests check that `icons.txt`, the JSON and `pad-icons.yuck` agree, that the
+font has every codepoint under its family name, that the proposed automatic
+icons are bundled, that every glyph lookup in the overlay is gated, the
+`bar-ctl` flag (font older or newer than EWW, no font) and that the updater
+installs the font and table before `eww.yuck`.
 
 Done by hand on a private X server, never the desktop: the patched EWW's
 click-through window has an empty XShape input region, and an XTEST click
