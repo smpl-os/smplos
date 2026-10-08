@@ -381,13 +381,46 @@ appear in profiles with the Kdenlive plugin on.
   The first Save creates the file.
 * **What Settings edits.** Base bindings of a profile, in the simple forms:
   `"ctrl+z"`, `"playpause"`, `"none"`, `{"command": [...]}`,
-  `{"action": "mark_in"}`, and later `{"mouse": "left"}`. It also edits the
-  profile header (`match.class`, `kdenlive`, `keyFallback`) and adds and removes
-  app profiles. App profiles go before Global, because the first match wins.
+  `{"action": "mark_in"}`, `{"mouse": "left"}`, `{"cheatsheet": "hold"}`, each
+  with an optional `"label"`, `"icon"` and `"ifInstalled"` ("Only if
+  installed": programs or app ids, a string or a list as the file had it).
+  It also edits the profile header: name, `match.class`, `match.title`
+  (optional window-title pattern), `fallthrough` ("unset controls use
+  Global"), `kdenlive` and `keyFallback`. It adds and removes app profiles;
+  they go before Global, because the first match wins.
+* **Advanced** (collapsed card), for what users otherwise edited by hand:
+  * **Input mode:** Automatic, Keymap (compatible) or Raw (fastest, firmware
+    2.0.2+), saved as `device.input` (`auto`, `evdev`, `raw`; Automatic
+    adds no key). Under it:
+    * a check mark, or an exclamation mark when raw input lost events it
+      couldn't restore or dropped out of raw mode;
+    * the mode in use (`GetStatus().input.mode`);
+    * a health line from its counters since the app started: events, lost
+      and restored, raw-mode drops, late heartbeats.
+
+    When raw was chosen but the keymap is in use, the line says why: the
+    stock firmware, firmware older than 2.0.2 (`GetStatus` has the full
+    version), a layout that doesn't match the firmware (the config's
+    `layout:` warning), or not saved yet. The keypad app switches modes on
+    reload, without a restart.
+  * **Knobs:** acceleration (`accelFactor`, 1 = off), fast-turn window
+    (`accelWindowMs`) and key rate (`keyRateHz`).
+  * **Kdenlive (API plugin):** update spacing (`coalesceMs`), answer timeout
+    (`ackTimeoutMs`) and edit gesture (`gestureIdleMs`, 50–590 like the
+    daemon). These are sliders over the config's `"settings"`, showing the
+    keypad app's built-in defaults when unset; Reset to defaults removes them.
+  * **Overlay switch:** "Draw the cheatsheet overlay through the bar"
+    (`cheatsheet.eww`: off writes `false`, or `"enabled": false` beside a
+    click-through window).
 * **What Settings keeps.** Everything else is kept verbatim, in its key order
-  and number spelling: layers, modes, continuous controls, cycles, requests,
-  hardware, settings and unknown keys. Such bindings show as "Advanced (edit in
-  file)". Comments are not kept, but the previous file is backed up first.
+  and number spelling: layers, modes, continuous controls with their `scale`
+  and `accel`, cycles, requests, hardware and unknown keys. Such bindings show
+  as "Advanced (edit in file)". Applying a binding keeps the file's key order,
+  so an unchanged binding is written back byte for byte. A custom auto-hide
+  value shows as itself in the Hide list. Comments are not kept, but the
+  previous file is backed up first. `device.serial` stays in the file: every
+  pad of this family reports the same serial (`key153`), so there is nothing
+  to choose.
 * **Knobs.** Knobs offer Turn left, Turn right and Press. Setting left or right
   removes the knob's continuous `turn` at that level, which would otherwise win,
   and says so.
