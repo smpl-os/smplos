@@ -1,8 +1,8 @@
 # Macro keypads (CH552) in smplOS
 
-Status: **implemented for development, flashing is a dry run.** The keypad
-daemon's own repository is not published yet, so its package recipe is parked.
-The daemon has since delivered the Settings API that this design asked for
+Status: **implemented, flashing is a dry run.** The keypad daemon lives in
+`smpl-os/smpl-apps` (`control-surface/`) and is released with the apps; smplOS
+installs it as the `control-surface` package. The daemon has since delivered the Settings API that this design asked for
 (`org.smplos.ControlSurface1`, see its `docs/dbus-settings-api.md`); Settings
 already uses its live input, identify mode, feature list and Kdenlive catalog.
 See [open decisions](#open-decisions) and the
@@ -102,7 +102,7 @@ flowchart LR
 | User unit | `src/shared/configs/systemd/user/control-surface.service` | Runs the keypad app only while a keypad is plugged in; sets the bar icon |
 | Bar icon | `src/shared/eww/eww.yuck` (`keypad-present`, `tray-keypad`), `scripts/keypad-bar-sync.sh`, `icons/status/keypad.svg` | Visible only while the keypad app runs |
 | Settings tab | smpl-apps `settings/src/keypad/`, `settings/ui/main.slint` (tab 11) | Status, layout, mapping editor, firmware wizard |
-| Packaging | `src/shared/pkgbuilds/control-surface/`, `packages-aur.txt` (`wchisp`) | Daemon recipe (parked) and the flasher |
+| Packaging | `src/shared/pkgbuilds/control-surface/`, `packages-aur.txt` (`wchisp`) | The daemon (a pinned smpl-apps release asset) and the flasher |
 | Migration | `migrations/20261007-123000-macro-keypad-support.sh` | Existing installs: udev rules, icon, unit (never enabled) |
 
 Settings code lives in smpl-apps, like every native app. This repository
@@ -264,16 +264,18 @@ way to close it:
 * The cheatsheet key itself (toggle) hides it.
 
 **Click-through (optional, off by default).** `pad-cheatsheet-passthrough` is
-the same overlay with `:passthrough true`, an EWW property from
-`smpl-os/eww` branch `work-window-passthrough` (an empty input region: the
-XShape input region on X11, `wl_surface.set_input_region` on Wayland). Clicks
+the same overlay with `:passthrough true`, an EWW property of the smplOS
+fork (`smpl-os/eww` 0eb4604, in `eww-smplos` since pkgrel 2; an empty input
+region: the XShape input region on X11, `wl_surface.set_input_region` on
+Wayland). **Verified on X11 only; Wayland is pending.** Clicks
 reach the window below, so its hint reads "Hides after N s or with your
 cheatsheet key" instead. Settings' **Click-through overlay** toggle sets
 `"cheatsheet": {"eww": {"window": "pad-cheatsheet-passthrough"}}`. The daemon
 closes the old window when that changes. Settings never combines it with
-"until hidden". An EWW without the patch only warns about the unknown
-property and keeps the window clickable, so the window ships before the
-patched EWW does.
+"until hidden". An EWW without it only warns about the unknown property and
+keeps the window clickable. Migration `20261008-120000-eww-smplos-passthrough`
+rebuilds an older eww-smplos; the running bar keeps the old binary until the
+next login.
 
 ### Icons
 
@@ -572,15 +574,18 @@ app on the bus there is nothing to switch.
 
 ## Packaging
 
-* **Daemon:** `src/shared/pkgbuilds/control-surface/PKGBUILD` builds from git,
-  runs ctest (without the test that creates a real uinput device) and installs
+* **Daemon:** source, CI (CMake + ctest) and releases are in `smpl-os/smpl-apps`
+  (`control-surface/`). Each smpl-apps release publishes
+  `control-surface-<version>-x86_64.tar.gz`, a `usr/` tree with
   `/usr/bin/control-surfaced`, `/usr/bin/ch552-padprog`, the example config,
-  docs, and released firmware images if any. Its `PENDING` file parks it: the
-  custom package build skips it until the source repository is published. To
-  build it locally, run
-  `CONTROL_SURFACE_SOURCE=git+file:///path/to/control-surface makepkg`.
-  When the repository is published, set `url=`, delete `PENDING` and uncomment
-  `control-surface` in `src/shared/packages-aur.txt`.
+  docs, licences and the current firmware images with their manifests.
+  `src/shared/pkgbuilds/control-surface/PKGBUILD` repackages one pinned
+  release (`pkgver` = the smpl-apps version, `sha256sums` pinned; no
+  `_gh_owner`/`_gh_repo`, so `build-iso.sh` doesn't move it to the latest
+  release). `packages-aur.txt` puts it on the ISO; the keypad migration
+  installs or updates it on existing installs (`src/shared/lib/smplos-pkgbuild.sh`,
+  deferring with exit 75 when offline). To ship a newer daemon: bump `pkgver`
+  and `sha256sums`, and add a migration that reruns that package step.
 * **wchisp:** from the AUR (`wchisp` 0.3.0, GPL-2.0), listed in
   `packages-aur.txt` so the offline ISO carries it.
 * **udev rules:** deployed by the generic udev step of `build.sh` and
@@ -613,7 +618,7 @@ app on the bus there is nothing to switch.
 | Validation | Settings' checks and `check-config` before writing; backup; atomic rename | An invalid file is never written; the old one is always recoverable |
 | Comments | Dropped on save, previous file backed up (10 kept) | A comment-preserving JSONC editor is far more code for little gain |
 | Flasher | wchisp through a two-command allowlist, dry run by default | Never touches config registers; nothing can flash by accident |
-| Daemon packaging | Build recipe referencing its repository; no vendoring | Its repository and remote are not decided yet |
+| Daemon packaging | Lives in smpl-apps (`control-surface/`, history kept); smplOS installs a pinned release asset with pacman | Built and tested once, by the apps' CI; the package owns `/usr/bin` and the firmware path keypad-ctl reads; not in the app bundle, which would also copy it to `/usr/local/bin` |
 | Sidebar | "Keypad" right after "Keyboard"; tab index 11 | Related settings stay together; existing indices are unchanged |
 | Cheatsheet look | 35% background with blur; text and borders opaque | Shows what's behind it without fading the labels |
 | Dismissing the cheatsheet | Click anywhere, the 8 s auto-hide, or the key; no Escape | The overlay never takes keyboard focus, so it can't steal keys from the app |
@@ -626,14 +631,14 @@ app on the bus there is nothing to switch.
 
 | # | Question | Recommended default |
 |---|---|---|
-| 1 | Public home of the daemon repository | `smpl-os/control-surface`; then unpark the PKGBUILD |
+| 1 | Public home of the daemon repository | Decided: `smpl-os/smpl-apps`, `control-surface/` (imported with its history); the PKGBUILD is unparked |
 | 2 | When to enable real flashing | After firmware 2.0.0 passes on the user's keypad: default `--execute` on, keep the acknowledgement toggle |
 | 3 | The bootloader leaves update mode after a few seconds | Add an "arm, then plug in" mode that flashes as soon as `4348:55e0` appears; decide after a real attempt |
 | 4 | Bundle wchisp in every ISO | Yes (offline-first, small); the alternative is installing it on demand from the wizard |
 | 5 | `uaccess` on `/dev/uinput` | Keep (same as Steam); the alternative is `input` group membership |
 | 6 | Default mapping without a config | The daemon's built-in example (Kdenlive, FL Studio, Global media keys), because the daemon runs it anyway |
 | 7 | Should a config `"layout"` override a self-described layout in the daemon? | Yes; done in the daemon (ebeabe8) |
-| 8 | Ship EWW `:passthrough` | Publish `work-window-passthrough` to `smpl-os/eww`, bump `_commit` in `pkgbuilds/eww-smplos` and add the usual migration; until then click-through stays clickable |
+| 8 | Ship EWW `:passthrough` | Done: `smpl-os/eww` master 0eb4604, `eww-smplos` pkgrel 2, migration `20261008-120000-eww-smplos-passthrough`. Verified on X11 only; confirm on Wayland (Hyprland) before relying on it there |
 | 9 | Cheatsheet opacity default | 0.35 in the daemon (requested); Settings and EWW already show 0.35 when the daemon reports none |
 | 10 | Brave and Kdenlive have no Tabler brand icon | `world` for browsers and `movie` for Kdenlive; revisit if Tabler adds them |
 | 11 | Icons on installs updated while the bar runs | They appear after the next login or `bar-ctl start` with a fresh EWW; an explicit bar restart from the updater was rejected as risky |

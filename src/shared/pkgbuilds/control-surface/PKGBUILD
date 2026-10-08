@@ -1,77 +1,40 @@
 # Maintainer: smplOS <https://github.com/smpl-os>
-# Macro keypad daemon for CH552 keypads (USB 1189:8890). See KEYPAD.md.
+# The keypad app (control-surfaced) for supported macro keypads; see KEYPAD.md
+# and src/shared/keypads/registry.json.
 #
-# The source repository's public home is not decided yet. Until it is, point
-# CONTROL_SURFACE_SOURCE at a checkout, e.g.
-#   CONTROL_SURFACE_SOURCE=git+file:///path/to/control-surface makepkg
-# The default below is the expected smpl-os location and only resolves once
-# the repository is published there.
+# Source, CI and releases live in smpl-os/smpl-apps (control-surface/). Every
+# smpl-apps release publishes control-surface-<version>-x86_64.tar.gz, a usr/
+# tree built and tested (ctest) there. This package installs one pinned
+# release: to update, set pkgver to a newer smpl-apps release, update
+# sha256sums, and add a migration that reruns the keypad migration's package
+# step. No _gh_owner/_gh_repo on purpose: build-iso.sh would move pkgver to
+# the latest release, which the pinned checksum would not match.
 #
-# smplOS ships the systemd user unit and udev rules itself
+# smplOS ships the user unit and udev rules itself
 # (src/shared/configs/systemd/user/control-surface.service,
-#  src/shared/system/udev/70-ch552-macropad.rules, 71-wch-isp-bootloader.rules),
-# so this package carries only the program, its example config and, once
-# released, firmware images for Settings > Keypad > Firmware.
+#  src/shared/system/udev/70-smplos-keypads.rules); the release's own copies
+# stay in /usr/share/control-surface/examples.
 
 pkgname=control-surface
-pkgver=0.1.0.r0
+pkgver=0.8.27
 pkgrel=1
-pkgdesc='Per-application control surface daemon for CH552 macro keypads (keys, knobs, Kdenlive API plugin)'
+pkgdesc='Keypad app for CH552 macro keypads: per-app profiles, cheatsheet, Kdenlive API plugin, open firmware images'
 arch=(x86_64)
-url='https://github.com/smpl-os/control-surface'
-license=('GPL-2.0-or-later')
+url='https://github.com/smpl-os/smpl-apps/tree/main/control-surface'
+license=('GPL-2.0-or-later' 'CC-BY-SA-3.0')
 depends=(gcc-libs glibc qt6-base systemd-libs)
-makedepends=(cmake git ninja)
-checkdepends=(dbus)
 optdepends=(
   'wchisp: flash open firmware from Settings > Keypad'
   'kdenlive: Kdenlive API plugin (enable its control-surface interface)'
 )
-source=("${pkgname}::${CONTROL_SURFACE_SOURCE:-git+${url}.git}")
-sha256sums=('SKIP')
-
-pkgver() {
-  cd "$pkgname"
-  local base
-  base=$(sed -n 's/.*setApplicationVersion(QStringLiteral("\([^"]*\)")).*/\1/p' src/daemon/main.cpp | head -1)
-  printf '%s.r%s.g%s' "${base:-0.1.0}" "$(git rev-list --count HEAD)" "$(git rev-parse --short HEAD)"
-}
-
-build() {
-  # smplOS's control-surface.service passes --eww-window/--eww-config
-  # (cheatsheet push, upstream b83980e); refuse older sources.
-  grep -q '"eww-window"' "$pkgname/src/daemon/main.cpp" ||
-    { echo "control-surface is too old for smplOS's unit (needs --eww-window)" >&2; return 1; }
-  cmake -S "$pkgname" -B build -G Ninja \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DCMAKE_INSTALL_PREFIX=/usr \
-    -DBUILD_TESTING=ON
-  cmake --build build
-}
-
-check() {
-  # tst_uinput creates a real virtual keyboard on the build host; skip it.
-  ctest --test-dir build --output-on-failure -E '^uinput$'
-}
+options=(!strip !debug)
+source=("https://github.com/smpl-os/smpl-apps/releases/download/v${pkgver}/control-surface-${pkgver}-x86_64.tar.gz")
+sha256sums=('7e2858801bd132430ac3957c3969e083a19f4e43688187aef713e8a7890ab675')
 
 package() {
-  DESTDIR="$pkgdir" cmake --install build
-  cd "$pkgname"
-  install -Dm644 data/config.example.jsonc "$pkgdir/usr/share/control-surface/config.example.jsonc"
-  install -Dm644 README.md "$pkgdir/usr/share/doc/control-surface/README.md"
-  if [[ -f USER-QUICKSTART.md ]]; then
-    install -Dm644 USER-QUICKSTART.md "$pkgdir/usr/share/doc/control-surface/USER-QUICKSTART.md"
-  fi
-  if [[ -f firmware/LICENSE.upstream ]]; then
-    install -Dm644 firmware/LICENSE.upstream "$pkgdir/usr/share/licenses/$pkgname/firmware-LICENSE"
-  fi
-  # Released firmware images (pending): firmware/release/<name>.bin with a
-  # <name>.json manifest ({name, version, board, license, sha256}). Settings
-  # lists /usr/share/control-surface/firmware/*.bin and refuses checksum mismatches.
-  if compgen -G 'firmware/release/*.bin' >/dev/null; then
-    install -Dm644 -t "$pkgdir/usr/share/control-surface/firmware" firmware/release/*.bin
-    if compgen -G 'firmware/release/*.json' >/dev/null; then
-      install -Dm644 -t "$pkgdir/usr/share/control-surface/firmware" firmware/release/*.json
-    fi
-  fi
+  # smplOS's control-surface.service passes --eww-window/--eww-config
+  # (cheatsheet push); refuse a daemon without them (Qt keeps it as UTF-16).
+  LC_ALL=C grep -aqP 'e\x00w\x00w\x00-\x00w\x00i\x00n\x00d\x00o\x00w\x00' "$srcdir/usr/bin/control-surfaced" ||
+    { echo "control-surfaced is too old for smplOS's unit (needs --eww-window)" >&2; return 1; }
+  cp -a --no-preserve=ownership "$srcdir/usr" "$pkgdir/"
 }

@@ -23,6 +23,9 @@ KEYPAD_CTL = ROOT / "src/shared/bin/keypad-ctl"
 BAR_CTL = ROOT / "src/shared/bin/bar-ctl"
 SESSION_SERVICES = ROOT / "src/shared/bin/smplos-session-services"
 MIGRATION = ROOT / "migrations/20261007-123000-macro-keypad-support.sh"
+PKGBUILD = ROOT / "src/shared/pkgbuilds/control-surface/PKGBUILD"
+EWW_MIGRATION = ROOT / "migrations/20261008-120000-eww-smplos-passthrough.sh"
+EWW_PKGBUILD = ROOT / "src/shared/pkgbuilds/eww-smplos/PKGBUILD"
 UDEV = ROOT / "src/shared/system/udev"
 RULES = UDEV / "70-smplos-keypads.rules"
 REGISTRY = ROOT / "src/shared/keypads/registry.json"
@@ -456,8 +459,8 @@ class LifecycleTests(unittest.TestCase):
         self.assertIn("ConditionPathExists=/usr/bin/control-surfaced", unit)
         self.assertIn("ExecStart=/usr/bin/control-surfaced run --quiet --eww-window pad-cheatsheet "
                       "--eww-config %h/.config/eww", unit)
-        self.assertIn('grep -q \'"eww-window"\'', (ROOT / "src/shared/pkgbuilds/control-surface/PKGBUILD").read_text(),
-                      "the package refuses daemon sources that lack the unit's flags")
+        self.assertIn("e\\x00w\\x00w\\x00-\\x00w\\x00i\\x00n\\x00d\\x00o\\x00w", (ROOT / "src/shared/pkgbuilds/control-surface/PKGBUILD").read_text(),
+                      "the package refuses a daemon that lacks the unit's flags")
         self.assertIn("ExecStartPost=-/usr/bin/eww --config %h/.config/eww update keypad-present=yes", unit)
         self.assertIn("ExecStopPost=-/usr/bin/eww --config %h/.config/eww update keypad-present=no", unit)
         build = (ROOT / "src/builder/build.sh").read_text()
@@ -556,12 +559,49 @@ class LifecycleTests(unittest.TestCase):
             output = result.stdout + result.stderr
             self.assertNotIn("error:", output.split("Failed to initialize GTK")[0].lower(), output)
 
-    def test_pending_daemon_recipe_is_parked(self):
-        self.assertTrue((ROOT / "src/shared/pkgbuilds/control-surface/PENDING").exists())
-        self.assertIn('[[ -f "$dir/PENDING" ]]', (ROOT / "src/build-iso.sh").read_text())
+    def test_daemon_package_is_a_pinned_smpl_apps_release(self):
+        recipe = ROOT / "src/shared/pkgbuilds/control-surface"
+        self.assertFalse((recipe / "PENDING").exists())
+        pkgbuild = (recipe / "PKGBUILD").read_text()
+        self.assertIn('source=("https://github.com/smpl-os/smpl-apps/releases/download/v${pkgver}/'
+                      'control-surface-${pkgver}-x86_64.tar.gz")', pkgbuild)
+        self.assertRegex(pkgbuild, r"(?m)^sha256sums=\('[0-9a-f]{64}'\)$")
+        self.assertRegex(pkgbuild, r"(?m)^pkgver=\d+\.\d+\.\d+$")
+        self.assertNotRegex(pkgbuild, r"(?m)^_gh_(owner|repo)=", "build-iso.sh would unpin it")
         aur = (ROOT / "src/shared/packages-aur.txt").read_text().splitlines()
         self.assertIn("wchisp", aur)
-        self.assertIn("# control-surface", aur)
+        self.assertIn("control-surface", aur)
+
+    def package(self, daemon):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        srcdir, pkgdir = Path(temp.name) / "src", Path(temp.name) / "pkg"
+        files = {"usr/bin/control-surfaced": daemon, "usr/bin/ch552-padprog": b"\x7fELF",
+                 "usr/share/control-surface/firmware/fw.bin": b"fw"}
+        for name, data in files.items():
+            path = srcdir / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
+            path.chmod(0o755 if "/bin/" in name else 0o644)
+        pkgdir.mkdir()
+        script = (f'source "{ROOT}/src/shared/pkgbuilds/control-surface/PKGBUILD"\n'
+                  f'srcdir="{srcdir}"; pkgdir="{pkgdir}"; package')
+        return subprocess.run(["bash", "-c", script], capture_output=True, text=True), pkgdir, files
+
+    def test_package_installs_the_release_tree_as_is(self):
+        daemon = b"\x7fELF..." + "--eww-window".encode("utf-16-le") + b"..."
+        result, pkgdir, files = self.package(daemon)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for name, data in files.items():
+            self.assertEqual((pkgdir / name).read_bytes(), data)
+        self.assertEqual((pkgdir / "usr/bin/control-surfaced").stat().st_mode & 0o777, 0o755)
+        self.assertEqual((pkgdir / "usr/share/control-surface/firmware/fw.bin").stat().st_mode & 0o777, 0o644)
+
+    def test_package_refuses_a_daemon_without_the_units_flags(self):
+        result, pkgdir, _ = self.package(b"\x7fELF old daemon --eww-window as UTF-8 only")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("too old", result.stderr)
+        self.assertFalse((pkgdir / "usr").exists())
 
 
 class OneShotSyncTests(KeypadCase):
@@ -648,6 +688,15 @@ class MigrationTests(KeypadCase):
         self.udev = self.root / "rules.d"
         self.tool("sudo", '"$@"\n')
         self.tool("udevadm", 'echo "udevadm $*" >> "$CALLS"\n')
+        # The keypad app's package: installed unless PKG_VERSION is empty.
+        self.tool("pacman", '[ "$1" = -Q ] && { [ -n "$PKG_VERSION" ] && echo "$2 $PKG_VERSION"; exit 0; }\n'
+                            'echo "pacman $*" >> "$CALLS"\n')
+        self.tool("fakeroot", 'exit 0\n')
+        self.tool("makepkg", 'echo "makepkg $*" >> "$CALLS"\n'
+                             '[ -n "$MAKEPKG_FAIL" ] && exit 1\n'
+                             'touch control-surface-0.8.27-1-x86_64.pkg.tar.zst\n')
+        pkgver = re.search(r"(?m)^pkgver=(.*)$", PKGBUILD.read_text())[1]
+        self.env.update(PKG_VERSION=f"{pkgver}-1")
         self.env.update(SMPLOS_REPO=str(ROOT), SMPLOS_UDEV_RULES_DIR=str(self.udev))
         theme = self.home / ".config/smplos/current/theme"
         theme.mkdir(parents=True)
@@ -696,6 +745,28 @@ class MigrationTests(KeypadCase):
         self.assertFalse((wants / "control-surface.service").is_symlink())
         self.assertIn("Removed the old login start", output)
 
+    def test_the_keypad_app_package_is_installed_when_missing_or_older(self):
+        for version in ("", "0.8.1-1"):
+            with self.subTest(installed=version or None):
+                self.calls.unlink(missing_ok=True)
+                self.env["PKG_VERSION"] = version
+                output = self.migrate()
+                calls = self.calls_made()
+                self.assertIn("makepkg -s --noconfirm --skippgpcheck", calls)
+                self.assertTrue(any(c.startswith("pacman -U --noconfirm ") and
+                                    c.endswith("/control-surface-0.8.27-1-x86_64.pkg.tar.zst") for c in calls), calls)
+                self.assertIn("Installed control-surface", output)
+
+    def test_an_offline_update_defers_after_the_other_steps(self):
+        self.env.update(PKG_VERSION="", MAKEPKG_FAIL="1")
+        result = subprocess.run(["bash", str(self.repo / "migrations" / MIGRATION.name)], env=self.env,
+                                capture_output=True, text=True, timeout=20)
+        self.assertEqual(result.returncode, 75, result.stdout + result.stderr)
+        self.assertTrue((self.udev / "70-smplos-keypads.rules").exists())
+        self.assertTrue((self.units / "control-surface.service").exists())
+        self.assertFalse(any(c.startswith("pacman -U") for c in self.calls_made()))
+        self.assertIn("will retry", result.stdout)
+
     def test_custom_unit_is_left_alone(self):
         self.units.mkdir(parents=True)
         custom = "[Service]\nExecStart=%h/.local/bin/control-surfaced run --quiet\n"
@@ -707,6 +778,49 @@ class MigrationTests(KeypadCase):
         self.assertEqual((self.units / "control-surface.service").read_text(), custom)
         self.assertTrue((wants / "control-surface.service").is_symlink())
         self.assertIn("custom unit", output)
+
+
+
+class EwwPassthroughMigrationTests(KeypadCase):
+    """eww-smplos is rebuilt at the fork commit with :passthrough when older."""
+
+    def setUp(self):
+        super().setUp()
+        self.tool("sudo", '"$@"\n')
+        self.tool("pacman", '[ "$1" = -Q ] && { [ -n "$EWW_VERSION" ] && echo "$2 $EWW_VERSION"; exit 0; }\n'
+                            'echo "pacman $*" >> "$CALLS"\n')
+        self.tool("fakeroot", 'exit 0\n')
+        self.tool("makepkg", 'echo "makepkg $*" >> "$CALLS"\n[ -n "$MAKEPKG_FAIL" ] && exit 1\n'
+                             'touch eww-smplos-0.6.0.r9.g0eb4604-2-x86_64.pkg.tar.zst\n')
+        self.env.update(SMPLOS_REPO=str(ROOT))
+
+    def migrate(self, version, **env):
+        self.calls.unlink(missing_ok=True)
+        result = subprocess.run(["bash", str(EWW_MIGRATION)], env=dict(self.env, EWW_VERSION=version, **env),
+                                capture_output=True, text=True, timeout=20)
+        return result.returncode, result.stdout, self.calls_made()
+
+    def test_pkgbuild_pins_the_passthrough_commit(self):
+        pkgbuild = EWW_PKGBUILD.read_text()
+        self.assertIn("_commit=0eb460422278dfaec64e5a527c1fd35dd3b35a1b\n", pkgbuild)
+        self.assertIn("pkgrel=2\n", pkgbuild)
+        self.assertIn("Verified on X11 only", (ROOT / "KEYPAD.md").read_text())
+
+    def test_rebuilds_only_an_older_eww_smplos_and_never_restarts_the_bar(self):
+        code, output, calls = self.migrate("0.6.0.r840.g78105f3-1")
+        self.assertEqual(code, 0, output)
+        self.assertIn("makepkg -s --noconfirm --skippgpcheck", calls)
+        self.assertTrue(any(c.startswith("pacman -U --noconfirm ") for c in calls), calls)
+        self.assertFalse(any("eww" in c and "kill" in c or "bar-ctl" in c for c in calls))
+        for version, expected in (("0.6.0.r841.g0eb4604-2", "already at 0eb4604"), ("", "not installed")):
+            code, output, calls = self.migrate(version)
+            self.assertEqual((code, calls), (0, []), output)
+            self.assertIn(expected, output)
+
+    def test_a_failed_build_defers_and_keeps_the_installed_eww(self):
+        code, output, calls = self.migrate("0.6.0.r840.g78105f3-1", MAKEPKG_FAIL="1")
+        self.assertEqual(code, 75, output)
+        self.assertFalse(any(c.startswith("pacman -U") for c in calls))
 
 
 if __name__ == "__main__":

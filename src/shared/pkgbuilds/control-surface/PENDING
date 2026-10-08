@@ -1,3 +1,0 @@
-source repository not published yet (set CONTROL_SURFACE_SOURCE to build locally; see KEYPAD.md)
-When the control-surface repository is published: point url= at it, delete
-this file and uncomment control-surface in src/shared/packages-aur.txt.

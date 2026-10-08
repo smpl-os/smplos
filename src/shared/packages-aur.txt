@@ -43,9 +43,9 @@ mullvad-vpn-bin
 # Only `keypad-ctl firmware flash` drives it (info + flash, never config).
 wchisp
 
-# Macro keypad daemon (src/shared/pkgbuilds/control-surface). Parked by its
-# PENDING file until the source repository is published; see KEYPAD.md.
-# control-surface
+# The keypad app (control-surfaced; src/shared/pkgbuilds/control-surface):
+# a pinned smpl-apps release asset. Runs only while a keypad is plugged in.
+control-surface
 
 # Hyprland plugins/extras (optional)
 # hyprland-plugins-git
