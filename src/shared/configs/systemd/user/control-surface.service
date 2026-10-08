@@ -15,7 +15,7 @@ Type=simple
 # pad-cheatsheet) itself, only while it runs; no listener process.
 ExecStart=/usr/bin/control-surfaced run --quiet --eww-window pad-cheatsheet --eww-config %h/.config/eww
 # The bar icon is an EWW variable, set here instead of by a watcher process.
-# "-": no bar running yet is fine; bar-ctl sets it when the bar starts.
+# "-": no bar running yet is fine; keypad-bar-sync.sh sets it when the bar opens.
 ExecStartPost=-/usr/bin/eww --config %h/.config/eww update keypad-present=yes
 ExecStopPost=-/usr/bin/eww --config %h/.config/eww update keypad-present=no
 Restart=on-failure
