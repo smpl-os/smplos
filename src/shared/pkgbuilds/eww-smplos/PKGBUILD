@@ -8,6 +8,9 @@
 #   78105f3  fix: Propagation::Stop on button_press prevents GTK default
 #            grab handler
 #   169e47a  fix: avoid pointer grab stuck on button press (Wayland)
+#   0eb4604  defwindow :passthrough (empty input region; the keypad's
+#            click-through cheatsheet, KEYPAD.md). Verified on X11 only;
+#            Wayland pending.
 #
 # Without these two commits, clicking a button on the eww bar frequently
 # no-ops until the user moves the mouse — because GTK's default button-
@@ -26,11 +29,11 @@
 
 _gh_owner=smpl-os
 _gh_repo=eww
-_commit=78105f363fe38b9e34b0ab05683f3a7d421dbf39
+_commit=0eb460422278dfaec64e5a527c1fd35dd3b35a1b
 
 pkgname=eww-smplos
 pkgver=0.6.0.r0.g0d666f6
-pkgrel=1
+pkgrel=2
 pkgdesc='Standalone widget system made in Rust (smplOS fork with Wayland button-grab fixes)'
 arch=(x86_64)
 url="https://github.com/${_gh_owner}/${_gh_repo}"
