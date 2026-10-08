@@ -48,6 +48,28 @@ the USB ID database; the product name varies). The ID is what counts. Pads with 
 Stream Deck-style devices) are not handled and don't appear in Settings. The
 Settings tab states this at the top and links here.
 
+
+### The keypad registry
+
+`src/shared/keypads/registry.json` lists every keypad family smplOS knows,
+with USB vendor and product IDs, a `status` and its backend:
+
+* `supported` (the CH552 pads, backend `control-surface`): udev grants the
+  seated user access, tags the device for systemd under the one alias
+  `/smplos/keypad` (`smplos-keypad.device`, "a supported keypad is present")
+  and starts the backend's user service. The bar shows the icon while it
+  runs.
+* `planned` (Elgato Stream Deck, vendor `0fd9`, no backend yet): nothing
+  happens on plug-in, no access, no service, no icon. `keypad-ctl status`
+  lists it under `planned`; Settings names it in its scope note.
+* `bootloaders`: the ROM bootloaders, which only get `uaccess` for flashing.
+
+`python3 src/shared/keypads/gen.py --apps <smpl-apps>` regenerates
+`70-smplos-keypads.rules`, the IDs block in `keypad-ctl` and Settings'
+`settings/src/keypad/registry.rs`; `--check` fails when one is stale (a test
+runs it). A second backend will get its own alias next to `/smplos/keypad`
+so each service binds to its own devices.
+
 ## Architecture
 
 ```mermaid
@@ -55,7 +77,7 @@ flowchart LR
   pad["CH552 keypad\n1189:8890"] -- "udev: uaccess, smplos-keypad.device,\nSYSTEMD_USER_WANTS" --> unit["control-surface.service\n(BindsTo the device)"]
   unit --> daemon["control-surfaced\n(control-surface repo)"]
   unit -- "ExecStartPost / ExecStopPost:\neww update keypad-present" --> eww["EWW tray icon"]
-  barctl["bar-ctl start / reload"] -- "once: is-active?" --> eww
+  sync["scripts/keypad-bar-sync.sh\n(eww deflisten, bar open/reload)"] -- "once: is-active?" --> eww
   daemon -- "evdev grab" --> pad
   daemon -- "uinput keys" --> desktop[Focused app]
   daemon -- "D-Bus ControlSurface1" --> kdenlive[Kdenlive]
@@ -75,9 +97,10 @@ flowchart LR
 | `control-surfaced` | control-surface repository (separate) | Grabs only `1189:8890`, follows the focused window, applies JSONC profiles, Kdenlive plugin |
 | Open firmware | control-surface `firmware/` (fork of CH552-OpenMacroPad, CC BY-SA 3.0) | Self-describing keypad firmware, same VID:PID |
 | `keypad-ctl` | `src/shared/bin/keypad-ctl` | On-demand tool: detection (`status`, `present`) and firmware list and flash. Never runs in the background |
-| udev rules | `src/shared/system/udev/70-ch552-macropad.rules`, `71-wch-isp-bootloader.rules` | Access, the `smplos-keypad.device` unit, start on plug-in |
+| Keypad registry | `src/shared/keypads/registry.json`, `gen.py` | The one list of keypads (supported or planned) and bootloaders; generates the udev rules, `keypad-ctl`'s IDs and Settings' IDs and scope text |
+| udev rules | `src/shared/system/udev/70-smplos-keypads.rules` (generated) | Access, the `smplos-keypad.device` unit, start on plug-in |
 | User unit | `src/shared/configs/systemd/user/control-surface.service` | Runs the keypad app only while a keypad is plugged in; sets the bar icon |
-| Bar icon | `src/shared/eww/eww.yuck` (`defvar keypad-present`, `tray-keypad`), `bar-ctl`, `icons/status/keypad.svg` | Visible only while the keypad app runs |
+| Bar icon | `src/shared/eww/eww.yuck` (`keypad-present`, `tray-keypad`), `scripts/keypad-bar-sync.sh`, `icons/status/keypad.svg` | Visible only while the keypad app runs |
 | Settings tab | smpl-apps `settings/src/keypad/`, `settings/ui/main.slint` (tab 11) | Status, layout, mapping editor, firmware wizard |
 | Packaging | `src/shared/pkgbuilds/control-surface/`, `packages-aur.txt` (`wchisp`) | Daemon recipe (parked) and the flasher |
 | Migration | `migrations/20261007-123000-macro-keypad-support.sh` | Existing installs: udev rules, icon, unit (never enabled) |
@@ -122,7 +145,7 @@ smplOS stays light, so the keypad support adds **no always-on process**. With
 no keypad plugged in, nothing keypad related runs: no watcher, no listener, no
 daemon. Everything is driven by the device:
 
-1. **Plug in.** `70-ch552-macropad.rules` matches the USB device `1189:8890`
+1. **Plug in.** `70-smplos-keypads.rules` matches the USB device `1189:8890`
    only. It tags it `systemd` and gives it `SYSTEMD_ALIAS=/smplos/keypad`, so
    the user manager tracks it as `smplos-keypad.device`
    (`systemd-escape --path --suffix=device /smplos/keypad`).
@@ -141,9 +164,12 @@ only act while a keypad is present).
 Two one-shot checks cover the cases the events can't:
 
 * **Bar starts or reloads after the keypad app** (login with the keypad already
-  plugged in, `theme-set`'s reload, which resets EWW variables): `bar-ctl
-  start`/`reload` runs `systemctl --user is-active control-surface.service`
-  once and sets `keypad-present=yes`. Nothing polls.
+  plugged in, `theme-set`'s reload, which resets EWW variables):
+  `keypad-present` is a `deflisten` of `scripts/keypad-bar-sync.sh`, which
+  prints `systemctl --user is-active control-surface.service` once and exits
+  (after 2 s, so EWW reads the line first). EWW runs it when the bar opens or
+  reloads and never restarts a script that ended; `eww update` from the unit
+  overrides it. Nothing polls, and `bar-ctl` has nothing keypad related.
 * **Keypad plugged in before login.** udev starts the app when the user manager
   comes up, before the session's environment is imported. At login,
   `smplos-session-services` restarts it once, only if `smplos-keypad.device` is
@@ -172,7 +198,7 @@ Access rules, in the same file, apply to `1189:8890` only:
 * `uaccess` on `/dev/uinput`, because the app types through one virtual
   keyboard (Steam's and xr-workspace's rules make the same grant).
 
-`71-wch-isp-bootloader.rules` grants `uaccess` on the bootloader only.
+The same generated file grants `uaccess` on the ROM bootloaders only.
 
 With two keypads plugged in, both carry the same alias; unplugging one may stop
 the app until the other is replugged. The app drives one keypad anyway.
@@ -287,8 +313,8 @@ opaque, recoloured by the theme like any label.
   changes). EWW finds it by family name. A running EWW never sees a font
   installed after it started, and other fonts would draw wrong glyphs for its
   codepoints. So the overlay draws icons only when `pad_icons_font` is `yes`.
-  `bar-ctl` sets that once at start and reload, if the font file is older
-  than the EWW daemon; until then the overlay shows labels and `< o >`.
+  The bar's one-shot `keypad-bar-sync.sh` sets that when the bar opens or
+  reloads, if the font file is older than the EWW daemon; until then the overlay shows labels and `< o >`.
   Nothing polls.
 
 Settings (Keypad → Cheatsheet) edits the config's
@@ -578,7 +604,8 @@ app on the bus there is nothing to switch.
 |---|---|---|
 | Where the UI lives | Settings tab in smpl-apps; system glue here | smplOS rule: app code only in smpl-apps; one settings app |
 | Detection | sysfs strings only, with the daemon's rules; in Settings while it's open, and `keypad-ctl` on demand | No device I/O, so it's safe with the daemon's grab |
-| Watcher | None. The unit sets an EWW variable on start/stop; `bar-ctl` checks once | Zero processes without a keypad (the first draft's watcher cost about 32 MB on every machine) |
+| Watcher | None. The unit sets an EWW variable on start/stop; a one-shot script checks once when the bar opens or reloads | Zero processes without a keypad (the first draft's watcher cost about 32 MB on every machine) |
+| Supported devices | One registry (`src/shared/keypads/registry.json`) generates the udev rules, `keypad-ctl`'s IDs and Settings' IDs and scope text; `planned` devices (Elgato Stream Deck) get nothing until a backend exists | Adding a keypad family is a data change plus a backend; nothing can start or show an icon for a device the backend can't drive |
 | Lifecycle | udev `SYSTEMD_USER_WANTS`, `SYSTEMD_ALIAS` and `BindsTo=` on the alias device unit | Starts on plug-in and stops on unplug, without a resident process |
 | Variant | The config's `"layout"`, from the daemon's board profiles or a custom grid | One source of truth that the daemon reads; no smplOS-only override file |
 | Access | `uaccess` for this VID:PID and `/dev/uinput` | No group membership; other keyboards untouched |
@@ -593,7 +620,7 @@ app on the bus there is nothing to switch.
 | Click-through cheatsheet | Optional second window with EWW `:passthrough`, off by default | Hyprland 0.56 has no input-passthrough layer rule; clicking to close stays the simple default |
 | Cheatsheet icons | Tabler Icons outline, subset to a 70 KB font, drawn as text | One consistent outline style, MIT, theme colour through CSS, opaque like labels; SVGs can't be recoloured by eww (`fill-svg` replaces fills, Tabler strokes) |
 | Icon names | Tabler's names, no mapping layer | eww, Settings and the keypad app share one vocabulary |
-| Font not yet seen by EWW | Labels only, flag set once by `bar-ctl` | No misleading fallback glyphs and no bar restart from the updater |
+| Font not yet seen by EWW | Labels only, flag set once when the bar opens | No misleading fallback glyphs and no bar restart from the updater |
 
 ## Open decisions
 
@@ -668,7 +695,7 @@ chip, and the wchisp allowlist. Its lifecycle tests check that the udev alias
 and the unit's `BindsTo=`/`After=` name the same device unit (via
 `systemd-escape`), that the unit has no `[Install]` and passes `systemd-analyze
 verify`, that no EWW `deflisten`/`defpoll` or script is keypad related, the
-one-shot `bar-ctl` and login steps, and the migration paths (fresh, an earlier
+bar's one-shot sync script and the login step, and the migration paths (fresh, an earlier
 draft's enabled unit, a custom unit). Its overlay tests check both cheatsheet
 windows (only the click-through one has `:passthrough`), the click-to-close
 handler, the 0.35 fallback and that the background is the only translucent
@@ -678,7 +705,7 @@ Icon tests check that `icons.txt`, the JSON and `pad-icons.yuck` agree, that the
 font has every codepoint under its family name, that the keypad app's
 automatic icons are bundled (pinned list, and a live keypad app when one is
 installed), that every glyph lookup in the overlay is gated, the
-`bar-ctl` flag (font older or newer than EWW, no font) and that the updater
+sync script's font flag (font older or newer than EWW, no font) and that the updater
 installs the font and table before `eww.yuck`.
 
 Done by hand on a private X server, never the desktop: the patched EWW's

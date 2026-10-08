@@ -24,6 +24,10 @@ BAR_CTL = ROOT / "src/shared/bin/bar-ctl"
 SESSION_SERVICES = ROOT / "src/shared/bin/smplos-session-services"
 MIGRATION = ROOT / "migrations/20261007-123000-macro-keypad-support.sh"
 UDEV = ROOT / "src/shared/system/udev"
+RULES = UDEV / "70-smplos-keypads.rules"
+REGISTRY = ROOT / "src/shared/keypads/registry.json"
+GEN = ROOT / "src/shared/keypads/gen.py"
+SYNC = ROOT / "src/shared/eww/scripts/keypad-bar-sync.sh"
 UNIT = ROOT / "src/shared/configs/systemd/user/control-surface.service"
 SHEET_HIDE = ROOT / "src/shared/eww/scripts/pad-sheet-hide.sh"
 
@@ -112,6 +116,13 @@ class DetectionTests(KeypadCase):
         self.device("1-6", dict(OPEN, product="Control Surface 12+2"))
         other = self.status()["devices"][1]
         self.assertEqual(other["layout"], {"board": "", "keys": 12, "knobs": 2})
+
+    def test_a_planned_keypad_is_named_but_never_present(self):
+        self.device("1-7", dict(idVendor="0fd9", idProduct="0080", manufacturer="Elgato", product="Stream Deck"))
+        data = self.status()
+        self.assertEqual((data["state"], data["devices"]), ("absent", []))
+        self.assertEqual(data["planned"], [{"name": "Elgato Stream Deck", "vid": "0fd9", "pid": "0080", "path": "1-7"}])
+        self.assertEqual(self.ctl("present", check=False).returncode, 1)
 
     def test_bootloader_alone(self):
         self.device("3-1", BOOTLOADER)
@@ -393,11 +404,26 @@ class LifecycleTests(unittest.TestCase):
     def unit(self):
         return UNIT.read_text()
 
+    def test_rules_and_ids_are_generated_from_the_registry(self):
+        result = subprocess.run(["python3", str(GEN), "--check"], capture_output=True, text=True, timeout=20)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(sorted(p.name for p in UDEV.glob("7?-*.rules") if "keypad" in p.name or "ch552" in p.name
+                                or "wch" in p.name), ["70-smplos-keypads.rules"])
+        registry = json.loads(REGISTRY.read_text())
+        planned = [d for d in registry["devices"] if d["status"] == "planned"]
+        self.assertIn("0fd9", [d["vid"] for d in planned], "Stream Deck is known, but planned")
+        active = [line for line in RULES.read_text().splitlines() if line and not line.startswith("#")]
+        for d in planned:
+            self.assertFalse([line for line in active if d["vid"] in line], "a planned keypad gets nothing")
+        ctl = runpy.run_path(str(KEYPAD_CTL))
+        self.assertEqual(ctl["PAD_IDS"], {("1189", "8890")})
+        self.assertEqual(ctl["PLANNED_IDS"][("0fd9", "0080")], "Elgato Stream Deck")
+
     def test_udev_rule_matches_only_the_keypad_and_names_its_device_unit(self):
-        rules = (UDEV / "70-ch552-macropad.rules").read_text()
+        rules = RULES.read_text()
         active = [line for line in rules.splitlines() if line and not line.startswith("#")]
         for line in active:
-            if "uinput" not in line:
+            if "uinput" not in line and "55e0" not in line:
                 self.assertIn('ATTR{idVendor}=="1189"' if "usb_device" in line else 'ATTRS{idVendor}=="1189"', line)
                 self.assertIn("8890", line)
         self.assertNotIn("0c45", rules)
@@ -408,12 +434,11 @@ class LifecycleTests(unittest.TestCase):
         self.assertTrue(alias.startswith("/"), "SYSTEMD_ALIAS must be an absolute path")
         self.assertNotIn("%", alias, "the alias must not vary, so BindsTo= can name it")
         self.assertNotIn("SYMLINK", rules)
-        loader = (UDEV / "71-wch-isp-bootloader.rules").read_text()
-        self.assertIn('ATTR{idVendor}=="4348", ATTR{idProduct}=="55e0", TAG+="uaccess"', loader)
+        self.assertIn('ATTR{idVendor}=="4348", ATTR{idProduct}=="55e0", TAG+="uaccess"', rules)
 
     @unittest.skipUnless(shutil.which("systemd-escape"), "systemd-escape not installed")
     def test_unit_binds_to_the_alias_device_unit(self):
-        rules = (UDEV / "70-ch552-macropad.rules").read_text()
+        rules = RULES.read_text()
         alias = re.search(r'ENV\{SYSTEMD_ALIAS\}="([^"]+)"', rules).group(1)
         device = escape_device(alias)
         self.assertEqual(device, "smplos-keypad.device")
@@ -452,14 +477,17 @@ class LifecycleTests(unittest.TestCase):
                                     env=env, capture_output=True, text=True, timeout=30)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
-    def test_bar_has_no_keypad_watcher(self):
+    def test_bar_syncs_once_and_runs_no_keypad_watcher(self):
         yuck = (ROOT / "src/shared/eww/eww.yuck").read_text()
-        for line in yuck.splitlines():
-            if re.match(r"\s*\((deflisten|defpoll)\b", line):
-                self.assertNotIn("keypad", line)
-                self.assertNotIn("pad-sheet", line, "the overlay's click handler runs only on a click")
-        self.assertIn('(defvar keypad-present "no")', yuck)
-        self.assertFalse(list((ROOT / "src/shared/eww/scripts").glob("*keypad*")))
+        listeners = [line.strip() for line in yuck.splitlines() if re.match(r"\s*\((deflisten|defpoll)\b", line)
+                     and ("keypad" in line or "pad-sheet" in line or "pad_" in line)]
+        self.assertEqual(listeners, ['(deflisten keypad-present :initial "no" "sh scripts/keypad-bar-sync.sh")'])
+        self.assertEqual(sorted(p.name for p in (ROOT / "src/shared/eww/scripts").glob("*keypad*")), ["keypad-bar-sync.sh"])
+        script = "\n".join(l for l in SYNC.read_text().splitlines() if not l.lstrip().startswith("#"))
+        for loop in ("while", "until", "for ", "inotify", "--follow", "watch", "monitor"):
+            self.assertNotIn(loop, script, "a one-shot: prints, then exits")
+        self.assertIn('sleep "${KEYPAD_SYNC_LINGER:-2}"', script)
+        self.assertNotIn("keypad", BAR_CTL.read_text(), "bar-ctl has nothing keypad related")
         self.assertNotIn("bootloader", yuck[yuck.index("(defwidget tray-keypad"):])
 
     def test_bar_icon_and_settings_entry(self):
@@ -552,24 +580,25 @@ class OneShotSyncTests(KeypadCase):
         (self.home / ".config/eww").mkdir(parents=True)
         for name in ("eww.yuck", "eww.scss", "theme-colors.scss"):
             (self.home / ".config/eww" / name).touch()
-        self.bar_ctl = self.root / "bar-ctl"
-        self.bar_ctl.write_text(BAR_CTL.read_text().replace('LOG="/tmp/eww-startup.log"',
-                                                           f'LOG="{self.root / "bar.log"}"'))
+        (self.home / ".config/eww/scripts").mkdir()
+        self.sync = self.home / ".config/eww/scripts/keypad-bar-sync.sh"
+        shutil.copy(SYNC, self.sync)
+        self.env["KEYPAD_SYNC_LINGER"] = "0"
 
-    def reload_bar(self, **env):
+    def run_sync(self, **env):
+        """What EWW runs when the bar opens or reloads; returns its output."""
         self.calls.unlink(missing_ok=True)
-        subprocess.run(["bash", str(self.bar_ctl), "reload"], env=dict(self.env, **env),
-                       capture_output=True, text=True, timeout=20)
-        return [c for c in self.calls_made() if "keypad" in c]
+        result = subprocess.run(["sh", "scripts/keypad-bar-sync.sh"], cwd=self.sync.parent.parent,
+                                env=dict(self.env, **env), capture_output=True, text=True, timeout=20)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return result.stdout
 
-    def test_bar_reload_sets_the_icon_only_while_the_app_runs(self):
-        config = self.home / ".config/eww"
-        self.assertEqual(self.reload_bar(APP_ACTIVE="1"),
-                         [f"eww --config {config} update keypad-present=yes"])
-        self.assertEqual(self.reload_bar(), [], "inactive: the defvar default already says no")
+    def test_the_bar_learns_once_whether_the_keypad_app_runs(self):
+        self.assertEqual(self.run_sync(APP_ACTIVE="1"), "yes\n")
+        self.assertEqual(self.run_sync(), "no\n")
 
     def icons_flag(self, font_age, eww_age, installed=True):
-        """bar-ctl reload with an icon font installed font_age s ago and an
+        """The bar's one-shot sync with an icon font installed font_age s ago and an
         EWW daemon started eww_age s ago."""
         font = self.root / "fonts/smplos-keypad-icons.ttf"
         font.parent.mkdir(exist_ok=True)
@@ -578,8 +607,7 @@ class OneShotSyncTests(KeypadCase):
         self.tool("fc-list", f'[ -n "{"1" if installed else ""}" ] && echo "{font}"\nexit 0\n')
         self.tool("pgrep", 'echo 4242\n')
         self.tool("ps", f'echo "{eww_age}"\n')
-        self.calls.unlink(missing_ok=True)
-        subprocess.run(["bash", str(self.bar_ctl), "reload"], env=self.env, capture_output=True, text=True, timeout=20)
+        self.run_sync()
         return [c for c in self.calls_made() if "pad_icons_font" in c]
 
     def test_icons_only_for_an_eww_that_started_with_the_font(self):
@@ -636,8 +664,8 @@ class MigrationTests(KeypadCase):
     def test_fresh_migration_installs_but_never_enables(self):
         pad = self.device("1-5", STOCK)
         output = self.migrate()
-        for rule in ("70-ch552-macropad.rules", "71-wch-isp-bootloader.rules"):
-            self.assertEqual((self.udev / rule).read_text(), (UDEV / rule).read_text())
+        self.assertEqual((self.udev / "70-smplos-keypads.rules").read_text(), RULES.read_text())
+        self.assertFalse((self.udev / "70-ch552-macropad.rules").exists())
         self.assertEqual((self.units / "control-surface.service").read_text(), UNIT.read_text())
         self.assertFalse(list(self.units.glob("*.wants/control-surface.service")))
         baked = (self.home / ".config/eww/icons/status/keypad.svg").read_text()

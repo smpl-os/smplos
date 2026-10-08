@@ -52,7 +52,15 @@ changed() { echo "  $*"; ((n_changes++)) || true; }
 
 # ── 1. udev rules → /etc/udev/rules.d (+ targeted reload) ────────────────────
 rules_changed=0
+# 70-smplos-keypads.rules is generated from src/shared/keypads/registry.json.
+# It replaces an earlier draft's two files, removed when they are ours.
 for rule in 70-ch552-macropad.rules 71-wch-isp-bootloader.rules; do
+    if [[ -f "$UDEV_DIR/$rule" ]] && grep -q 'KEYPAD.md' "$UDEV_DIR/$rule" && sudo rm -f "$UDEV_DIR/$rule"; then
+        changed "Removed $rule (replaced by 70-smplos-keypads.rules)"
+        rules_changed=1
+    fi
+done
+for rule in 70-smplos-keypads.rules; do
     src="$REPO/src/shared/system/udev/$rule"
     dst="$UDEV_DIR/$rule"
     if [[ ! -f "$src" ]]; then

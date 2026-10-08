@@ -1,0 +1,31 @@
+{
+    "_comment": "Supported keypads: the single source for the udev rules, keypad-ctl and Settings > Keypad. Edit, then run gen.py (see KEYPAD.md). status: supported = has a working backend (udev grants access, tags the device for systemd and starts the backend's service; the bar shows the icon); planned = known but no backend yet (nothing happens on plug-in).",
+    "alias": "/smplos/keypad",
+    "devices": [
+        {
+            "family": "ch552-macropad",
+            "name": "CH552 macro keypads",
+            "description": "the inexpensive \"MINI KeyBoard\"-style pads with 3 to 16 keys and up to 3 knobs",
+            "vid": "1189",
+            "pids": ["8890"],
+            "status": "supported",
+            "backend": "control-surface",
+            "service": "control-surface.service",
+            "uinput": true
+        },
+        {
+            "family": "elgato-stream-deck",
+            "name": "Elgato Stream Deck",
+            "description": "Original, MK.2, Mini, XL, Plus, Neo and Pedal",
+            "vid": "0fd9",
+            "pids": ["0060", "006d", "0080", "0063", "0090", "006c", "008f", "0084", "009a", "0086"],
+            "status": "planned",
+            "backend": null,
+            "service": null
+        }
+    ],
+    "bootloaders": [
+        {"family": "wch-isp", "name": "WCH ROM bootloader (CH55x)", "vid": "4348", "pids": ["55e0"]},
+        {"family": "wch-isp", "name": "WCH ROM bootloader (newer WCH parts)", "vid": "1a86", "pids": ["55e0"]}
+    ]
+}

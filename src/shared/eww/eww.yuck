@@ -45,16 +45,18 @@
 ;; USB storage (event-driven via udevadm)
 (deflisten usb-data :initial '{"present":"no","count":"0","icon":"","mounted":"0","devices":[]}' `scripts/usb-listener.sh`)
 
-;; Macro keypad (see KEYPAD.md). No watcher process: control-surface.service,
-;; which runs only while a CH552 keypad is plugged in, sets this on start/stop,
-;; and bar-ctl sets it once when the bar starts.
-(defvar keypad-present "no")
+;; Macro keypad (see KEYPAD.md). No watcher: control-surface.service, which
+;; runs only while a supported keypad is plugged in, sets this on start/stop.
+;; When the bar opens or reloads, scripts/keypad-bar-sync.sh prints it once
+;; (and turns the cheatsheet icons on), then exits; eww never restarts a
+;; deflisten script that has ended.
+(deflisten keypad-present :initial "no" "sh scripts/keypad-bar-sync.sh")
 
 ;; Macro keypad cheatsheet: what every key and knob does right now. No listener
 ;; either: control-surfaced (running only while a keypad is plugged in) sets
 ;; pad_sheet to its cheatsheet JSON and opens/closes pad-cheatsheet itself.
 (defvar pad_sheet '{"visible":false}')
-;; "yes" once bar-ctl has seen that this EWW started with the icon font
+;; "yes" once keypad-bar-sync.sh has seen that this EWW started with the icon font
 ;; installed: a running EWW never picks up a font added later, and other
 ;; fonts would draw wrong glyphs for its codepoints. Labels only until then.
 (defvar pad_icons_font "no")
