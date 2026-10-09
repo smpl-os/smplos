@@ -56,7 +56,8 @@ class KeypadCase(unittest.TestCase):
         self.calls = self.root / "calls"
         self.env = dict(os.environ, HOME=str(self.home), SMPLOS_KEYPAD_SYSFS=str(self.sysfs),
                         PATH=f"{self.bin}:{os.environ['PATH']}", CALLS=str(self.calls))
-        for key in ("XDG_CONFIG_HOME", "XDG_DATA_HOME", "SMPLOS_WCHISP", "SMPLOS_KEYPAD_FIRMWARE_DIRS",
+        for key in ("XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME",
+                    "SMPLOS_WCHISP", "SMPLOS_KEYPAD_FIRMWARE_DIRS",
                     "WAYLAND_DISPLAY", "DISPLAY", "HYPRLAND_INSTANCE_SIGNATURE"):
             self.env.pop(key, None)
 
@@ -457,6 +458,8 @@ class LifecycleTests(unittest.TestCase):
         self.assertNotIn("WantedBy", unit)
         self.assertNotIn("Requisite=", unit)
         self.assertIn("ConditionPathExists=/usr/bin/control-surfaced", unit)
+        self.assertIn("Type=exec\n", unit)
+        self.assertIn("StartLimitBurst=5\n", unit)
         self.assertIn("ExecStart=/usr/bin/control-surfaced run --quiet --eww-window pad-cheatsheet "
                       "--eww-config %h/.config/eww", unit)
         self.assertIn("e\\x00w\\x00w\\x00-\\x00w\\x00i\\x00n\\x00d\\x00o\\x00w", (ROOT / "src/shared/pkgbuilds/control-surface/PKGBUILD").read_text(),
@@ -474,11 +477,14 @@ class LifecycleTests(unittest.TestCase):
             # The binaries don't exist on a build host; everything else is checked.
             unit.write_text(self.unit().replace("/usr/bin/control-surfaced", "/usr/bin/true")
                             .replace("/usr/bin/eww", "/usr/bin/true"))
+            target = Path(temp) / "smplos-session.target"
+            shutil.copy(ROOT / "src/shared/configs/systemd/user/smplos-session.target", target)
             env = {k: v for k, v in os.environ.items() if k != "DBUS_SESSION_BUS_ADDRESS"}
             env.update(XDG_RUNTIME_DIR=temp, SYSTEMD_UNIT_PATH=f"{temp}:")
-            result = subprocess.run(["systemd-analyze", "--user", "--man=no", "verify", str(unit)],
+            result = subprocess.run(["systemd-analyze", "--user", "--man=no", "verify", str(unit), str(target)],
                                     env=env, capture_output=True, text=True, timeout=30)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            self.assertNotIn("ordering cycle", result.stderr.lower())
 
     def test_bar_syncs_once_and_runs_no_keypad_watcher(self):
         yuck = (ROOT / "src/shared/eww/eww.yuck").read_text()
@@ -572,6 +578,45 @@ class LifecycleTests(unittest.TestCase):
         self.assertIn("wchisp", aur)
         self.assertIn("control-surface", aur)
 
+    def test_iso_build_replaces_the_older_cached_package_and_keeps_the_pin(self):
+        build = (ROOT / "src/build-iso.sh").read_text()
+        body = "build_custom_packages() {" + build.split("build_custom_packages() {", 1)[1].split("\n}\n", 1)[0] + "\n}\n"
+        pkgver = re.search(r"(?m)^pkgver=(.*)$", PKGBUILD.read_text())[1]
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        root = Path(temp.name)
+        calls = root / "calls"
+        container = root / "container"
+        container.write_text('#!/bin/sh\necho "$*" >> "$CALLS"\n')
+        container.chmod(0o755)
+        script = ('log_info() { :; }; log_step() { :; }; _stage_ok() { :; }\n'
+                  'die_help() { echo "$*" >&2; return 1; }\n' + body + "\nbuild_custom_packages\n")
+        for cached in (False, True):
+            with self.subTest(current_package_cached=cached):
+                project = root / str(cached)
+                recipe = project / "src/shared/pkgbuilds/control-surface"
+                recipe.mkdir(parents=True)
+                shutil.copy(PKGBUILD, recipe / "PKGBUILD")
+                prebuilt = project / "build/prebuilt"
+                prebuilt.mkdir(parents=True)
+                old = prebuilt / "control-surface-0.8.27-1-x86_64.pkg.tar.zst"
+                old.write_bytes(b"old cache fixture")
+                if cached:
+                    (prebuilt / f"control-surface-{pkgver}-1-x86_64.pkg.tar.zst").touch()
+                before = calls.read_text() if calls.exists() else ""
+                result = subprocess.run(["bash", "-euc", script],
+                                        env=dict(os.environ, PROJECT_ROOT=str(project), SCRIPT_DIR=str(project / "src"),
+                                                 CTR=str(container), CALLS=str(calls)),
+                                        capture_output=True, text=True, timeout=20)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                after = calls.read_text()
+                if cached:
+                    self.assertEqual(after, before, "the matching package must be reused")
+                else:
+                    self.assertIn(f"PKGVER_OVERRIDE={pkgver}", after)
+                    self.assertIn(f"{recipe}:/build/pkg:ro", after)
+                self.assertEqual(old.read_bytes(), b"old cache fixture", "keep the prior cache until replacement succeeds")
+
     def package(self, daemon):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
@@ -602,6 +647,18 @@ class LifecycleTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("too old", result.stderr)
         self.assertFalse((pkgdir / "usr").exists())
+
+    def test_package_smoke_test_refuses_a_runtime_incompatible_release(self):
+        with tempfile.TemporaryDirectory() as temp:
+            src = Path(temp)
+            daemon = src / "usr/bin/control-surfaced"
+            daemon.parent.mkdir(parents=True)
+            script = f'source "{PKGBUILD}"\nsrcdir="{src}"\ncheck\n'
+            for status in (0, 127):
+                daemon.write_text(f'#!/bin/sh\n[ "$*" = "features --json" ] || exit 1\nexit {status}\n')
+                daemon.chmod(0o755)
+                result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=20)
+                self.assertEqual(result.returncode, status)
 
 
 class OneShotSyncTests(KeypadCase):
@@ -668,6 +725,12 @@ class OneShotSyncTests(KeypadCase):
         return self.calls_made()
 
     def test_login_restarts_the_app_once_only_with_a_keypad(self):
+        self.tool("systemctl", 'echo "systemctl $*" >> "$CALLS"\n'
+                  'case "$*" in\n'
+                  '  *"is-active --quiet smplos-keypad.device"*) [ -n "$KEYPAD" ];;\n'
+                  '  *is-active*) exit 3;;\n'
+                  '  *"show control-surface.service -p ActiveState"*) echo active;;\n'
+                  'esac\n')
         calls = self.login(KEYPAD="1")
         self.assertIn("systemctl --user restart control-surface.service", calls)
         self.assertLess(calls.index("systemctl --user start smplos-session.target"),
@@ -686,23 +749,33 @@ class MigrationTests(KeypadCase):
             'smplos_have_user_bus() { return 0; }\n'
             'smplos_run_as_user() { echo "session $*" >> "$CALLS"; }\n')
         self.udev = self.root / "rules.d"
+        self.uinput = self.root / "uinput"
+        self.uinput.mkdir()
+        self.env["SMPLOS_KEYPAD_UINPUT_SYSFS"] = str(self.uinput)
         self.tool("sudo", '"$@"\n')
         self.tool("udevadm", 'echo "udevadm $*" >> "$CALLS"\n')
         # The keypad app's package: installed unless PKG_VERSION is empty.
         self.tool("pacman", '[ "$1" = -Q ] && { [ -n "$PKG_VERSION" ] && echo "$2 $PKG_VERSION"; exit 0; }\n'
                             'echo "pacman $*" >> "$CALLS"\n')
         self.tool("fakeroot", 'exit 0\n')
+        self.tool("vercmp", 'python3 -c \'import re, sys; a, b = [tuple(map(int, re.findall(r"\\d+", v))) '
+                           'for v in sys.argv[1:]]; print((a > b) - (a < b))\' "$@"\n')
+        self.pkgver = re.search(r"(?m)^pkgver=(.*)$", PKGBUILD.read_text())[1]
         self.tool("makepkg", 'echo "makepkg $*" >> "$CALLS"\n'
                              '[ -n "$MAKEPKG_FAIL" ] && exit 1\n'
-                             'touch control-surface-0.8.27-1-x86_64.pkg.tar.zst\n')
-        pkgver = re.search(r"(?m)^pkgver=(.*)$", PKGBUILD.read_text())[1]
-        self.env.update(PKG_VERSION=f"{pkgver}-1")
+                             f'touch control-surface-{self.pkgver}-1-x86_64.pkg.tar.zst\n')
+        daemon = self.tool("control-surfaced", 'echo "keypad-runtime $*" >> "$CALLS"\n'
+                          '[ -n "$RUNTIME_FAIL" ] && { echo "Qt_6.12 not found" >&2; exit 127; }\n'
+                          'echo "{}"\n')
+        self.env["SMPLOS_KEYPAD_DAEMON"] = str(daemon)
+        self.env.update(PKG_VERSION=f"{self.pkgver}-1")
         self.env.update(SMPLOS_REPO=str(ROOT), SMPLOS_UDEV_RULES_DIR=str(self.udev))
         theme = self.home / ".config/smplos/current/theme"
         theme.mkdir(parents=True)
         (theme / "colors.toml").write_text('accent = "#123abc"\n')
         (self.home / ".config/eww").mkdir(parents=True)
         self.units = self.home / ".config/systemd/user"
+        self.unit_state = self.home / ".local/state/smplos/keypad-units"
 
     def migrate(self):
         result = subprocess.run(["bash", str(self.repo / "migrations" / MIGRATION.name)], env=self.env,
@@ -722,6 +795,7 @@ class MigrationTests(KeypadCase):
         calls = self.calls_made()
         self.assertIn("udevadm control --reload-rules", calls)
         self.assertIn(f"udevadm trigger --action=change --parent-match={pad.resolve()}", calls)
+        self.assertIn(f"udevadm trigger --action=change {self.uinput}", calls)
         self.assertIn("session systemctl --user daemon-reload", calls)
         self.assertFalse(any("start" in call or "enable" in call for call in calls))
         self.assertFalse(any("subsystem-match" in call for call in calls), "only targeted triggers")
@@ -729,7 +803,7 @@ class MigrationTests(KeypadCase):
 
         self.calls.unlink()
         self.assertIn("already configured", self.migrate())
-        self.assertEqual(self.calls_made(), [])
+        self.assertEqual(self.calls_made(), ["keypad-runtime features --json"])
 
     def test_an_earlier_smplos_unit_is_updated_and_no_longer_starts_at_login(self):
         self.units.mkdir(parents=True)
@@ -737,13 +811,22 @@ class MigrationTests(KeypadCase):
                "[Service]\nExecStart=/usr/bin/control-surfaced run --quiet\n"
                "[Install]\nWantedBy=graphical-session.target\n")
         (self.units / "control-surface.service").write_text(old)
+        self.unit_state.mkdir(parents=True)
+        (self.unit_state / "last-installed.service").write_text(old)
         wants = self.units / "graphical-session.target.wants"
         wants.mkdir()
         (wants / "control-surface.service").symlink_to("../control-surface.service")
         output = self.migrate()
         self.assertEqual((self.units / "control-surface.service").read_text(), UNIT.read_text())
         self.assertFalse((wants / "control-surface.service").is_symlink())
-        self.assertIn("Removed the old login start", output)
+        self.assertIn("Removed obsolete keypad login link", output)
+        backups = list(self.unit_state.glob("backup.*/preimage"))
+        self.assertIn(old, [p.read_text() for p in backups if not p.is_symlink()])
+
+    def test_no_device_and_unloaded_uinput_module_do_not_fail_an_update(self):
+        self.uinput.rmdir()
+        self.migrate()
+        self.assertFalse(any(c.startswith("udevadm trigger") for c in self.calls_made()))
 
     def test_the_keypad_app_package_is_installed_when_missing_or_older(self):
         for version in ("", "0.8.1-1"):
@@ -754,7 +837,7 @@ class MigrationTests(KeypadCase):
                 calls = self.calls_made()
                 self.assertIn("makepkg -s --noconfirm --skippgpcheck", calls)
                 self.assertTrue(any(c.startswith("pacman -U --noconfirm ") and
-                                    c.endswith("/control-surface-0.8.27-1-x86_64.pkg.tar.zst") for c in calls), calls)
+                                    c.endswith(f"/control-surface-{self.pkgver}-1-x86_64.pkg.tar.zst") for c in calls), calls)
                 self.assertIn("Installed control-surface", output)
 
     def test_an_offline_update_defers_after_the_other_steps(self):
@@ -763,9 +846,25 @@ class MigrationTests(KeypadCase):
                                 capture_output=True, text=True, timeout=20)
         self.assertEqual(result.returncode, 75, result.stdout + result.stderr)
         self.assertTrue((self.udev / "70-smplos-keypads.rules").exists())
-        self.assertTrue((self.units / "control-surface.service").exists())
+        self.assertFalse((self.units / "control-surface.service").exists())
         self.assertFalse(any(c.startswith("pacman -U") for c in self.calls_made()))
         self.assertIn("will retry", result.stdout)
+
+    def test_offline_or_incompatible_delivery_preserves_the_working_unit(self):
+        self.units.mkdir(parents=True)
+        old = UNIT.read_text().replace("StartLimitIntervalSec=60\nStartLimitBurst=5\n", "").replace("Type=exec", "Type=simple")
+        unit = self.units / "control-surface.service"
+        unit.write_text(old)
+        self.assertEqual(hashlib.sha256(old.encode()).hexdigest(),
+                         "7d62b1a499c372362e1941dfc687884f67c0e1bf828743db3bfc22346dbbb495")
+        for extra in (dict(PKG_VERSION="", MAKEPKG_FAIL="1"), dict(RUNTIME_FAIL="1")):
+            with self.subTest(extra=extra):
+                result = subprocess.run(["bash", str(MIGRATION)], env=dict(self.env, **extra),
+                                        capture_output=True, text=True, timeout=20)
+                self.assertEqual(result.returncode, 75, result.stderr + result.stdout)
+                self.assertEqual(unit.read_text(), old)
+                self.assertIn("retained", result.stdout + result.stderr)
+        self.assertFalse((self.unit_state / "last-installed.service").exists())
 
     def test_custom_unit_is_left_alone(self):
         self.units.mkdir(parents=True)
@@ -779,6 +878,178 @@ class MigrationTests(KeypadCase):
         self.assertTrue((wants / "control-surface.service").is_symlink())
         self.assertIn("custom unit", output)
 
+    def test_custom_documented_unit_dropins_and_mappings_are_preserved(self):
+        self.units.mkdir(parents=True)
+        custom = UNIT.read_text().replace("--quiet", "--quiet --my-custom-argument")
+        (self.units / "control-surface.service").write_text(custom)
+        dropin = self.units / "control-surface.service.d/custom.conf"
+        dropin.parent.mkdir()
+        dropin.write_text("[Service]\nEnvironment=CUSTOM=1\n")
+        mapping = self.home / ".config/control-surface/config.jsonc"
+        mapping.parent.mkdir()
+        mapping.write_text("// my profiles\n{}\n")
+        self.migrate()
+        self.assertEqual((self.units / "control-surface.service").read_text(), custom)
+        self.assertEqual(dropin.read_text(), "[Service]\nEnvironment=CUSTOM=1\n")
+        self.assertEqual(mapping.read_text(), "// my profiles\n{}\n")
+        self.assertFalse((self.unit_state / "last-installed.service").exists())
+
+    def test_custom_edits_after_an_update_are_not_overwritten_by_later_updates(self):
+        self.migrate()
+        unit = self.units / "control-surface.service"
+        custom = unit.read_text().replace("--quiet", "--quiet --custom")
+        unit.write_text(custom)
+        self.migrate()
+        self.assertEqual(unit.read_text(), custom)
+        self.assertEqual((self.unit_state / "last-installed.service").read_text(), UNIT.read_text())
+
+    def test_missing_recipe_or_rule_fails_instead_of_claiming_support_is_installed(self):
+        for missing in ("src/shared/system/udev/70-smplos-keypads.rules",
+                        "src/shared/pkgbuilds/control-surface/PKGBUILD"):
+            with self.subTest(missing=missing):
+                repo = self.root / "incomplete"
+                shutil.copytree(ROOT / "src/shared/lib", repo / "src/shared/lib", dirs_exist_ok=True)
+                for rel in ("src/shared/system/udev/70-smplos-keypads.rules",
+                            "src/shared/configs/systemd/user/control-surface.service",
+                            "src/shared/pkgbuilds/control-surface/PKGBUILD"):
+                    if rel == missing:
+                        continue
+                    dst = repo / rel
+                    dst.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy(ROOT / rel, dst)
+                result = subprocess.run(["bash", str(MIGRATION)], env=dict(self.env, SMPLOS_REPO=str(repo)),
+                                        capture_output=True, text=True, timeout=20)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("ERROR:", result.stderr)
+                shutil.rmtree(repo)
+
+    def test_known_temporary_login_helper_is_backed_up_and_retired(self):
+        self.units.mkdir(parents=True)
+        helper = ("[Unit]\n"
+                  "Description=Start the keypad app for a keypad plugged in before login (smplOS live install)\n"
+                  "Documentation=https://github.com/smpl-os/smplos/blob/main/KEYPAD.md\n"
+                  "# The user manager doesn't start a device's SYSTEMD_USER_WANTS for a keypad\n"
+                  "# that was already plugged in when it came up. This one-shot does, once per\n"
+                  "# session, only if a supported keypad is present (smplos-keypad.device);\n"
+                  "# otherwise it does nothing. It replaces smplOS's smplos-session-services\n"
+                  "# step until that version is installed here.\n"
+                  "After=graphical-session.target\n\n[Service]\nType=oneshot\n"
+                  "ExecCondition=/usr/bin/systemctl --user --quiet is-active smplos-keypad.device\n"
+                  "ExecStart=/usr/bin/systemctl --user start --no-block control-surface.service\n\n"
+                  "[Install]\nWantedBy=graphical-session.target\n")
+        unit = self.units / "smplos-keypad-login.service"
+        unit.write_text(helper)
+        wants = self.units / "graphical-session.target.wants"
+        wants.mkdir()
+        link = wants / unit.name
+        link.symlink_to("../" + unit.name)
+        self.migrate()
+        self.assertFalse(unit.exists())
+        self.assertFalse(link.is_symlink())
+        backups = list(self.unit_state.glob("backup.*/preimage"))
+        self.assertIn(helper, [p.read_text() for p in backups if not p.is_symlink()])
+        self.assertIn("../" + unit.name, [os.readlink(p) for p in backups if p.is_symlink()])
+        # An exact stock base with custom overrides is no longer ours to retire.
+        unit.write_text(helper)
+        dropin = self.units / (unit.name + ".d") / "custom.conf"
+        dropin.parent.mkdir()
+        dropin.write_text("[Service]\nEnvironment=CUSTOM=1\n")
+        self.migrate()
+        self.assertEqual(unit.read_text(), helper)
+        self.assertTrue(dropin.exists())
+
+    def test_custom_login_helper_and_unit_symlink_are_preserved(self):
+        self.units.mkdir(parents=True)
+        custom = "[Service]\nType=oneshot\nExecStart=/usr/bin/true\n"
+        helper = self.units / "smplos-keypad-login.service"
+        helper.write_text(custom)
+        external = self.root / "my-unit.service"
+        external.write_text(UNIT.read_text())
+        (self.units / "control-surface.service").symlink_to(external)
+        self.migrate()
+        self.assertEqual(helper.read_text(), custom)
+        self.assertTrue((self.units / "control-surface.service").is_symlink())
+        self.assertEqual(external.read_text(), UNIT.read_text())
+
+    def test_every_normal_update_reconciles_even_after_migrations_were_marked_done(self):
+        updater = (ROOT / "src/shared/bin/smplos-os-update").read_text()
+        body = "sync_keypad_support() {" + updater.split("sync_keypad_support() {", 1)[1].split("\n}\n", 1)[0] + "\n}\n"
+        script = 'as_invoker() { "$@"; }\nwarn() { echo "$*" >&2; }\n' + body + "sync_keypad_support\n"
+        result = subprocess.run(["bash", "-c", script], env=self.env, capture_output=True, text=True, timeout=20)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.units / "control-surface.service").read_text(), UNIT.read_text())
+        main = updater[updater.index("    sync_configs\n"):]
+        self.assertLess(main.index("    sync_keypad_support"), main.index("    sync_user_units"))
+        self.env.update(PKG_VERSION="", MAKEPKG_FAIL="1")
+        result = subprocess.run(["bash", "-c", script], env=self.env, capture_output=True, text=True, timeout=20)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Keypad integration is incomplete", result.stderr)
+
+    def test_fresh_iso_and_installer_use_the_same_units_and_ownership_as_updates(self):
+        build = (ROOT / "src/builder/build.sh").read_text()
+        body = "install_keypad_packaging() {" + build.split("install_keypad_packaging() {", 1)[1].split("\n}\n", 1)[0] + "\n}\n"
+        def fragment(start, end):
+            first = build.index(start)
+            return build[first:build.index(end, first)]
+        copies = [
+            fragment("    # 2. Populate /etc/skel/.config", '    mkdir -p "$airootfs/root/smplos/install/helpers"'),
+            fragment("    # Copy shared bin scripts", "    # Deploy shared web app"),
+            fragment("    # Deploy udev rules", "    # Copy EWW configs"),
+            fragment("    # Copy package lists so", "    # Copy edition extra packages"),
+            fragment("    # Copy configs for post-install", "    # Setup systemd services"),
+        ]
+        script = body + '''
+stage_fixture() {
+    local airootfs="$AIROOTFS" skel="$AIROOTFS/etc/skel"
+    mkdir -p "$skel/.config" "$airootfs/usr/local/bin"
+    log_info() { :; }
+    install_keypad_packaging "$airootfs"
+''' + "\n".join(copies) + "\n}\nstage_fixture\n"
+        iso = self.root / "iso"
+        result = subprocess.run(["bash", "-euc", script],
+                                env=dict(self.env, SRC_DIR=str(ROOT / "src"), AIROOTFS=str(iso), COMPOSITOR="hyprland"),
+                                capture_output=True, text=True, timeout=20)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.migrate()
+        live = iso / "etc/skel"
+        payload = iso / "root/smplos"
+        self.assertEqual((live / ".config/systemd/user/control-surface.service").read_bytes(),
+                         (self.units / "control-surface.service").read_bytes())
+        self.assertEqual((payload / "config/systemd/user/control-surface.service").read_bytes(), UNIT.read_bytes())
+        self.assertEqual((live / ".local/state/smplos/keypad-units/last-installed.service").read_bytes(),
+                         (self.unit_state / "last-installed.service").read_bytes())
+        for staged in (iso / "usr/local/bin/smplos-session-services", payload / "bin/smplos-session-services"):
+            self.assertEqual(staged.read_bytes(), SESSION_SERVICES.read_bytes())
+            self.assertEqual(staged.stat().st_mode & 0o777, 0o755)
+        for staged in (iso / "usr/local/lib/smplos/smplos-keypad-units.sh", payload / "lib/smplos-keypad-units.sh"):
+            self.assertEqual(staged.read_bytes(), (ROOT / "src/shared/lib/smplos-keypad-units.sh").read_bytes())
+        for staged in (iso / "etc/udev/rules.d/70-smplos-keypads.rules",
+                       payload / "system/udev/70-smplos-keypads.rules"):
+            self.assertEqual(staged.read_bytes(), RULES.read_bytes())
+        self.assertIn("control-surface", (payload / "packages-aur.txt").read_text().splitlines())
+        target = ROOT / "src/shared/configs/systemd/user/smplos-session.target"
+        self.assertEqual((live / ".config/systemd/user/smplos-session.target").read_bytes(), target.read_bytes())
+        self.assertEqual((payload / "config/systemd/user/smplos-session.target").read_bytes(), target.read_bytes())
+        for name in ("autostart.conf", "autostart.lua"):
+            self.assertEqual((payload / "config/hypr" / name).read_bytes(),
+                             (ROOT / "src/compositors/hyprland/hypr" / name).read_bytes())
+        installed_home = self.root / "installed-user"
+        installed_home.mkdir()
+        install = (ROOT / "src/shared/installer/install.sh").read_text()
+        stanza = "# Use the same canonical unit" + install.split("# Use the same canonical unit", 1)[1].split("# smplOS fonts", 1)[0]
+        shutil.copytree(payload / "config", installed_home / ".config")
+        subprocess.run(["bash", "-euc", stanza], env=dict(self.env, HOME=str(installed_home), SMPLOS_PATH=str(payload)),
+                       check=True, capture_output=True, text=True, timeout=20)
+        self.assertEqual((installed_home / ".config/systemd/user/control-surface.service").read_bytes(), UNIT.read_bytes())
+        self.assertEqual((installed_home / ".local/state/smplos/keypad-units/last-installed.service").read_bytes(),
+                         (self.unit_state / "last-installed.service").read_bytes())
+        for home in (live, installed_home):
+            self.assertFalse(list((home / ".config/systemd/user").glob("*.wants/*keypad*")))
+            self.assertFalse(list((home / ".config/systemd/user").glob("*.wants/control-surface.service")))
+        self.assertIn('install_keypad_packaging "$airootfs"', build)
+        self.assertIn('cp -r "$SRC_DIR/shared/bin/"* "$airootfs/usr/local/bin/"', build)
+        self.assertIn('cp -r "$SRC_DIR/shared/bin/"* "$airootfs/root/smplos/bin/"', build)
+        self.assertIn("control-surface", (ROOT / "src/shared/packages-aur.txt").read_text().splitlines())
 
 
 class EwwPassthroughMigrationTests(KeypadCase):

@@ -75,7 +75,7 @@ so each service binds to its own devices.
 ```mermaid
 flowchart LR
   pad["CH552 keypad\n1189:8890"] -- "udev: uaccess, smplos-keypad.device,\nSYSTEMD_USER_WANTS" --> unit["control-surface.service\n(BindsTo the device)"]
-  unit --> daemon["control-surfaced\n(control-surface repo)"]
+  unit --> daemon["control-surfaced\n(smpl-apps/control-surface)"]
   unit -- "ExecStartPost / ExecStopPost:\neww update keypad-present" --> eww["EWW tray icon"]
   sync["scripts/keypad-bar-sync.sh\n(eww deflisten, bar open/reload)"] -- "once: is-active?" --> eww
   daemon -- "evdev grab" --> pad
@@ -94,8 +94,8 @@ flowchart LR
 
 | Piece | Lives in | Role |
 |---|---|---|
-| `control-surfaced` | control-surface repository (separate) | Grabs only `1189:8890`, follows the focused window, applies JSONC profiles, Kdenlive plugin |
-| Open firmware | control-surface `firmware/` (fork of CH552-OpenMacroPad, CC BY-SA 3.0) | Self-describing keypad firmware, same VID:PID |
+| `control-surfaced` | smpl-apps `control-surface/` | Grabs only `1189:8890`, follows the focused window, applies JSONC profiles, Kdenlive plugin |
+| Open firmware | smpl-apps `control-surface/firmware/` (fork of CH552-OpenMacroPad, CC BY-SA 3.0) | Self-describing keypad firmware, same VID:PID |
 | `keypad-ctl` | `src/shared/bin/keypad-ctl` | On-demand tool: detection (`status`, `present`) and firmware list and flash. Never runs in the background |
 | Keypad registry | `src/shared/keypads/registry.json`, `gen.py` | The one list of keypads (supported or planned) and bootloaders; generates the udev rules, `keypad-ctl`'s IDs and Settings' IDs and scope text |
 | udev rules | `src/shared/system/udev/70-smplos-keypads.rules` (generated) | Access, the `smplos-keypad.device` unit, start on plug-in |
@@ -103,7 +103,7 @@ flowchart LR
 | Bar icon | `src/shared/eww/eww.yuck` (`keypad-present`, `tray-keypad`), `scripts/keypad-bar-sync.sh`, `icons/status/keypad.svg` | Visible only while the keypad app runs |
 | Settings tab | smpl-apps `settings/src/keypad/`, `settings/ui/main.slint` (tab 11) | Status, layout, mapping editor, firmware wizard |
 | Packaging | `src/shared/pkgbuilds/control-surface/`, `packages-aur.txt` (`wchisp`) | The daemon (a pinned smpl-apps release asset) and the flasher |
-| Migration | `migrations/20261007-123000-macro-keypad-support.sh` | Existing installs: udev rules, icon, unit (never enabled) |
+| Updates | `migrations/20261007-123000-macro-keypad-support.sh`, `20261009-010000-keypad-login-recovery.sh` | Existing installs: rules, icon, packaged daemon and backed-up unit reconciliation; also run on every normal OS update |
 
 Settings code lives in smpl-apps, like every native app. This repository
 carries the system integration only, and never vendors the daemon's source.
@@ -170,10 +170,50 @@ Two one-shot checks cover the cases the events can't:
   (after 2 s, so EWW reads the line first). EWW runs it when the bar opens or
   reloads and never restarts a script that ended; `eww update` from the unit
   overrides it. Nothing polls, and `bar-ctl` has nothing keypad related.
-* **Keypad plugged in before login.** udev starts the app when the user manager
-  comes up, before the session's environment is imported. At login,
-  `smplos-session-services` restarts it once, only if `smplos-keypad.device` is
-  active, so `command` bindings run in the session.
+* **Keypad plugged in before login.** The user manager can miss an already-active
+  device's `SYSTEMD_USER_WANTS`, or start the app before the graphical environment
+  is available. At login, `smplos-session-services` imports the environment,
+  starts `smplos-session.target`, resets the app's failure limit and restarts it
+  once, only if `smplos-keypad.device` is active. This also binds `command`
+  mappings to the current session. The daemon is verified even though it has
+  no enablement link: one transient failure is retried; a persistent failure
+  is stopped and reported with its reason and journal command. A missing app
+  while hardware is present is an error, not an optional skipped service.
+
+Successful login one-shots are accepted as completed even without
+`RemainAfterExit=yes`; `inactive` plus a successful, recorded execution is
+normal for them. The temporary live-install `smplos-keypad-login.service`
+used to be incorrectly reported as failed despite `Result=success`.
+Updates back up and retire only recognized, unmodified versions of that
+helper; the canonical login hook replaces it. Custom units, unit symlinks,
+drop-ins and `~/.config/control-surface/config.jsonc` mappings are preserved.
+
+The ISO builder and post-install script use the same
+`smplos-keypad-units.sh` reconciliation as updates, shipping the canonical
+device-bound unit without enabling it. The shared scripts include the login
+hook, both Hyprland autostart formats invoke it, and the offline package list
+includes the pinned published `control-surface` package from
+**smpl-apps v0.8.28**, built against the Qt 6.11 baseline rather than requiring
+Qt 6.12. Normal OS updates retry missing/older packages even
+when earlier migrations were already marked complete. Offline failures are
+reported as incomplete updates instead of silently declaring success.
+The package and migration smoke-test the actual daemon runtime before a
+working unit is replaced. A failed download/build or incompatible Qt runtime
+preserves the existing units and login helper for the next retry.
+
+Read-only diagnosis:
+
+```bash
+systemctl --user status smplos-keypad.device control-surface.service
+journalctl --user -b -u control-surface.service
+smplos-session-services --verify
+```
+
+`--verify` leaves an active keypad app alone. Updated unit execution paths take
+effect at the next login or plug-in, not by interrupting a running keypad.
+Backups and the last OS-installed unit are kept under
+`~/.local/state/smplos/keypad-units/`; customized units are reported, never
+silently replaced.
 
 `ExecStartPost`/`ExecStopPost` are `-` prefixed: with no bar running, `eww
 update` fails in about a second and never starts an EWW daemon.
@@ -585,7 +625,7 @@ app on the bus there is nothing to switch.
   release). `packages-aur.txt` puts it on the ISO; the keypad migration
   installs or updates it on existing installs (`src/shared/lib/smplos-pkgbuild.sh`,
   deferring with exit 75 when offline). To ship a newer daemon: bump `pkgver`
-  and `sha256sums`, and add a migration that reruns that package step.
+  and `sha256sums`; normal OS updates rerun that package step.
 * **wchisp:** from the AUR (`wchisp` 0.3.0, GPL-2.0), listed in
   `packages-aur.txt` so the offline ISO carries it.
 * **udev rules:** deployed by the generic udev step of `build.sh` and
@@ -594,14 +634,14 @@ app on the bus there is nothing to switch.
 * **User unit:** copied to skel with the shared configs and never enabled. For
   existing users, `smplos-os-update`'s `sync_configs` adds it when it's missing
   (that step copies any file from `src/shared/configs` the user doesn't have).
-  The migration installs or updates a unit an earlier smplOS draft installed
-  (recognised by its `Documentation=` line) and removes that draft's
-  `*.wants` link. A different unit of the same name, such as a developer's
-  `install-user.sh` unit, is left alone.
+  Shared reconciliation installs or updates an earlier smplOS unit recognised
+  by its exact content or last-installed ownership stamp, removes obsolete
+  login links, and retires recognised temporary login helpers after package
+  runtime validation. Customized units, symlinks and drop-ins are preserved.
 * **Bar and scripts:** delivered by `smplos-os-update` (scripts, EWW config).
   The migration bakes the tray icon with the current theme's accent.
-* **Settings tab:** ships in the next smpl-apps release. There is no new
-  binary.
+* **Settings tab:** ships with smpl-apps as **Settings > Keypad**; there is no
+  separate keypad settings GUI.
 
 ## Decisions
 

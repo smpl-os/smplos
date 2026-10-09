@@ -798,6 +798,16 @@ sync_user_units() {
     fi
 }
 
+sync_keypad_support() {
+    local migration="$SMPLOS_REPO/migrations/20261009-010000-keypad-login-recovery.sh"
+    if as_invoker bash "$migration"; then
+        return 0
+    else
+        warn "Keypad integration is incomplete; resolve the reported error and retry Update OS."
+        return 1
+    fi
+}
+
 # Run even without new commits: older Settings releases can reintroduce direct
 # dispatcher syntax after a one-shot migration has already completed.
 sync_hypridle_config() {
@@ -998,9 +1008,12 @@ if [[ $SCRIPTS_ONLY -eq 0 ]]; then
     sync_themes
     sync_apps
     sync_hypr_configs
-    sync_user_units
     migrations_failed=0
     run_migrations || migrations_failed=1
+    # Reconcile even when migrations were already marked done. Verify only
+    # after units and the published keypad package have been delivered.
+    sync_keypad_support || migrations_failed=1
+    sync_user_units
     sync_hypridle_config
     [[ $migrations_failed -eq 0 ]] || die "Some migrations failed; idle reconciliation was attempted. Resolve the reported errors and retry Update OS."
 

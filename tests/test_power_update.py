@@ -359,6 +359,7 @@ SELF_UPDATED=1; SELF_CANONICAL="$HOME/not-installed"
 pull_updates() { return 1; }
 sync_scripts() { :; }; sync_configs() { :; }; sync_themes() { :; }
 sync_apps() { :; }; sync_user_units() { :; }; run_migrations() { :; }; cleanup_shadow_bins() { :; }
+sync_keypad_support() { :; }
 post_deploy() { :; }; rebuild-app-cache() { :; }
 """
         script = self.sync_script() + stubs + main
@@ -393,6 +394,7 @@ SELF_UPDATED=1; SELF_CANONICAL="$HOME/not-installed"
 pull_updates() {{ return 1; }}
 sync_scripts() {{ :; }}; sync_configs() {{ :; }}; sync_themes() {{ :; }}
 sync_apps() {{ :; }}; sync_user_units() {{ :; }}; cleanup_shadow_bins() {{ :; }}
+sync_keypad_support() {{ :; }}
 post_deploy() {{ :; }}; rebuild-app-cache() {{ :; }}
 run_migrations() {{ bash "{BIN / 'smplos-migrate'}"; }}
 """
@@ -561,10 +563,15 @@ class SessionServicesTests(unittest.TestCase):
             json.dump(state, open(path, "w"))
         if args[0] == "is-active":
             if args[-1].endswith(".device"):
-                sys.exit(3)  # no macro keypad plugged in
+                sys.exit(0 if state.get("keypad") else 3)
             sys.exit(0 if state["graphical"] else 3)
         if args[0] == "stop":
-            state["graphical"] = False
+            if args[1] == "graphical-session.target":
+                state["graphical"] = False
+            elif args[1] in units:
+                units[args[1]]["active"] = False
+                if os.environ.get("CLEAR_RESULT_ON_STOP"):
+                    units[args[1]]["completed"] = True
         elif args[0] == "start":
             if state.get("start_fails", 0) > 0:
                 state["start_fails"] -= 1
@@ -572,16 +579,37 @@ class SessionServicesTests(unittest.TestCase):
                 sys.exit(1)
             state["graphical"] = True
             for name, unit in units.items():
-                if not unit.get("skip"):
+                if name == "control-surface.service":
+                    continue  # device-bound, not enabled for the target
+                if unit.get("oneshot"):
+                    unit["completed"] = name not in broken
+                    unit["active"] = False
+                elif not unit.get("skip"):
                     unit["active"] = name not in broken
         elif args[0] == "restart":
-            units[args[1]]["active"] = args[1] not in broken
+            unit = units[args[1]]
+            if args[1] == "control-surface.service":
+                if os.environ.get("UNPLUG_ON_RESTART"):
+                    state["keypad"] = False
+                if state.get("keypad_failures", 0):
+                    state["keypad_failures"] -= 1
+                    unit["active"] = False
+                    save()
+                    sys.exit(1)
+            unit["active"] = args[1] not in broken and not unit.get("skip") and not unit.get("oneshot")
+            unit["completed"] = args[1] not in broken
         elif args[0] == "show":
             unit = units.get(args[1], {})
-            value = {"ActiveState": "active" if unit.get("active") else "failed",
+            success = unit.get("active") or unit.get("completed")
+            value = {"ActiveState": "active" if unit.get("active") else
+                                    "inactive" if unit.get("oneshot") or unit.get("skip") else "failed",
                      "ConditionResult": "no" if unit.get("skip") else "yes",
                      "ConditionTimestamp": "Sun 2026-10-04" if unit.get("skip") else "",
-                     "Result": "exit-code", "Description": args[1]}[args[3]]
+                     "Type": "oneshot" if unit.get("oneshot") else "exec",
+                     "Result": "success" if success else "exit-code",
+                     "ExecMainStatus": "0" if success else "1",
+                     "ExecMainExitTimestampMonotonic": "42" if unit.get("completed") else "0",
+                     "Description": args[1]}[args[3]]
             print(value)
         save()
         """)
@@ -610,10 +638,13 @@ class SessionServicesTests(unittest.TestCase):
                         XDG_CACHE_HOME=str(root / "cache"), SMPLOS_SYSTEM_USER_UNITS=str(root / "none"),
                         SMPLOS_SESSION_SETTLE="0", SMPLOS_SESSION_RETRY="0")
 
-    def run_login(self, graphical=False, start_fails=0, skip=(), **env):
+    def run_login(self, graphical=False, start_fails=0, skip=(), extra_units=None,
+                  keypad=False, keypad_failures=0, **env):
         units = {u: {"active": False, "skip": u in skip}
                  for u in ("hypridle.service", "voxtype.service", "xr-glasses.service")}
-        self.state.write_text(json.dumps({"graphical": graphical, "start_fails": start_fails, "units": units}))
+        units.update(extra_units or {})
+        self.state.write_text(json.dumps({"graphical": graphical, "start_fails": start_fails, "units": units,
+                                         "keypad": keypad, "keypad_failures": keypad_failures}))
         result = subprocess.run(["bash", str(self.SCRIPT)], env=dict(self.env, **env),
                                 capture_output=True, text=True, timeout=20)
         calls = self.calls.read_text().splitlines()
@@ -699,6 +730,89 @@ class SessionServicesTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertNotIn("restart xr-glasses.service", calls)
         self.assertFalse(self.notified.exists())
+
+    def test_a_successful_non_remaining_login_oneshot_is_not_retried_or_reported(self):
+        helper = "smplos-keypad-login.service"
+        (self.root / "config/systemd/user/graphical-session.target.wants" / helper).touch()
+        result, calls = self.run_login(extra_units={helper: {"oneshot": True}})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn(f"restart {helper}", calls)
+        self.assertNotIn(f"stop {helper}", calls)
+        self.assertFalse(self.notified.exists())
+
+    def test_a_really_failed_oneshot_is_still_retried_and_reported(self):
+        helper = "smplos-keypad-login.service"
+        (self.root / "config/systemd/user/graphical-session.target.wants" / helper).touch()
+        result, calls = self.run_login(extra_units={helper: {"oneshot": True}}, BROKEN=helper)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(f"restart {helper}", calls)
+        self.assertIn(f"stop {helper}", calls)
+        self.assertIn("exit-code (exit status 1)", self.notified.read_text())
+
+    def test_coldplug_recovery_follows_environment_and_target_and_is_verified(self):
+        for already_running in (False, True):
+            with self.subTest(already_running=already_running):
+                self.calls.unlink(missing_ok=True)
+                result, calls = self.run_login(keypad=True, extra_units={
+                    "control-surface.service": {"active": already_running}})
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertLess(calls.index("import-environment"), calls.index("start smplos-session.target"))
+                self.assertLess(calls.index("start smplos-session.target"),
+                                calls.index("reset-failed control-surface.service"))
+                self.assertEqual(calls.count("restart control-surface.service"), 1)
+                self.assertIn("show control-surface.service -p ActiveState --value", calls)
+                self.assertFalse(self.notified.exists())
+
+    def test_no_device_never_starts_or_restarts_a_keypad_process(self):
+        result, calls = self.run_login()
+        self.assertEqual(result.returncode, 0)
+        self.assertFalse([call for call in calls if "control-surface.service" in call])
+
+    def test_transient_keypad_start_failure_recovers_but_persistent_failure_reports(self):
+        result, calls = self.run_login(keypad=True, keypad_failures=1, extra_units={
+            "control-surface.service": {"active": False}})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(calls.count("restart control-surface.service"), 2)
+        self.assertFalse(self.notified.exists())
+        self.calls.unlink()
+        result, calls = self.run_login(keypad=True, extra_units={
+            "control-surface.service": {"active": False}}, BROKEN="control-surface.service")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("stop control-surface.service", calls)
+        self.assertIn("Macro keypad app", self.notified.read_text())
+        self.assertIn("journalctl --user -u control-surface.service", self.notified.read_text())
+
+    def test_missing_keypad_app_is_an_error_with_hardware_not_an_optional_condition_skip(self):
+        result, calls = self.run_login(keypad=True, extra_units={
+            "control-surface.service": {"active": False, "skip": True}})
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("restart control-surface.service", calls)
+        self.assertIn("keypad app unavailable; retry Update OS", self.notified.read_text())
+
+    def test_failure_reason_is_captured_before_stopping_the_failed_unit(self):
+        result, _ = self.run_login(keypad=True, extra_units={
+            "control-surface.service": {"active": False}}, BROKEN="control-surface.service",
+            CLEAR_RESULT_ON_STOP="1")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("exit-code (exit status 1)", self.notified.read_text())
+        self.assertNotIn("success (exit status 0)", self.notified.read_text())
+
+    def test_unplug_during_start_is_not_reported_as_failure(self):
+        result, calls = self.run_login(keypad=True, extra_units={
+            "control-surface.service": {"active": False}}, UNPLUG_ON_RESTART="1")
+        self.assertEqual(result.returncode, 0)
+        self.assertFalse(self.notified.exists())
+        self.assertNotIn("stop control-surface.service", calls)
+
+    def test_update_verification_does_not_interrupt_the_running_keypad(self):
+        self.run_login(keypad=True, extra_units={"control-surface.service": {"active": True}})
+        self.calls.unlink()
+        result = subprocess.run(["bash", str(self.SCRIPT), "--verify"], env=self.env,
+                                capture_output=True, text=True, timeout=20)
+        calls = self.calls.read_text().splitlines()
+        self.assertEqual(result.returncode, 0)
+        self.assertIn("show control-surface.service -p ActiveState --value", calls)
+        self.assertNotIn("restart control-surface.service", calls)
 
     def test_update_installs_the_target_and_starts_it_in_the_running_session(self):
         repo = self.root / "repo"

@@ -118,6 +118,37 @@ This backs up their version and copies the new default.
 ### Option B: Breaking change (must update or things break)
 Write a migration. See section 5 below.
 
+### Device-triggered keypad delivery
+
+Normal OS updates reconcile keypad integration on every run, not only once
+per migration: the canonical `control-surface.service`, udev rules and pinned
+`control-surface` package from **smpl-apps v0.8.28** must all be available.
+That release builds the keypad daemon on its Qt 6.11 baseline, compatible with
+the installed Qt 6.11.2 runtime; v0.8.27 incorrectly required Qt 6.12.
+The catch-up migration `20261009-010000-keypad-login-recovery.sh` covers
+already-marked installs. Package/build/privilege failures remain explicit
+and retryable; a missing recipe is an error, not a pending placeholder.
+The package smoke-tests `control-surfaced features --json` against the build
+host's runtime. Updates also check the installed binary before replacing a
+working unit or retiring its login helper. Offline or ABI-incompatible delivery
+retains those units and leaves the update incomplete.
+
+`src/shared/lib/smplos-keypad-units.sh` is shared by updates, ISO skel staging
+and post-install setup. It tracks the last installed unit, verifies backups
+before changes, retires only exact known temporary login helpers, and leaves
+custom units, symlinks, drop-ins and keypad mappings alone. The daemon is never
+enabled for a login target: udev starts it and its device binding stops it.
+The existing session login hook imports the environment before recovering a
+connected coldplug keypad. No device means no keypad daemon or watcher.
+
+Session verification runs after delivery, includes the device-triggered app
+when a keypad is present, and accepts genuinely completed successful
+one-shots. It retries and reports real failures and does not restart a healthy
+keypad during an update. Existing running daemons adopt changed unit paths
+on the next login or plug-in. Fresh ISOs carry the same unit and hook and
+install the daemon from their offline mirror; rebuilding smpl-apps is not
+required for this OS-only fix. See [keypad lifecycle](KEYPAD.md#lifecycle-and-footprint).
+
 ### Power preferences and command compatibility
 
 Settings and the user own `~/.config/hypr/hypridle.conf`: updates retain exact

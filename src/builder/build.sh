@@ -1004,6 +1004,16 @@ install_xr_packaging() {
     fi
 }
 
+install_keypad_packaging() {
+    local airootfs="$1"
+    source "$SRC_DIR/shared/lib/smplos-keypad-units.sh"
+    smplos_keypad_sync_units "$SRC_DIR/shared/configs/systemd/user" \
+        "$airootfs/etc/skel/.config/systemd/user" \
+        "$airootfs/etc/skel/.local/state/smplos/keypad-units"
+    install -Dm644 "$SRC_DIR/shared/configs/systemd/user/control-surface.service" \
+        "$airootfs/root/smplos/config/systemd/user/control-surface.service"
+}
+
 ###############################################################################
 # Configure Airootfs
 ###############################################################################
@@ -1029,6 +1039,7 @@ setup_airootfs() {
         log_info "Populating /etc/skel/.config from src/shared/configs..."
         cp -r "$SRC_DIR/shared/configs/"* "$skel/.config/" 2>/dev/null || true
     fi
+    install_keypad_packaging "$airootfs"
 
     mkdir -p "$airootfs/root/smplos/install/helpers"
     mkdir -p "$airootfs/root/smplos/config"

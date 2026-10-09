@@ -6,8 +6,8 @@
 # smpl-apps release publishes control-surface-<version>-x86_64.tar.gz, a usr/
 # tree built and tested (ctest) there. This package installs one pinned
 # release: to update, set pkgver to a newer smpl-apps release, update
-# sha256sums, and add a migration that reruns the keypad migration's package
-# step. No _gh_owner/_gh_repo on purpose: build-iso.sh would move pkgver to
+# sha256sums; normal OS updates rerun the keypad package step.
+# No _gh_owner/_gh_repo on purpose: build-iso.sh would move pkgver to
 # the latest release, which the pinned checksum would not match.
 #
 # smplOS ships the user unit and udev rules itself
@@ -16,7 +16,7 @@
 # stay in /usr/share/control-surface/examples.
 
 pkgname=control-surface
-pkgver=0.8.27
+pkgver=0.8.28
 pkgrel=1
 pkgdesc='Keypad app for CH552 macro keypads: per-app profiles, cheatsheet, Kdenlive API plugin, open firmware images'
 arch=(x86_64)
@@ -29,7 +29,15 @@ optdepends=(
 )
 options=(!strip !debug)
 source=("https://github.com/smpl-os/smpl-apps/releases/download/v${pkgver}/control-surface-${pkgver}-x86_64.tar.gz")
-sha256sums=('7e2858801bd132430ac3957c3969e083a19f4e43688187aef713e8a7890ab675')
+sha256sums=('0577fa04890f0bea7c27c6ede30e87097c43b607b4fe2d27b547063b02626e63')
+
+check() {
+  # Verify the release's real runtime ABI before pacman can install it.
+  local home="$srcdir/keypad-runtime-home"
+  mkdir -p "$home"
+  env HOME="$home" XDG_CONFIG_HOME="$home/config" XDG_STATE_HOME="$home/state" \
+    XDG_CACHE_HOME="$home/cache" "$srcdir/usr/bin/control-surfaced" features --json >/dev/null
+}
 
 package() {
   # smplOS's control-surface.service passes --eww-window/--eww-config

@@ -8,9 +8,11 @@ Documentation=https://github.com/smpl-os/smplos/blob/main/KEYPAD.md
 BindsTo=smplos-keypad.device
 After=smplos-keypad.device graphical-session.target
 ConditionPathExists=/usr/bin/control-surfaced
+StartLimitIntervalSec=60
+StartLimitBurst=5
 
 [Service]
-Type=simple
+Type=exec
 # --eww-*: the app pushes its cheatsheet into the bar's EWW (pad_sheet,
 # pad-cheatsheet) itself, only while it runs; no listener process.
 ExecStart=/usr/bin/control-surfaced run --quiet --eww-window pad-cheatsheet --eww-config %h/.config/eww

@@ -51,6 +51,12 @@ if [[ -d "$SMPLOS_PATH/config" ]]; then
   ls -la "$HOME/.config/eww/" 2>/dev/null || echo "    WARNING: eww config dir missing!"
 fi
 
+# Use the same canonical unit and ownership stamp as the live ISO and updater.
+# Nothing is enabled or started here; the login hook handles coldplug.
+source "$SMPLOS_PATH/lib/smplos-keypad-units.sh"
+smplos_keypad_sync_units "$SMPLOS_PATH/config/systemd/user" \
+  "$HOME/.config/systemd/user" "$HOME/.local/state/smplos/keypad-units"
+
 # smplOS fonts (keypad cheatsheet icons: Tabler Icons subset, MIT; see KEYPAD.md)
 if compgen -G "$SMPLOS_PATH/fonts/*.ttf" >/dev/null; then
   install -Dm644 -t "$HOME/.local/share/fonts/smplos" "$SMPLOS_PATH/fonts/"*.ttf "$SMPLOS_PATH/fonts/"LICENSE-*.txt

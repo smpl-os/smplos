@@ -44,11 +44,34 @@ condition_skipped() {
     [[ "$(prop "$1" ConditionResult)" == no && -n "$(prop "$1" ConditionTimestamp)" ]]
 }
 
+unit_ready() {
+    # Unplugging during verification is not a startup failure.
+    if [[ "$1" == control-surface.service ]] && ! sc is-active --quiet smplos-keypad.device; then
+        return 0
+    fi
+    local state
+    state=$(prop "$1" ActiveState)
+    [[ "$state" == active ]] && return 0
+    # A completed oneshot need not use RemainAfterExit to have succeeded.
+    [[ "$state" == inactive && "$(prop "$1" Type)" == oneshot \
+        && "$(prop "$1" Result)" == success && "$(prop "$1" ExecMainStatus)" == 0 \
+        && "$(prop "$1" ExecMainExitTimestampMonotonic)" =~ ^[1-9][0-9]*$ ]]
+}
+
+failure_reason() {
+    if [[ "$1" == control-surface.service ]] && condition_skipped "$1"; then
+        echo "keypad app unavailable; retry Update OS and check the unit's executable path"
+    else
+        printf '%s (exit status %s)' "$(prop "$1" Result)" "$(prop "$1" ExecMainStatus)"
+    fi
+}
+
 describe() {
     case "$1" in
         hypridle.service) echo "Power timers (screen off, suspend, lock)" ;;
         voxtype.service) echo "Dictation" ;;
         xr-glasses.service) echo "XR glasses watcher" ;;
+        control-surface.service) echo "Macro keypad app" ;;
         *) prop "$1" Description ;;
     esac
 }
@@ -76,28 +99,38 @@ if [[ "$MODE" != --verify ]]; then
         sc start "$TARGET" 2>>"$LOG" || log "could not start $TARGET"
     fi
 
-    # A macro keypad plugged in before login started its app when the user
-    # manager came up, before this session's environment was imported. Restart
-    # it once so its command bindings reach this session (and start it if that
-    # was missed). Only while the keypad is plugged in; see KEYPAD.md.
+    # Coldplug may have been missed, or started the app before environment
+    # import. Rebind it once after the target starts, only with a keypad.
     if sc is-active --quiet smplos-keypad.device 2>/dev/null; then
+        sc reset-failed control-surface.service 2>>"$LOG"
         sc restart control-surface.service 2>>"$LOG" || log "could not restart control-surface.service"
     fi
 fi
 
+# This device-triggered service has no enablement link, but must be verified
+# when hardware is present. --verify does not restart an already-running app.
+if sc is-active --quiet smplos-keypad.device 2>/dev/null \
+    && [[ " ${units[*]} " != *" control-surface.service "* ]]; then
+    units+=(control-surface.service)
+fi
+
 sleep "${SMPLOS_SESSION_SETTLE:-5}"
 failed=()
+declare -A failure_reasons=()
 for unit in "${units[@]}"; do
-    [[ "$(prop "$unit" ActiveState)" == active ]] && continue
-    condition_skipped "$unit" && continue
+    unit_ready "$unit" && continue
+    if [[ "$unit" != control-surface.service ]] && condition_skipped "$unit"; then
+        continue
+    fi
     log "$unit is $(prop "$unit" ActiveState); restarting"
     sc restart "$unit" 2>>"$LOG"
     sleep "${SMPLOS_SESSION_RETRY:-2}"
-    if [[ "$(prop "$unit" ActiveState)" == active ]]; then
+    if unit_ready "$unit"; then
         log "$unit recovered"
     else
         failed+=("$unit")
-        log "$unit failed: $(prop "$unit" Result); stopped"
+        failure_reasons["$unit"]=$(failure_reason "$unit")
+        log "$unit failed: ${failure_reasons[$unit]}; stopped"
         sc stop "$unit" 2>>"$LOG"
     fi
 done
@@ -112,8 +145,9 @@ if [[ -n "$current" ]]; then
     done
     if [[ "$current" != "$previous" || $always -eq 1 ]]; then
         names=$(for unit in "${failed[@]}"; do describe "$unit"; done | paste -sd ',' - | sed 's/,/, /g')
+        reasons=$(for unit in "${failed[@]}"; do printf '%s: %s\n' "$unit" "${failure_reasons[$unit]}"; done)
         notify-send -u critical "Some settings are not active" \
-            "$names did not start. Details: journalctl --user -u ${failed[0]}" 2>/dev/null || true
+            "$names did not start. $reasons. Details: journalctl --user -u ${failed[0]}" 2>/dev/null || true
     fi
     exit 1
 fi

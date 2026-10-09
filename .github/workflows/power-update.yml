@@ -11,8 +11,16 @@ on:
       - "src/shared/configs/systemd/**"
       - "src/shared/lib/smplos-hypridle*"
       - "src/shared/lib/smplos-session-env.sh"
+      - "src/shared/lib/smplos-keypad-units.sh"
+      - "src/shared/keypads/**"
+      - "src/shared/system/udev/*keypad*"
+      - "src/shared/pkgbuilds/control-surface/**"
+      - "migrations/*keypad*.sh"
+      - "tests/test_keypad.py"
       - "src/builder/build.sh"
+      - "src/build-iso.sh"
       - "src/shared/installer/automated_script.sh"
+      - "src/shared/installer/install.sh"
       - "src/compositors/hyprland/hypr/**"
       - "migrations/*hypridle*.sh"
       - "migrations/*idle-preferences.sh"
@@ -29,8 +37,16 @@ on:
       - "src/shared/configs/systemd/**"
       - "src/shared/lib/smplos-hypridle*"
       - "src/shared/lib/smplos-session-env.sh"
+      - "src/shared/lib/smplos-keypad-units.sh"
+      - "src/shared/keypads/**"
+      - "src/shared/system/udev/*keypad*"
+      - "src/shared/pkgbuilds/control-surface/**"
+      - "migrations/*keypad*.sh"
+      - "tests/test_keypad.py"
       - "src/builder/build.sh"
+      - "src/build-iso.sh"
       - "src/shared/installer/automated_script.sh"
+      - "src/shared/installer/install.sh"
       - "src/compositors/hyprland/hypr/**"
       - "migrations/*hypridle*.sh"
       - "migrations/*idle-preferences.sh"
@@ -53,8 +69,14 @@ jobs:
         run: |
           python3 -m unittest discover -s tests -p 'test_power_update.py' -v
           python3 -m unittest discover -s tests -p 'test_workspace_rollout.py' -v
+          python3 -m unittest discover -s tests -p 'test_keypad.py' -v
           bash -n src/shared/bin/smplos-os-update src/shared/bin/smplos-migrate \
             src/shared/bin/smplos-hypr-dpms src/shared/lib/smplos-hypridle.sh \
             migrations/20260707-210000-hypridle-legacy-dpms-syntax.sh \
             migrations/20260720-120000-enable-hypridle-service.sh \
-            migrations/20260930-120000-preserve-idle-preferences.sh
+            migrations/20260930-120000-preserve-idle-preferences.sh \
+            src/shared/bin/smplos-session-services src/shared/lib/smplos-keypad-units.sh \
+            src/builder/build.sh src/build-iso.sh src/shared/installer/install.sh \
+            src/shared/pkgbuilds/control-surface/PKGBUILD \
+            migrations/20261007-123000-macro-keypad-support.sh \
+            migrations/20261009-010000-keypad-login-recovery.sh
