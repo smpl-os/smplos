@@ -129,6 +129,14 @@ mv ~/.config/hypr/hyprland.conf.disabled ~/.config/hypr/hyprland.conf
   both providers (the normal case during the transition), edit both. The Lua
   file is intentionally a one-to-one translation, so a diff between
   `windows.conf` and `windows.lua` should show only translation noise.
+* **Screenshot overlay**: slurp's region-selection overlay is the layer
+  namespace `selection`. It must keep a `no_anim` layer rule, otherwise grim
+  (which runs the instant slurp exits) captures its close animation as a white
+  wash plus black border baked into every region screenshot. The `screenshot`
+  script also settles briefly before capturing, for other compositors. Satty,
+  the annotation editor, belongs in the `compositor-opaque` tag so screenshots
+  being edited are not shown through the theme's window opacity
+  (`tests/test_screenshot_overlay.py`).
 
 ## monitors.conf contract
 

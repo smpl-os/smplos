@@ -24,6 +24,11 @@ end
 
 require("keypad_glass")
 
+-- Screenshot selection overlay (slurp). `grim` runs the moment slurp exits, so
+-- an animated close gets captured half-faded: a washed-out white frame plus a
+-- black border baked into the screenshot. Remove it instantly.
+hl.layer_rule({ match = { namespace = "selection" }, no_anim = true })
+
 -- Rofi launcher (layer surface; needs layer rules not window rules)
 hl.layer_rule({ match = { namespace = "rofi" }, animation = "slide left" })
 hl.layer_rule({ match = { namespace = "rofi" }, order = -1 })
@@ -50,7 +55,8 @@ hl.window_rule({ match = { class = ".*" }, suppress_event = "maximize" })
 -- Windows fall into one of three opacity classes, expressed as tags:
 --
 --   (untagged)         — regular apps. Theme active/inactive opacity. Default.
---   compositor-opaque  — Hyprland forces 1.0 (media, video webapps, pip, fs).
+--   compositor-opaque  — Hyprland forces 1.0 (media, image editors, video
+--                        webapps, pip, fs).
 --   self-managed-alpha — App owns its own alpha channel (st ALPHA_PATCH, Slint
 --                        ARGB surfaces). Hyprland must pass 1.0 override so the
 --                        two don't compound (e.g. 0.85×0.85≈0.72). Adding a new
@@ -81,9 +87,9 @@ hl.window_rule({
     tag = "+self-managed-alpha",
 })
 
--- Media and special — always fully opaque
+-- Media, image editors (Pinta, Satty annotation) and special — always fully opaque
 hl.window_rule({
-    match = { class = "^(mpv|imv|vlc|zoom|org\\.kde\\.kdenlive(\\.automation-preview)?|com\\.obsproject\\.Studio|com\\.github\\.PintaProject\\.Pinta|org\\.gnome\\.NautilusPreviewer|steam|qemu)$" },
+    match = { class = "^(mpv|imv|vlc|zoom|org\\.kde\\.kdenlive(\\.automation-preview)?|com\\.obsproject\\.Studio|com\\.github\\.PintaProject\\.Pinta|com\\.gabm\\.satty|org\\.gnome\\.NautilusPreviewer|steam|qemu)$" },
     tag = "+compositor-opaque",
 })
 hl.window_rule({ match = { tag = "pip" },           tag = "+compositor-opaque" })

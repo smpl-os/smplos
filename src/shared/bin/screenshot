@@ -17,12 +17,20 @@ do_notify() {
   notify-send "Screenshot saved" "$FILENAME" -i "$FILENAME" -t 3000
 }
 
+# slurp's selection overlay is a layer surface that compositors may animate away
+# over a few frames after slurp exits, and grim captures whatever is on screen.
+# Grabbing at once bakes the half-faded white wash and border into the PNG. The
+# Hyprland `no_anim` layer rule (windows.conf/.lua) removes the animation; the
+# settle sleep before capture covers other compositors and customised configs.
+OVERLAY_SETTLE_SECS=0.2
+
 if [[ -n "$WAYLAND_DISPLAY" ]]; then
   # ── Wayland capture ──
   case "$MODE" in
     region)
       SELECTION=$(slurp 2>/dev/null)
       [[ -z "$SELECTION" ]] && exit 0
+      sleep "$OVERLAY_SETTLE_SECS"
       if [[ "$EDIT" == quick ]] || ! command -v satty &>/dev/null; then
         grim -g "$SELECTION" "$FILENAME"
         wl-copy < "$FILENAME" 2>/dev/null

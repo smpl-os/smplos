@@ -188,7 +188,7 @@ class FullOpacityPolicyTests(unittest.TestCase):
                   "nemo", "org.Nemo.nemo-float", "grafium", "st", "st-256color", "terminal", "rofi")
         cases = [(app, {}, neutral) for app in native]
         cases += [(app, props, neutral) for app, props in (
-            ("mpv", {}), ("steam_app_1234", {}),
+            ("mpv", {}), ("steam_app_1234", {}), ("com.gabm.satty", {}),
             ("brave-browser", {"title": "Picture-in-Picture"}),
             ("brave-browser", {"fullscreen": "1"}),
             ("brave-browser", {"content": "video"}),
@@ -260,7 +260,7 @@ class FullOpacityPolicyTests(unittest.TestCase):
                         self.assertEqual(evaluate(rules, app), neutral, app)
                         self.assertEqual(evaluate(rules, app, fullscreen="1"), neutral, app)
                         self.assertEqual(evaluate(rules, app, tags=("chromium-based-browser",)), neutral, app)
-                    for app in ("mpv", "imv", "vlc", "steam", "steam_app_1234"):
+                    for app in ("mpv", "imv", "vlc", "steam", "steam_app_1234", "com.gabm.satty"):
                         self.assertEqual(evaluate(rules, app), neutral, app)
                         self.assertEqual(evaluate(rules, app, tags=("chromium-based-browser",)), neutral, app)
                     for app in ("code", "brave-browser", "firefox", "signal", "brave-discord"):
