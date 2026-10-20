@@ -36,6 +36,20 @@ close_all() {
   done
 }
 
+# Open on the primary monitor (where the bar is) when it is known and
+# addressable; otherwise let EWW pick its default monitor. The primary is
+# resolved in the background (primary_fd) while the other popups close; a
+# stuck lookup delays the popup by at most 2 seconds.
+open_popup() {
+  local primary=""
+  read -r -t 2 -u "$primary_fd" primary || true
+  exec {primary_fd}<&-
+  if [[ -n $primary ]] && $EWW open "$@" --screen "$primary" 2>/dev/null; then
+    return 0
+  fi
+  $EWW open "$@"
+}
+
 # --close: just close everything
 if [[ "${1:-}" == "--close" ]]; then
   close_all
@@ -50,6 +64,7 @@ if is_window_open "$WINDOW"; then
   $EWW close "$WINDOW" 2>/dev/null
   _reenter &
 else
+  exec {primary_fd}< <(workspace-ctl primary 2>/dev/null)
   close_all
   if [[ "$WINDOW" == workspace-overview ]]; then
     # Window properties can read arguments, not EWW's listener variables.
@@ -57,8 +72,8 @@ else
       echo "popup-toggle: Cannot read workspace overview state; reload the bar and retry" >&2
       exit 1
     fi
-    $EWW open "$WINDOW" --arg "overview-state=$overview_state"
+    open_popup "$WINDOW" --arg "overview-state=$overview_state"
   else
-    $EWW open "$WINDOW" 2>/dev/null
+    open_popup "$WINDOW" 2>/dev/null
   fi
 fi

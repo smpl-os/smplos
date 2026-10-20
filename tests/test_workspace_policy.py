@@ -426,6 +426,176 @@ class WorkspacePolicyTests(unittest.TestCase):
         self.assertEqual(self.policy.load()["homes"]["2"], "m2")
         self.assertEqual(next(w for w in self.backend.data["workspaces"] if w["id"] == 2)["monitor"], "DP-3")
 
+    def use_three_monitors(self):
+        self.backend.data["monitors"] = [
+            monitor(2, "DP-right", 3, x=3840),
+            monitor(0, "DP-left", 2),
+            monitor(1, "DP-middle", 1, x=1920),
+        ]
+        self.backend.data["workspaces"] = [
+            {"id": m["activeWorkspace"]["id"], "name": str(m["activeWorkspace"]["id"]),
+             "monitor": m["name"], "windows": 1}
+            for m in self.backend.data["monitors"]
+        ]
+
+    def run_cli(self, *argv):
+        output, errors = io.StringIO(), io.StringIO()
+        with mock.patch.object(policy_module, "Policy", return_value=self.policy), \
+                mock.patch("sys.argv", ["workspace-ctl", *argv]), \
+                contextlib.redirect_stdout(output), contextlib.redirect_stderr(errors):
+            code = policy_module.main()
+        return code, output.getvalue(), errors.getvalue()
+
+    def workspace_monitors(self):
+        return {w["id"]: w["monitor"] for w in self.backend.data["workspaces"] if w["id"] > 0}
+
+    def test_primary_is_the_monitor_that_owns_workspace_one_and_reading_it_changes_nothing(self):
+        self.enable()
+        saved = (self.policy.path.read_bytes(), self.policy.rules.read_bytes())
+        actions, reloads = list(self.backend.actions), self.backend.reloads
+        self.assertEqual(self.policy.primary_connector(), "DP-3")
+        self.assertEqual((self.policy.path.read_bytes(), self.policy.rules.read_bytes()), saved)
+        self.assertEqual((self.backend.actions, self.backend.reloads), (actions, reloads))
+        self.policy.arrange(automatic=True)
+        self.assertEqual(self.policy.primary_connector(), "HDMI-A-1")
+        self.backend.data["monitors"] = []
+        with self.assertRaises(RuntimeError):
+            self.policy.primary_connector()
+
+    def test_set_primary_in_spatial_mode_gives_workspace_one_to_the_chosen_monitor(self):
+        self.policy.init(only_new=True)
+        self.assertEqual(self.policy.primary_connector(), "HDMI-A-1")
+        self.assertEqual(self.policy.set_primary("DP-3"), "DP-3")
+        profile = self.policy.load()
+        self.assertEqual(profile["primary"], "m2")
+        self.assertEqual(profile["assignment"], "spatial-round-robin")
+        self.assertEqual(profile["homes"], {str(w): "m2" if w % 2 else "m1" for w in range(1, 8)})
+        self.assertIn('workspace = "1", monitor = "DP-3"', self.policy.rules.read_text())
+        self.assertEqual(self.workspace_monitors()[1], "DP-3")
+        self.assertEqual(self.policy.primary_connector(), "DP-3")
+
+    def test_set_primary_in_preserve_mode_swaps_homes_and_keeps_the_mode(self):
+        self.enable()
+        self.assertEqual(self.policy.set_primary("HDMI-A-1"), "HDMI-A-1")
+        profile = self.policy.load()
+        self.assertEqual(profile["assignment"], "preserve")
+        self.assertEqual(profile["homes"], {
+            "1": "m1", "2": "m2", "3": "m2", "4": "m1", "5": "m2", "6": "m1", "7": "m2",
+        })
+        self.assertEqual(self.workspace_monitors(), {
+            1: "HDMI-A-1", 2: "DP-3", 3: "DP-3", 4: "HDMI-A-1", 5: "DP-3", 6: "HDMI-A-1", 7: "DP-3",
+        })
+        self.assertEqual(self.policy.primary_connector(), "HDMI-A-1")
+
+    def test_set_primary_with_three_monitors_continues_spatially_after_the_primary(self):
+        self.use_three_monitors()
+        self.enable()
+        self.policy.arrange(automatic=True)
+        self.policy.set_primary("DP-middle")
+        self.assertEqual(self.policy.load()["homes"], {
+            "1": "m2", "2": "m1", "3": "m3", "4": "m2", "5": "m1", "6": "m3", "7": "m2",
+        })
+        self.assertEqual(self.policy.primary_connector(), "DP-middle")
+
+    def test_chosen_primary_survives_layout_changes_and_reconnects(self):
+        self.policy.init(only_new=True)
+        self.policy.set_primary("DP-3")
+        homes = self.policy.load()["homes"]
+        self.backend.data["monitors"][1]["x"] = 3000
+        self.policy.state()
+        self.assertEqual(self.policy.load()["homes"], homes)
+        detached = self.backend.data["monitors"].pop()
+        self.policy.state()
+        self.assertEqual(self.policy.load()["primary"], "m2")
+        self.assertEqual(self.policy.primary_connector(), "HDMI-A-1")
+        self.backend.data["monitors"].append(detached)
+        self.policy.state()
+        self.assertEqual(self.policy.load()["homes"], homes)
+        self.assertEqual(self.policy.primary_connector(), "DP-3")
+
+    def test_set_primary_is_idempotent_and_accepts_the_stable_monitor_id(self):
+        self.enable()
+        self.policy.set_primary("HDMI-A-1")
+        saved = self.policy.path.read_bytes()
+        stamp = self.policy.path.stat().st_mtime_ns
+        actions, reloads = list(self.backend.actions), self.backend.reloads
+        for target in ("HDMI-A-1", "m1"):
+            self.assertEqual(self.policy.set_primary(target), "HDMI-A-1")
+        self.assertEqual(self.policy.path.read_bytes(), saved)
+        self.assertEqual(self.policy.path.stat().st_mtime_ns, stamp)
+        self.assertEqual((self.backend.actions, self.backend.reloads), (actions, reloads))
+
+    def test_set_primary_rejects_unknown_and_disconnected_monitors_without_writing(self):
+        self.enable()
+        saved = self.policy.path.read_bytes()
+        actions, reloads = list(self.backend.actions), self.backend.reloads
+        with self.assertRaisesRegex(ValueError, "DP-9"):
+            self.policy.set_primary("DP-9")
+        self.backend.data["monitors"].pop()
+        with self.assertRaisesRegex(ValueError, "DP-3"):
+            self.policy.set_primary("DP-3")
+        self.assertEqual(self.policy.path.read_bytes(), saved)
+        self.assertEqual((self.backend.actions, self.backend.reloads), (actions, reloads))
+
+    def test_primary_follows_an_explicit_move_of_workspace_one(self):
+        self.enable()
+        self.policy.select("1")
+        self.policy.move("left", whole_workspace=True)
+        self.assertEqual(self.policy.load()["homes"]["1"], "m1")
+        self.assertEqual(self.policy.primary_connector(), "HDMI-A-1")
+
+    def test_invalid_primary_monitor_fails_explicitly(self):
+        self.enable()
+        profile = self.policy.load()
+        profile["primary"] = None
+        self.policy.save(profile)
+        self.assertIsNone(self.policy.load()["primary"])
+        for bad in ("m9", "", 1, ["m1"], True):
+            with self.subTest(primary=bad):
+                profile["primary"] = bad
+                self.policy.save(profile)
+                with self.assertRaises(ValueError):
+                    self.policy.load()
+
+    def test_primary_commands_require_the_enabled_policy_and_never_touch_the_compositor(self):
+        env = {**os.environ, "HOME": str(self.home), "XDG_RUNTIME_DIR": str(self.home / "run")}
+        for command in (["primary"], ["set-primary", "DP-3"]):
+            with self.subTest(command=command):
+                result = subprocess.run([str(CONTROLLER), *command], env=env, capture_output=True,
+                                        text=True, timeout=10)
+                self.assertEqual(result.returncode, 1)
+                self.assertEqual(result.stdout, "")
+                self.assertIn("workspace-ctl: Stable workspace policy is not enabled", result.stderr)
+
+    def test_primary_command_prints_one_connector(self):
+        self.enable()
+        self.assertEqual(self.run_cli("primary"), (0, "DP-3\n", ""))
+
+    def test_set_primary_command_refreshes_the_taskbar_even_when_nothing_changed(self):
+        self.enable()
+        with mock.patch.object(policy_module.subprocess, "run") as run:
+            self.assertEqual(self.run_cli("set-primary", "HDMI-A-1"), (0, "Primary monitor: HDMI-A-1\n", ""))
+            self.assertEqual(self.run_cli("set-primary", "HDMI-A-1"), (0, "Primary monitor: HDMI-A-1\n", ""))
+        self.assertEqual([call.args[0] for call in run.call_args_list], [["bar-ctl", "refresh"]] * 2)
+
+    def test_failed_taskbar_refresh_does_not_undo_the_primary_change(self):
+        self.enable()
+        for error in (FileNotFoundError("bar-ctl"),
+                      subprocess.CalledProcessError(1, ["bar-ctl", "refresh"]),
+                      subprocess.TimeoutExpired(["bar-ctl", "refresh"], 20)):
+            with self.subTest(error=type(error).__name__), \
+                    mock.patch.object(policy_module.subprocess, "run", side_effect=error):
+                code, output, errors = self.run_cli("set-primary", "HDMI-A-1")
+                self.assertEqual((code, output), (0, "Primary monitor: HDMI-A-1\n"))
+                self.assertIn("workspace-ctl: the bar was not moved", errors)
+                self.assertEqual(self.policy.primary_connector(), "HDMI-A-1")
+
+    def test_rejected_primary_target_leaves_the_taskbar_alone(self):
+        self.enable()
+        with mock.patch.object(policy_module.subprocess, "run") as run, self.assertRaises(ValueError):
+            self.run_cli("set-primary", "DP-9")
+        run.assert_not_called()
+
     def test_send_and_focus_existing_window_use_exact_id(self):
         self.enable()
         self.policy.send("1", silent=True)

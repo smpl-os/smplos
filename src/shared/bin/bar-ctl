@@ -30,6 +30,27 @@ eww_cmd() {
     eww --config "$EWW_CONFIG" "$@" 8>&- 9>&-
 }
 
+# The primary monitor owns workspace 1 under the stable workspace policy. It is
+# empty without that policy (or off Hyprland), so the bar keeps EWW's default.
+eww_primary() {
+    workspace-ctl primary 2>/dev/null || true
+}
+
+# Open the bar on the primary monitor, or on EWW's default when the primary is
+# unknown or not addressable yet. bar_screen records where it actually landed,
+# so a bar that fell back is moved by the next refresh instead of staying put.
+bar_screen=""
+eww_open() {
+    local primary=$1
+    shift
+    bar_screen=""
+    if [[ -n "$primary" ]] && eww_cmd open "$BAR_NAME" "$@" --screen "$primary" >> "$LOG" 2>&1; then
+        bar_screen=$primary
+        return 0
+    fi
+    eww_cmd open "$BAR_NAME" "$@" >> "$LOG" 2>&1
+}
+
 eww_geometry() {
     if [[ -z "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]]; then
         printf '%s\n' unsupported
@@ -84,10 +105,11 @@ eww_start() {
     # non-running daemon auto-starts one. This avoids the race condition
     # where a separate 'eww daemon' + 'eww open' could spawn two daemons
     # if the IPC socket wasn't ready between the two commands.
-    local geometry
+    local geometry primary
     geometry=$(eww_geometry) || return 1
-    echo "$(date '+%H:%M:%S') Opening: $BAR_NAME" >> "$LOG"
-    eww_cmd open "$BAR_NAME" >> "$LOG" 2>&1 || return
+    primary=$(eww_primary)
+    echo "$(date '+%H:%M:%S') Opening: $BAR_NAME on ${primary:-the default monitor}" >> "$LOG"
+    eww_open "$primary" || return
 
     # Apply saved bar settings (workspace count, position, etc.)
     eww_apply || return
@@ -95,6 +117,7 @@ eww_start() {
     echo "$(date '+%H:%M:%S') Active windows:" >> "$LOG"
     eww_cmd active-windows >> "$LOG" 2>&1 || return
     printf '%s\n' "$geometry" > "$geometry_file" || return
+    printf '%s\n' "$bar_screen" > "$screen_file" || return
 
     # Start the geometry watcher so the bar recomputes its width whenever the
     # monitor scale/resolution changes (Settings -> Display, hot-plug, etc.).
@@ -115,24 +138,27 @@ eww_stop() {
 
 # Force the bar to recompute its geometry (percentage widths are resolved
 # against the monitor only at open time, so a close+reopen is the reliable
-# way to pick up a new scale/resolution).
+# way to pick up a new scale/resolution) and to move to the given primary.
 eww_redraw() {
-    local geometry
+    local primary=$1 geometry
     geometry=$(eww_geometry) || return 1
     eww_cmd close "$BAR_NAME" 2>/dev/null
     sleep 0.3
-    eww_cmd open "$BAR_NAME" >> "$LOG" 2>&1 || return
+    eww_open "$primary" || return
     eww_apply || return
     printf '%s\n' "$geometry" > "$geometry_file" || return
+    printf '%s\n' "$bar_screen" > "$screen_file" || return
     echo "$(date '+%H:%M:%S') bar-ctl redraw complete" >> "$LOG"
 }
 
 eww_refresh() {
-    local geometry previous=""
+    local geometry primary previous="" screen=""
     geometry=$(eww_geometry) || return 1
+    primary=$(eww_primary)
     [[ ! -f "$geometry_file" ]] || previous=$(<"$geometry_file")
-    if [[ "$geometry" == unsupported || "$geometry" != "$previous" ]]; then
-        eww_redraw
+    [[ ! -f "$screen_file" ]] || screen=$(<"$screen_file")
+    if [[ "$geometry" == unsupported || "$geometry" != "$previous" || "$primary" != "$screen" ]]; then
+        eww_redraw "$primary"
     fi
 }
 
@@ -156,7 +182,14 @@ eww_watch() {
     done
 }
 eww_toggle() {
-    eww_cmd open --toggle "$BAR_NAME"
+    local primary
+    primary=$(eww_primary)
+    if [[ -n "$primary" ]] && eww_cmd open --toggle "$BAR_NAME" --screen "$primary" 2>/dev/null; then
+        printf '%s\n' "$primary" > "$screen_file"
+        return
+    fi
+    eww_cmd open --toggle "$BAR_NAME" || return
+    [[ -z "$primary" ]] || printf '\n' > "$screen_file"
 }
 eww_reload() {
     local stale geometry
@@ -271,6 +304,9 @@ if [[ "$action" != watch ]]; then
     flock 9 || exit 1
     bar_id=$(printf '%s' "$BAR_NAME" | sha256sum) || exit 1
     geometry_file="$lock_dir/bar-${config_id%% *}-${bar_id%% *}.geometry"
+    # The monitor the bar was last opened on; kept apart from the geometry
+    # because a reload rewrites the geometry but never moves the bar.
+    screen_file="${geometry_file%.geometry}.screen"
 fi
 
 case "$action" in

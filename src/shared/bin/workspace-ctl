@@ -208,6 +208,8 @@ class Policy:
             for i, home in profile["homes"].items()
         ):
             raise ValueError("Invalid workspace homes in workspace policy")
+        if profile.get("primary") is not None and profile["primary"] not in ids:
+            raise ValueError("Invalid primary monitor in workspace policy")
         return profile
 
     def save(self, profile):
@@ -270,9 +272,16 @@ class Policy:
         return min(monitors, key=lambda m: int(m["id"][1:]))
 
     @staticmethod
+    def assignment_order(profile, monitors):
+        """Spatial order with the primary monitor first, so it owns workspace 1."""
+        ordered = spatial_order(monitors)
+        primary = profile.get("primary")
+        return [m for m in ordered if m["id"] == primary] + [m for m in ordered if m["id"] != primary]
+
+    @staticmethod
     def new_home(profile, monitors, workspace, preferred=None):
         if profile.get("assignment") == "spatial-round-robin":
-            return spatial_order(monitors)[(int(workspace) - 1) % len(monitors)]["id"]
+            return Policy.assignment_order(profile, monitors)[(int(workspace) - 1) % len(monitors)]["id"]
         if preferred is not None:
             return preferred["id"]
         return min(monitors, key=lambda m: (
@@ -309,7 +318,7 @@ class Policy:
         profile["count"] = count
         if profile.get("assignment") == "spatial-round-robin":
             layout = [[m["id"], m["x"], m["y"], m["width"], m["height"]]
-                      for m in spatial_order(monitors)]
+                      for m in self.assignment_order(profile, monitors)]
             # Explicit workspace transfers remain valid until the display layout
             # changes again; ordinary focus events must not undo a manual move.
             if profile.get("spatial_layout") != layout:
@@ -448,6 +457,44 @@ class Policy:
                 profile.pop("spatial_layout", None)
             self.save(profile)
         self.sync(snapshot, enforce=True, restore_views=True)
+
+    def primary_connector(self):
+        """The connector of the primary monitor: whichever monitor owns workspace 1."""
+        profile = self.load()
+        monitors = self.match_monitors(profile, self.backend.snapshot())
+        if not monitors:
+            raise RuntimeError("No connected monitors")
+        if "1" in profile["homes"]:
+            return self.effective_home(profile, monitors, 1)["connector"]
+        return self.assignment_order(profile, monitors)[0]["connector"]
+
+    def set_primary(self, target):
+        """Make a connected monitor primary: it owns workspace 1 and, with it, the bar."""
+        snapshot = self.backend.snapshot()
+        with self.lock():
+            profile = self.load()
+            original = copy.deepcopy(profile)
+            monitors, _ = self.reconcile(profile, snapshot)
+            chosen = next((m for m in monitors if target in (m["connector"], m["id"])), None)
+            if chosen is None:
+                raise ValueError(f"Monitor {target} is not connected")
+            profile["primary"] = chosen["id"]
+            if profile.get("assignment") == "spatial-round-robin":
+                # Explicit transfers are reset, as for any other layout-level change.
+                profile.pop("spatial_layout", None)
+            else:
+                previous = profile["homes"]["1"]
+                for workspace, home in profile["homes"].items():
+                    if home == previous:
+                        profile["homes"][workspace] = chosen["id"]
+                    elif home == chosen["id"]:
+                        profile["homes"][workspace] = previous
+            self.reconcile(profile, snapshot)
+            if profile != original:
+                self.save(profile)
+        if profile["homes"] != original["homes"]:
+            self.sync(snapshot, enforce=True, restore_views=True)
+        return chosen["connector"]
 
     def disable(self):
         with self.lock():
@@ -701,11 +748,20 @@ class Policy:
                         dirty = True
 
 
+def refresh_bar():
+    # The bar follows the primary monitor; a failed refresh must not undo the change.
+    try:
+        subprocess.run(["bar-ctl", "refresh"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                       timeout=20, check=True)
+    except (OSError, subprocess.SubprocessError) as error:
+        print(f"workspace-ctl: the bar was not moved: {error}", file=sys.stderr)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("action", choices=("enabled", "init", "enroll", "arrange", "disable", "apply", "current", "monitor", "status", "watch",
                                           "select", "send", "focus-monitor", "focus-window",
-                                          "move-window", "move-workspace"))
+                                          "move-window", "move-workspace", "primary", "set-primary"))
     parser.add_argument("target", nargs="?")
     parser.add_argument("--preserve", action="store_true", help="keep saved homes instead of automatic reassignment")
     parser.add_argument("--auto", action="store_true", help="reassign spatially whenever the monitor layout changes")
@@ -720,7 +776,8 @@ def main():
     policy = Policy()
     if args.action == "enabled":
         return 0 if policy.enabled() else 1
-    if args.action in ("select", "send", "focus-monitor", "focus-window", "move-window", "move-workspace") and not args.target:
+    if args.action in ("select", "send", "focus-monitor", "focus-window", "move-window", "move-workspace",
+                       "set-primary") and not args.target:
         parser.error("this action requires a target")
     if args.action not in ("init", "enroll", "disable", "status", "watch") and not policy.enabled():
         raise RuntimeError("Stable workspace policy is not enabled")
@@ -753,6 +810,11 @@ def main():
         policy.focus_monitor(args.target)
     elif args.action == "focus-window":
         policy.focus_window(args.target)
+    elif args.action == "primary":
+        print(policy.primary_connector())
+    elif args.action == "set-primary":
+        print(f"Primary monitor: {policy.set_primary(args.target)}")
+        refresh_bar()
     else:
         policy.move(args.target, whole_workspace=args.action == "move-workspace")
     return 0

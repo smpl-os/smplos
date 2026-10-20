@@ -40,13 +40,19 @@ class BarApplyTests(unittest.TestCase):
             "    out.write(json.dumps(sys.argv[1:]) + '\\n')\n"
             "if os.environ.get('FAIL_EWW') == '1':\n"
             "    print('mock: EWW connection failed', file=sys.stderr)\n"
-            "    sys.exit(17)\n")
+            "    sys.exit(17)\n"
+            "if os.environ.get('FAIL_SCREEN') == '1' and '--screen' in sys.argv:\n"
+            "    print('mock: unknown monitor', file=sys.stderr)\n"
+            "    sys.exit(18)\n")
         eww.chmod(0o755)
+        workspace_ctl = mock_bin / "workspace-ctl"
+        workspace_ctl.write_text('#!/bin/sh\n[ "$1" = primary ] && [ -n "$PRIMARY" ] && echo "$PRIMARY"\n')
+        workspace_ctl.chmod(0o755)
         watcher = mock_bin / "inotifywait"
         watcher.write_text("#!/bin/sh\nexit 0\n")
         watcher.chmod(0o755)
         self.env = dict(os.environ, HOME=str(self.root), PATH=f"{mock_bin}:{os.environ['PATH']}",
-                        CALLS=str(self.calls), XDG_RUNTIME_DIR=str(self.root / "runtime"))
+                        CALLS=str(self.calls), XDG_RUNTIME_DIR=str(self.root / "runtime"), PRIMARY="")
         for key in ("WAYLAND_DISPLAY", "DISPLAY", "HYPRLAND_INSTANCE_SIGNATURE",
                     "NIRI_SOCKET", "DBUS_SESSION_BUS_ADDRESS"):
             self.env.pop(key, None)
@@ -392,6 +398,125 @@ class BarApplyTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("cannot read monitor geometry", result.stderr)
         self.assertFalse(self.calls.exists())
+
+    def run_bar(self, action, **env):
+        return subprocess.run(["bash", str(self.script), action], env={**self.env, **env},
+                              capture_output=True, text=True, timeout=10)
+
+    def eww_calls(self):
+        if not self.calls.exists():
+            return []
+        return [json.loads(line)[2:] for line in self.calls.read_text().splitlines()]
+
+    def recorded_screen(self):
+        files = list((self.root / "runtime/smplos").glob("bar-*.screen"))
+        if not files:
+            return None
+        self.assertEqual(len(files), 1, files)
+        return files[0].read_text()
+
+    def without_boot_background_jobs(self):
+        self.script.write_text(self.script.read_text().replace(
+            '( sleep 2; "$0" refresh "$BAR_NAME" ) 8>&- 9>&- >/dev/null 2>&1 &',
+            ': # Boot geometry timer is outside this fixture.'))
+        pgrep = self.root / "bin/pgrep"
+        pgrep.write_text("#!/bin/sh\nexit 0\n")
+        pgrep.chmod(0o755)
+
+    def fake_monitors(self, name="HDMI-A-1"):
+        monitors = self.root / "monitors"
+        monitors.write_text(json.dumps([dict(name=name, width=1920, height=1080, scale=1,
+                                             transform=0, x=0, y=0)]))
+        hyprctl = self.root / "bin/hyprctl"
+        hyprctl.write_text('#!/bin/sh\ncat "$MONITORS"\n')
+        hyprctl.chmod(0o755)
+        return {"HYPRLAND_INSTANCE_SIGNATURE": "fixture", "MONITORS": str(monitors)}
+
+    def test_start_opens_the_bar_on_the_primary_monitor_and_records_it(self):
+        self.without_boot_background_jobs()
+        result = self.run_bar("start", PRIMARY="DP-3")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.eww_calls()[0], ["open", "bar", "--screen", "DP-3"])
+        self.assertEqual(self.recorded_screen(), "DP-3\n")
+
+    def test_start_without_a_primary_keeps_the_default_monitor(self):
+        self.without_boot_background_jobs()
+        result = self.run_bar("start")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.eww_calls()[0], ["open", "bar"])
+        self.assertEqual(self.recorded_screen(), "\n")
+
+    def test_unaddressable_primary_falls_back_and_is_retried_by_the_next_refresh(self):
+        self.without_boot_background_jobs()
+        env = self.fake_monitors()
+        result = self.run_bar("start", PRIMARY="DP-3", FAIL_SCREEN="1", **env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.eww_calls()[:2], [["open", "bar", "--screen", "DP-3"], ["open", "bar"]])
+        self.assertEqual(self.recorded_screen(), "\n")
+        self.calls.unlink()
+        result = self.run_bar("refresh", PRIMARY="DP-3", **env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([call[0] for call in self.eww_calls()], ["close", "open", "update"])
+        self.assertEqual(self.eww_calls()[1], ["open", "bar", "--screen", "DP-3"])
+        self.assertEqual(self.recorded_screen(), "DP-3\n")
+
+    def test_refresh_moves_the_bar_only_when_the_primary_changes(self):
+        env = self.fake_monitors()
+
+        def refresh(primary):
+            self.calls.unlink(missing_ok=True)
+            result = self.run_bar("refresh", PRIMARY=primary, **env)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            return self.eww_calls()
+
+        for primary, expected_open in (("HDMI-A-1", ["open", "bar", "--screen", "HDMI-A-1"]),
+                                       ("DP-3", ["open", "bar", "--screen", "DP-3"]),
+                                       ("", ["open", "bar"])):
+            with self.subTest(primary=primary):
+                calls = refresh(primary)
+                self.assertEqual([call[0] for call in calls], ["close", "open", "update"])
+                self.assertEqual(calls[1], expected_open)
+                self.assertEqual(self.recorded_screen(), f"{primary}\n")
+                self.assertEqual(refresh(primary), [])
+
+    def test_reload_keeps_the_recorded_monitor_because_it_does_not_move_the_bar(self):
+        env = self.fake_monitors()
+        self.assertEqual(self.run_bar("refresh", PRIMARY="DP-3", **env).returncode, 0)
+        self.calls.unlink()
+        self.assertEqual(self.run_bar("reload", PRIMARY="HDMI-A-1", **env).returncode, 0)
+        self.assertEqual([call[0] for call in self.eww_calls()], ["reload", "update"])
+        self.assertEqual(self.recorded_screen(), "DP-3\n")
+        self.calls.unlink()
+        self.assertEqual(self.run_bar("refresh", PRIMARY="HDMI-A-1", **env).returncode, 0)
+        self.assertEqual(self.eww_calls()[1], ["open", "bar", "--screen", "HDMI-A-1"])
+
+    def test_toggle_shows_the_bar_on_the_primary_monitor_and_falls_back_without_it(self):
+        self.assertEqual(self.run_bar("toggle", PRIMARY="DP-3").returncode, 0)
+        self.assertEqual(self.eww_calls(), [["open", "--toggle", "bar", "--screen", "DP-3"]])
+        self.assertEqual(self.recorded_screen(), "DP-3\n")
+        self.calls.unlink()
+        self.assertEqual(self.run_bar("toggle", PRIMARY="DP-3", FAIL_SCREEN="1").returncode, 0)
+        self.assertEqual(self.eww_calls(), [["open", "--toggle", "bar", "--screen", "DP-3"],
+                                            ["open", "--toggle", "bar"]])
+        self.assertEqual(self.recorded_screen(), "\n")
+        self.calls.unlink()
+        (self.root / "runtime/smplos").joinpath(
+            next((self.root / "runtime/smplos").glob("bar-*.screen")).name).unlink()
+        self.assertEqual(self.run_bar("toggle").returncode, 0)
+        self.assertEqual(self.eww_calls(), [["open", "--toggle", "bar"]])
+        self.assertIsNone(self.recorded_screen())
+
+    def test_failed_open_on_the_primary_never_applies_preferences_or_records_a_monitor(self):
+        for action in ("start", "redraw"):
+            with self.subTest(action=action):
+                self.calls.unlink(missing_ok=True)
+                result = self.run_bar(action, PRIMARY="DP-3", FAIL_EWW="1")
+                self.assertNotEqual(result.returncode, 0)
+                calls = self.eww_calls()
+                self.assertNotIn("update", [call[0] for call in calls])
+                self.assertEqual([call for call in calls if call[0] == "open"],
+                                 [["open", "bar", "--screen", "DP-3"], ["open", "bar"]])
+                self.assertIsNone(self.recorded_screen())
 
 
 if __name__ == "__main__":
