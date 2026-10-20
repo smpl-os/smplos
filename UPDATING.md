@@ -210,9 +210,9 @@ on every update. No migration needed.
 
 **That's it.** On next `smplos-update --mode full`, the script syncs.
 
-For example, Super+K search behavior lives in `src/shared/bin/keybind-help`, not
-in the user's Rofi configuration. Script updates replace `/usr/local/bin/keybind-help`;
-the next invocation rebuilds its per-user cached list when the script is newer.
+For example, the screenshot capture flow lives in `src/shared/bin/screenshot`,
+not in the user's Hyprland configuration. Script updates replace
+`/usr/local/bin/screenshot`, and the next capture uses the new script.
 No config refresh, migration, logout, or ISO rebuild is needed once the change
 reaches `main`.
 
@@ -222,6 +222,17 @@ user-managed and normally preserved during updates. Migration
 Super+Shift+F command in existing Hyprland/shared bindings and niri configs;
 custom commands and other shortcuts remain untouched. New ISO builds ship the
 updated binding and both launcher scripts through the existing shared-file copy.
+
+Super+K follows the same pattern. It opens the Settings app on its Keybindings
+tab (`settings --tab keybindings`) instead of the `keybind-help` list, and
+migration `20261020-154500-super-k-settings.sh` backs up and repoints only the
+stock bind in existing `~/.config/smplos/bindings.conf` and
+`~/.config/hypr/bindings.conf`. A bind with another command or description, a
+second bind on the same chord and a symlinked file are left alone. The tab and
+its focused filter box come from the Settings app, so they arrive with the
+matching smpl-apps release. niri's `binds.kdl` is only refreshed by new ISO
+builds, so an existing niri install keeps calling `keybind-help` until its
+configs are redeployed.
 
 ### Monitor-owned workspace rollout
 

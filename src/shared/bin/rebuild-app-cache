@@ -158,9 +158,9 @@ Appearance;smplos-settings appearance;settings;preferences-desktop-theme
 Display;smplos-settings display;settings;preferences-desktop-display
 Keyboard;smplos-settings keyboard;settings;preferences-desktop-keyboard
 Keypad;smplos-settings keypad;settings;input-keyboard
+Mouse;smplos-settings mouse;settings;input-mouse
 Network;smplos-settings network;settings;preferences-system-network
-Wi-Fi;smplos-settings wifi;settings;network-wireless
-Bluetooth;smplos-settings bluetooth;settings;bluetooth
+Connections;smplos-settings connections;settings;network-wireless
 Audio;smplos-settings audio;settings;audio-volume-high
 Dictation;smplos-settings dictation;settings;audio-input-microphone
 Power;smplos-settings power;settings;preferences-system-power-management
@@ -206,17 +206,19 @@ Workspaces;settings --tab taskbar --highlight "Workspaces";settings;preferences-
 Workspace Count;settings --tab taskbar --highlight "Workspace Count";settings;preferences-system;1
 Workspace Style;settings --tab taskbar --highlight "Workspace Style";settings;preferences-system;1
 Bar;settings --tab taskbar --highlight "Bar";settings;preferences-system;1
-WiFi;settings --tab wifi --highlight "WiFi";settings;network-wireless;1
-Wireless;settings --tab wifi --highlight "Wireless";settings;network-wireless;1
-Connect Wi-Fi;settings --tab wifi --highlight "Connect Wi-Fi";settings;network-wireless;1
-Wi-Fi Password;settings --tab wifi --highlight "Wi-Fi Password";settings;network-wireless;1
-Airplane Mode;settings --tab wifi --highlight "Airplane Mode";settings;network-wireless;1
-QR Code Wi-Fi;settings --tab wifi --highlight "QR Code Wi-Fi";settings;network-wireless;1
-Bluetooth Devices;settings --tab bluetooth --highlight "Bluetooth Devices";settings;bluetooth;1
-Pair Bluetooth;settings --tab bluetooth --highlight "Pair Bluetooth";settings;bluetooth;1
-Connect Bluetooth;settings --tab bluetooth --highlight "Connect Bluetooth";settings;bluetooth;1
-Headphones;settings --tab bluetooth --highlight "Headphones";settings;bluetooth;1
-Discoverable;settings --tab bluetooth --highlight "Discoverable";settings;bluetooth;1
+Wi-Fi;settings --tab connections --highlight "Wi-Fi";settings;network-wireless;1
+WiFi;settings --tab connections --highlight "WiFi";settings;network-wireless;1
+Wireless;settings --tab connections --highlight "Wireless";settings;network-wireless;1
+Connect Wi-Fi;settings --tab connections --highlight "Connect Wi-Fi";settings;network-wireless;1
+Wi-Fi Password;settings --tab connections --highlight "Wi-Fi Password";settings;network-wireless;1
+Airplane Mode;settings --tab connections --highlight "Airplane Mode";settings;network-wireless;1
+QR Code Wi-Fi;settings --tab connections --highlight "QR Code Wi-Fi";settings;network-wireless;1
+Bluetooth;settings --tab connections --highlight "Bluetooth";settings;bluetooth;1
+Bluetooth Devices;settings --tab connections --highlight "Bluetooth Devices";settings;bluetooth;1
+Pair Bluetooth;settings --tab connections --highlight "Pair Bluetooth";settings;bluetooth;1
+Connect Bluetooth;settings --tab connections --highlight "Connect Bluetooth";settings;bluetooth;1
+Headphones;settings --tab connections --highlight "Headphones";settings;bluetooth;1
+Discoverable;settings --tab connections --highlight "Discoverable";settings;bluetooth;1
 EOF
 }
 
@@ -242,6 +244,13 @@ merge_settings_deep_links() {
       *"--tab taskbar"*)     icon="preferences-system" ;;
       *"--tab wifi"*)        icon="network-wireless" ;;
       *"--tab bluetooth"*)   icon="bluetooth" ;;
+      *"--tab connections"*)
+        # One tab holds both radios; the label says which one an entry is.
+        case "$name" in
+          *[Bb]luetooth*|Headphones|Discoverable) icon="bluetooth" ;;
+          *)                                      icon="network-wireless" ;;
+        esac ;;
+      *"--tab mouse"*)       icon="input-mouse" ;;
     esac
     printf '%s;%s;%s;%s;1\n' "$name" "$exec" "settings" "$icon"
   done < "$idx"

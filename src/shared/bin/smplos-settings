@@ -33,6 +33,13 @@ case "${1:-}" in
     die "No network manager UI found"
     ;;
 
+  connections)
+    command -v settings &>/dev/null && exec settings --tab connections
+    die "Settings app not found (Connections needs smpl-apps with the Connections tab)"
+    ;;
+
+  # Wi-Fi and Bluetooth are sections of the Connections tab; these two names
+  # open the matching section and keep older shortcuts working.
   wifi)
     command -v settings &>/dev/null && exec settings --tab wifi
     die "Settings app not found"
@@ -59,6 +66,11 @@ case "${1:-}" in
   keypad)
     command -v settings &>/dev/null && exec settings --tab keypad
     die "Settings app not found (Keypad needs smpl-apps with the Keypad tab)"
+    ;;
+
+  mouse)
+    command -v settings &>/dev/null && exec settings --tab mouse
+    die "Settings app not found (Mouse needs smpl-apps with the Mouse tab)"
     ;;
 
   dictation)
@@ -93,7 +105,7 @@ case "${1:-}" in
     ;;
 
   *)
-    echo "Usage: smplos-settings {appearance|display|keyboard|keypad|network|wifi|bluetooth|audio|dictation|power|about|keybindings|taskbar}" >&2
+    echo "Usage: smplos-settings {appearance|display|keyboard|keypad|mouse|network|connections|wifi|bluetooth|audio|dictation|power|about|keybindings|taskbar}" >&2
     exit 1
     ;;
 esac

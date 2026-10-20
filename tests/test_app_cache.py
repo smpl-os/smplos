@@ -156,6 +156,52 @@ class AppCacheTests(unittest.TestCase):
         self.assertEqual(pins.read_text(), 'custom --arg\n"grafium"\n')
         self.assertFalse((self.home / "other-cache/smplos/app_index").exists())
 
+    def settings_rows(self):
+        result = self.rebuild()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return {row[0]: row for row in self.rows() if row[2] == "settings"}
+
+    def test_settings_browse_list_shows_connections_and_mouse_not_wifi_and_bluetooth(self):
+        rows = self.settings_rows()
+        self.assertEqual(rows["Connections"], ["Connections", "smplos-settings connections",
+                                               "settings", "network-wireless"])
+        self.assertEqual(rows["Mouse"], ["Mouse", "smplos-settings mouse", "settings", "input-mouse"])
+        browsable = {name for name, row in rows.items() if len(row) == 4}
+        self.assertLessEqual({"Connections", "Mouse", "Keypad", "Keyboard", "Display"}, browsable)
+        self.assertFalse({"Wi-Fi", "Bluetooth"} & browsable,
+                         "both radios live inside the Connections tab now")
+
+    def test_wifi_bluetooth_and_airplane_mode_stay_searchable_and_open_connections(self):
+        rows = self.settings_rows()
+        for name, icon in (("Wi-Fi", "network-wireless"), ("Wi-Fi Password", "network-wireless"),
+                           ("Airplane Mode", "network-wireless"), ("Bluetooth", "bluetooth"),
+                           ("Pair Bluetooth", "bluetooth"), ("Headphones", "bluetooth")):
+            with self.subTest(name=name):
+                self.assertEqual(rows[name], [name, f'settings --tab connections --highlight "{name}"',
+                                              "settings", icon, "1"])
+        for name, row in rows.items():
+            with self.subTest(entry=name):
+                self.assertNotRegex(row[1], r"--tab (wifi|bluetooth)\b",
+                                    "the standalone tabs are only kept as aliases")
+
+    def test_settings_index_deep_links_get_an_icon_per_tab_and_section(self):
+        self.cache.parent.mkdir(parents=True)
+        (self.cache.parent / "settings_index").write_text(
+            'Share Wi-Fi;settings --tab connections --highlight "Share Wi-Fi";settings;\n'
+            'Bluetooth Radio;settings --tab connections --highlight "Bluetooth Radio";settings;\n'
+            'Pointer Speed;settings --tab mouse --highlight "Pointer Speed";settings;\n'
+            'Old Radio;settings --tab bluetooth --highlight "Old Radio";settings;\n'
+        )
+        self.assertEqual(self.rebuild().returncode, 0)
+        rows = {row[0]: row for row in self.rows()}
+        for name, tab, icon in (("Share Wi-Fi", "connections", "network-wireless"),
+                                ("Bluetooth Radio", "connections", "bluetooth"),
+                                ("Pointer Speed", "mouse", "input-mouse"),
+                                ("Old Radio", "bluetooth", "bluetooth")):
+            with self.subTest(name=name):
+                self.assertEqual(rows[name], [name, f'settings --tab {tab} --highlight "{name}"',
+                                              "settings", icon, "1"])
+
     def test_scan_failure_preserves_previous_cache_and_reports_error(self):
         self.desktop(self.user_data)
         self.cache.parent.mkdir(parents=True)
