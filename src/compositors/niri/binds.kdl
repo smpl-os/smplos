@@ -101,7 +101,7 @@ binds {
     Mod+Ctrl+x hotkey-overlay-title="Toggle dictation" { spawn "sh" "-c" "dictation-toggle"; }
     Mod+Escape hotkey-overlay-title="System menu" { spawn "sh" "-c" "powermenu"; }
     Mod+l hotkey-overlay-title="Lock system" { spawn "sh" "-c" "lock-screen"; }
-    Mod+k hotkey-overlay-title="Show keybindings" { spawn "sh" "-c" "keybind-help"; }
+    Mod+k hotkey-overlay-title="Show keybindings" { spawn "sh" "-c" "settings --tab keybindings &"; }
     Mod+Shift+Space hotkey-overlay-title="Toggle bar" { spawn "sh" "-c" "bar-ctl toggle"; }
     Mod+Shift+t hotkey-overlay-title="Theme picker" { spawn "sh" "-c" "theme-picker"; }
     Mod+Shift+w hotkey-overlay-title="Next wallpaper" { spawn "sh" "-c" "theme-bg-next"; }

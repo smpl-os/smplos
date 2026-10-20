@@ -146,7 +146,7 @@ stock | SUPER+SHIFT+K | Settings | exec settings --tab keyboard & -> exec_cmd("s
 stock | SUPER+CTRL+X | Toggle dictation | exec dictation-toggle -> exec_cmd("dictation-toggle")
 stock | SUPER+ESCAPE | System menu | exec powermenu -> exec_cmd("powermenu")
 stock | SUPER+L | Lock system | exec lock-screen -> exec_cmd("lock-screen")
-stock | SUPER+K | Show keybindings | exec keybind-help -> exec_cmd("keybind-help")
+stock | SUPER+K | Show keybindings | exec settings --tab keybindings & -> exec_cmd("settings --tab keybindings &")
 stock | SUPER+SHIFT+SPACE | Toggle bar | exec bar-ctl toggle -> exec_cmd("bar-ctl toggle")
 stock | SUPER+SHIFT+T | Theme picker | exec theme-picker -> exec_cmd("theme-picker")
 stock | SUPER+SHIFT+W | Next wallpaper | exec theme-bg-next -> exec_cmd("theme-bg-next")

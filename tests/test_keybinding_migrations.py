@@ -15,6 +15,7 @@ HYPR = ROOT / "src/compositors/hyprland/hypr"
 MIGRATE = ROOT / "src/shared/bin/smplos-migrate"
 HYPRPICKER = ROOT / "migrations/20261019-153000-install-hyprpicker.sh"
 POPUP = ROOT / "migrations/20261019-153100-remove-duplicate-popup-click-bind.sh"
+SUPER_K = ROOT / "migrations/20261020-154500-super-k-settings.sh"
 
 INSTALL = "-S --needed --noconfirm hyprpicker"
 BIND = "bindn = , mouse:272, exec, popup-click-check"
@@ -35,6 +36,15 @@ SHIPPED_HEADERS = (
     _HEAD + ("# closes any open popup if the click landed outside it. Declared in bindings.conf",
              "# (the single source of truth); the .lua loader parses it into an hl.bind on",
              "# Hyprland 0.55+. Internal \u2014 not shown in keybind-help."),
+)
+
+# Super+K before and after the Settings repoint, as literals for the same reason.
+OLD_K_BIND = "bindd = SUPER, K, Show keybindings, exec, keybind-help"
+NEW_K_BIND = "bindd = SUPER, K, Show keybindings, exec, settings --tab keybindings &"
+NEW_K_COMMENT = "# Keybinding help: Settings on the Keybindings tab, filter box focused"
+OLD_K_COMMENTS = (
+    "# Keybinding help (fuzzy searchable list of all shortcuts)",
+    "# Keybinding help (substring-searchable list of all shortcuts)",
 )
 
 # Fake pacman: $STATE lists the installed packages and every call except -Q is logged
@@ -80,6 +90,14 @@ def stock_with(replacement):
 def shipped(header=SHIPPED_HEADERS[1]):
     """The stock file as it looked while it still bound the popup watcher."""
     return stock_with("\n" + block(*header, BIND))
+
+
+def before_super_k(comment=OLD_K_COMMENTS[1]):
+    """The stock file as it looked while Super+K still ran keybind-help."""
+    new = block(NEW_K_COMMENT, NEW_K_BIND)
+    text = read(BINDINGS)
+    assert text.count(new) == 1, "the stock Super+K bind moved; update this test"
+    return text.replace(new, block(comment, OLD_K_BIND))
 
 
 class PacmanHarness(unittest.TestCase):
@@ -156,7 +174,7 @@ class MigrationRunnerTests(PacmanHarness):
         self.data = self.home / "data"
         migrations = self.data / "repo/migrations"
         migrations.mkdir(parents=True)
-        for path in (HYPRPICKER, POPUP):
+        for path in (HYPRPICKER, POPUP, SUPER_K):
             shutil.copy(path, migrations / path.name)
         self.markers = self.home / ".local/state/smplos/migrations"
 
@@ -189,6 +207,21 @@ class MigrationRunnerTests(PacmanHarness):
         self.assertTrue((self.markers / POPUP.name).is_file())
         self.assertFalse((self.markers / HYPRPICKER.name).exists())
         self.assertEqual(self.pacman_calls(), [])
+
+    def test_the_super_k_repoint_is_a_core_migration_that_runs_once(self):
+        self.assertIn(SUPER_K.stem, self.runner("core", "--pending").stdout)
+        self.assertNotIn(SUPER_K.stem, self.runner("optional", "--pending").stdout)
+        bindings = self.home / ".config/smplos/bindings.conf"
+        bindings.parent.mkdir(parents=True)
+        old = before_super_k()
+        write(bindings, old)
+        result = self.runner("core")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(read(bindings), read(BINDINGS))
+        self.assertTrue((self.markers / SUPER_K.name).is_file())
+        write(bindings, old)
+        self.runner("core")
+        self.assertEqual(read(bindings), old)
 
 
 class PopupClickBindMigrationTests(unittest.TestCase):
@@ -383,6 +416,173 @@ class PopupClickBindMigrationTests(unittest.TestCase):
             self.primary.parent.chmod(0o700)
         self.assertNotEqual(result.returncode, 0)
         self.assertEqual(read(self.primary), shipped())
+        self.assertEqual(list(self.primary.parent.glob("*.tmp.*")), [])
+
+
+class SuperKSettingsMigrationTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.home = Path(self.tmp.name) / "home with spaces"
+        self.hypr = self.home / ".config/hypr"
+        self.primary = self.home / ".config/smplos/bindings.conf"
+        self.fallback = self.hypr / "bindings.conf"
+        self.primary.parent.mkdir(parents=True)
+        self.hypr.mkdir(parents=True)
+        self.env = {**os.environ, "HOME": str(self.home)}
+        self.current = read(BINDINGS)
+
+    def migrate(self, check=True):
+        result = subprocess.run(["bash", str(SUPER_K)], env=self.env, capture_output=True,
+                                text=True, timeout=20)
+        if check:
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        return result
+
+    def backups(self):
+        return sorted(self.home.rglob("*.pre-super-k-settings.*"))
+
+    def kept(self, text):
+        """Migrating `text` changes nothing and leaves no backup."""
+        write(self.primary, text)
+        self.migrate()
+        self.assertEqual(read(self.primary), text)
+        self.assertEqual(self.backups(), [])
+
+    def test_every_shipped_comment_becomes_the_current_stock_file_with_a_verified_backup(self):
+        for comment in OLD_K_COMMENTS:
+            with self.subTest(comment=comment):
+                old = before_super_k(comment)
+                self.assertNotEqual(old, self.current)
+                for path in (self.primary, self.fallback):
+                    write(path, old)
+                    path.chmod(0o640)
+                result = self.migrate()
+                self.assertEqual(result.stdout.count("SUPER+K now opens Settings"), 2)
+                for path in (self.primary, self.fallback):
+                    self.assertEqual(read(path), self.current)
+                    self.assertEqual(path.stat().st_mode & 0o777, 0o640)
+                    saved = list(path.parent.glob("bindings.conf.pre-super-k-settings.*"))
+                    self.assertEqual([read(backup) for backup in saved], [old])
+                    self.assertEqual(saved[0].stat().st_mode & 0o777, 0o640)
+                self.assertEqual(self.migrate().stdout.count("nothing to do"), 2)
+                self.assertEqual(len(self.backups()), 2)
+                for backup in self.backups():
+                    backup.unlink()
+
+    def test_the_current_stock_file_and_missing_files_need_no_change(self):
+        self.assertIn("No bindings.conf found", self.migrate().stdout)
+        write(self.primary, self.current)
+        self.assertIn("nothing to do", self.migrate().stdout)
+        self.assertEqual(read(self.primary), self.current)
+        self.assertEqual(self.backups(), [])
+
+    def test_each_file_is_migrated_on_its_own(self):
+        write(self.primary, self.current)
+        write(self.fallback, before_super_k())
+        self.migrate()
+        self.assertEqual(read(self.fallback), self.current)
+        self.assertEqual([path.parent for path in self.backups()], [self.hypr])
+
+    def test_a_customized_comment_is_kept_and_only_the_bind_is_repointed(self):
+        for comment in ("# my own help shortcut", OLD_K_COMMENTS[0] + " (edited)", ""):
+            with self.subTest(comment=comment):
+                write(self.primary, before_super_k(comment))
+                self.migrate()
+                self.assertEqual(read(self.primary), self.current.replace(NEW_K_COMMENT, comment))
+
+    def test_a_bind_on_the_first_line_never_borrows_the_comment_from_the_last_line(self):
+        write(self.primary, block(OLD_K_BIND, OLD_K_COMMENTS[1]))
+        self.migrate()
+        self.assertEqual(read(self.primary), block(NEW_K_BIND, OLD_K_COMMENTS[1]))
+
+    def test_the_bind_is_found_anywhere_and_in_any_spacing(self):
+        for line, repointed in (
+            (OLD_K_BIND, NEW_K_BIND),
+            ("bindd=SUPER,K,Show keybindings,exec,keybind-help", NEW_K_BIND),
+            ("bindd = SUPER, k, show keybindings, EXEC, keybind-help", NEW_K_BIND),
+            ("  " + OLD_K_BIND, "  " + NEW_K_BIND),
+        ):
+            with self.subTest(line=line):
+                write(self.primary, self.current + "\n" + line + "\n")
+                self.migrate()
+                self.assertEqual(read(self.primary), self.current + "\n" + repointed + "\n")
+
+    def test_every_matching_line_is_handled(self):
+        write(self.primary, before_super_k() + "\n" + OLD_K_BIND + "\n")
+        self.migrate()
+        self.assertEqual(read(self.primary), self.current + "\n" + NEW_K_BIND + "\n")
+
+    def test_customized_binds_are_kept(self):
+        for line in (
+            "bind = SUPER, K, exec, keybind-help",
+            "bindd = SUPER SHIFT, K, Show keybindings, exec, keybind-help",
+            "bindd = SUPER, J, Show keybindings, exec, keybind-help",
+            "bindd = SUPER, K, Show the shortcuts, exec, keybind-help",
+            "bindd = SUPER, K, Show keybindings, exec, keybind-help --verbose",
+            "bindd = SUPER, K, Show keybindings, exec, keybind-help # mine",
+            "bindd = SUPER, K, Show keybindings, exec, my-own-help",
+            "bindd = SUPER, K, Show keybindings, exec, settings --tab keyboard &",
+            "bindd = SUPER, K, Show keybindings, killactive",
+        ):
+            with self.subTest(line=line):
+                self.kept(self.current + line + "\n")
+
+    def test_a_bind_inside_a_submap_is_kept_but_one_after_it_is_not(self):
+        scoped = "submap = custom\n" + OLD_K_BIND + "\nsubmap = reset\n"
+        self.kept(self.current + scoped)
+        write(self.primary, self.current + scoped + OLD_K_BIND + "\n")
+        self.migrate()
+        self.assertEqual(read(self.primary), self.current + scoped + NEW_K_BIND + "\n")
+
+    def test_crlf_line_endings_and_a_missing_final_newline_are_preserved(self):
+        self.primary.write_bytes(before_super_k().replace("\n", "\r\n").encode())
+        self.migrate()
+        self.assertEqual(self.primary.read_bytes(), self.current.replace("\n", "\r\n").encode())
+        write(self.primary, self.current + "\n" + OLD_K_BIND)
+        self.migrate()
+        self.assertEqual(read(self.primary), self.current + "\n" + NEW_K_BIND)
+        self.primary.write_bytes((self.current + "\n" + OLD_K_BIND).replace("\n", "\r\n").encode())
+        self.migrate()
+        self.assertEqual(self.primary.read_bytes(),
+                         (self.current + "\n" + NEW_K_BIND).replace("\n", "\r\n").encode())
+
+    def test_bytes_that_are_not_utf8_survive(self):
+        tail = b"# caf\xe9 in latin-1\n"
+        self.primary.write_bytes(before_super_k().encode() + tail)
+        self.migrate()
+        self.assertEqual(self.primary.read_bytes(), self.current.encode() + tail)
+
+    def test_other_binding_files_are_not_touched(self):
+        old = before_super_k()
+        for name in ("messenger-bindings.conf", "emergency.conf"):
+            write(self.hypr / name, old)
+        self.migrate()
+        for name in ("messenger-bindings.conf", "emergency.conf"):
+            self.assertEqual(read(self.hypr / name), old)
+        self.assertEqual(self.backups(), [])
+
+    def test_symlinked_bindings_are_left_alone_without_failing_the_update(self):
+        target = self.home / "dotfiles.conf"
+        write(target, before_super_k())
+        self.primary.symlink_to(target)
+        result = self.migrate()
+        self.assertIn("symlink", result.stdout)
+        self.assertIn(NEW_K_BIND, result.stdout)
+        self.assertTrue(self.primary.is_symlink())
+        self.assertEqual(read(target), before_super_k())
+        self.assertEqual(self.backups(), [])
+
+    @unittest.skipIf(os.geteuid() == 0, "root bypasses fixture directory permissions")
+    def test_a_backup_failure_keeps_the_original_config(self):
+        write(self.primary, before_super_k())
+        self.primary.parent.chmod(0o500)
+        try:
+            result = self.migrate(check=False)
+        finally:
+            self.primary.parent.chmod(0o700)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(read(self.primary), before_super_k())
         self.assertEqual(list(self.primary.parent.glob("*.tmp.*")), [])
 
 
