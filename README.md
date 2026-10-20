@@ -184,7 +184,7 @@ A notification hub that collects and groups desktop notifications by app. Suppor
 
 #### Display Manager
 
-A graphical display configuration panel. Detects connected monitors via Hyprland IPC, shows resolution, refresh rate, scale, and position for each display, and lets you apply changes live. No external dependencies - just `hyprctl` under the hood. Replaces the need for `wlr-randr` CLI or a full KDE/GNOME settings app just to rearrange monitors.
+A graphical display configuration panel. Detects connected monitors via Hyprland IPC, shows resolution, refresh rate, scale, and position for each display, and lets you apply changes live. **Make primary** chooses the primary monitor and the taskbar moves with it (see [Monitor-owned workspaces](#monitor-owned-workspaces)). No external dependencies - just `hyprctl` under the hood. Replaces the need for `wlr-randr` CLI or a full KDE/GNOME settings app just to rearrange monitors.
 
 <a href="images/7-displaymgr.png"><img src="images/7-displaymgr.png" width="720" /></a>
 
@@ -320,6 +320,24 @@ stacked, and disconnected monitors. Filled chips indicate keyboard focus,
 outlines indicate visibility, and dots indicate occupied workspaces. Escape
 closes the overview on supported Hyprland versions without consuming Escape
 in other applications once the overview is closed.
+
+The **primary monitor** is the one that owns workspace 1. The bar and its
+popups (calendar, quick settings, notifications, USB, workspace overview) open
+on it, and the bar moves as soon as the primary monitor changes. Choose it with
+**Make primary** in Settings > Display, or from a terminal:
+
+```bash
+workspace-ctl primary             # print the primary monitor's connector
+workspace-ctl set-primary DP-3    # a connector or a monitor identity such as M2
+```
+
+In automatic spatial mode the primary monitor comes first and the others follow
+left to right; choosing a new one also clears explicit workspace transfers. In
+fixed-home mode the new primary swaps workspaces with the old one.
+`workspace-ctl primary` reports the monitor that owns workspace 1 right now, so
+moving workspace 1 by hand changes it without rewriting the saved choice.
+Without the stable workspace policy, or on niri and X11, the bar and popups stay
+on EWW's default monitor.
 
 The Taskbar workspace count is a **total across all monitors**, not a per-monitor
 count. Changing it updates the shared pool through the workspace listener.
