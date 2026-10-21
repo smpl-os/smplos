@@ -7,6 +7,8 @@
 -- Module load order intentionally matches the source order of hyprland.conf:
 --   monitors → theme variables → envs → input → looknfeel → windows →
 --   bindings (shared + messenger) → apps → autostart
+-- The one addition is pointer.conf (Settings → Mouse), loaded straight after
+-- input; hyprland.conf cannot source it, see README.md ("pointer.conf contract").
 
 -- Allow `require("…")` to find modules in this directory and apps/.
 package.path = (os.getenv("HOME") or "") .. "/.config/hypr/?.lua;"
@@ -27,6 +29,13 @@ require("workspace_policy")
 -- ── Configuration modules ──────────────────────────────────────────────────
 require("envs")
 require("input")
+-- User-saved pointer options (written by Settings → Mouse) go on top of the
+-- input defaults above. Isolated like the monitors loader: a failure here
+-- must never abort the rest of the config.
+local pointer_ok, pointer_err = pcall(function()
+    require("pointer_loader").load((os.getenv("HOME") or "") .. "/.config/hypr/pointer.conf")
+end)
+if not pointer_ok then print("pointer_loader failed: " .. tostring(pointer_err)) end
 require("looknfeel")
 require("windows")
 -- Scrolling column_width is a global; this hook rewrites it live per focused

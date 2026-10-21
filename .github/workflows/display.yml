@@ -11,10 +11,13 @@ on:
       - "src/shared/bin/smplos-hypr-log-journal"
       - "src/shared/bin/smplos-gpu-watch"
       - "src/shared/bin/smplos-gpu-snapshot"
+      - "src/shared/bin/smplos-os-update"
+      - "src/shared/bin/smplos-update-check"
       - "src/shared/system/systemd/**"
       - "src/shared/system/journald/**"
       - "migrations/20261005-161500-gpu-fault-recorder.sh"
       - "tests/test_display_stack.py"
+      - "tests/test_pointer_loader.py"
   push:
     branches: [main]
     paths:
@@ -26,10 +29,13 @@ on:
       - "src/shared/bin/smplos-hypr-log-journal"
       - "src/shared/bin/smplos-gpu-watch"
       - "src/shared/bin/smplos-gpu-snapshot"
+      - "src/shared/bin/smplos-os-update"
+      - "src/shared/bin/smplos-update-check"
       - "src/shared/system/systemd/**"
       - "src/shared/system/journald/**"
       - "migrations/20261005-161500-gpu-fault-recorder.sh"
       - "tests/test_display_stack.py"
+      - "tests/test_pointer_loader.py"
   workflow_dispatch:
 
 permissions:
@@ -58,6 +64,9 @@ jobs:
           bash -n src/shared/bin/smplos-hypr-log-journal
           bash -n src/shared/bin/smplos-gpu-watch
           bash -n src/shared/bin/smplos-gpu-snapshot
+          bash -n src/shared/bin/smplos-os-update
           bash -n migrations/20261005-161500-gpu-fault-recorder.sh
       - name: Check monitors.conf loading, guarding and rotated geometry
         run: python3 -m unittest discover -s tests -p 'test_display*.py' -v
+      - name: Check pointer.conf loading and update guards
+        run: python3 -m unittest discover -s tests -p 'test_pointer_loader.py' -v

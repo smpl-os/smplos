@@ -21,7 +21,7 @@ APPS = (
 )
 XR_SCRIPTS = {"xrctl", "xr-game", "xr-glasses-hotplugd"}
 USER_HYPR = {
-    "monitors.conf", "hypridle.conf", "bindings.conf", "messenger-bindings.conf",
+    "monitors.conf", "pointer.conf", "hypridle.conf", "bindings.conf", "messenger-bindings.conf",
     "theme.conf", "hyprlock-theme.conf",
 }
 STACK = re.compile(
