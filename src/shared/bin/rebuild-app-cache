@@ -158,7 +158,6 @@ Appearance;smplos-settings appearance;settings;preferences-desktop-theme
 Display;smplos-settings display;settings;preferences-desktop-display
 Keyboard;smplos-settings keyboard;settings;preferences-desktop-keyboard
 Keypad;smplos-settings keypad;settings;input-keyboard
-Mouse;smplos-settings mouse;settings;input-mouse
 Network;smplos-settings network;settings;preferences-system-network
 Connections;smplos-settings connections;settings;network-wireless
 Audio;smplos-settings audio;settings;audio-volume-high
@@ -250,7 +249,6 @@ merge_settings_deep_links() {
           *[Bb]luetooth*|Headphones|Discoverable) icon="bluetooth" ;;
           *)                                      icon="network-wireless" ;;
         esac ;;
-      *"--tab mouse"*)       icon="input-mouse" ;;
     esac
     printf '%s;%s;%s;%s;1\n' "$name" "$exec" "settings" "$icon"
   done < "$idx"
