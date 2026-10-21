@@ -10,6 +10,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 import unittest
 from unittest import mock
 
@@ -573,22 +574,63 @@ class WorkspacePolicyTests(unittest.TestCase):
 
     def test_set_primary_command_refreshes_the_taskbar_even_when_nothing_changed(self):
         self.enable()
-        with mock.patch.object(policy_module.subprocess, "run") as run:
+        with mock.patch.object(policy_module.subprocess, "Popen") as popen:
+            popen.return_value.wait.return_value = 0
             self.assertEqual(self.run_cli("set-primary", "HDMI-A-1"), (0, "Primary monitor: HDMI-A-1\n", ""))
             self.assertEqual(self.run_cli("set-primary", "HDMI-A-1"), (0, "Primary monitor: HDMI-A-1\n", ""))
-        self.assertEqual([call.args[0] for call in run.call_args_list], [["bar-ctl", "refresh"]] * 2)
+        self.assertEqual([call.args[0] for call in popen.call_args_list], [["bar-ctl", "refresh"]] * 2)
 
     def test_failed_taskbar_refresh_does_not_undo_the_primary_change(self):
         self.enable()
-        for error in (FileNotFoundError("bar-ctl"),
-                      subprocess.CalledProcessError(1, ["bar-ctl", "refresh"]),
-                      subprocess.TimeoutExpired(["bar-ctl", "refresh"], 20)):
-            with self.subTest(error=type(error).__name__), \
-                    mock.patch.object(policy_module.subprocess, "run", side_effect=error):
+        failures = {
+            "bar-ctl missing": {"side_effect": FileNotFoundError("bar-ctl")},
+            "bar-ctl failed": {"return_value": mock.Mock(wait=mock.Mock(return_value=1))},
+        }
+        for label, failure in failures.items():
+            with self.subTest(label), mock.patch.object(policy_module.subprocess, "Popen", **failure):
                 code, output, errors = self.run_cli("set-primary", "HDMI-A-1")
                 self.assertEqual((code, output), (0, "Primary monitor: HDMI-A-1\n"))
                 self.assertIn("workspace-ctl: the bar was not moved", errors)
                 self.assertEqual(self.policy.primary_connector(), "HDMI-A-1")
+
+    def test_slow_taskbar_refresh_is_not_killed_and_set_primary_answers_inside_the_settings_limit(self):
+        self.enable()
+        # Settings abandons a command after 8 seconds.
+        self.assertLess(policy_module.BAR_REFRESH_WAIT, 8)
+        with mock.patch.object(policy_module.subprocess, "Popen") as popen:
+            popen.return_value.wait.side_effect = subprocess.TimeoutExpired(["bar-ctl", "refresh"], 5)
+            code, output, errors = self.run_cli("set-primary", "HDMI-A-1")
+        self.assertEqual((code, output), (0, "Primary monitor: HDMI-A-1\n"))
+        self.assertIn("workspace-ctl: the bar is still moving", errors)
+        popen.return_value.wait.assert_called_once_with(timeout=policy_module.BAR_REFRESH_WAIT)
+        popen.return_value.kill.assert_not_called()
+        popen.return_value.terminate.assert_not_called()
+        self.assertEqual(self.policy.primary_connector(), "HDMI-A-1")
+
+    def test_slow_taskbar_refresh_keeps_running_after_set_primary_returns(self):
+        self.enable()
+        bin_dir = self.home / "bin"
+        bin_dir.mkdir()
+        release, finished = self.home / "release", self.home / "bar-refreshed"
+        fake = bin_dir / "bar-ctl"
+        fake.write_text(
+            "#!/bin/sh\n"
+            "i=0\n"
+            f"while [ ! -e '{release}' ] && [ $i -lt 200 ]; do sleep 0.05; i=$((i+1)); done\n"
+            f"touch '{finished}'\n"
+        )
+        fake.chmod(0o755)
+        with mock.patch.dict(os.environ, {"PATH": f"{bin_dir}:{os.environ['PATH']}"}), \
+                mock.patch.object(policy_module, "BAR_REFRESH_WAIT", 0.2):
+            code, output, errors = self.run_cli("set-primary", "HDMI-A-1")
+        self.assertEqual((code, output), (0, "Primary monitor: HDMI-A-1\n"))
+        self.assertIn("still moving", errors)
+        self.assertFalse(finished.exists())
+        release.touch()
+        deadline = time.monotonic() + 10
+        while not finished.exists() and time.monotonic() < deadline:
+            time.sleep(0.05)
+        self.assertTrue(finished.exists(), "bar-ctl was killed instead of being left to finish")
 
     def test_rejected_primary_target_leaves_the_taskbar_alone(self):
         self.enable()

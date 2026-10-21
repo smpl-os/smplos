@@ -18,6 +18,8 @@ import time
 
 
 LAYOUT_POLL_INTERVAL = 2.0
+# Settings abandons a command after 8 seconds; set-primary must answer before that.
+BAR_REFRESH_WAIT = 5
 
 
 def atomic_write(path, content):
@@ -750,11 +752,22 @@ class Policy:
 
 def refresh_bar():
     # The bar follows the primary monitor; a failed refresh must not undo the change.
+    # A slow refresh is left running: killing bar-ctl between closing and reopening
+    # the bar would leave it closed. The next refresh converges either way.
     try:
-        subprocess.run(["bar-ctl", "refresh"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                       timeout=20, check=True)
-    except (OSError, subprocess.SubprocessError) as error:
+        process = subprocess.Popen(["bar-ctl", "refresh"], stdin=subprocess.DEVNULL,
+                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                                   start_new_session=True)
+        status = process.wait(timeout=BAR_REFRESH_WAIT)
+    except subprocess.TimeoutExpired:
+        print("workspace-ctl: the bar is still moving", file=sys.stderr)
+        return
+    except OSError as error:
         print(f"workspace-ctl: the bar was not moved: {error}", file=sys.stderr)
+        return
+    if status:
+        print(f"workspace-ctl: the bar was not moved: bar-ctl refresh exited with status {status}",
+              file=sys.stderr)
 
 
 def main():
