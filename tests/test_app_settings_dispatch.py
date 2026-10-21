@@ -9,7 +9,7 @@ ROOT = Path(__file__).resolve().parents[1]
 DISPATCHER = ROOT / "src/shared/bin/smplos-settings"
 BUILDER = ROOT / "src/shared/bin/rebuild-app-cache"
 SETTINGS_TABS = ("about", "keyboard", "dictation", "display", "power", "keybindings",
-                 "taskbar", "connections", "wifi", "bluetooth", "keypad")
+                 "taskbar", "connections", "wifi", "bluetooth", "keypad", "mouse")
 
 
 class SettingsDispatchTests(unittest.TestCase):
@@ -45,7 +45,7 @@ class SettingsDispatchTests(unittest.TestCase):
 
     def test_a_missing_settings_app_is_reported_instead_of_ignored(self):
         self.install("notify-send")
-        for tab in ("connections", "keypad", "keybindings", "taskbar"):
+        for tab in ("connections", "mouse", "keypad", "keybindings", "taskbar"):
             with self.subTest(tab=tab):
                 self.log.unlink(missing_ok=True)
                 result = self.dispatch(tab)
@@ -65,7 +65,7 @@ class SettingsDispatchTests(unittest.TestCase):
         self.install("settings")
         self.install("notify-send")
         names = set(re.findall(r"\bsmplos-settings ([a-z][\w-]*)", BUILDER.read_text()))
-        self.assertLessEqual({"connections", "keypad", "keybindings", "taskbar"}, names)
+        self.assertLessEqual({"connections", "mouse", "keypad", "keybindings", "taskbar"}, names)
         for name in sorted(names):
             with self.subTest(entry=name):
                 result = self.dispatch(name)

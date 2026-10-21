@@ -234,6 +234,16 @@ matching smpl-apps release. niri's `binds.kdl` is only refreshed by new ISO
 builds, so an existing niri install keeps calling `keybind-help` until its
 configs are redeployed.
 
+The Mouse tab saves pointer speed, acceleration and scroll options to
+`~/.config/hypr/pointer.conf`, and `pointer_loader.lua` restores them when
+Hyprland starts or reloads (it runs right after `input.lua`). The loader comes
+with the normal Hyprland config sync and the tab with the matching smpl-apps
+release. Updates never replace the file (it is protected in `smplos-os-update`
+and `smplos-update-check`) and the ISO ships none. `hyprland.conf` does not
+source it, so after a rollback to hyprlang the options still apply live but
+are not restored at login; see the
+[pointer.conf contract](src/compositors/hyprland/hypr/README.md#pointerconf-contract).
+
 ### Monitor-owned workspace rollout
 
 `workspace-ctl` and the EWW monitor overview are OS-owned scripts/configs; they

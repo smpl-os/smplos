@@ -161,12 +161,13 @@ class AppCacheTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         return {row[0]: row for row in self.rows() if row[2] == "settings"}
 
-    def test_settings_browse_list_shows_connections_not_wifi_and_bluetooth(self):
+    def test_settings_browse_list_shows_connections_and_mouse_not_wifi_and_bluetooth(self):
         rows = self.settings_rows()
         self.assertEqual(rows["Connections"], ["Connections", "smplos-settings connections",
                                                "settings", "network-wireless"])
+        self.assertEqual(rows["Mouse"], ["Mouse", "smplos-settings mouse", "settings", "input-mouse"])
         browsable = {name for name, row in rows.items() if len(row) == 4}
-        self.assertLessEqual({"Connections", "Keypad", "Keyboard", "Display"}, browsable)
+        self.assertLessEqual({"Connections", "Mouse", "Keypad", "Keyboard", "Display"}, browsable)
         self.assertFalse({"Wi-Fi", "Bluetooth"} & browsable,
                          "both radios live inside the Connections tab now")
 
@@ -188,12 +189,14 @@ class AppCacheTests(unittest.TestCase):
         (self.cache.parent / "settings_index").write_text(
             'Share Wi-Fi;settings --tab connections --highlight "Share Wi-Fi";settings;\n'
             'Bluetooth Radio;settings --tab connections --highlight "Bluetooth Radio";settings;\n'
+            'Pointer Speed;settings --tab mouse --highlight "Pointer Speed";settings;\n'
             'Old Radio;settings --tab bluetooth --highlight "Old Radio";settings;\n'
         )
         self.assertEqual(self.rebuild().returncode, 0)
         rows = {row[0]: row for row in self.rows()}
         for name, tab, icon in (("Share Wi-Fi", "connections", "network-wireless"),
                                 ("Bluetooth Radio", "connections", "bluetooth"),
+                                ("Pointer Speed", "mouse", "input-mouse"),
                                 ("Old Radio", "bluetooth", "bluetooth")):
             with self.subTest(name=name):
                 self.assertEqual(rows[name], [name, f'settings --tab {tab} --highlight "{name}"',

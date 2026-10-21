@@ -198,6 +198,10 @@ A keyboard layout and input configuration panel with two tabs. The **Keyboard** 
 
 Cheap CH552 macro keypads (USB `1189:8890`, 3 to 16 keys, up to 3 knobs) work as soon as they're plugged in. A keypad icon appears in the bar while one is connected; click it to open **Settings → Keypad**. There you can map keys and knobs to shortcuts, media keys or commands, give apps their own profiles, and turn on API plugins such as Kdenlive's control-surface interface. A guided wizard installs the open firmware. See [KEYPAD.md](KEYPAD.md).
 
+#### Mouse
+
+**Settings → Mouse** sets pointer speed, acceleration (system default, flat or adaptive), natural scrolling and scroll speed. Changes apply live and are saved to `~/.config/hypr/pointer.conf`, which Hyprland reads again at login. The button assignments (global and per app, with layouts for generic and MMO mice) are a preview for now: you can set them up and they are saved, but nothing acts on them yet.
+
 ---
 
 ### Design Decisions
