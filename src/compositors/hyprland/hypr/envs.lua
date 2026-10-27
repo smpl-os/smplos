@@ -22,10 +22,6 @@ hl.env("ELECTRON_OZONE_PLATFORM_HINT", "wayland")
 hl.env("OZONE_PLATFORM",             "wayland")
 hl.env("XDG_SESSION_TYPE",           "wayland")
 
--- GTK file dialogs (rendered by xdg-desktop-portal-gtk) -- force dark Adwaita.
--- theme-set overrides this at runtime for light themes.
-hl.env("GTK_THEME", "Adwaita:dark")
-
 -- Allow better support for screen sharing (Google Meet, Discord, etc.)
 hl.env("XDG_CURRENT_DESKTOP", "Hyprland")
 hl.env("XDG_SESSION_DESKTOP", "Hyprland")

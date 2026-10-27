@@ -135,8 +135,10 @@ fi
 if [[ -d "$SHARE/lib" && "$(ls -A "$SHARE/lib" 2>/dev/null)" ]]; then
     log "Applying shell libraries..."
     mkdir -p /usr/local/lib/smplos
-    cp "$SHARE/lib/"*.sh /usr/local/lib/smplos/ 2>/dev/null || true
-    chmod 644 /usr/local/lib/smplos/*.sh 2>/dev/null || true
+    for lib in "$SHARE/lib/"*.sh "$SHARE/lib/"*.py; do
+        [[ -f "$lib" ]] || continue
+        install -m644 "$lib" /usr/local/lib/smplos/ || exit 1
+    done
     log "  $(ls "$SHARE/lib" | wc -l) libraries installed"
 fi
 

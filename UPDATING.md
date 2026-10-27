@@ -57,6 +57,50 @@ automatic rollback or boot recovery are provided by this flow.
 OS-owned changes reach users after merging to `main` and running the updater.
 Changes to independently built apps also require a release in their own repo.
 
+### Standard GTK defaults and missing-icon repair
+
+Stock palettes no longer select Yaru icon packs that smplOS does not ship.
+Adwaita and hicolor icon packages are explicit ISO dependencies; a required core
+migration installs missing packages only after the complete system upgrade.
+The shared GTK preference helper repairs an unavailable icon-theme selection to
+installed Adwaita, retains installed personal icon themes, and keeps GSettings
+and GTK3/GTK4 settings.ini icon selections consistent. Theme switching ignores
+legacy `icons.theme` metadata, including in custom palettes.
+
+Light/dark changes use standard GSettings and GTK preferences, not a global
+`GTK_THEME` override. GTK4 settings no longer contain GTK3-only mnemonic keys.
+Fonts, cursors, other personal settings and app-local CSS are preserved; Nemo's
+native CSS/theme delivery is unchanged. Before changing existing settings, the
+helper saves and verifies originals under
+`~/.local/state/smplos/backups/gtk/` (private directory/files, content-addressed
+backups retained across retries). GSettings originals are readable JSON.
+
+Update OS delivers the helper and migration, refreshes stock themes through the
+existing verified-backup path, and reapplies the active palette. Known stock
+overrides are also removed from environment.d and existing Hyprland/Niri config
+files, including Niri's stored assembly input. Finalization clears the systemd
+and D-Bus activation overrides and Hyprland's launcher environment. Running apps
+and terminals retain their inherited environment; log out/in after updating
+before comparing apps on either machine. No installed app is forcibly closed.
+Custom explicit `GTK_THEME` configuration on disk is not removed.
+
+For the Mission Center regression, after Update OS and a new login, check
+`gsettings get org.gnome.desktop.interface icon-theme` (normally `Adwaita`),
+then launch the unmodified pacman `missioncenter` package. Switch between a
+light and a dark smplOS palette and repeat: icon selection must remain installed,
+GTK4 must not emit unknown-mnemonic-setting warnings, and startup must not
+stack-overflow. The updater does not install or replace Mission Center or btop.
+An unavailable icon theme alone may still fall back successfully on a clean
+profile. The reproduced crash also used a user-local `hicolor/index.theme`
+listing only application-icon directories, hiding the standard status-icon
+fallback directories. The repair preserves that user file and supplies a valid
+selected theme instead.
+
+`src/test-gtk-defaults.py` exercises a private profile and bus, including a
+shortened local hicolor index, actual GTK3 settings and live libadwaita
+dark/light/dark transitions. Run it with the system Python/GTK introspection
+packages, or through `xvfb-run -a /usr/bin/python3 src/test-gtk-defaults.py`.
+
 ### OpenChamber theme bridge delivery
 
 The bridge is OS-owned; OpenChamber's renderer and local control API are

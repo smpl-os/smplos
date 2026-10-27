@@ -1122,7 +1122,7 @@ build_hyprland_plugins() {
 setup_airootfs() {
     log_step "Configuring airootfs"
     
-    local airootfs="$PROFILE_DIR/airootfs"
+    local airootfs="$PROFILE_DIR/airootfs" lib
     local skel="$airootfs/etc/skel"
     
     # Create directories
@@ -1232,16 +1232,15 @@ VOXCFG
         chmod +x "$airootfs/root/smplos/bin/"* 2>/dev/null || true
     fi
 
-    # Copy shared shell libraries (sourceable, NOT executable — must not go in bin)
+    # Copy shared shell libraries and Python helpers (NOT executable — must not go in bin)
     if [[ -d "$SRC_DIR/shared/lib" ]]; then
         log_info "Copying shared shell libraries"
         mkdir -p "$airootfs/usr/local/lib/smplos" "$airootfs/root/smplos/lib"
-        cp "$SRC_DIR/shared/lib/"*.sh "$airootfs/usr/local/lib/smplos/" 2>/dev/null || true
-        cp "$SRC_DIR/shared/lib/"*.sh "$airootfs/root/smplos/lib/" 2>/dev/null || true
-        install -m644 "$SRC_DIR/shared/lib/smplos-hypridle-migrate.py" "$airootfs/usr/local/lib/smplos/"
-        install -m644 "$SRC_DIR/shared/lib/smplos-hypridle-migrate.py" "$airootfs/root/smplos/lib/"
-        chmod 644 "$airootfs/usr/local/lib/smplos/"*.sh 2>/dev/null || true
-        chmod 644 "$airootfs/root/smplos/lib/"*.sh 2>/dev/null || true
+        for lib in "$SRC_DIR/shared/lib/"*.sh "$SRC_DIR/shared/lib/"*.py; do
+            [[ -f "$lib" ]] || continue
+            install -m644 "$lib" "$airootfs/usr/local/lib/smplos/" || return 1
+            install -m644 "$lib" "$airootfs/root/smplos/lib/" || return 1
+        done
     fi
     
     # Deploy shared web app .desktop files and icons (available in all editions)

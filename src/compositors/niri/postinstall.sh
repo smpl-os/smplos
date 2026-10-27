@@ -36,9 +36,10 @@ gtk-font-name=JetBrains Mono 11
 gtk-cursor-theme-name=Adwaita
 gtk-application-prefer-dark-theme=1
 gtk-overlay-scrolling=0
-gtk-enable-mnemonics=0
-gtk-auto-mnemonics=1
 GTKEOF
+  if [[ "$ver" == 3.0 ]]; then
+    printf 'gtk-enable-mnemonics=0\ngtk-auto-mnemonics=1\n' >> "/home/smplos/.config/gtk-$ver/settings.ini"
+  fi
   chown smplos:smplos "/home/smplos/.config/gtk-$ver/settings.ini"
 done
 
@@ -57,13 +58,6 @@ DCONF
 dconf compile /home/smplos/.config/dconf/user "$_dconf_dir/user.d"
 chown smplos:smplos /home/smplos/.config/dconf/user
 rm -rf "$_dconf_dir"
-
-# Ensure GTK_THEME reaches systemd user services
-sudo -u smplos mkdir -p /home/smplos/.config/environment.d
-cat > /home/smplos/.config/environment.d/gtk.conf << 'ENVD'
-GTK_THEME=Adwaita:dark
-ENVD
-chown smplos:smplos /home/smplos/.config/environment.d/gtk.conf
 
 # Qt
 echo "export QT_QPA_PLATFORMTHEME=qt5ct" >> /etc/environment

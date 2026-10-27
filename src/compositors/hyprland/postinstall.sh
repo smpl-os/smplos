@@ -54,8 +54,6 @@ gtk-font-name=JetBrains Mono 11
 gtk-cursor-theme-name=Adwaita
 gtk-application-prefer-dark-theme=1
 gtk-overlay-scrolling=0
-gtk-enable-mnemonics=0
-gtk-auto-mnemonics=1
 GTKEOF
 chown smplos:smplos /home/smplos/.config/gtk-4.0/settings.ini
 
@@ -76,15 +74,6 @@ DCONF
 dconf compile /home/smplos/.config/dconf/user "$_dconf_dir/user.d"
 chown smplos:smplos /home/smplos/.config/dconf/user
 rm -rf "$_dconf_dir"
-
-# Ensure GTK_THEME reaches systemd user services (portals, etc.) on first boot.
-# Hyprland's envs.conf sets it, but portal-gtk may D-Bus activate before
-# autostart.conf runs 'systemctl --user import-environment'.
-sudo -u smplos mkdir -p /home/smplos/.config/environment.d
-cat > /home/smplos/.config/environment.d/gtk.conf << 'ENVD'
-GTK_THEME=Adwaita:dark
-ENVD
-chown smplos:smplos /home/smplos/.config/environment.d/gtk.conf
 
 # Configure Qt to use kvantum
 echo "export QT_QPA_PLATFORMTHEME=qt5ct" >> /etc/environment
