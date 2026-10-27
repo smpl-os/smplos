@@ -890,10 +890,11 @@ rebuild-app-cache() { echo refreshed; return "$CACHE_STATUS"; }
 
     def test_new_user_cache_is_generated_not_shipped(self):
         builder = (ROOT / "src/builder/build.sh").read_text()
-        self.assertIn('cp "$SRC_DIR/shared/lib/"*.sh "$airootfs/usr/local/lib/smplos/"',
+        self.assertIn('install -m644 "$lib" "$airootfs/usr/local/lib/smplos/"',
                       builder)
-        self.assertIn('cp "$SRC_DIR/shared/lib/"*.sh "$airootfs/root/smplos/lib/"',
+        self.assertIn('install -m644 "$lib" "$airootfs/root/smplos/lib/"',
                       builder)
+        self.assertIn('in "$SRC_DIR/shared/lib/"*.sh "$SRC_DIR/shared/lib/"*.py', builder)
         self.assertIn('ln -sf ../smplos-app-cache.service', builder)
         self.assertIn('ln -sf ../smplos-app-cache.path', builder)
         installer = (ROOT / "src/shared/installer/install.sh").read_text()

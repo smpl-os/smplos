@@ -45,6 +45,8 @@ gtk3
 gtk4
 gtk4-layer-shell    # Wayland layer-shell for GTK4 apps
 libadwaita          # GTK4 UI library
+adwaita-icon-theme  # Standard GTK icons; no palette-specific icon packs
+hicolor-icon-theme # Icon lookup fallback
 qt5ct
 kvantum
 kvantum-qt5

@@ -29,6 +29,22 @@ case "$name" in
   theme-set-st) exit "${FAIL_TERMINAL:-0}" ;;
   theme-set-copilot) exit "${FAIL_COPILOT:-0}" ;;
   theme-set-openchamber) exit "${FAIL_OPENCHAMBER:-0}" ;;
+  gsettings)
+    key="$3"
+    case "$1" in
+      get)
+        if [[ -f "$HOME/gsettings-$key" ]]; then
+          cat "$HOME/gsettings-$key"
+        else
+          case "$key" in
+            gtk-theme) echo "'Adwaita'" ;;
+            icon-theme) echo "'Adwaita'" ;;
+            color-scheme) echo "'default'" ;;
+          esac
+        fi ;;
+      set)
+        printf "'%s'\\n" "$4" > "$HOME/gsettings-$key" ;;
+    esac ;;
   hyprctl)
     case "$1" in
       eval)
@@ -96,16 +112,24 @@ class ThemeSwitchingTests(unittest.TestCase):
             "DISPLAY": "",
             "NIRI_SOCKET": "",
             "ST_PID": "",
+            "DBUS_SESSION_BUS_ADDRESS": "",
+            "XDG_CONFIG_HOME": str(self.home / ".config"),
+            "XDG_DATA_HOME": str(self.home / ".local/share"),
+            "XDG_DATA_DIRS": str(self.home / "data"),
         }
         for cmd in (
             "pgrep", "cp", "bar-ctl", "theme-bg-next", "theme-set-st", "fish",
-            "gsettings", "hyprctl", "systemctl", "code", "codium", "cursor", "notify-send",
+            "gsettings", "hyprctl", "systemctl", "dbus-update-activation-environment",
+            "code", "codium", "cursor", "notify-send",
         ):
             path = self.bin / cmd
             path.write_text(MOCK_COMMAND)
             path.chmod(0o755)
         self.make_theme("old", "#000000")
         self.make_theme("new", "#111c18")
+        icons = self.home / "data/icons/Adwaita"
+        icons.mkdir(parents=True)
+        (icons / "index.theme").write_text("[Icon Theme]\nName=Adwaita\n")
 
     def make_theme(self, name, background):
         theme = self.stock / name
@@ -295,8 +319,9 @@ class ThemeSwitchingTests(unittest.TestCase):
         self.assertEqual((self.current / "theme.name").read_text().strip(), "frosted")
         self.assertIn("gsettings set org.gnome.desktop.interface color-scheme prefer-dark",
                       self.log.read_text())
-        self.assertIn("GTK_THEME=Adwaita:dark",
-                      (self.home / ".config/environment.d/gtk.conf").read_text())
+        self.assertFalse((self.home / ".config/environment.d/gtk.conf").exists())
+        self.assertIn("gtk-application-prefer-dark-theme=1",
+                      (self.home / ".config/gtk-4.0/settings.ini").read_text())
         self.assertIn("background = \"#0b2230\"", (self.current / "theme/colors.toml").read_text())
 
     def test_retired_logseq_data_never_changes_or_blocks_theme_switching(self):
@@ -417,12 +442,10 @@ class ThemeSwitchingTests(unittest.TestCase):
                 self.assertNotIn("hyprctl setenv ", calls)
                 self.assertNotIn("unknown request", result.stdout + result.stderr)
                 if provider == "lua":
-                    self.assertIn("hyprctl eval hl.env('GTK_THEME', 'Adwaita:dark'); "
-                                  "hl.env('XCURSOR_THEME', 'Adwaita')", calls)
+                    self.assertIn("hyprctl eval hl.env('GTK_THEME', '')", calls)
                     self.assertNotIn("hyprctl keyword env", calls)
                 else:
-                    self.assertIn("hyprctl keyword env GTK_THEME,Adwaita:dark", calls)
-                    self.assertIn("hyprctl keyword env XCURSOR_THEME,Adwaita", calls)
+                    self.assertIn("hyprctl keyword env GTK_THEME,", calls)
 
     def test_hyprland_environment_rejects_unknown_apis_and_success_exit_with_error_reply(self):
         for extra in (

@@ -1390,8 +1390,20 @@ PY
         calls = self.calls.read_text()
         self.assertNotIn("yay -Sua", calls)
         self.assertNotIn("--capture-brave-target", calls)
-        self.assertIn("--brave-report", calls)
+        self.assertNotIn("--brave-report", calls)
         self.assertNotIn("--finalize", calls)
+
+    def test_core_failure_does_not_verify_a_brave_target_that_was_never_requested(self):
+        for failure in ("BASE_FAIL", "DEPLOY_FAIL", "APPS_FAIL", "VERIFY_FAIL"):
+            with self.subTest(failure=failure):
+                self.calls.write_text("")
+                result = self.run_body(**{failure: "1"})
+                self.assertNotEqual(result.returncode, 0)
+                calls = self.calls.read_text()
+                self.assertNotIn("--capture-brave-target", calls)
+                self.assertNotIn("--brave-report", calls)
+                self.assertIn("check --before", calls)
+                self.assertNotIn("--finalize", calls)
 
     def test_retired_paru_cannot_block_base_with_old_libalpm_dependencies(self):
         result = self.run_body(PARU_INSTALLED="1")

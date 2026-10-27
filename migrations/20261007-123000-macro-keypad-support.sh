@@ -133,11 +133,26 @@ else
     have=$(smplos_pkg_version control-surface)
     if [[ -n "$have" ]] && (( $(vercmp "$have" "$want") >= 0 )); then
         echo "  control-surface $have already installed"
-    elif smplos_pkgbuild_install "$PKG_DIR"; then
-        changed "Installed control-surface $(smplos_pkg_version control-surface) (the keypad app)"
     else
-        echo "  Could not install control-surface now; will retry on the next update"
-        deferred=1
+        install_flags=()
+        mouse_daemon="${SMPLOS_MOUSE_DAEMON:-/usr/bin/mouse-remapperd}"
+        # Older standalone installs predate package ownership of this binary.
+        if [[ -e "$mouse_daemon" || -L "$mouse_daemon" ]] \
+            && ! pacman -Qqo "$mouse_daemon" >/dev/null 2>&1; then
+            if [[ ! -f "$mouse_daemon" || -L "$mouse_daemon" || ! -x "$mouse_daemon" ]] \
+                || ! smplos_mouse_check_runtime "$mouse_daemon"; then
+                echo "  ERROR: unowned $mouse_daemon is not a recognized mouse remapper; left untouched. Resolve the file conflict before retrying Update OS." >&2
+                exit 75
+            fi
+            install_flags=(--overwrite "${mouse_daemon#/}")
+            echo "  Adopting standalone $mouse_daemon into control-surface; saved mappings are unchanged"
+        fi
+        if smplos_pkgbuild_install "$PKG_DIR" "${install_flags[@]}"; then
+            changed "Installed control-surface $(smplos_pkg_version control-surface) (the keypad app)"
+        else
+            echo "  Could not install control-surface now; will retry on the next update"
+            deferred=1
+        fi
     fi
 fi
 

@@ -58,7 +58,7 @@ apply_hyprland_environment() {
   local probe probe_status=0 version
   probe=$(timeout 3 hyprctl eval "assert(type(hl.env) == 'function')" 2>&1) || probe_status=$?
   if [[ $probe_status -eq 0 && "$probe" == ok ]]; then
-    hyprland_request eval "hl.env('GTK_THEME', '$GTK_THEME'); hl.env('XCURSOR_THEME', '$_cursor_theme')"
+    hyprland_request eval "hl.env('GTK_THEME', '')"
     return
   fi
   if [[ $probe_status -ne 0 || "$probe" != "eval is only supported with the lua config manager" ]]; then
@@ -68,8 +68,7 @@ apply_hyprland_environment() {
       die "Unsupported/unavailable Hyprland environment API: $probe"
     fi
   fi
-  hyprland_request keyword env "GTK_THEME,$GTK_THEME"
-  hyprland_request keyword env "XCURSOR_THEME,$_cursor_theme"
+  hyprland_request keyword env "GTK_THEME,"
 }
 
 # Normalize theme name: strip markup, lowercase, spaces to hyphens
@@ -288,68 +287,28 @@ fi
 # APP-SPECIFIC THEMES — optional integrations
 # =========================================================================
 
-# GTK / Icon theme + cursor
+# Standard GTK light/dark preference; palette changes never select an icon pack.
 if [[ -f "$CURRENT_THEME_PATH/light.mode" ]]; then
-  _gtk_theme="Adwaita"
-  _color_scheme="prefer-light"
-  _dark_pref=0
-  _gtk_env="Adwaita"
-  _cursor_theme="Adwaita"
+  _gtk_mode=--light
 else
-  _gtk_theme="Adwaita-dark"
-  _color_scheme="prefer-dark"
-  _dark_pref=1
-  _gtk_env="Adwaita:dark"
-  _cursor_theme="Adwaita"
+  _gtk_mode=--dark
 fi
+_gtk_helper="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../lib/smplos-gtk.py"
+[[ -r "$_gtk_helper" ]] || _gtk_helper="/usr/local/lib/smplos/smplos-gtk.py"
+python3 "$_gtk_helper" "$_gtk_mode" || die "Cannot apply standard GTK preferences"
 
-# dconf/GSettings (primary on Wayland — GTK3/4 read from here)
-if command -v gsettings &>/dev/null; then
-  gsettings set org.gnome.desktop.interface color-scheme "$_color_scheme" 2>/dev/null
-  gsettings set org.gnome.desktop.interface gtk-theme "$_gtk_theme" 2>/dev/null
-  gsettings set org.gnome.desktop.interface cursor-theme "$_cursor_theme" 2>/dev/null
-  if [[ -f "$CURRENT_THEME_PATH/icons.theme" ]]; then
-    gsettings set org.gnome.desktop.interface icon-theme "$(<"$CURRENT_THEME_PATH/icons.theme")" 2>/dev/null
-  fi
-fi
-
-# Set cursor theme for Hyprland + env
-export XCURSOR_THEME="$_cursor_theme"
-if command -v hyprctl &>/dev/null && [[ -n "${WAYLAND_DISPLAY:-}" ]]; then
-  hyprctl setcursor "$_cursor_theme" 24 2>/dev/null || true
-fi
-
-# settings.ini (fallback for X11 and apps that don't use dconf)
-# Always gtk-theme-name=Adwaita — the "Adwaita-dark" theme doesn't exist as an
-# installed theme. Dark variant is activated by gtk-application-prefer-dark-theme
-# (settings.ini) and color-scheme (dconf). The gsettings gtk-theme key can hold
-# "Adwaita-dark" because GTK's GSettings codepath special-cases it, but the
-# settings.ini parser does not.
-for _gtk_dir in "$HOME/.config/gtk-3.0" "$HOME/.config/gtk-4.0"; do
-  mkdir -p "$_gtk_dir"
-  cat > "$_gtk_dir/settings.ini" << EOF
-[Settings]
-gtk-theme-name=Adwaita
-gtk-application-prefer-dark-theme=$_dark_pref
-gtk-icon-theme-name=Adwaita
-gtk-font-name=JetBrains Mono 11
-gtk-cursor-theme-name=$_cursor_theme
-gtk-enable-mnemonics=0
-gtk-auto-mnemonics=1
-EOF
-done
-
-# GTK_THEME env var — forces GTK file dialogs (xdg-desktop-portal-gtk) dark/light.
-# gsettings alone is unreliable on non-GNOME desktops; this is the direct override.
-export GTK_THEME="$_gtk_env"
-# Persist for systemd user services (portals start before Hyprland env import)
-mkdir -p "$HOME/.config/environment.d"
-printf 'GTK_THEME=%s\nXCURSOR_THEME=%s\n' "$_gtk_env" "$_cursor_theme" > "$HOME/.config/environment.d/gtk.conf"
-# Push to Hyprland + systemd so portal services see the change without reboot
-apply_hyprland_environment
-systemctl --user import-environment GTK_THEME XCURSOR_THEME 2>/dev/null || true
-# Restart portal-gtk so it picks up the new GTK_THEME
-systemctl --user restart xdg-desktop-portal-gtk 2>/dev/null || true
+# Clear old session overrides. Empty GTK_THEME is equivalent to unset in GTK3/4;
+# the D-Bus activation environment has no unset operation.
+case "${GTK_THEME:-}" in
+  ""|Adwaita|Adwaita:dark|Adwaita-dark)
+    unset GTK_THEME
+    apply_hyprland_environment
+    if [[ -n "${DBUS_SESSION_BUS_ADDRESS:-}" ]]; then
+      systemctl --user unset-environment GTK_THEME || die "Cannot clear systemd GTK override"
+      dbus-update-activation-environment GTK_THEME= || die "Cannot clear D-Bus GTK override"
+      systemctl --user try-restart xdg-desktop-portal-gtk || die "Cannot refresh GTK portal"
+    fi ;;
+esac
 fi
 
 if [[ "$THEME_SCOPE" == core ]]; then
