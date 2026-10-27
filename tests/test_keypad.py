@@ -770,7 +770,9 @@ class MigrationTests(KeypadCase):
         self.tool("udevadm", 'echo "udevadm $*" >> "$CALLS"\n')
         # The keypad app's package: installed unless PKG_VERSION is empty.
         self.tool("pacman", '[ "$1" = -Q ] && { [ -n "$PKG_VERSION" ] && echo "$2 $PKG_VERSION"; exit 0; }\n'
-                            'echo "pacman $*" >> "$CALLS"\n')
+                            '[ "$1" = -Qqo ] && exit "${MOUSE_OWNED:-1}"\n'
+                            'echo "pacman $*" >> "$CALLS"\n'
+                            'exit "${PACMAN_INSTALL_FAIL:-0}"\n')
         self.tool("fakeroot", 'exit 0\n')
         self.tool("vercmp", 'python3 -c \'import re, sys; a, b = [tuple(map(int, re.findall(r"\\d+", v))) '
                            'for v in sys.argv[1:]]; print((a > b) - (a < b))\' "$@"\n')
@@ -782,6 +784,8 @@ class MigrationTests(KeypadCase):
                           '[ -n "$RUNTIME_FAIL" ] && { echo "Qt_6.12 not found" >&2; exit 127; }\n'
                           'echo "{}"\n')
         self.env["SMPLOS_KEYPAD_DAEMON"] = str(daemon)
+        self.mouse_daemon = self.bin / "mouse-remapperd"
+        self.env["SMPLOS_MOUSE_DAEMON"] = str(self.mouse_daemon)
         self.env.update(PKG_VERSION=f"{self.pkgver}-1")
         self.env.update(SMPLOS_REPO=str(ROOT), SMPLOS_UDEV_RULES_DIR=str(self.udev))
         theme = self.home / ".config/smplos/current/theme"
@@ -864,6 +868,87 @@ class MigrationTests(KeypadCase):
         self.assertFalse((self.units / "control-surface.service").exists())
         self.assertFalse(any(c.startswith("pacman -U") for c in self.calls_made()))
         self.assertIn("will retry", result.stdout)
+
+    def test_standalone_mouse_daemon_is_adopted_with_only_its_exact_overwrite_path(self):
+        from test_mouse import FEATURES
+        self.tool("mouse-remapperd", f'echo \'{json.dumps(FEATURES)}\'\n')
+        self.env["PKG_VERSION"] = "0.8.29-1"
+        mapping = self.home / ".config/smplos/mouse.json"
+        mapping.parent.mkdir(parents=True, exist_ok=True)
+        mapping.write_text('{"custom": "keep exactly"}\n')
+        original = self.mouse_daemon.read_bytes()
+        output = self.migrate()
+        installs = [call for call in self.calls_made() if call.startswith("pacman -U")]
+        self.assertEqual(len(installs), 1)
+        self.assertIn(f"--overwrite {str(self.mouse_daemon).lstrip('/')} ", installs[0])
+        self.assertNotIn("*", installs[0])
+        self.assertIn("Adopting standalone", output)
+        self.assertEqual(mapping.read_text(), '{"custom": "keep exactly"}\n')
+        self.assertEqual(self.mouse_daemon.read_bytes(), original)
+        self.calls.unlink()
+        self.env["PKG_VERSION"] = f"{self.pkgver}-1"
+        self.migrate()
+        self.assertFalse(any("--overwrite" in call for call in self.calls_made()))
+
+    def test_owned_mouse_daemon_never_bypasses_package_conflict_checks(self):
+        self.tool("mouse-remapperd", 'echo "must not execute" >&2\nexit 99\n')
+        self.env.update(PKG_VERSION="0.8.29-1", MOUSE_OWNED="0", PACMAN_INSTALL_FAIL="1")
+        result = subprocess.run(
+            ["bash", str(self.repo / "migrations" / MIGRATION.name)], env=self.env,
+            capture_output=True, text=True, timeout=20,
+        )
+        self.assertEqual(result.returncode, 75, result.stdout + result.stderr)
+        installs = [call for call in self.calls_made() if call.startswith("pacman -U")]
+        self.assertEqual(len(installs), 1)
+        self.assertNotIn("--overwrite", installs[0])
+        self.assertNotIn("must not execute", result.stderr)
+        self.assertFalse((self.units / "control-surface.service").exists())
+
+    def test_failed_build_or_install_keeps_the_standalone_binary_and_working_units(self):
+        from test_mouse import FEATURES
+        self.tool("mouse-remapperd", f'echo \'{json.dumps(FEATURES)}\'\n')
+        original = self.mouse_daemon.read_bytes()
+        self.units.mkdir(parents=True)
+        unit = self.units / "control-surface.service"
+        unit.write_text("[Service]\nExecStart=/custom/control-surfaced run\n")
+        for failure in ("MAKEPKG_FAIL", "PACMAN_INSTALL_FAIL"):
+            with self.subTest(failure=failure):
+                result = subprocess.run(
+                    ["bash", str(self.repo / "migrations" / MIGRATION.name)],
+                    env={**self.env, "PKG_VERSION": "0.8.29-1", failure: "1"},
+                    capture_output=True, text=True, timeout=20,
+                )
+                self.assertEqual(result.returncode, 75, result.stdout + result.stderr)
+                self.assertEqual(self.mouse_daemon.read_bytes(), original)
+                self.assertEqual(unit.read_text(), "[Service]\nExecStart=/custom/control-surfaced run\n")
+
+    def test_unrecognized_or_symlinked_mouse_daemon_defers_without_replacement(self):
+        self.env["PKG_VERSION"] = "0.8.29-1"
+        target = self.root / "custom-mouse-remapperd"
+        target.write_text("#!/bin/sh\nexit 0\n")
+        for kind in ("unknown", "broken-runtime", "symlink", "directory"):
+            with self.subTest(kind=kind):
+                self.calls.unlink(missing_ok=True)
+                if self.mouse_daemon.is_dir():
+                    self.mouse_daemon.rmdir()
+                else:
+                    self.mouse_daemon.unlink(missing_ok=True)
+                if kind == "symlink":
+                    self.mouse_daemon.symlink_to(target)
+                elif kind == "directory":
+                    self.mouse_daemon.mkdir()
+                else:
+                    self.tool("mouse-remapperd", 'echo "{}"\n' if kind == "unknown" else "exit 127\n")
+                result = subprocess.run(
+                    ["bash", str(self.repo / "migrations" / MIGRATION.name)], env=self.env,
+                    capture_output=True, text=True, timeout=20,
+                )
+                self.assertEqual(result.returncode, 75, result.stdout + result.stderr)
+                self.assertIn("left untouched", result.stderr)
+                self.assertFalse(any(call.startswith("pacman -U") or call.startswith("makepkg")
+                                     for call in self.calls_made()))
+                self.assertFalse((self.units / "control-surface.service").exists())
+        self.assertEqual(target.read_text(), "#!/bin/sh\nexit 0\n")
 
     def test_offline_or_incompatible_delivery_preserves_the_working_unit(self):
         self.units.mkdir(parents=True)

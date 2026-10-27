@@ -351,6 +351,7 @@ cat >> "$UPDATE_SCRIPT" << 'EOF' || bootstrap_fail "Cannot write updater body."
 set -o pipefail
 UPDATE_FAILED=0
 CORE_VERIFIED=0
+BRAVE_TARGET_REQUESTED=0
 OPTIONAL_WARNINGS=()
 # Set only when this run's system upgrade completed; gates the bundle.
 SYSTEM_UPGRADED=0
@@ -942,6 +943,7 @@ update_stage aur
 if [[ "$UPDATE_MODE" == full && $CORE_VERIFIED -eq 1 && $AUR_POLICY_READY -eq 1 ]]; then
     echo "── Optional AUR apps (background priority) ──"
     if [[ "$NETWORK_OK" -eq 1 ]] && check_update_power; then
+        BRAVE_TARGET_REQUESTED=1
         run_optional "Brave target capture" smplos-update-check \
             --capture-brave-target --output "$LOG_FILE.brave.json"
         if [[ -n "$OPTIONAL_AUR_PACKAGES" ]]; then
@@ -1020,7 +1022,7 @@ echo
 check_args=(--before "$LOG_FILE.before.json" --output "$LOG_FILE.after.json"
     --apps-report "$LOG_FILE.apps.json"
     --mode "$UPDATE_MODE")
-[[ "$UPDATE_MODE" != full ]] || check_args+=(--brave-report "$LOG_FILE.brave.json")
+[[ $BRAVE_TARGET_REQUESTED -eq 0 ]] || check_args+=(--brave-report "$LOG_FILE.brave.json")
 for warning in "${OPTIONAL_WARNINGS[@]}"; do check_args+=(--optional-warning "$warning"); done
 [[ $UPDATE_FAILED -eq 0 ]] || check_args+=(--required-error "A required update operation failed; see $LOG_FILE")
 AUDIT_WARNINGS=0

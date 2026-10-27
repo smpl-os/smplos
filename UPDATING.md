@@ -57,6 +57,21 @@ automatic rollback or boot recovery are provided by this flow.
 OS-owned changes reach users after merging to `main` and running the updater.
 Changes to independently built apps also require a release in their own repo.
 
+### Standalone mouse-remapper adoption
+
+Older development installs can have an unowned `/usr/bin/mouse-remapperd`
+before the `control-surface` package starts shipping it. The repeated keypad
+package reconciliation checks ownership and the daemon's read-only feature API
+in an isolated profile. A recognized, regular standalone executable can be
+adopted with an exact-path pacman overwrite in the validated package transaction.
+Other packages' files retain normal pacman conflict checks; unrecognized files,
+directories and symlinks are left untouched with an explicit retry error.
+Mouse/keypad mappings, custom units and other user data are not removed.
+
+If a required deployment fails, optional AUR work is skipped. Final verification
+only requests a Brave target report when target capture was actually attempted,
+so a skipped stage does not generate a misleading missing-report warning.
+
 ### Standard GTK defaults and missing-icon repair
 
 Stock palettes no longer select Yaru icon packs that smplOS does not ship.
