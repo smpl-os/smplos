@@ -819,7 +819,8 @@ dofile(arg[2]).load(arg[3])
         (directory / "workspace-rules.lua").write_text('hl.workspace_rule({workspace="1", monitor="DP-1"})\n')
         enabled = subprocess.run(command_args, input=script, text=True, capture_output=True,
                                  env=env, check=True).stdout
-        self.assertIn("exec:workspace-ctl select 1", enabled)
+        self.assertIn("native-focus:table", enabled)
+        self.assertNotIn("exec:workspace-ctl select 1\n", enabled)
         self.assertIn("exec:workspace-ctl select +1", enabled)
         self.assertIn("exec:workspace-ctl send 1 --silent", enabled)
         self.assertIn("exec:workspace-ctl move-workspace up", enabled)

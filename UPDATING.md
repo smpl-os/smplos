@@ -380,6 +380,12 @@ EWW fragments, and Hyprland Lua modules into both the live system and installer
 payload. Monitor identities and workspace assignments are generated on the
 target machine; no developer profile is shipped.
 
+Plain Super+number bindings use Hyprland's native workspace focus, with homes
+provided by the generated workspace rules. The binding itself does not invoke
+policy reconciliation, reload configuration, or dispatch window/workspace moves.
+Relative/previous navigation still resolves monitor-local IDs through
+`workspace-ctl`; modified send/move shortcuts remain explicit moves.
+
 ---
 
 ## 2. Updating Configs (EWW, Hyprland, foot, etc.)

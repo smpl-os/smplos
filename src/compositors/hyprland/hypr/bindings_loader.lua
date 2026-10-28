@@ -177,7 +177,10 @@ local function make_dispatcher(dispatcher, arg)
         return hl.dsp.layout(arg)
 
     elseif dispatcher == "workspace" then
-        if stable_workspaces and (arg:match("^[1-9]%d*$") or arg == "+1" or arg == "-1" or arg == "previous") then
+        -- Numbered navigation follows the generated workspace rules directly.
+        -- Reconciliation can rehome whole workspaces and must not run on a
+        -- plain Super+number press. Relative navigation still needs local IDs.
+        if stable_workspaces and (arg == "+1" or arg == "-1" or arg == "previous") then
             return hl.dsp.exec_cmd("workspace-ctl select " .. arg)
         end
         return hl.dsp.focus({ workspace = ws_arg(arg) })

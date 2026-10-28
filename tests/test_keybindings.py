@@ -419,7 +419,7 @@ class LoaderMappingTests(Scratch):
         ("fullscreen, 0", 'window.fullscreen({"mode":"fullscreen"})', None),
         ("fullscreen", 'window.fullscreen({"mode":"fullscreen"})', None),
         ("fullscreen, 1", 'window.fullscreen({"mode":"maximized"})', None),
-        ("workspace, 3", 'focus({"workspace":3})', 'exec_cmd("workspace-ctl select 3")'),
+        ("workspace, 3", 'focus({"workspace":3})', None),
         ("workspace, +1", 'focus({"workspace":"+1"})', 'exec_cmd("workspace-ctl select +1")'),
         ("workspace, -1", 'focus({"workspace":"-1"})', 'exec_cmd("workspace-ctl select -1")'),
         ("movetoworkspace, 3", 'window.move({"workspace":3})', 'exec_cmd("workspace-ctl send 3")'),
@@ -440,6 +440,15 @@ class LoaderMappingTests(Scratch):
             for on, expected in ((False, plain), (True, policy or plain)):
                 with self.subTest(bind=dispatch, workspace_policy="on" if on else "off"):
                     self.assertEqual(expected, self.translate(dispatch, on))
+
+    def test_numbered_workspace_navigation_never_runs_reconciliation_or_moves(self):
+        for workspace in range(1, 11):
+            for policy in (False, True):
+                with self.subTest(workspace=workspace, policy=policy):
+                    self.assertEqual(
+                        f'focus({{"workspace":{workspace}}})',
+                        self.translate(f"workspace, {workspace}", policy),
+                    )
 
 
 # ── The command line ────────────────────────────────────────────────────────
