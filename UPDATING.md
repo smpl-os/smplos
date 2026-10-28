@@ -57,6 +57,19 @@ automatic rollback or boot recovery are provided by this flow.
 OS-owned changes reach users after merging to `main` and running the updater.
 Changes to independently built apps also require a release in their own repo.
 
+### Web-app DNS after VPN/resolver changes
+
+The web-app launcher exposes `/run/systemd/resolve` read-only when present,
+so `/etc/resolv.conf` remains readable inside Bubblewrap when it points to
+systemd-resolved. Binding the directory also follows atomic DNS-file updates.
+Web apps keep the host network, DNS routing and VPN policy; no public-DNS
+override, VPN exclusion or browser-profile reset is needed. Static resolver
+files remain available through the existing read-only `/etc` mount.
+
+Update OS delivers the launcher. Close and reopen existing web-app windows
+after updating: a running sandbox keeps its original mounts. Profiles,
+cookies and logins are not cleared.
+
 ### Standalone mouse-remapper adoption
 
 Older development installs can have an unowned `/usr/bin/mouse-remapperd`

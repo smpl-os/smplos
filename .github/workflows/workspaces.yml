@@ -18,6 +18,7 @@ on:
       - "migrations/*workspace*.sh"
       - "tests/test_workspace*.py"
       - "tests/test_bar_ctl.py"
+      - "tests/test_webapp_dns.py"
   push:
     branches: [main]
     paths:
@@ -36,6 +37,7 @@ on:
       - "migrations/*workspace*.sh"
       - "tests/test_workspace*.py"
       - "tests/test_bar_ctl.py"
+      - "tests/test_webapp_dns.py"
   workflow_dispatch:
 
 permissions:
@@ -55,3 +57,5 @@ jobs:
         run: python3 -m unittest discover -s tests -p 'test_workspace*.py' -v
       - name: Check taskbar preference application
         run: python3 -m unittest discover -s tests -p 'test_bar_ctl.py' -v
+      - name: Check web-app sandbox DNS
+        run: python3 -m unittest discover -s tests -p 'test_webapp_dns.py' -v
