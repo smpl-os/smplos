@@ -793,11 +793,12 @@ class MigrationTests(KeypadCase):
                             'elif [ -n "$PKG_VERSION" ]; then echo "$2 $PKG_VERSION"; fi; exit 0; }\n'
                             '[ "$1" = -Qkk ] && exit "${PACKAGE_DAMAGED:-0}"\n'
                             '[ "$1" = -Qqo ] && { '
-                            '[[ "$2" != "$SMPLOS_MOUSE_DAEMON" || -f "$HOME/package-version" || "${MOUSE_OWNED:-0}" = 0 ]] '
+                            '{ [ "$2" != "$SMPLOS_MOUSE_DAEMON" ] || [ -f "$HOME/package-version" ] || [ "${MOUSE_OWNED:-0}" = 0 ]; } '
                             '&& { echo control-surface; exit 0; }; exit 1; }\n'
                             'echo "pacman $*" >> "$CALLS"\n'
-                            'if [[ "$1" = -U && "${PACMAN_INSTALL_FAIL:-0}" = 0 && "${INSTALL_NOOP:-0}" = 0 ]]; then '
-                            'basename "${@: -1}" | sed -E "s/^control-surface-(.*)-x86_64.pkg.tar.zst$/\\1/" > "$HOME/package-version"; fi\n'
+                            'if [ "$1" = -U ] && [ "${PACMAN_INSTALL_FAIL:-0}" = 0 ] && [ "${INSTALL_NOOP:-0}" = 0 ]; then '
+                            'for package in "$@"; do :; done\n'
+                            'basename "$package" | sed -E "s/^control-surface-(.*)-x86_64.pkg.tar.zst$/\\1/" > "$HOME/package-version"; fi\n'
                             'exit "${PACMAN_INSTALL_FAIL:-0}"\n')
         self.tool("fakeroot", 'exit 0\n')
         self.tool("vercmp", 'python3 -c \'import re, sys; a, b = [tuple(map(int, re.findall(r"\\d+", v))) '
