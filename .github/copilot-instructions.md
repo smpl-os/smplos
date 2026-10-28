@@ -395,7 +395,7 @@ smpl-apps/         ← independent repository
 ```
 
 **smpl-common** is the single source of truth for backend init. Every app
-calls `smpl_common::init(app_id, w, h)` which sets the FemtoVG renderer,
+uses its shared init path, which selects alpha-safe Skia CPU rendering from launch,
 disables decorations, and configures the Wayland app_id. **NO app should
 inline this init code or have its own Backend::builder() calls.**
 
@@ -409,48 +409,35 @@ binaries, including smpl-hints and smpl-hintsd, before marking a release cached.
 
 **RULE 2: NEVER create standalone Cargo.toml files for individual apps.**
 Apps use `workspace = true` for all shared dependencies. The workspace
-`Cargo.toml` declares `renderer-femtovg` once; individual apps inherit it.
+`Cargo.toml` owns the Skia renderer features and pinned Skia/softbuffer alpha
+patches; individual apps inherit them. Keep those patches and their lockfile
+revisions coordinated in smpl-apps, not in this OS repository.
+The CPU architecture uses Slint 1.15.1 with `default-features = false` and
+`backend-winit`, `renderer-skia`, `compat-1-2`; shared initialization selects
+`skia-software`. The vendored `i-slint-renderer-skia` 1.15.1 and `softbuffer`
+0.4.8 patches preserve premultiplied BGRA/ARGB presentation, including Wayland
+surface creation and resize via `wayland-alpha`, and the native X11 ARGB visual.
+See smpl-apps `vendor/README.md` for the maintained patch inventory.
 
 **RULE 3: build-iso.sh downloads pre-built binaries by default.**
 Both the default build path and `--build-apps` download native smpl-apps release
 binaries from GitHub (`build-apps.sh` invokes `fetch-apps.sh`). Neither builds
 unpublished Rust changes from a local subtree.
 
-```toml
-# ✅ CORRECT — in workspace Cargo.toml (ONE place, inherited by all apps):
-slint = { version = "1.8", default-features = false, features = ["backend-winit", "renderer-femtovg", "compat-1-2"] }
+**Renderer ownership:** use the current smpl-apps workspace manifest and
+`smpl-common` implementation as the source of truth, rather than copying backend
+initialization into OS scripts. CPU rendering is the user-directed default, not
+a GPU-failure fallback. It must preserve per-pixel alpha, opaque foregrounds,
+shadows and compositor-blur compatibility. Stock/unpatched software presentation
+can discard alpha; the pinned Skia/softbuffer patches are part of the release
+contract. Do not force a renderer with OS environment variables.
 
-# ❌ WRONG — NEVER use these (destroys transparency with no error):
-# renderer-software (softbuffer hardcodes XRGB on Wayland — alpha ignored)
-# renderer-skia, or omitting the renderer feature entirely
-```
+**Rules — preserve these across renderer changes:**
 
-**smpl-common init code** (in `smpl-common/src/lib.rs`):
-
-```rust
-let backend = i_slint_backend_winit::Backend::builder()
-    .with_renderer_name("femtovg")           // MUST match Cargo.toml feature
-    .with_window_attributes_hook(|attrs| {
-        use i_slint_backend_winit::winit::platform::wayland::WindowAttributesExtWayland;
-        use i_slint_backend_winit::winit::dpi::LogicalSize;
-        attrs
-            .with_name("app-id", "app-id")   // sets Wayland app_id for windowrulev2
-            .with_decorations(false)          // MUST be false
-            .with_inner_size(LogicalSize::new(W as f64, H as f64))
-    })
-    .build()?;
-slint::platform::set_platform(Box::new(backend))
-    .map_err(|e| slint::PlatformError::Other(e.to_string()))?;
-```
-
-**Rules — each one has caused a regression:**
-
-- **`renderer-femtovg` in BOTH Cargo.toml AND runtime code.** The Cargo.toml
-  feature flag controls what gets compiled in. The runtime `.with_renderer_name()`
-  selects it. FemtoVG uses OpenGL/EGL with ARGB visuals on Wayland, so the
-  compositor sees real alpha. NEVER use `renderer-software` — softbuffer
-  hardcodes `wl_shm::Format::Xrgb8888` on Wayland, making alpha completely
-  ignored regardless of what the app writes.
+- **Keep compiled renderer features, shared runtime selection and alpha patches
+  together.** Do not restore the former FemtoVG-only requirement or substitute
+  an unpatched software backend. Validate transparent -> opaque -> transparent
+  backgrounds with readable text/icons and shadows on both Wayland and X11.
 - **`with_decorations(false)` is mandatory.** CSD adds an opaque frame, destroying the
   borderless transparent look.
 - **`with_name(app_id, instance)` is mandatory.** Without it the Wayland `app_id` is
@@ -486,9 +473,10 @@ slint::platform::set_platform(Box::new(backend))
   not only the original inode. Native releases and reopen-once rollout are
   required; an OS source update is not a native binary delivery.
 
-**NEVER do these — each one silently kills transparency with no error:**
-- NEVER put `renderer-software` or `renderer-skia` in the workspace Cargo.toml
-- NEVER remove the `renderer-femtovg` feature from a Cargo.toml
+**NEVER do these:**
+- NEVER drop the pinned Skia/softbuffer alpha patches without verifying equivalent
+  per-pixel alpha support on Wayland and X11
+- NEVER force GPU rendering or add an OS-level renderer override
 - NEVER set `with_decorations(true)` or omit the decorations call
 - NEVER hardcode an opaque `#rrggbb` background on a `.slint` Window (use theme alpha)
 - NEVER create standalone per-app Cargo.toml files with their own slint dependency

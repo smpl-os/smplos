@@ -801,7 +801,7 @@ class InstalledStateTests(unittest.TestCase):
         self.assertEqual(report["native_files"][str(binary)]["status"], "mismatch")
 
     def test_native_target_is_checked_independently_of_a_success_result(self):
-        self.packages.update({"nemo-smpl": "1.0-1", "grafium-bin": "1.0-1"})
+        self.packages.update({"nemo-smpl": "1.0-1", "grafium-bin": "1.0-1", "control-surface": "1.0-1"})
         components = {
             name: {"status": "current", "target": "v1.0"} for name in CHECK.RELEASE_COMPONENTS
         }
@@ -818,7 +818,9 @@ class InstalledStateTests(unittest.TestCase):
         self.assertIn("native release update was not completed", "\n".join(audit.report["errors"]))
 
     def test_legacy_optional_reports_are_ignored_without_weakening_core_verification(self):
-        self.packages.update({"nemo-smpl": "1.0-1", "grafium-bin": "1.0-1"})
+        self.packages.update({"nemo-smpl": "1.0-1", "grafium-bin": "1.0-1", "control-surface": "1.0-1"})
+        for name in ("control-surfaced", "mouse-remapperd"):
+            self.write(self.root / "usr/bin" / name, b"\x7fELF" + name.encode())
         components = {name: {"status": "current", "target": "v1.0"}
                       for name in CHECK.RELEASE_COMPONENTS}
         components["smpl-apps"]["target"] = "v0.8.28"
@@ -852,8 +854,25 @@ class InstalledStateTests(unittest.TestCase):
         audit.release_results(core)
         self.assertIn("native release update was not completed", "\n".join(audit.report["errors"]))
 
+    def test_input_release_and_package_revision_are_independent_required_targets(self):
+        self.packages["control-surface"] = "0.8.37-1"
+        result = {"status": "updated", "target": "v0.8.38", "package_target": "0.8.38-1"}
+        audit = CHECK.Audit(self.home, self.repo, self.root, self.runner)
+        audit.snapshot()
+        audit.release_component_result("control-surface", result)
+        self.assertIn("did not reach release target", "\n".join(audit.report["errors"]))
+        for component in ("control-surface", "nemo-smpl"):
+            self.packages[component] = "0.8.38-1"
+            for package_target in ("0.8.38-2", "0.8.37-1", None):
+                with self.subTest(component=component, package_target=package_target):
+                    audit = CHECK.Audit(self.home, self.repo, self.root, self.runner)
+                    audit.snapshot()
+                    audit.release_component_result(component, {**result, "package_target": package_target})
+                    self.assertTrue(audit.report["errors"])
+
     def test_legacy_grafium_native_result_is_not_a_current_managed_component(self):
         self.packages["nemo-smpl"] = "1.0-1"
+        self.packages["control-surface"] = "1.0-1"
         components = {name: {"status": "current", "target": "v1.0"}
                       for name in CHECK.RELEASE_COMPONENTS}
         components["smpl-apps"]["target"] = "v0.8.28"
@@ -1490,7 +1509,7 @@ PY
                 aur = [line for line in calls.splitlines() if line.startswith("yay -Sua")]
                 self.assertEqual(len(aur), 2 if mode == "full" else 0)
                 for line in aur:
-                    self.assertIn("nemo-smpl,grafium-bin,eww-smplos", line)
+                    self.assertIn("nemo-smpl,control-surface,grafium-bin,eww-smplos", line)
 
     def test_required_foreign_driver_updates_before_native_and_failure_remains_blocking(self):
         result = self.run_body(CORE_AUR="1")

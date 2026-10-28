@@ -8,6 +8,7 @@
 #   - st-smpl (st-wl terminal)
 #   - nemo-smpl (file manager)
 #   - micro-smpl (text editor with dynamic config reloading)
+#   - control-surface (keypad and mouse remapping daemons)
 #
 # Each app is only downloaded if a newer version exists on GitHub.
 # Version state is tracked in ~/.local/state/smplos/app-versions/
@@ -25,6 +26,9 @@ for _lib in "$SMPLOS_PATH/repo/src/shared/lib/smplos-app-bundle.sh" \
     if [[ -r "$_lib" ]]; then
         source "$_lib"
         source "$(dirname "$_lib")/smplos-release-package.sh"
+        source "$(dirname "$_lib")/smplos-pkgbuild.sh"
+        source "$(dirname "$_lib")/smplos-keypad-units.sh"
+        source "$(dirname "$_lib")/smplos-control-surface.sh"
         break
     fi
 done
@@ -155,7 +159,7 @@ record_component_files() {
 
 installed_component_version() {
     local version package=""
-    case "$1" in nemo-smpl) package=nemo-smpl ;; esac
+    case "$1" in nemo-smpl|control-surface) package="$1" ;; esac
     if [[ -n "$package" ]]; then
         version=$(pacman -Q "$package" 2>/dev/null) || version=""
         printf '%s\n' "${version#* }"
@@ -190,6 +194,9 @@ if component:
     report["components"][component] = {
         "before": before or None, "after": after or None, "target": target, "status": status,
     }
+    package_target = work / (component + ".json.package-target")
+    if package_target.exists():
+        report["components"][component]["package_target"] = package_target.read_text().strip()
 report["time"] = datetime.now(timezone.utc).isoformat()
 path.parent.mkdir(parents=True, exist_ok=True)
 fd, temporary = tempfile.mkstemp(prefix=".app-results-", dir=path.parent)
@@ -482,7 +489,25 @@ update_nemo_smpl() {
     remote_ver=$(echo "$_gh_json" | grep -oP '"tag_name"\s*:\s*"\K[^"]+' || true)
     [[ -z "$remote_ver" ]] && { warn "nemo-smpl: could not parse version"; return 1; }
 
-    if smplos_package_current nemo-smpl "$remote_ver"; then
+    local pkg_url package_target
+    pkg_url=$(echo "$_gh_json" \
+        | grep -oP '"browser_download_url"\s*:\s*"\K[^"]*nemo-smpl-[^"]*x86_64\.pkg\.tar\.zst' \
+        | head -1 || true)
+    if [[ "${pkg_url##*/}" =~ ^nemo-smpl-([0-9]+(\.[0-9]+)*-[0-9]+)-x86_64\.pkg\.tar\.zst$ ]]; then
+        package_target="${BASH_REMATCH[1]}"
+        [[ "${package_target%-*}" == "${remote_ver#v}" ]] || {
+            warn "nemo-smpl: package version differs from release $remote_ver"
+            return 1
+        }
+    else
+        warn "nemo-smpl: no versioned .pkg.tar.zst in release $remote_ver"
+        return 1
+    fi
+    if [[ -n "${SMPLOS_APP_RESULT_FILE:-}" ]]; then
+        printf '%s\n' "$package_target" > "$SMPLOS_APP_RESULT_FILE.package-target"
+    fi
+
+    if smplos_package_current nemo-smpl "$remote_ver" "$package_target"; then
         ok "nemo-smpl: installed package is current or newer than $remote_ver"
         return 0
     elif [[ $? -eq 2 ]]; then
@@ -492,16 +517,6 @@ update_nemo_smpl() {
     if [[ $CHECK_ONLY -eq 1 ]]; then
         log "nemo-smpl: update available ${cached_ver:-none} -> $remote_ver"
         return
-    fi
-
-    local pkg_url
-    pkg_url=$(echo "$_gh_json" \
-        | grep -oP '"browser_download_url"\s*:\s*"\K[^"]*nemo-smpl-[^"]*x86_64\.pkg\.tar\.zst' \
-        | head -1 || true)
-
-    if [[ -z "$pkg_url" ]]; then
-        warn "nemo-smpl: no .pkg.tar.zst in release $remote_ver"
-        return 1
     fi
 
     log "nemo-smpl: updating ${cached_ver:-none} -> $remote_ver"
@@ -522,6 +537,10 @@ update_nemo_smpl() {
         }
 
         if sudo pacman -U --noconfirm "$tmpfile"; then
+            smplos_package_current nemo-smpl "$remote_ver" "$package_target" || {
+                warn "nemo-smpl: installation did not reach intact package $package_target; not recorded"
+                return 1
+            }
             echo "$remote_ver" > "$STATE_DIR/nemo-smpl"
             ok "nemo-smpl: updated to $remote_ver"
             ((n_updated++)) || true
@@ -608,13 +627,44 @@ update_micro_smpl() {
     fi
 }
 
+update_control_surface() {
+    local tmpdir target
+    tmpdir=$(mktemp -d /tmp/smplos-control-surface.XXXXXX)
+    trap "rm -rf '$tmpdir'" RETURN
+    # Share the exact smpl-apps release snapshot, even if latest moves mid-update.
+    if [[ -s "$REPORT_WORK/smpl-apps.json" ]]; then
+        cp "$REPORT_WORK/smpl-apps.json" "$SMPLOS_APP_RESULT_FILE"
+    else
+        _gh_api "https://api.github.com/repos/smpl-os/smpl-apps/releases/latest" || {
+            warn "control-surface: GitHub unreachable"
+            return 1
+        }
+    fi
+    smplos_control_surface_prepare "$SMPLOS_PATH/repo/src/shared/pkgbuilds/control-surface" \
+        "$SMPLOS_APP_RESULT_FILE" "$tmpdir/recipe" || return 1
+    target=$(smplos_pkgbuild_version "$tmpdir/recipe") || return 1
+    printf '%s\n' "$target" > "$SMPLOS_APP_RESULT_FILE.package-target"
+    if smplos_control_surface_current "$target"; then
+        ok "control-surface: installed package is current or newer than $target"
+        return 0
+    elif [[ $? -eq 2 ]]; then
+        return 1
+    fi
+    log "control-surface: update/repair $(smplos_pkg_version control-surface) -> $target"
+    [[ $CHECK_ONLY -eq 0 ]] || return 0
+    smplos_control_surface_install "$tmpdir/recipe" || return 1
+    ok "control-surface: updated to $target"
+    log "Mouse/keypad mappings are unchanged. Log out/in when ready to load the new daemons; no running services were stopped."
+    ((n_updated++)) || true
+}
+
 # ── Main ─────────────────────────────────────────────────────────────
 [[ $QUIET -eq 0 ]] && echo "── smplOS App Updates ──"
 
 failed=0
 record_app_result "" "" "" "" || { warn "Cannot initialize app update report"; exit 1; }
 # Retain the old optional selector as an empty report for installed callers.
-for component in smpl-apps st-smpl nemo-smpl micro-smpl; do
+for component in smpl-apps st-smpl nemo-smpl micro-smpl control-surface; do
     [[ "${GROUP:-all}" != optional ]] || continue
     before=$(installed_component_version "$component")
     status=current
@@ -622,7 +672,7 @@ for component in smpl-apps st-smpl nemo-smpl micro-smpl; do
     # A separate shell retains errexit inside each component; independent apps
     # still run after a failure, and no failed install gets a version stamp.
     if ! SMPLOS_APP_RESULT_FILE="$REPORT_WORK/$component.json" \
-        bash -e -o pipefail -c "$(declare -f); $(declare -p STATE_DIR SMPLOS_PATH CHECK_ONLY QUIET SMPLOS_APP_BINS); n_updated=0; $function_name; printf '%s\n' \"\$n_updated\" > \"\$SMPLOS_APP_RESULT_FILE.installed\""; then
+        bash -e -o pipefail -c "$(declare -f); $(declare -p STATE_DIR SMPLOS_PATH CHECK_ONLY QUIET SMPLOS_APP_BINS REPORT_WORK); n_updated=0; $function_name; printf '%s\n' \"\$n_updated\" > \"\$SMPLOS_APP_RESULT_FILE.installed\""; then
         status=failed
         failed=1
     fi
@@ -630,6 +680,7 @@ for component in smpl-apps st-smpl nemo-smpl micro-smpl; do
     if [[ "$status" != failed ]] &&
         { [[ "$before" != "$after" ]] || [[ "$(< "$REPORT_WORK/$component.json.installed")" != 0 ]]; }; then
         status=updated
+        log "Testing needed: $component changed ${before:-none} -> ${after:-unknown}; test it on this machine after reopening the app or logging in again."
     fi
     if [[ $CHECK_ONLY -eq 1 && "$status" != failed ]]; then status=checked; fi
     record_app_result "$component" "$before" "$after" "$status" || {

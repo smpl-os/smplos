@@ -35,7 +35,7 @@ STACK = re.compile(
     r"greetd.*|plymouth|dbus.*|networkmanager|pipewire.*|wireplumber|brave-bin)$"
 )
 KERNELS = {"linux", "linux-lts", "linux-zen", "linux-hardened", "linux-surface"}
-RELEASE_COMPONENTS = {"smpl-apps", "st-smpl", "nemo-smpl", "micro-smpl"}
+RELEASE_COMPONENTS = {"smpl-apps", "st-smpl", "nemo-smpl", "micro-smpl", "control-surface"}
 OPTIONAL_PACKAGES = {"brave-bin", "flatpak", "nvidia-container-toolkit"}
 CORE_BINARIES = {
     "bash": ("usr/bin/bash",),
@@ -299,9 +299,9 @@ class Audit:
             self.linkage(self.root / "usr/bin/Hyprland")
         for name in ("nemo-document-renderer", "nemo-archive-create-worker"):
             self.linkage(self.root / "usr/libexec" / name)
-        for name in ("control-surfaced",):
+        for name in ("control-surfaced", "mouse-remapperd"):
             path = self.root / "usr/bin" / name
-            if path.exists():
+            if "control-surface" in self.report["packages"] or path.exists():
                 self.linkage(path)
         self.receipt("smpl-apps", APPS)
         self.receipt("st-smpl", ("st-wl",))
@@ -438,10 +438,18 @@ class Audit:
         if not isinstance(result.get("target"), str) or not result["target"]:
             self.error(f"{component}: published release target could not be verified")
             return
-        package = "nemo-smpl" if component == "nemo-smpl" else None
+        package = component if component in {"nemo-smpl", "control-surface"} else None
         installed = (self.report["packages"].get(package) if package
                      else self.report["app_versions"].get(component))
         target = result["target"].removeprefix("v") + ("-1" if package else "")
+        if package and "package_target" in result:
+            target = result["package_target"]
+            if not isinstance(target, str) or not re.fullmatch(r"[0-9]+(?:\.[0-9]+)*-[0-9]+", target):
+                self.error(f"{component}: invalid captured package target")
+                return
+            if target.rsplit("-", 1)[0] != result["target"].removeprefix("v"):
+                self.error(f"{component}: package target differs from captured release")
+                return
         if not installed:
             self.error(f"{component}: no installed version matches the release result")
             return
@@ -545,7 +553,7 @@ class Audit:
                     self.error(f"No system provider for core dependency {dependency} required by {name}")
                     return
                 pending.extend(candidates - closure)
-        managed = {"nemo-smpl", "eww-smplos"}
+        managed = {"nemo-smpl", "eww-smplos", "control-surface"}
         app_only = {"grafium-bin"}
         excluded = managed | app_only
         self.report["aur_policy"] = {
@@ -830,8 +838,10 @@ class Audit:
                 print(f"  Native {name}: invalid release result")
                 continue
             print(f"  Native {name}: {item.get('before') or 'not recorded'} -> "
-                  f"{item.get('after') or 'not recorded'}; target={item.get('target') or 'unknown'}; "
-                  f"{item.get('status', 'unknown')}")
+                  f"{item.get('after') or 'not recorded'}; "
+                  f"target={item.get('package_target') or item.get('target') or 'unknown'}; "
+                  f"{item.get('status', 'unknown')}"
+                  + ("; Testing needed" if item.get("status") == "updated" else ""))
 
     def session(self):
         if not (os.environ.get("WAYLAND_DISPLAY") or os.environ.get("DISPLAY")):

@@ -870,7 +870,7 @@ sync_mouse_support() { :; }
 sync_hypridle_config() { :; }
 cleanup_shadow_bins() { :; }; post_deploy() { :; }
 update_smpl_apps() { :; }; update_st_smpl() { :; }; update_nemo_smpl() { :; }
-update_micro_smpl() { :; }
+update_micro_smpl() { :; }; update_control_surface() { :; }
 rebuild-app-cache() { echo refreshed; return "$CACHE_STATUS"; }
 """
             for status in ("0", "1"):
@@ -948,9 +948,12 @@ header() { :; }; warn() { :; }
     def package_mocks(self):
         self.mock("pacman", """#!/bin/bash
 case "$1" in
--Q) [[ -n "${INSTALLED_VERSION:-}" ]] || exit 1; echo "$2 $INSTALLED_VERSION";;
--Qk) exit "${MISSING_FILES:-0}";;
--U) echo "$*" >> "$HOME/pacman.log"; exit "${INSTALL_FAIL:-0}";;
+-Q) if [[ -f "$HOME/package-version" ]]; then echo "$2 $(cat "$HOME/package-version")";
+    else [[ -n "${INSTALLED_VERSION:-}" ]] || exit 1; echo "$2 $INSTALLED_VERSION"; fi;;
+-Qkk) exit "${MISSING_FILES:-0}";;
+-U) echo "$*" >> "$HOME/pacman.log"
+    if [[ "${INSTALL_FAIL:-0}" = 0 && "${INSTALL_NOOP:-0}" = 0 ]]; then echo "${PACKAGE_TARGET:-1.4.72-1}" > "$HOME/package-version"; fi
+    exit "${INSTALL_FAIL:-0}";;
 *) exit 99;;
 esac
 """)
@@ -1002,6 +1005,26 @@ update_nemo_smpl
         result = self.nemo_update()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue((self.home / "pacman.log").exists())
+
+    def test_nemo_success_exit_without_installation_does_not_record_the_target(self):
+        self.nemo_release()
+        self.package_mocks()
+        result = self.nemo_update(INSTALLED_VERSION="1.4.71-1", INSTALL_NOOP="1")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("did not reach intact package", result.stderr)
+        self.assertFalse((self.home / "state/nemo-smpl").exists())
+
+    def test_nemo_package_revision_is_not_hidden_by_unchanged_release_tag(self):
+        self.nemo_release()
+        self.package_mocks()
+        release = Path(self.env["NEMO_RELEASE_JSON"])
+        release.write_text(release.read_text().replace("1.4.72-1-", "1.4.72-2-"))
+        checksums = Path(self.env["CHECKSUMS"])
+        checksums.write_text(checksums.read_text().replace("1.4.72-1-", "1.4.72-2-"))
+        result = self.nemo_update(INSTALLED_VERSION="1.4.72-1", PACKAGE_TARGET="1.4.72-2")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((self.home / "pacman.log").exists())
+        self.assertEqual((self.home / "package-version").read_text().strip(), "1.4.72-2")
 
     def test_nemo_checksum_missing_worker_or_install_failure_never_records_version(self):
         self.package_mocks()
@@ -1084,6 +1107,7 @@ update_smpl_apps() { echo native-start; false; echo must-not-reach; }
 update_st_smpl() { echo terminal; }
 update_nemo_smpl() { echo nemo; }
 update_micro_smpl() { echo editor; }
+update_control_surface() { echo mouse-keypad; }
 update_grafium() { echo forbidden-grafium; return 99; }
 rebuild-app-cache() { echo cache; }
 """
@@ -1109,6 +1133,7 @@ update_smpl_apps() { release_target; echo attempted-new-suite; false; echo must-
 update_st_smpl() { release_target; n_updated=1; }
 update_nemo_smpl() { release_target; }
 update_micro_smpl() { release_target; }
+update_control_surface() { release_target; }
 update_grafium() { echo forbidden-grafium; return 99; }
 rebuild-app-cache() { echo refreshed; }
 """ + main
@@ -1117,7 +1142,7 @@ rebuild-app-cache() { echo refreshed; }
         self.assertNotIn("must-not-reach", result.stdout)
         report = json.loads((self.home / "apps.json").read_text())
         self.assertEqual(set(report["components"]),
-                         {"smpl-apps", "st-smpl", "nemo-smpl", "micro-smpl"})
+                         {"smpl-apps", "st-smpl", "nemo-smpl", "micro-smpl", "control-surface"})
         self.assertNotIn("forbidden-grafium", result.stdout)
         self.assertEqual(report["components"]["smpl-apps"],
                          {"before": "v1.0", "after": "v1.0", "target": "v2.0", "status": "failed"})
@@ -1153,6 +1178,7 @@ update_smpl_apps() { release_target; }
 update_st_smpl() { release_target; }
 update_nemo_smpl() { release_target; }
 update_micro_smpl() { release_target; }
+update_control_surface() { release_target; }
 update_grafium() { echo forbidden-grafium; return 99; }
 rebuild-app-cache() { :; }
 """
@@ -1162,7 +1188,7 @@ rebuild-app-cache() { :; }
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertNotIn("forbidden-grafium", result.stdout)
                 self.assertEqual(set(json.loads((self.home / f"{group}.json").read_text())["components"]),
-                                 {"smpl-apps", "st-smpl", "nemo-smpl", "micro-smpl"})
+                                 {"smpl-apps", "st-smpl", "nemo-smpl", "micro-smpl", "control-surface"})
         original = (self.home / "core.json").read_bytes()
         optional = self.shell(script + main, GROUP="optional")
         self.assertEqual(optional.returncode, 0, optional.stderr)

@@ -566,7 +566,7 @@ class LifecycleTests(unittest.TestCase):
             output = result.stdout + result.stderr
             self.assertNotIn("error:", output.split("Failed to initialize GTK")[0].lower(), output)
 
-    def test_daemon_package_is_a_pinned_smpl_apps_release(self):
+    def test_daemon_package_snapshot_is_resolved_with_its_release_digest(self):
         recipe = ROOT / "src/shared/pkgbuilds/control-surface"
         self.assertFalse((recipe / "PENDING").exists())
         pkgbuild = (recipe / "PKGBUILD").read_text()
@@ -574,15 +574,15 @@ class LifecycleTests(unittest.TestCase):
                       'control-surface-${pkgver}-x86_64.tar.gz")', pkgbuild)
         self.assertRegex(pkgbuild, r"(?m)^sha256sums=\('[0-9a-f]{64}'\)$")
         self.assertRegex(pkgbuild, r"(?m)^pkgver=\d+\.\d+\.\d+$")
-        self.assertNotRegex(pkgbuild, r"(?m)^_gh_(owner|repo)=", "build-iso.sh would unpin it")
+        self.assertNotRegex(pkgbuild, r"(?m)^_gh_(owner|repo)=", "version-only rewriting would break the digest")
         aur = (ROOT / "src/shared/packages-aur.txt").read_text().splitlines()
         self.assertIn("wchisp", aur)
         self.assertIn("control-surface", aur)
 
-    def test_iso_build_replaces_the_older_cached_package_and_keeps_the_pin(self):
+    def test_iso_build_resolves_latest_and_reuses_only_its_matching_cached_package(self):
         build = (ROOT / "src/build-iso.sh").read_text()
         body = "build_custom_packages() {" + build.split("build_custom_packages() {", 1)[1].split("\n}\n", 1)[0] + "\n}\n"
-        pkgver = re.search(r"(?m)^pkgver=(.*)$", PKGBUILD.read_text())[1]
+        pkgver = "9.8.7"
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         root = Path(temp.name)
@@ -590,7 +590,16 @@ class LifecycleTests(unittest.TestCase):
         container = root / "container"
         container.write_text('#!/bin/sh\necho "$*" >> "$CALLS"\n')
         container.chmod(0o755)
+        metadata = json.dumps({
+            "tag_name": f"v{pkgver}", "assets": [{
+                "name": f"control-surface-{pkgver}-x86_64.tar.gz",
+                "browser_download_url": f"https://github.com/smpl-os/smpl-apps/releases/download/v{pkgver}/control-surface-{pkgver}-x86_64.tar.gz",
+                "digest": "sha256:" + "a" * 64,
+            }],
+        })
         script = ('log_info() { :; }; log_step() { :; }; _stage_ok() { :; }\n'
+                  'curl() { [[ "$*" == *"/releases/$EXPECTED_API "* ]] || return 99; '
+                  'printf "%s" "$RELEASE_JSON" > "${@: -1}"; }\n'
                   'die_help() { echo "$*" >&2; return 1; }\n' + body + "\nbuild_custom_packages\n")
         for cached in (False, True):
             with self.subTest(current_package_cached=cached):
@@ -598,16 +607,23 @@ class LifecycleTests(unittest.TestCase):
                 recipe = project / "src/shared/pkgbuilds/control-surface"
                 recipe.mkdir(parents=True)
                 shutil.copy(PKGBUILD, recipe / "PKGBUILD")
+                library = project / "src/shared/lib"
+                library.mkdir()
+                shutil.copy(ROOT / "src/shared/lib/smplos-control-surface.sh", library)
                 prebuilt = project / "build/prebuilt"
                 prebuilt.mkdir(parents=True)
                 old = prebuilt / "control-surface-0.8.27-1-x86_64.pkg.tar.zst"
                 old.write_bytes(b"old cache fixture")
                 if cached:
                     (prebuilt / f"control-surface-{pkgver}-1-x86_64.pkg.tar.zst").touch()
+                    apps_cache = project / ".cache/app-binaries"
+                    apps_cache.mkdir(parents=True)
+                    (apps_cache / ".smpl-apps-version").write_text(f"v{pkgver}\n")
                 before = calls.read_text() if calls.exists() else ""
                 result = subprocess.run(["bash", "-euc", script],
                                         env=dict(os.environ, PROJECT_ROOT=str(project), SCRIPT_DIR=str(project / "src"),
-                                                 CTR=str(container), CALLS=str(calls)),
+                                                 CTR=str(container), CALLS=str(calls), RELEASE_JSON=metadata,
+                                                 EXPECTED_API=f"tags/v{pkgver}" if cached else "latest"),
                                         capture_output=True, text=True, timeout=20)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 after = calls.read_text()
@@ -615,7 +631,10 @@ class LifecycleTests(unittest.TestCase):
                     self.assertEqual(after, before, "the matching package must be reused")
                 else:
                     self.assertIn(f"PKGVER_OVERRIDE={pkgver}", after)
-                    self.assertIn(f"{recipe}:/build/pkg:ro", after)
+                    self.assertIn(f"{project}/build/resolved-pkgbuilds/control-surface:/build/pkg:ro", after)
+                resolved = (project / "build/resolved-pkgbuilds/control-surface/PKGBUILD").read_text()
+                self.assertIn(f"pkgver={pkgver}", resolved)
+                self.assertIn("sha256sums=('" + "a" * 64 + "')", resolved)
                 self.assertEqual(old.read_bytes(), b"old cache fixture", "keep the prior cache until replacement succeeds")
 
     def package(self, daemon, *, mouse=True):
@@ -769,9 +788,17 @@ class MigrationTests(KeypadCase):
         self.tool("sudo", '"$@"\n')
         self.tool("udevadm", 'echo "udevadm $*" >> "$CALLS"\n')
         # The keypad app's package: installed unless PKG_VERSION is empty.
-        self.tool("pacman", '[ "$1" = -Q ] && { [ -n "$PKG_VERSION" ] && echo "$2 $PKG_VERSION"; exit 0; }\n'
-                            '[ "$1" = -Qqo ] && exit "${MOUSE_OWNED:-1}"\n'
+        self.tool("pacman", '[ "$1" = -Q ] && { if [ -f "$HOME/package-version" ]; then '
+                            'echo "$2 $(cat "$HOME/package-version")"; '
+                            'elif [ -n "$PKG_VERSION" ]; then echo "$2 $PKG_VERSION"; fi; exit 0; }\n'
+                            '[ "$1" = -Qkk ] && exit "${PACKAGE_DAMAGED:-0}"\n'
+                            '[ "$1" = -Qqo ] && { '
+                            '{ [ "$2" != "$SMPLOS_MOUSE_DAEMON" ] || [ -f "$HOME/package-version" ] || [ "${MOUSE_OWNED:-0}" = 0 ]; } '
+                            '&& { echo control-surface; exit 0; }; exit 1; }\n'
                             'echo "pacman $*" >> "$CALLS"\n'
+                            'if [ "$1" = -U ] && [ "${PACMAN_INSTALL_FAIL:-0}" = 0 ] && [ "${INSTALL_NOOP:-0}" = 0 ]; then '
+                            'for package in "$@"; do :; done\n'
+                            'basename "$package" | sed -E "s/^control-surface-(.*)-x86_64.pkg.tar.zst$/\\1/" > "$HOME/package-version"; fi\n'
                             'exit "${PACMAN_INSTALL_FAIL:-0}"\n')
         self.tool("fakeroot", 'exit 0\n')
         self.tool("vercmp", 'python3 -c \'import re, sys; a, b = [tuple(map(int, re.findall(r"\\d+", v))) '
@@ -779,12 +806,16 @@ class MigrationTests(KeypadCase):
         self.pkgver = re.search(r"(?m)^pkgver=(.*)$", PKGBUILD.read_text())[1]
         self.tool("makepkg", 'echo "makepkg $*" >> "$CALLS"\n'
                              '[ -n "$MAKEPKG_FAIL" ] && exit 1\n'
-                             f'touch control-surface-{self.pkgver}-1-x86_64.pkg.tar.zst\n')
+                             'version=$(sed -n "s/^pkgver=//p" PKGBUILD)\n'
+                             'revision=$(sed -n "s/^pkgrel=//p" PKGBUILD)\n'
+                             'touch "control-surface-$version-$revision-x86_64.pkg.tar.zst"\n')
         daemon = self.tool("control-surfaced", 'echo "keypad-runtime $*" >> "$CALLS"\n'
                           '[ -n "$RUNTIME_FAIL" ] && { echo "Qt_6.12 not found" >&2; exit 127; }\n'
                           'echo "{}"\n')
         self.env["SMPLOS_KEYPAD_DAEMON"] = str(daemon)
         self.mouse_daemon = self.bin / "mouse-remapperd"
+        from test_mouse import FEATURES
+        self.tool("mouse-remapperd", f'echo \'{json.dumps(FEATURES)}\'\n')
         self.env["SMPLOS_MOUSE_DAEMON"] = str(self.mouse_daemon)
         self.env.update(PKG_VERSION=f"{self.pkgver}-1")
         self.env.update(SMPLOS_REPO=str(ROOT), SMPLOS_UDEV_RULES_DIR=str(self.udev))
@@ -851,6 +882,7 @@ class MigrationTests(KeypadCase):
             with self.subTest(installed=version or None):
                 self.calls.unlink(missing_ok=True)
                 self.env["PKG_VERSION"] = version
+                (self.home / "package-version").unlink(missing_ok=True)
                 output = self.migrate()
                 calls = self.calls_made()
                 self.assertIn("makepkg -s --noconfirm", calls)
@@ -869,10 +901,137 @@ class MigrationTests(KeypadCase):
         self.assertFalse(any(c.startswith("pacman -U") for c in self.calls_made()))
         self.assertIn("will retry", result.stdout)
 
+    def release(self, version="9.8.7", **changes):
+        data = {
+            "tag_name": f"v{version}", "assets": [{
+                "name": f"control-surface-{version}-x86_64.tar.gz",
+                "browser_download_url": f"https://github.com/smpl-os/smpl-apps/releases/download/v{version}/control-surface-{version}-x86_64.tar.gz",
+                "digest": "sha256:" + "a" * 64,
+            }],
+        }
+        data.update(changes)
+        metadata = self.root / "release.json"
+        metadata.write_text(json.dumps(data))
+        return metadata
+
+    def control_script(self):
+        return "\n".join(f'source "{ROOT}/src/shared/lib/{name}.sh"' for name in
+                         ("smplos-pkgbuild", "smplos-keypad-units", "smplos-control-surface")) + "\n"
+
+    def native_update(self, **variables):
+        from test_app_delivery import function
+        path = ROOT / "src/shared/bin/smplos-update-apps"
+        project = self.root / "native"
+        project.mkdir(exist_ok=True)
+        if not (project / "repo").exists():
+            (project / "repo").symlink_to(ROOT, target_is_directory=True)
+        work = project / "results"
+        work.mkdir(exist_ok=True)
+        shutil.copy(self.root / "release.json", work / "smpl-apps.json")
+        script = self.control_script() + function(path, "update_control_surface") + """
+log() { echo "$*"; }; ok() { echo "$*"; }; warn() { echo "$*" >&2; }
+_gh_api() { echo "unexpected second latest lookup" >&2; return 99; }
+n_updated=0; CHECK_ONLY=0
+SMPLOS_APP_RESULT_FILE="$REPORT_WORK/control-surface.json"
+update_control_surface
+echo "installed-count=$n_updated"
+"""
+        return subprocess.run(
+            ["bash", "-euo", "pipefail", "-c", script],
+            env={**self.env, "SMPLOS_PATH": str(project), "REPORT_WORK": str(work), **variables},
+            capture_output=True, text=True, timeout=20,
+        )
+
+    def test_latest_input_release_updates_independently_of_bootstrap_snapshot(self):
+        self.release()
+        mapping = self.home / ".config/smplos/mouse.json"
+        mapping.write_text('{"keep": "my mappings"}\n')
+        result = self.native_update()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("installed-count=1", result.stdout)
+        self.assertIn("-> 9.8.7-1", result.stdout)
+        self.assertEqual((self.home / "package-version").read_text().strip(), "9.8.7-1")
+        self.assertEqual(mapping.read_text(), '{"keep": "my mappings"}\n')
+        work = self.root / "native/results"
+        self.assertEqual((work / "control-surface.json").read_bytes(),
+                         (work / "smpl-apps.json").read_bytes())
+        self.assertEqual((work / "control-surface.json.package-target").read_text(), "9.8.7-1\n")
+        self.calls.unlink()
+        result = self.native_update()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("installed-count=0", result.stdout)
+        self.assertFalse(any(call.startswith("makepkg") for call in self.calls_made()))
+        self.release(version="9.8.6")
+        result = self.native_update()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((self.home / "package-version").read_text().strip(), "9.8.7-1")
+
+    def test_input_installation_false_success_remains_failed_and_retryable(self):
+        self.release()
+        for _ in range(2):
+            result = self.native_update(INSTALL_NOOP="1")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("did not reach intact package", result.stderr)
+            self.assertFalse((self.home / "package-version").exists())
+        self.assertEqual(self.calls_made().count("makepkg -s --noconfirm"), 2)
+
+    def test_matching_package_with_unowned_mouse_daemon_is_repaired(self):
+        self.release(version=self.pkgver)
+        result = self.native_update(MOUSE_OWNED="1")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("installed-count=1", result.stdout)
+        self.assertTrue(any("--overwrite " in call for call in self.calls_made()))
+
+    def test_full_package_revision_and_newer_broken_install_protection(self):
+        script = self.control_script() + 'smplos_control_surface_current "$TARGET"\n'
+        for target, variables, status in (
+            (f"{self.pkgver}-2", {}, 1),
+            (f"{self.pkgver}-1", {}, 0),
+            (f"{self.pkgver}-1", {"PKG_VERSION": "99.0.0-1", "PACKAGE_DAMAGED": "1"}, 2),
+        ):
+            result = subprocess.run(
+                ["bash", "-euo", "pipefail", "-c", script],
+                env={**self.env, "TARGET": target, **variables},
+                capture_output=True, text=True, timeout=10,
+            )
+            self.assertEqual(result.returncode, status, result.stderr)
+        self.assertIn("refusing downgrade", result.stderr)
+
+    def test_missing_mouse_payload_cannot_be_certified_as_installed(self):
+        self.mouse_daemon.unlink()
+        self.release(version=self.pkgver)
+        result = self.native_update()
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("did not reach intact package", result.stderr)
+        self.assertIn("makepkg -s --noconfirm", self.calls_made())
+
+    def test_incomplete_or_untrusted_release_never_replaces_the_package(self):
+        metadata = self.release()
+        valid = json.loads(metadata.read_text())
+        malformed = []
+        for digest in (None, "sha256:SKIP", "sha256:" + "a" * 63):
+            data = json.loads(json.dumps(valid))
+            data["assets"][0]["digest"] = digest
+            malformed.append(data)
+        malformed.extend([
+            {**valid, "assets": []},
+            {**valid, "prerelease": True},
+            {**valid, "tag_name": "v9.8.7;false"},
+            {**valid, "assets": [{**valid["assets"][0], "browser_download_url": "https://example.invalid/release"}]},
+        ])
+        for data in malformed:
+            with self.subTest(data=data):
+                metadata.write_text(json.dumps(data))
+                result = self.native_update()
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("cannot resolve published release", result.stderr)
+                self.assertFalse((self.home / "package-version").exists())
+        self.assertFalse(any(call.startswith("makepkg") for call in self.calls_made()))
+
     def test_standalone_mouse_daemon_is_adopted_with_only_its_exact_overwrite_path(self):
         from test_mouse import FEATURES
         self.tool("mouse-remapperd", f'echo \'{json.dumps(FEATURES)}\'\n')
-        self.env["PKG_VERSION"] = "0.8.29-1"
+        self.env.update(PKG_VERSION="0.8.29-1", MOUSE_OWNED="1")
         mapping = self.home / ".config/smplos/mouse.json"
         mapping.parent.mkdir(parents=True, exist_ok=True)
         mapping.write_text('{"custom": "keep exactly"}\n')
@@ -915,7 +1074,7 @@ class MigrationTests(KeypadCase):
             with self.subTest(failure=failure):
                 result = subprocess.run(
                     ["bash", str(self.repo / "migrations" / MIGRATION.name)],
-                    env={**self.env, "PKG_VERSION": "0.8.29-1", failure: "1"},
+                    env={**self.env, "PKG_VERSION": "0.8.29-1", "MOUSE_OWNED": "1", failure: "1"},
                     capture_output=True, text=True, timeout=20,
                 )
                 self.assertEqual(result.returncode, 75, result.stdout + result.stderr)
@@ -923,7 +1082,7 @@ class MigrationTests(KeypadCase):
                 self.assertEqual(unit.read_text(), "[Service]\nExecStart=/custom/control-surfaced run\n")
 
     def test_unrecognized_or_symlinked_mouse_daemon_defers_without_replacement(self):
-        self.env["PKG_VERSION"] = "0.8.29-1"
+        self.env.update(PKG_VERSION="0.8.29-1", MOUSE_OWNED="1")
         target = self.root / "custom-mouse-remapperd"
         target.write_text("#!/bin/sh\nexit 0\n")
         for kind in ("unknown", "broken-runtime", "symlink", "directory"):
