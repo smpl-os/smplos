@@ -1,0 +1,9 @@
+#!/bin/bash
+# Trim video/audio without re-encoding.
+
+if [[ $# -ne 4 ]]; then
+    echo "Usage: clip <start> <end> <inputfile> <outputfile>" >&2
+    exit 1
+fi
+
+exec ffmpeg -ss "$1" -to "$2" -i "$3" -c copy "$4"

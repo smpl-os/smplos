@@ -418,6 +418,21 @@ Use `workspace-ctl init --preserve` to stop automatic reassignment and keep the
 current saved homes. An opt-out is preserved across updates and logins, even if
 `disable` is run before the first automatic setup.
 
+### Media helpers
+
+Every edition includes the Bash command `clip` to trim video or audio without
+re-encoding. It works from any shell, including Fish:
+
+```fish
+clip 274.09 276.33 input.mp4 output.mp4
+```
+
+Arguments are start time, end time (not duration), input file and output file.
+Quote paths containing spaces. Stream copying is fast and lossless, but video
+cuts can be limited by keyframe positions.
+Existing installations receive `/usr/local/bin/clip` through **Update OS**
+without changing personal shell configuration.
+
 ### Themes
 
 Switch the system theme (terminal, bar, borders, lock screen, editor) with a single command:

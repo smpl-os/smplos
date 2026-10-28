@@ -57,6 +57,15 @@ automatic rollback or boot recovery are provided by this flow.
 OS-owned changes reach users after merging to `main` and running the updater.
 Changes to independently built apps also require a release in their own repo.
 
+### Clip command delivery
+
+`src/shared/bin/clip` is a Bash executable shared by every edition and usable
+from Fish, Bash or other shells. The ISO build installs shared commands, and
+normal Update OS syncs them to `/usr/local/bin/` with executable permissions.
+No separate migration or shell-config rewrite is needed. All four values are
+arguments: `clip <start> <end> <inputfile> <outputfile>`.
+FFmpeg is already in the shared package list.
+
 ### Web-app DNS after VPN/resolver changes
 
 The web-app launcher exposes `/run/systemd/resolve` read-only when present,

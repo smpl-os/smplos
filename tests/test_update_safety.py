@@ -914,6 +914,42 @@ class InstalledStateTests(unittest.TestCase):
 
 
 class ManagedConfigDeliveryTests(unittest.TestCase):
+    def test_clip_command_is_installed_executable_by_script_sync(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            repo, home, installed = base / "repo", base / "home", base / "installed"
+            source = repo / "src/shared/bin/clip"
+            source.parent.mkdir(parents=True)
+            source.write_bytes((BIN / "clip").read_bytes())
+            installed.mkdir()
+            target = installed / "clip"
+            script = function(BIN / "smplos-os-update", "sync_scripts")
+            script = script.replace('dest="/usr/local/bin/$name"', 'dest="$INSTALLED/$name"')
+            script += """
+install_system_file() { install -m "$3" "$1" "$2"; }
+sync_libs() { :; }
+header() { :; }; ok() { :; }; die() { echo "$*" >&2; exit 1; }
+sync_scripts
+"""
+            env = {**os.environ, "SMPLOS_REPO": str(repo), "HOME": str(home),
+                   "INSTALLED": str(installed)}
+
+            def deploy():
+                result = subprocess.run(
+                    ["bash", "-eu", "-c", script], env=env,
+                    capture_output=True, text=True, timeout=10,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+
+            deploy()
+            self.assertEqual(target.read_bytes(), source.read_bytes())
+            self.assertTrue(os.access(target, os.X_OK))
+            deploy()
+            self.assertEqual(target.read_bytes(), source.read_bytes())
+            target.chmod(0o644)
+            deploy()
+            self.assertTrue(os.access(target, os.X_OK))
+
     def test_fragments_and_scripts_publish_before_entrypoints_without_touching_palette(self):
         with tempfile.TemporaryDirectory() as temporary:
             base = Path(temporary)
