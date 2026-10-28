@@ -796,6 +796,17 @@ actually contain the compatible binaries before advertising native alpha on an
 ISO. Installation itself remains offline. Do not point at an unpublished local
 commit or claim a release version that has not been published.
 
+**Skia CPU app delivery:** rendering is owned by the published smpl-apps
+binaries and their shared initialization, including the pinned Skia/softbuffer
+alpha patches. Normal Update OS resolves the latest published release and
+installs its complete native bundle; no OS version pin, renderer environment
+override, theme reset beyond the existing update policy, or special migration
+is needed for this renderer change. The ISO fetch paths also discover the
+latest release. Preserve the existing palette roles and compositor alpha/blur
+rules: CPU rendering must not fade text/icons or replace app-owned background
+alpha with whole-window opacity. Reopen apps for the new renderer; running
+apps are not stopped by delivery, and background daemons adopt it at next login.
+
 ### Native delivery checks and recovery
 
 For a coordinated rollout, publish and verify the native release assets before
