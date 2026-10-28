@@ -7,7 +7,7 @@ url='https://dunst-project.org/'
 arch=(x86_64)
 license=(BSD-3-Clause)
 depends=(libxinerama dbus systemd wayland libxss pango gdk-pixbuf2 libxrandr glib2 python)
-makedepends=(libnotify wayland-protocols lua)
+makedepends=(libnotify wayland-protocols lua perl)
 optdepends=('libnotify: dunstify')
 provides=("dunst=$pkgver")
 conflicts=(dunst)

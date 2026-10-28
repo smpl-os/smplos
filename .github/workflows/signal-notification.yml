@@ -27,7 +27,7 @@ jobs:
     steps:
       - name: Install build dependencies
         run: >-
-          pacman -Syu --noconfirm --needed base-devel git python lua
+          pacman -Syu --noconfirm --needed base-devel git python lua perl
           libnotify wayland-protocols libxinerama dbus systemd wayland libxss
           pango gdk-pixbuf2 libxrandr glib2
       - uses: actions/checkout@v5
