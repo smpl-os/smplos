@@ -62,7 +62,8 @@ BASE_COMMANDS = frozenset("""
 """.split())
 # Commands whose package is not named after them (the usual case needs no entry).
 PACKAGE_FOR_COMMAND = {
-    "hyprctl": "hyprland", "dunstctl": "dunst", "nemo": "nemo-smpl",
+    "hyprctl": "hyprland", "dunstctl": "dunst-smplos", "dunst": "dunst-smplos",
+    "nemo": "nemo-smpl",
     "wl-copy": "wl-clipboard", "wl-paste": "wl-clipboard", "rofi": "rofi-wayland",
 }
 

@@ -1,0 +1,46 @@
+name: Signal notification bridge
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/signal-notification.yml"
+      - "src/shared/pkgbuilds/dunst-smplos/**"
+      - "tests/test_signal_notification_activation.py"
+      - "migrations/*signal-notification*"
+  pull_request:
+    paths:
+      - ".github/workflows/signal-notification.yml"
+      - "src/shared/pkgbuilds/dunst-smplos/**"
+      - "tests/test_signal_notification_activation.py"
+      - "migrations/*signal-notification*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    timeout-minutes: 15
+    steps:
+      - name: Install build dependencies
+        run: >-
+          pacman -Syu --noconfirm --needed base-devel git python lua
+          libnotify wayland-protocols libxinerama dbus systemd wayland libxss
+          pango gdk-pixbuf2 libxrandr glib2
+      - uses: actions/checkout@v5
+      - name: Build package and test the actual patched pre-emit function
+        run: |
+          useradd -m builder
+          chown -R builder:builder src/shared/pkgbuilds/dunst-smplos
+          cd src/shared/pkgbuilds/dunst-smplos
+          runuser -u builder -- makepkg --nodeps --noconfirm
+      - name: Check offline delivery and non-restarting migration
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+          PYTHONPATH: tests
+        run: |
+          export SMPLOS_DUNST_SOURCE="$GITHUB_WORKSPACE/src/shared/pkgbuilds/dunst-smplos/src/dunst-1.13.2"
+          python -m unittest test_signal_notification_activation -v

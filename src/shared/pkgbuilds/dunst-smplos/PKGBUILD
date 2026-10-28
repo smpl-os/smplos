@@ -1,0 +1,49 @@
+# Maintainer: smplOS <https://github.com/smpl-os>
+pkgname=dunst-smplos
+pkgver=1.13.2
+pkgrel=1
+pkgdesc='Dunst with bounded, notification-only Signal workspace preparation'
+url='https://dunst-project.org/'
+arch=(x86_64)
+license=(BSD-3-Clause)
+depends=(libxinerama dbus systemd wayland libxss pango gdk-pixbuf2 libxrandr glib2 python)
+makedepends=(libnotify wayland-protocols lua)
+optdepends=('libnotify: dunstify')
+provides=("dunst=$pkgver")
+conflicts=(dunst)
+replaces=(dunst)
+backup=(etc/dunst/dunstrc)
+options=(!debug)
+source=("dunst-$pkgver.tar.gz::https://github.com/dunst-project/dunst/archive/v$pkgver.tar.gz"
+        pre-forward.patch smplos-action.h signal-notification-activate signal-transaction.lua
+        test_activation.py)
+sha256sums=('c68645cecef4a45840cd67c19a18a3a21ecae6b331e9864c2b745c31aee5fc85'
+            'f530eb5e4d25aeaa5e44465d9e7ce5e1130f96d5f2224f1221b080703312e85b'
+            '427a43cd9bfb23a3c74df1cc860e266c4d39eb97e2cb51b80cda0f8fff694040'
+            '80af4bd4e9bceff3f6b2f681d851b9ee8a55e25d360f3a7ecf8bf4837ca640db'
+            '74e771fe57b5d611847d724f3d304248eaa97068cec41b82b2989d27edf98268'
+            '3699972443a5c8ae5747e11a6d19ad65668346ef100ba3fd4e10477838304679')
+
+prepare() {
+    cd "dunst-$pkgver"
+    patch -Np1 -i "$srcdir/pre-forward.patch" || return 1
+    cp "$srcdir/smplos-action.h" src/
+}
+
+build() {
+    cd "dunst-$pkgver"
+    make PREFIX=/usr SYSCONFDIR=/etc X11INC=/usr/include/X11 X11LIB=/usr/lib/X11 all
+}
+
+check() {
+    SMPLOS_DUNST_SOURCE="$srcdir/dunst-$pkgver" python "$srcdir/test_activation.py"
+}
+
+package() {
+    cd "dunst-$pkgver"
+    make DESTDIR="$pkgdir" SYSCONFDIR=/etc PREFIX=/usr install
+    install -Dm755 dunstify "$pkgdir/usr/bin/dunstify"
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+    install -Dm755 "$srcdir/signal-notification-activate" "$pkgdir/usr/lib/smplos/signal-notification-activate"
+    install -Dm644 "$srcdir/signal-transaction.lua" "$pkgdir/usr/lib/smplos/signal-transaction.lua"
+}

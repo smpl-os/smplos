@@ -1,0 +1,158 @@
+#!/usr/bin/python3 -I
+"""Dunst's private, synchronous pre-forward helper. Never receives notification data."""
+
+import ctypes as C
+import os
+from pathlib import Path
+import re
+import socket
+import sys
+
+
+ROOT = Path("/usr/lib/smplos")
+UNIQUE = re.compile(r":[0-9]+\.[0-9]+\Z")
+
+
+def process(pid):
+    path = Path("/proc") / str(pid)
+    if path.stat().st_uid != os.getuid():
+        raise ValueError("foreign process")
+    fields = (path / "stat").read_text().rsplit(")", 1)[1].split()
+    if fields[0] in ("Z", "X", "x"):
+        raise ValueError("dead process")
+    return int(fields[1]), fields[19]
+
+
+class Bus:
+    """Two typed daemon queries via libdbus; no child process or subscription."""
+
+    def __init__(self):
+        address = os.environ.get("DBUS_SESSION_BUS_ADDRESS", "")
+        if not address.startswith(("unix:path=", "unix:abstract=")) or ";" in address:
+            raise ValueError("session bus unavailable")
+        self.lib = C.CDLL("libdbus-1.so.3")
+        signatures = {
+            "dbus_connection_open_private": (C.c_void_p, [C.c_char_p, C.c_void_p]),
+            "dbus_bus_register": (C.c_int, [C.c_void_p, C.c_void_p]),
+            "dbus_connection_close": (None, [C.c_void_p]),
+            "dbus_connection_unref": (None, [C.c_void_p]),
+            "dbus_connection_set_exit_on_disconnect": (None, [C.c_void_p, C.c_int]),
+            "dbus_message_new_method_call": (C.c_void_p, [C.c_char_p] * 4),
+            "dbus_message_append_args": (C.c_int, [C.c_void_p, C.c_int]),
+            "dbus_connection_send_with_reply_and_block": (
+                C.c_void_p, [C.c_void_p, C.c_void_p, C.c_int, C.c_void_p]),
+            "dbus_message_get_args": (C.c_int, [C.c_void_p, C.c_void_p, C.c_int]),
+            "dbus_message_unref": (None, [C.c_void_p]),
+        }
+        for name, (result, args) in signatures.items():
+            fn = getattr(self.lib, name)
+            fn.restype, fn.argtypes = result, args
+        self.connection = self.lib.dbus_connection_open_private(address.encode(), None)
+        if not self.connection:
+            raise ValueError("session bus unavailable")
+        self.lib.dbus_connection_set_exit_on_disconnect(self.connection, 0)
+        if not self.lib.dbus_bus_register(self.connection, None):
+            self.close()
+            raise ValueError("session bus registration failed")
+
+    def close(self):
+        self.lib.dbus_connection_close(self.connection)
+        self.lib.dbus_connection_unref(self.connection)
+
+    def query(self, method, name, kind):
+        lib = self.lib
+        request = lib.dbus_message_new_method_call(
+            b"org.freedesktop.DBus", b"/org/freedesktop/DBus",
+            b"org.freedesktop.DBus", method.encode())
+        if not request:
+            raise ValueError("bus request unavailable")
+        reply = None
+        try:
+            value = C.c_char_p(name.encode())
+            if not lib.dbus_message_append_args(request, ord("s"), C.byref(value), C.c_int(0)):
+                raise ValueError("bus argument rejected")
+            reply = lib.dbus_connection_send_with_reply_and_block(
+                self.connection, request, 250, None)
+            if not reply:
+                raise ValueError("bus identity unavailable")
+            result = C.c_uint32() if kind == "u" else C.c_char_p()
+            if not lib.dbus_message_get_args(reply, None, ord(kind), C.byref(result), C.c_int(0)):
+                raise ValueError("bus identity rejected")
+            return result.value if kind == "u" else result.value.decode("ascii")
+        finally:
+            if reply:
+                lib.dbus_message_unref(reply)
+            lib.dbus_message_unref(request)
+
+    def owner(self):
+        return self.query("GetNameOwner", "org.freedesktop.Notifications", "s")
+
+    def pid(self, name):
+        return self.query("GetConnectionUnixProcessID", name, "u")
+
+
+def prepare(recipient, bus, dispatch):
+    if not UNIQUE.fullmatch(recipient):
+        raise ValueError("invalid recipient")
+    parent = os.getppid()
+    parent_identity = process(parent)
+    owner = bus.owner()
+    if not UNIQUE.fullmatch(owner) or bus.pid(owner) != parent:
+        raise ValueError("not notification owner")
+    target_pid = bus.pid(recipient)
+    target_identity = process(target_pid)
+    helper = os.getpid()
+    helper_identity = process(helper)
+    if (bus.owner() != owner or bus.pid(owner) != parent or
+            bus.pid(recipient) != target_pid or os.getppid() != parent or
+            process(parent) != parent_identity or process(target_pid) != target_identity):
+        raise ValueError("identity changed")
+    dispatch(helper, helper_identity[1], parent, parent_identity[1],
+             target_pid, target_identity[1])
+
+
+def dispatch(helper, start, parent, parent_start, recipient, recipient_start):
+    signature = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE", "")
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+", signature):
+        raise ValueError("compositor unavailable")
+    runtime = Path("/run/user") / str(os.getuid())
+    code = (
+        f'assert(loadfile("{ROOT}/signal-transaction.lua"))()'
+        f'({helper},"{start}",{parent},"{parent_start}",{recipient},"{recipient_start}")'
+    )
+    with socket.socket(socket.AF_UNIX) as connection:
+        connection.settimeout(0.5)
+        connection.connect(str(runtime / "hypr" / signature / ".socket.sock"))
+        connection.sendall(("eval " + code).encode("ascii"))
+        reply = bytearray()
+        while True:
+            chunk = connection.recv(4096)
+            if not chunk:
+                break
+            reply.extend(chunk)
+            if len(reply) > 65536:
+                raise ValueError("compositor response exceeded limit")
+        if reply != b"ok":
+            raise ValueError("compositor rejected preparation")
+
+
+def main():
+    if len(sys.argv) != 2 or not UNIQUE.fullmatch(sys.argv[1]):
+        return 1
+    if not os.environ.get("HYPRLAND_INSTANCE_SIGNATURE"):
+        return 0
+    bus = None
+    try:
+        bus = Bus()
+        prepare(sys.argv[1], bus, dispatch)
+        return 0
+    except (OSError, ValueError, UnicodeError, IndexError):
+        print("Signal workspace preparation unavailable", file=sys.stderr)
+        return 1
+    finally:
+        if bus is not None:
+            bus.close()
+
+
+if __name__ == "__main__":
+    sys.exit(main())

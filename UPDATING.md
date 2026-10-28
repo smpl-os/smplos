@@ -424,6 +424,62 @@ policy reconciliation, reload configuration, or dispatch window/workspace moves.
 Relative/previous navigation still resolves monitor-local IDs through
 `workspace-ctl`; modified send/move shortcuts remain explicit moves.
 
+#### Signal notification activation
+
+The custom `dunst-smplos` package pins Dunst 1.13.2 and adds a synchronous
+pre-forward hook for Signal's **default notification action only**. Action
+buttons (including non-activating actions), other applications, and ordinary
+Signal tray/deep-link/second-instance activation keep their native paths.
+No global or Signal-wide activation suppression rule is installed.
+The transaction uses Hyprland's Lua window/monitor APIs, validated against
+0.56.2. Outside Hyprland, native forwarding is unchanged.
+
+Before forwarding the native `ActionInvoked`, Dunst directly executes a fixed
+helper with only the recipient's unique bus name. The helper verifies that its
+actual, stable parent is the current Notifications bus owner's PID, resolves
+the recipient's live PID, rechecks identities, then submits one non-yielding
+Lua transaction. That transaction reads the **currently active window's normal
+workspace**, moves only the uniquely identified existing Signal window there,
+and focuses it. If Signal was already active on normal workspace 3, it stays
+there; another app active on workspace 2 with Signal parked on normal workspace
+3 or a special workspace targets 2. This boundary is the compositor transaction,
+not a promise of click-instant ordering against independent user focus changes.
+
+Moving grouped/pinned/swallowing Signal or auto-joining a destination group is
+rejected before mutation rather than changing the user's grouping policy or moving
+unrelated group members. Already-on-target Signal can be focused without a move.
+An empty old special workspace is closed only on its exact old monitor, only
+if that monitor still shows the same special; other specials are never toggled.
+The preflight also rejects emptying a hidden special when native
+`misc.close_special_on_empty` would close a different visible special; it does
+not override that global/user setting.
+Missing/ambiguous recipients, no normal active target, identity changes,
+unsupported APIs, failed dispatches/postconditions and timeouts produce a fixed
+warning and preserve ordinary native forwarding. A failure after a successful
+move can leave that exact window moved; this is not an all-or-nothing rollback
+of compositor effects.
+
+The two-second native deadline kills the helper's process group and reaps the
+direct child **before** forwarding on failure. The helper creates no child
+processes, listener or background service. Queued Lua checks the helper's live
+PID/start time/non-zombie state before any query/mutation, rejecting late work
+after the helper exits. Normal acknowledgment means synchronous completion,
+not just enqueueing; dispatcher error tables and no-op successes are checked
+explicitly. This path is independent of EWW, workspace reconciliation and saved
+workspace state. It reads no window titles, notification bodies, contacts,
+activation tokens, saved history or Signal profile, and creates no additional
+notification persistence. Dunst's existing notification handling/history stays
+unchanged.
+
+The ISO embeds the custom package in its offline mirror. Migration
+`20261028-080000-signal-notification-workspace.sh` builds/installs the same pinned
+recipe for existing systems, with explicit retryable failures. There is no
+package install script, service restart or live configuration change. Replacing
+files does **not** activate the hook in an already-running Dunst. Keep that
+daemon and its in-memory history running until a separately agreed activation;
+do not restart Dunst, Signal, Hyprland or unrelated services as a deployment
+shortcut. No native smpl-apps release is needed for this package.
+
 ---
 
 ## 2. Updating Configs (EWW, Hyprland, foot, etc.)

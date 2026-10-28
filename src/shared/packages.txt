@@ -66,7 +66,7 @@ noto-fonts-emoji
 
 # ── Notifications ────────────────────────────────────────────
 libnotify
-dunst
+# Dunst is supplied by the offline custom dunst-smplos package.
 
 # ── Polkit ───────────────────────────────────────────────────
 polkit-gnome
