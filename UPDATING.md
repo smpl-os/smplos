@@ -18,7 +18,7 @@ smplOS uses a **git-based update system**. The repo is cloned to
    upgrade, including the supported Hyprland series, libraries and drivers.
 5. Enrolls compatible Yay and updates required foreign drivers, public shared
    libraries and transitive dependencies of the core stack.
-6. Delivers core native releases (smpl-apps, st, Nemo and micro), deploys essential
+6. Delivers core native releases (smpl-apps, st, Nemo, micro and control-surface), deploys essential
    desktop configs/themes and core migrations, reconciles services and checks
    that the EWW bar is open. Persists a verified core checkpoint.
 7. Attempts ordinary application configs/integrations and optional migrations,
@@ -71,6 +71,31 @@ Mouse/keypad mappings, custom units and other user data are not removed.
 If a required deployment fails, optional AUR work is skipped. Final verification
 only requests a Brave target report when target capture was actually attempted,
 so a skipped stage does not generate a misleading missing-report warning.
+
+### Latest managed releases and testing notices
+
+Update OS follows the latest published stable releases of our native apps;
+mouse/keypad daemons no longer wait for a manually bumped OS recipe.
+`control-surface` uses the **same captured smpl-apps release** as Settings,
+including the release asset's required SHA256 digest. The local packaging step
+validates both daemons against the installed runtime before installation.
+ISO builds resolve the latest archive and its digest together, then embed the
+resulting package in the offline mirror. The checked-in recipe is only an
+offline bootstrap snapshot, not an update hold.
+
+Changed native components print **Testing needed** with before/after versions.
+This is a notice, not an approval gate; the update continues and records its
+captured targets. Reopen changed apps or log out/in before testing the new
+mouse/keypad daemons. Upgrading files does not replace already-running processes.
+Mappings, custom units, application settings and databases remain untouched.
+
+Package comparisons include `pkgrel`, not just the release tag. Missing or
+unowned input daemons cannot count as a current package. Installation is checked
+again before success is recorded, and final verification independently compares
+installed package versions against captured targets. A stale marker or a zero
+installer exit code alone is not success. Failed/incomplete releases remain
+explicitly retryable; healthy newer installed versions are never downgraded.
+Yay does not independently replace the release-managed control-surface package.
 
 ### Standard GTK defaults and missing-icon repair
 
@@ -420,10 +445,10 @@ Write a migration. See section 5 below.
 ### Device-triggered keypad delivery
 
 Normal OS updates reconcile keypad integration on every run, not only once
-per migration: the canonical `control-surface.service`, udev rules and pinned
-`control-surface` package from **smpl-apps v0.8.35** must all be available.
-That release builds the keypad daemon on its Qt 6.11 baseline, compatible with
-the installed Qt 6.11.2 runtime; v0.8.27 incorrectly required Qt 6.12.
+per migration: the canonical `control-surface.service`, udev rules and
+latest published `control-surface` package must all be available.
+Update OS delivers that package alongside its matching smpl-apps release.
+Runtime validation remains required: v0.8.27 incorrectly required Qt 6.12.
 The catch-up migration `20261009-010000-keypad-login-recovery.sh` covers
 already-marked installs. Package/build/privilege failures remain explicit
 and retryable; a missing recipe is an error, not a pending placeholder.
@@ -473,11 +498,10 @@ The existing backed-up unit reconciliation also handles the mouse unit, with a
 separate `mouse-units` ownership stamp. Custom units, links, drop-ins and saved
 mouse/keypad profiles are preserved.
 
-**Native delivery:** the pinned **control-surface v0.8.35** package includes
-`mouse-remapperd`, and the matching published **smpl-apps v0.8.35** bundle
-delivers Settings with complete guided setup. Both archives were built and
-validated on the pinned Qt 6.11.2/glibc 2.44 baseline. The package checksum pins
-the actual published archive, not a local development build.
+**Native delivery:** the latest published **control-surface** package includes
+`mouse-remapperd`, and the matching published **smpl-apps** bundle delivers
+Settings with complete guided setup. The selected asset's published SHA256
+verifies the actual release archive, not a local development build.
 The mouse migration and
 every normal update probe `mouse-remapperd features --json` in an isolated home,
 requiring learning, identify (including wheel/tilt), guided side-grid
@@ -987,7 +1011,7 @@ to keep the OS update running.
 
 ---
 
-## 6. Updating Forked Apps (smpl-apps, st-smpl, nemo-smpl)
+## 6. Updating Forked Apps (smpl-apps, st-smpl, nemo-smpl, micro, control-surface)
 
 These apps live in separate repos and are distributed as GitHub releases.
 `smplos-update-apps` downloads them automatically.
@@ -999,8 +1023,10 @@ These apps live in separate repos and are distributed as GitHub releases.
 2. Dispatch its manual `Release` workflow (`.github/workflows/release.yml`).
 3. The workflow increments the workspace patch version, builds the release
    workspace, and publishes `v<VERSION>` with
-   `smpl-apps-<VERSION>-x86_64.tar.gz` plus individual binary assets.
-4. Confirm the complete tarball is attached before treating the release as
+   `smpl-apps-<VERSION>-x86_64.tar.gz`, the matching
+   `control-surface-<VERSION>-x86_64.tar.gz`, plus individual binary assets.
+4. Confirm both complete archives are attached and control-surface has a GitHub
+   asset SHA256 digest before treating the release as
    available. An OS release alone does not rebuild or publish `start-menu`.
 
 **st-smpl** (C — terminal emulator):
@@ -1364,7 +1390,7 @@ inventory without network access. Core stack roots, public shared libraries,
 kernel modules/DKMS sources and their transitive package/provider dependencies
 are required; ordinary foreign apps are optional. Private browser/editor
 libraries and debug source trees do not make those apps core. Independently
-managed Nemo/EWW releases are excluded from Yay transactions. Grafium is
+managed Nemo/EWW/control-surface packages are excluded from Yay transactions. Grafium is
 separately recorded under `app_updates_only` and excluded from both OS AUR groups.
 Incomplete
 or unresolved dependency metadata fails classification explicitly, never
@@ -1392,8 +1418,8 @@ and remain in the overall update status. The AUR transaction disables Yay's
 own sudo loop (`--sudoloop=false`) and uses the update's cached, noninteractive
 sudo context. Native App Center/Settings must also be delivered from
 **smpl-apps v0.8.29** or newer, with their Yay callers, before the migration
-is considered complete. That coordinated release includes the pinned keypad
-package above.
+is considered complete. Subsequent updates follow the latest published
+smpl-apps and matching keypad/mouse release together.
 
 ### Bringing older fleet machines onto this updater
 

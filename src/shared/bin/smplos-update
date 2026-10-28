@@ -872,7 +872,7 @@ PY
     fi
     if [[ $AUR_POLICY_READY -eq 1 && -n "$CORE_AUR_PACKAGES" ]]; then
         if ! _yay_run -Sua --noconfirm --sudoloop=false --sudo sudo --sudoflags=-n \
-            --ignore "$CRITICAL_IGNORE,nemo-smpl,grafium-bin,eww-smplos${OPTIONAL_AUR_PACKAGES:+,$OPTIONAL_AUR_PACKAGES}"; then
+            --ignore "$CRITICAL_IGNORE,nemo-smpl,control-surface,grafium-bin,eww-smplos${OPTIONAL_AUR_PACKAGES:+,$OPTIONAL_AUR_PACKAGES}"; then
             echo "  ERROR: required AUR drivers/libraries were not updated."
             UPDATE_FAILED=1
         fi
@@ -949,7 +949,7 @@ if [[ "$UPDATE_MODE" == full && $CORE_VERIFIED -eq 1 && $AUR_POLICY_READY -eq 1 
         if [[ -n "$OPTIONAL_AUR_PACKAGES" ]]; then
             run_optional "Optional AUR apps" _yay_run -Sua --noconfirm --sudoloop=false \
                 --sudo sudo --sudoflags=-n \
-                --ignore "$CRITICAL_IGNORE,nemo-smpl,grafium-bin,eww-smplos${CORE_AUR_PACKAGES:+,$CORE_AUR_PACKAGES}"
+                --ignore "$CRITICAL_IGNORE,nemo-smpl,control-surface,grafium-bin,eww-smplos${CORE_AUR_PACKAGES:+,$CORE_AUR_PACKAGES}"
         fi
     else
         optional_warning "Optional AUR updates deferred: network and external power are required."

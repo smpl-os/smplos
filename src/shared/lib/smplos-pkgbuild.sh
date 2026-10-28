@@ -8,6 +8,17 @@ smplos_pkg_version() {
     { pacman -Q "$1" 2>/dev/null || true; } | awk '{print $2}'
 }
 
+smplos_pkgbuild_version() {
+    local version revision
+    version=$(sed -n 's/^pkgver=\([0-9][0-9.]*\)$/\1/p' "$1/PKGBUILD") || return 1
+    revision=$(sed -n 's/^pkgrel=\([0-9][0-9.]*\)$/\1/p' "$1/PKGBUILD") || return 1
+    [[ -n "$version" && -n "$revision" && "$version$revision" != *$'\n'* ]] || {
+        echo "  ERROR: cannot read full package version from $1/PKGBUILD" >&2
+        return 1
+    }
+    printf '%s-%s\n' "$version" "$revision"
+}
+
 smplos_remove_retired_orphan() {
     local pkg="$1"
     if ! pacman -Qq "$pkg" >/dev/null 2>&1; then

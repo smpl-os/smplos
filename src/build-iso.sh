@@ -367,7 +367,7 @@ build_custom_packages() {
     [[ -d "$pkgbuild_dir" ]] || return 0
 
     local need_build=()
-    declare -A pkg_resolved_ver
+    declare -A pkg_resolved_ver pkg_recipe_dir
     for dir in "$pkgbuild_dir"/*/; do
         [[ -f "$dir/PKGBUILD" ]] || continue
         local pkg
@@ -378,7 +378,35 @@ build_custom_packages() {
             continue
         fi
 
-        # Read the expected version from the PKGBUILD
+        if [[ "$pkg" == control-surface ]]; then
+            source "$SCRIPT_DIR/shared/lib/smplos-control-surface.sh"
+            local metadata resolved="$PROJECT_ROOT/build/resolved-pkgbuilds/$pkg"
+            local release_api=latest apps_marker="$PROJECT_ROOT/.cache/app-binaries/.smpl-apps-version"
+            if [[ -s "$apps_marker" ]]; then
+                local apps_tag
+                apps_tag=$(cat "$apps_marker")
+                [[ "$apps_tag" =~ ^v[0-9]+(\.[0-9]+)+$ ]] || {
+                    echo "Invalid smpl-apps cache version: $apps_marker" >&2
+                    return 1
+                }
+                release_api="tags/$apps_tag"
+            fi
+            metadata=$(mktemp /tmp/smplos-control-release.XXXXXX)
+            if ! { curl -fsSL --connect-timeout 15 --max-time 30 \
+                "https://api.github.com/repos/smpl-os/smpl-apps/releases/$release_api" -o "$metadata" &&
+                smplos_control_surface_prepare "$dir" "$metadata" "$resolved"; }; then
+                rm -f "$metadata"
+                die_help "Cannot resolve latest control-surface release" \
+                    "Release metadata or its matching SHA256 is unavailable" \
+                    "Retry the build after the published release is complete"
+                return 1
+            fi
+            rm -f "$metadata"
+            dir="$resolved"
+        fi
+        pkg_recipe_dir[$pkg]="$dir"
+
+        # Read the expected version from the resolved PKGBUILD.
         local pkgver pkgrel
         pkgver=$(grep -E '^pkgver=' "$dir/PKGBUILD" | head -1 | cut -d= -f2 | tr -d '"'"'"' ' || true)
         pkgrel=$(grep -E '^pkgrel=' "$dir/PKGBUILD" | head -1 | cut -d= -f2 | tr -d '"'"'"' ' || true)
@@ -455,7 +483,7 @@ build_custom_packages() {
         $CTR run --rm \
             --network=host \
             -e "PKGVER_OVERRIDE=${pkgver_override}" \
-            -v "$pkgbuild_dir/$pkg:/build/pkg:ro" \
+            -v "${pkg_recipe_dir[$pkg]}:/build/pkg:ro" \
             -v "$prebuilt_dir:/output" \
             archlinux:latest bash -c "
                 set -e

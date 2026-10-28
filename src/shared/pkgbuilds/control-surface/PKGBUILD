@@ -4,11 +4,10 @@
 #
 # Source, CI and releases live in smpl-os/smpl-apps (control-surface/). Every
 # smpl-apps release publishes control-surface-<version>-x86_64.tar.gz, a usr/
-# tree built and tested (ctest) there. This package installs one pinned
-# release: to update, set pkgver to a newer smpl-apps release, update
-# sha256sums; normal OS updates rerun the keypad package step.
-# No _gh_owner/_gh_repo on purpose: build-iso.sh would move pkgver to
-# the latest release, which the pinned checksum would not match.
+# tree built and tested (ctest) there. Update OS and ISO builds resolve the
+# latest release AND its published SHA256 together using
+# smplos-control-surface.sh. Values below are an offline bootstrap snapshot,
+# not an OTA version pin. Never rewrite pkgver without its matching digest.
 #
 # smplOS ships the user unit and udev rules itself
 # (src/shared/configs/systemd/user/control-surface.service,
@@ -17,7 +16,7 @@
 # stay in /usr/share/control-surface/examples.
 
 pkgname=control-surface
-pkgver=0.8.35
+pkgver=0.8.37
 pkgrel=1
 pkgdesc='CH552 keypad and Razer mouse remappers: per-app profiles, shared actions, Kdenlive API and guided mouse setup'
 arch=(x86_64)
@@ -30,7 +29,7 @@ optdepends=(
 )
 options=(!strip !debug)
 source=("https://github.com/smpl-os/smpl-apps/releases/download/v${pkgver}/control-surface-${pkgver}-x86_64.tar.gz")
-sha256sums=('f9d3dc5fafea7d4e0f8fc99018d5478799cfc1413a4fe35f6a3afe9754b3cd64')
+sha256sums=('a25410ab6ca2e84f85020c51fbd0cdf6635d1e033961bccd0a96545c936a316b')
 
 check() {
   # Verify the release's real runtime ABI before pacman can install it.

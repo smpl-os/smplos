@@ -25,6 +25,12 @@ on:
       - "src/shared/bin/heal-paru"
       - "src/shared/bin/rebuild-paru"
       - "src/shared/lib/smplos-pkgbuild.sh"
+      - "src/shared/lib/smplos-control-surface.sh"
+      - "src/shared/lib/smplos-release-package.sh"
+      - "src/shared/pkgbuilds/control-surface/**"
+      - "src/build-iso.sh"
+      - "tests/test_keypad.py"
+      - "tests/test_mouse.py"
       - "src/shared/pkgbuilds/yay-bin/**"
       - "src/shared/pkgbuilds/eww-smplos/**"
       - "src/shared/packages-aur.txt"
@@ -75,6 +81,12 @@ on:
       - "src/shared/bin/heal-paru"
       - "src/shared/bin/rebuild-paru"
       - "src/shared/lib/smplos-pkgbuild.sh"
+      - "src/shared/lib/smplos-control-surface.sh"
+      - "src/shared/lib/smplos-release-package.sh"
+      - "src/shared/pkgbuilds/control-surface/**"
+      - "src/build-iso.sh"
+      - "tests/test_keypad.py"
+      - "tests/test_mouse.py"
       - "src/shared/pkgbuilds/yay-bin/**"
       - "src/shared/pkgbuilds/eww-smplos/**"
       - "src/shared/packages-aur.txt"
@@ -127,6 +139,8 @@ jobs:
             src/shared/bin/smplos-ensure-yay src/shared/bin/heal-paru src/shared/bin/rebuild-paru \
             src/shared/pkgbuilds/yay-bin/PKGBUILD src/shared/pkgbuilds/eww-smplos/PKGBUILD src/shared/lib/smplos-pkgbuild.sh \
             src/shared/lib/smplos-app-bundle.sh src/shared/installer/automated_script.sh \
+            src/shared/lib/smplos-control-surface.sh src/shared/lib/smplos-release-package.sh \
+            src/shared/pkgbuilds/control-surface/PKGBUILD src/build-iso.sh \
             src/shared/update-policy/critical-bundle.conf migrations/*.sh; do
             bash -n "$script" || exit 1
           done
@@ -141,6 +155,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_update_handoff.py' -v
           python3 -m unittest discover -s tests -p 'test_yay_delivery.py' -v
           python3 -m unittest discover -s tests -p 'test_app_delivery.py' -v
+          PYTHONPATH=tests python3 -m unittest test_keypad test_mouse -v
           python3 -m unittest discover -s tests -p 'test_bar_ctl.py' -v
           python3 -m unittest discover -s tests -p 'test_eww_delivery.py' -v
           python3 -m unittest discover -s tests -p 'test_dropped_packages.py' -v
