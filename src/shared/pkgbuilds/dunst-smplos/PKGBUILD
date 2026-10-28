@@ -32,7 +32,8 @@ prepare() {
 
 build() {
     cd "dunst-$pkgver"
-    make PREFIX=/usr SYSCONFDIR=/etc X11INC=/usr/include/X11 X11LIB=/usr/lib/X11 all
+    make PREFIX=/usr SYSCONFDIR=/etc X11INC=/usr/include/X11 X11LIB=/usr/lib/X11 \
+        POD2MAN=/usr/bin/core_perl/pod2man all
 }
 
 check() {
@@ -41,7 +42,8 @@ check() {
 
 package() {
     cd "dunst-$pkgver"
-    make DESTDIR="$pkgdir" SYSCONFDIR=/etc PREFIX=/usr install
+    make DESTDIR="$pkgdir" SYSCONFDIR=/etc PREFIX=/usr \
+        POD2MAN=/usr/bin/core_perl/pod2man install
     install -Dm755 dunstify "$pkgdir/usr/bin/dunstify"
     install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
     install -Dm755 "$srcdir/signal-notification-activate" "$pkgdir/usr/lib/smplos/signal-notification-activate"
