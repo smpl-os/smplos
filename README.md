@@ -385,6 +385,12 @@ workspace to its home instead of swapping it onto another monitor. Local
 next/previous navigation stays within the focused monitor's homes. Window
 transfer uses physical monitor geometry and the destination's visible workspace;
 an explicit whole-workspace transfer changes that workspace's saved home.
+On the supported Hyprland Lua configuration, **Super+1-9/0** explicitly focuses
+the target workspace's last-used window, including when that workspace is already
+visible on another monitor and the pointer is there while you type elsewhere.
+Hidden targets open with their remembered window focused; empty targets activate
+without retaining a keyboard recipient on another output. The global mouse-focus
+policy and custom commands in your shared bindings file are unchanged.
 In fixed-home mode, disconnected homes fall back to a connected display without
 forgetting their ownership, and return when their home reconnects.
 

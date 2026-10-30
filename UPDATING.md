@@ -60,6 +60,37 @@ automatic rollback or boot recovery are provided by this flow.
 OS-owned changes reach users after merging to `main` and running the updater.
 Changes to independently built apps also require a release in their own repo.
 
+### Numbered workspace keyboard focus
+
+The pointer-independent last-used-window fix is in the OS-owned
+`src/compositors/hyprland/hypr/bindings_loader.lua`. Normal Update OS delivers
+it with the Hyprland Lua modules; no native release, compositor upgrade or
+binding migration is needed. Existing shared binding files and mouse-focus
+preferences are preserved. Reload the Lua configuration when ready to apply
+the delivered loader; do not interrupt a typing session for a test.
+
+For a coordinated local trial, first save and verify a copy of the installed
+`~/.config/hypr/bindings_loader.lua`, then replace only that module with this
+version and run `hyprctl reload config-only`. Do not replace personal
+`bindings.conf`, workspace homes or pointer settings. Confirm
+`hyprctl -j configerrors` has no nonempty errors. On Hyprland 0.56, type in
+workspace 1 while the pointer is over an older window on visible workspace 4;
+Super+4 must focus workspace 4's last-used window, not the hovered one.
+Repeat with workspace 4 hidden, with the pointer on either monitor, and with
+an empty target. Modified move-window shortcuts must still move windows.
+This fix targets the Lua provider; the classic hyprlang fallback is unchanged.
+
+Regression checks (no interaction with the live desktop):
+
+```bash
+PYTHONPATH=tests python -m unittest test_workspace_shortcuts test_keybindings
+KEYBIND_LAB=1 PYTHONPATH=tests python -m unittest test_workspace_shortcuts
+```
+
+The second command requires the isolated headless keybinding lab prerequisites
+and checks real window focus, monitor ownership and virtual Super+4 presses on
+two outputs, with both workspace-policy modes and cursor-warp preferences.
+
 ### Clip command delivery
 
 `src/shared/bin/clip` is a Bash executable shared by every edition and usable
