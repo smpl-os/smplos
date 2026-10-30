@@ -795,13 +795,19 @@ local function op(kind)
 end
 hl = {
   workspace_rule=function(_) end,
+  get_workspaces=function() return {} end,
+  get_windows=function() return {} end,
+  get_active_window=function() return nil end,
+  dispatch=function(action)
+    print(action.kind .. ":" .. (type(action.value) == "string" and action.value or "table"))
+  end,
   dsp={
     focus=op("native-focus"), exec_cmd=op("exec"),
     window={move=op("native-send")},
     workspace={move=op("native-workspace-move"), toggle_special=op("special")}
   },
   bind=function(_, action, _)
-    print(action.kind .. ":" .. (type(action.value) == "string" and action.value or "table"))
+    if type(action) == "function" then action() else hl.dispatch(action) end
   end
 }
 dofile(arg[1])

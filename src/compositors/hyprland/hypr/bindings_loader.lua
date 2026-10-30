@@ -118,6 +118,46 @@ local function ws_arg(arg)
     return arg
 end
 
+local function numbered_workspace(number)
+    return function()
+        local function eligible(window)
+            return window and window.mapped and not window.hidden and window.accepts_input
+                and window.workspace and window.workspace.id == number
+        end
+        local window
+        for _, workspace in ipairs(hl.get_workspaces()) do
+            if workspace.id == number then
+                window = workspace.last_window
+                break
+            end
+        end
+        if not eligible(window) then
+            window = nil
+            local best = math.huge
+            for _, candidate in ipairs(hl.get_windows()) do
+                if eligible(candidate) then
+                    local rank = candidate.focus_history_id
+                    if not rank or rank < 0 then rank = math.huge end
+                    if not window or rank < best then window, best = candidate, rank end
+                end
+            end
+        end
+        if window then
+            -- Workspace-only focus can no-op when follow_mouse=2 already selected
+            -- the target monitor. Resolve before dispatch so it cannot change MRU.
+            hl.dispatch(hl.dsp.focus({ window = window }))
+        else
+            -- Restore the keyboard monitor first: an already-visible empty target
+            -- must clear the old keyboard focus, even if the pointer selected it.
+            local active = hl.get_active_window()
+            if active and active.monitor then
+                hl.dispatch(hl.dsp.focus({ monitor = active.monitor }))
+            end
+            hl.dispatch(hl.dsp.focus({ workspace = number }))
+        end
+    end
+end
+
 local function make_dispatcher(dispatcher, arg)
     arg = arg or ""
 
@@ -182,6 +222,9 @@ local function make_dispatcher(dispatcher, arg)
         -- plain Super+number press. Relative navigation still needs local IDs.
         if stable_workspaces and (arg == "+1" or arg == "-1" or arg == "previous") then
             return hl.dsp.exec_cmd("workspace-ctl select " .. arg)
+        end
+        if arg:match("^[1-9]%d*$") then
+            return numbered_workspace(tonumber(arg))
         end
         return hl.dsp.focus({ workspace = ws_arg(arg) })
 
