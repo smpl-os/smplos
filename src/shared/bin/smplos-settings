@@ -84,6 +84,11 @@ case "${1:-}" in
     die "Settings app not found (Mouse needs smpl-apps with the Mouse tab)"
     ;;
 
+  printing|printers)
+    command -v settings &>/dev/null && exec settings --tab printing
+    die "Settings app not found (Printing needs a compatible smpl-apps release)"
+    ;;
+
   dictation)
     command -v settings &>/dev/null && exec settings --tab dictation
     # Fall back to standalone script if settings unavailable
@@ -116,7 +121,7 @@ case "${1:-}" in
     ;;
 
   *)
-    echo "Usage: smplos-settings {appearance|display|keyboard|keypad|mouse|network|connections|wifi|bluetooth|audio|dictation|power|about|keybindings|taskbar}" >&2
+    echo "Usage: smplos-settings {appearance|display|keyboard|keypad|mouse|printing|network|connections|wifi|bluetooth|audio|dictation|power|about|keybindings|taskbar}" >&2
     exit 1
     ;;
 esac

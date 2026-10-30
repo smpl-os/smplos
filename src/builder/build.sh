@@ -1673,8 +1673,15 @@ setup_services() {
     local airootfs="$1"
     
     log_info "Setting up systemd services"
+
+    # Local printing activates on demand; Avahi resolves DNS-SD printers.
+    mkdir -p "$airootfs/etc/systemd/system/sockets.target.wants" \
+        "$airootfs/etc/systemd/system/multi-user.target.wants"
+    ln -sf /usr/lib/systemd/system/cups.socket \
+        "$airootfs/etc/systemd/system/sockets.target.wants/cups.socket"
+    ln -sf /usr/lib/systemd/system/avahi-daemon.service \
+        "$airootfs/etc/systemd/system/multi-user.target.wants/avahi-daemon.service"
     
-    mkdir -p "$airootfs/etc/systemd/system/multi-user.target.wants"
     mkdir -p "$airootfs/etc/systemd/system/getty@tty1.service.d"
     
     # Enable NetworkManager

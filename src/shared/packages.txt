@@ -110,6 +110,13 @@ bluez
 bluez-utils
 blueman
 
+# Local print queues, driverless IPP/filtering and DNS-SD address resolution.
+# No cups-browsed (auto-created queues) or duplicate printer GUI.
+cups
+cups-filters
+python-pycups
+avahi
+
 # ── Display Extras ───────────────────────────────────────────
 gammastep
 

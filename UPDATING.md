@@ -592,6 +592,30 @@ on the next login or plug-in. Fresh ISOs carry the same unit and hook and
 install the daemon from their offline mirror; rebuilding smpl-apps is not
 required for this OS-only fix. See [keypad lifecycle](KEYPAD.md#lifecycle-and-footprint).
 
+### Printing platform delivery
+
+Publish the compatible native Settings release in **smpl-apps** and deliver it
+through the existing complete native bundle. The OS half installs
+`smplos-printing` and its shared Python module through normal script/library
+sync. Its core printing migration enrolls `cups`, `cups-filters`,
+`python-pycups` and `avahi` after the complete official upgrade, using the
+managed transaction guard so stack pins and user holds remain effective.
+Scripts-only enrollment defers missing packages instead of doing a partial
+Arch upgrade. Failed packages or service enrollment remain retryable.
+
+Fresh ISOs embed those packages and dependencies through the shared package
+list/offline mirror and enable local CUPS socket activation plus Avahi. Updates
+enable services only for newly enrolled packages and preserve existing
+disabled/masked service policy. Neither path edits queues, defaults, spool
+documents, job history, VPN policy or firewall rules. Existing disabled Avahi
+is a visible discovery warning, not permission to override an opt-out.
+
+Keep protocol v1 and both release halves coordinated: older native Settings
+has no panel; new Settings reports a missing/failed helper explicitly. Use
+`settings --tab printing` / `smplos-settings printing`. See
+[printing contract and safety](PRINTING.md) for exact schema, visible history
+scope, UUID-guarded own-job controls and uncertain-action handling.
+
 ### Mouse remapping delivery
 
 The Razer Naga V2 HyperSpeed (`1532:00b4`) backend lives alongside the keypad

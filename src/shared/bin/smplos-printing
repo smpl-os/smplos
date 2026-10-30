@@ -1,0 +1,43 @@
+#!/usr/bin/python3
+"""Bound the local CUPS worker, including native calls that can block."""
+
+import json
+from pathlib import Path
+import subprocess
+import sys
+
+
+def main():
+    source = Path(__file__).resolve().parents[1] / "lib/smplos-printing.py"
+    worker = source if source.is_file() else Path("/usr/local/lib/smplos/smplos-printing.py")
+    try:
+        result = subprocess.run(
+            [sys.executable, str(worker), *sys.argv[1:]],
+            capture_output=True, timeout=15, check=False,
+        )
+    except subprocess.TimeoutExpired:
+        action = len(sys.argv) > 1 and sys.argv[1] == "job"
+        print(json.dumps({
+            "protocol_version": 1, "ok": False, "printers": [], "jobs": [],
+            "error": {
+                "code": "outcome_unknown" if action else "timeout",
+                "message": (
+                    "CUPS did not acknowledge the action in time. Refresh the queue before "
+                    "deciding what to do; do not retry automatically."
+                    if action else "Printing status timed out. Check local CUPS and try refreshing."
+                ),
+            },
+        }, separators=(",", ":")))
+        return 1
+    sys.stdout.buffer.write(result.stdout)
+    sys.stderr.buffer.write(result.stderr)
+    if not result.stdout:
+        print(json.dumps({
+            "protocol_version": 1, "ok": False, "printers": [], "jobs": [],
+            "error": {"code": "backend_failed", "message": "Printing helper failed. Run Update OS to repair it."},
+        }, separators=(",", ":")))
+    return result.returncode or (1 if not result.stdout else 0)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

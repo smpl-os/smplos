@@ -424,6 +424,16 @@ Use `workspace-ctl init --preserve` to stop automatic reassignment and keep the
 current saved homes. An opt-out is preserved across updates and logins, even if
 `disable` is run before the first automatic setup.
 
+### Printing
+
+The coordinated native **Settings > Printing** release shows CUPS printer
+status, active queues and retained job history, with explicit controls for your
+own jobs and connectivity/VPN warnings. The OS helper and printing dependencies
+ship offline in every edition and enroll through full Update OS. Existing
+printers, defaults, jobs and network policy are preserved; an idle queue is not
+proof that a printer is reachable. See [printing support and protocol](PRINTING.md)
+for delivery requirements, service opt-outs, history limits and safe controls.
+
 ### Media helpers
 
 Every edition includes the Bash command `clip` to trim video or audio without

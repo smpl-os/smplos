@@ -29,6 +29,10 @@ chrootable_systemctl_enable() {
   fi
 }
 
+echo "==> Enabling local printing and DNS-SD resolution..."
+chrootable_systemctl_enable cups.socket
+chrootable_systemctl_enable avahi-daemon.service
+
 echo "==> Configuring desktop environment..."
 
 # Install AUR packages from the offline mirror
