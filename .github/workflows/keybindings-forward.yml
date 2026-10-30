@@ -1,0 +1,35 @@
+name: Keybindings (latest Arch warning)
+
+# Deliberately separate from keybindings.yml and auto-release.yml. Do not make
+# this check required: new upstream releases are not yet approved smplOS stacks.
+on:
+  pull_request:
+  schedule:
+    - cron: "37 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  forward:
+    name: forward compatibility (non-blocking)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: true
+    container: archlinux:latest
+    env:
+      KEYBIND_CHECK_REQUIRE: lua,xkbcommon,hyprland
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - name: Install latest Arch Hyprland, Lua and Python
+        run: pacman -Syu --noconfirm --needed hyprland python lua libxkbcommon git
+      - uses: actions/checkout@v5
+      - name: Show the tools under test
+        run: pacman -Q && python3 --version && tools/keybind-check doctor
+      - name: Check every bind against unapproved upstream
+        run: PYTHONPATH=tests python3 -m unittest test_keybindings -v
