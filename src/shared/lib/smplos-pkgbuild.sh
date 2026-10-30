@@ -58,7 +58,7 @@ smplos_pkgbuild_install() {
     fi
     build=$(mktemp -d "${TMPDIR:-/tmp}/smplos-pkgbuild.XXXXXX") || return 1
     cp -a "$dir/." "$build/" || { rm -rf "$build"; return 1; }
-    if (cd "$build" && makepkg -s --noconfirm); then
+    if (cd "$build" && PACMAN="${SMPLOS_UPDATE_PACMAN:-${PACMAN:-pacman}}" makepkg -s --noconfirm); then
         pkg=$(find "$build" -maxdepth 1 -name '*.pkg.tar.*' ! -name '*-debug-*' | head -1)
         [[ -n "$pkg" ]] && sudo pacman -U --noconfirm "$@" "$pkg" && rc=0
     fi

@@ -1,0 +1,62 @@
+#!/bin/bash
+# Per-run package guard used by Update OS, Yay and makepkg.
+set -euo pipefail
+
+die() { echo "ERROR: protected-stack transaction: $*" >&2; exit 1; }
+pins="${SMPLOS_UPDATE_PIN_IGNORE:-}"
+[[ -z "$pins" || "$pins" =~ ^[a-zA-Z0-9@._+-]+(,[a-zA-Z0-9@._+-]+)*$ ]] ||
+    die "invalid protected package list"
+
+mutation=0
+query=0
+sync_or_upgrade=0
+for argument in "$@"; do
+    case "$argument" in
+        -Q*|-D*|-T*|-F*|--query|--database|--deptest|--files) query=1 ;;
+        --info|--list|--search|--print) query=1 ;;
+        -S*|-U*|--sync|--upgrade)
+            mutation=1; sync_or_upgrade=1
+            [[ "$argument" != -[SU]* || ! "$argument" =~ d ]] || die "dependency checks cannot be disabled"
+            [[ "$argument" != -S* || ! "$argument" =~ [ils] ]] || query=1 ;;
+        -R*|--remove)
+            mutation=1
+            [[ ! "$argument" =~ d ]] || die "dependency checks cannot be disabled" ;;
+        -d|--nodeps|--assume-installed|--assume-installed=*) die "dependency checks cannot be disabled" ;;
+    esac
+done
+if [[ -z "$pins" || $mutation -eq 0 || $query -eq 1 ]]; then
+    exec /usr/bin/pacman "$@"
+fi
+
+option_value=0
+for argument in "$@"; do
+    if [[ $option_value -eq 1 ]]; then option_value=0; continue; fi
+    case "$argument" in
+        --ignore|--ignoregroup|--config|--root|--dbpath|--cachedir|--gpgdir|--hookdir|--logfile|--arch|--overwrite|--ask)
+            option_value=1; continue ;;
+        -*) continue ;;
+    esac
+    name="${argument%%[<>=]*}"
+    [[ ",$pins," != *",$name,"* ]] || die "$name is deliberately retained; operation refused"
+done
+arguments=("$@")
+[[ $sync_or_upgrade -eq 0 ]] || arguments+=(--ignore "$pins")
+# Printed sync targets omit removals caused by replacements/conflicts.
+hook_dir=$(mktemp -d /tmp/smplos-pin-hook.XXXXXX) || die "cannot prepare transaction protection"
+trap 'rm -f -- "$hook_dir/00-smplos-protected-stack.hook"; rmdir -- "$hook_dir"' EXIT
+{
+    printf '[Trigger]\nOperation = Install\nOperation = Upgrade\nOperation = Remove\nType = Package\n'
+    IFS=, read -r -a protected <<< "$pins"
+    printf 'Target = %s\n' "${protected[@]}"
+    printf '\n[Action]\nDescription = Refusing changes to the protected smplOS stack\nWhen = PreTransaction\nExec = /usr/bin/false\nAbortOnFail\n'
+} > "$hook_dir/00-smplos-protected-stack.hook"
+arguments+=(--hookdir "$hook_dir")
+if ! targets=$(LC_ALL=C /usr/bin/pacman "${arguments[@]}" --print --print-format '%n'); then
+    die "cannot resolve this operation without changing the protected stack"
+fi
+while IFS= read -r name; do
+    [[ -n "$name" ]] || continue
+    [[ "$name" =~ ^[a-zA-Z0-9@._+-]+$ ]] || die "unexpected pacman preview: $name"
+    [[ ",$pins," != *",$name,"* ]] || die "$name would change or be removed; operation refused"
+done <<< "$targets"
+/usr/bin/pacman "${arguments[@]}"

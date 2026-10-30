@@ -84,7 +84,7 @@ if [[ $EUID -eq 0 ]]; then
     fi
     sudo userdel -r _mvbuild 2>/dev/null || true
 else
-    if ! (cd "$BUILD_DIR" && makepkg -s --noconfirm); then
+    if ! (cd "$BUILD_DIR" && PACMAN="${SMPLOS_UPDATE_PACMAN:-${PACMAN:-pacman}}" makepkg -s --noconfirm); then
         echo "  ERROR: makepkg failed — will retry on next update"
         exit 1
     fi

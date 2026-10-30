@@ -2,6 +2,7 @@
 """Read-only installed-state verification; reports stay on this machine."""
 
 import argparse
+import fnmatch
 import hashlib
 import json
 import os
@@ -495,29 +496,8 @@ class Audit:
 
         if not inventory_files(foreign):
             return
-        metadata = self.command("pacman", "-Qi")
-        if metadata is None or metadata.returncode:
-            self.error("Cannot read package dependency metadata for AUR ordering")
-            return
-        records, record, field = {}, None, None
-        for line in metadata.stdout.splitlines():
-            match = re.match(r"^([A-Za-z][A-Za-z ]*?)\s*:\s*(.*)$", line)
-            if match:
-                key, value = match.groups()
-                key = key.strip()
-                if key == "Name":
-                    if value in records:
-                        self.error(f"Duplicate installed package metadata: {value}")
-                        return
-                    record = records[value] = {}
-                field = key if key in ("Provides", "Depends On") else None
-                if record is not None and field:
-                    record.setdefault(field, []).extend(value.split())
-            elif line[:1].isspace() and record is not None and field:
-                record[field].extend(line.split())
-        if records.keys() != packages.keys() or any(
-                not {"Provides", "Depends On"} <= record.keys() for record in records.values()):
-            self.error("Incomplete installed dependency metadata; AUR priority cannot be certified")
+        records = self.dependency_metadata()
+        if records is None:
             return
         providers = {}
         for name, record in records.items():
@@ -563,6 +543,145 @@ class Audit:
             "app_updates_only": sorted(foreign & app_only),
             "required_closure": sorted(closure),
         }
+
+    def dependency_metadata(self):
+        metadata = self.command("pacman", "-Qi")
+        if metadata is None or metadata.returncode:
+            self.error("Cannot read installed package dependency metadata")
+            return
+        records, record, field = {}, None, None
+        for line in metadata.stdout.splitlines():
+            match = re.match(r"^([A-Za-z][A-Za-z ]*?)\s*:\s*(.*)$", line)
+            if match:
+                key, value = match.groups()
+                key = key.strip()
+                if key == "Name":
+                    if value in records:
+                        self.error(f"Duplicate installed package metadata: {value}")
+                        return
+                    record = records[value] = {}
+                field = key if key in ("Provides", "Depends On") else None
+                if record is not None and field:
+                    record.setdefault(field, []).extend(value.split())
+            elif line[:1].isspace() and record is not None and field:
+                record[field].extend(line.split())
+        if records.keys() != self.report["packages"].keys() or any(
+                not {"Provides", "Depends On"} <= record.keys() for record in records.values()):
+            self.error("Incomplete installed dependency metadata")
+            return
+        return records
+
+    def pin_policy(self):
+        directory = self.repo / "src/shared/update-policy"
+        return {name: digest(directory / name)
+                for name in ("critical-packages.txt", "critical-bundle.conf")}
+
+    def plan_pins(self):
+        packages = self.report["packages"]
+        pins = {}
+        plan = self.report["pin_plan"] = {
+            "policy": self.pin_policy(), "pins": pins, "targets": {}, "attempts": [],
+        }
+        if "hyprland" in packages:
+            bundle = (self.repo / "src/shared/update-policy/critical-bundle.conf").read_text()
+            series = re.findall(r'^HYPRLAND_SERIES="?([0-9]+\.[0-9]+)"?\s*(?:#.*)?$', bundle, re.M)
+            available = self.command("pacman", "-Si", "hyprland")
+            versions = re.findall(r"^Version\s*:\s*(\S+)$", available.stdout, re.M) if available else []
+            if len(series) != 1 or len(versions) != 1 or available.returncode:
+                self.error("Cannot establish the approved and available Hyprland series")
+                return
+            approved_available = versions[0].split(":")[-1].startswith(series[0] + ".")
+            if not packages["hyprland"].split(":")[-1].startswith(series[0] + "."):
+                comparison = self.command("vercmp", packages["hyprland"], versions[0])
+                if (not approved_available or comparison is None or comparison.returncode
+                        or comparison.stdout.strip() != "-1"):
+                    self.error("Installed Hyprland is outside the approved series; refusing an automatic downgrade")
+                    return
+            if not approved_available:
+                patterns = (self.repo / "src/shared/update-policy/critical-packages.txt").read_text().splitlines()
+                for pattern in patterns:
+                    pattern = pattern.split("#", 1)[0].strip()
+                    if not pattern:
+                        continue
+                    if not re.fullmatch(r"[a-zA-Z0-9@._+*?-]+", pattern):
+                        raise ValueError(f"Invalid protected package pattern: {pattern}")
+                    for name, version in packages.items():
+                        if fnmatch.fnmatchcase(name, pattern):
+                            pins[name] = {"version": version, "reason": f"approved desktop stack ({series[0]})"}
+                if "hyprland" not in pins:
+                    self.error("Protected stack policy does not include Hyprland")
+                    return
+        records = self.dependency_metadata()
+        if records is None:
+            return
+        for _ in range(len(packages) + 1):
+            arguments = ["pacman", "-Su", "--print", "--print-format", "%n %v", "--noconfirm"]
+            if "qemu-block-gluster" in packages:
+                arguments += ["--ask", "4"]
+            if pins:
+                arguments += ["--ignore", ",".join(sorted(pins))]
+            result = self.command(*arguments)
+            if result is None:
+                return
+            transcript = result.stdout + result.stderr
+            plan["attempts"].append({"ignore": sorted(pins), "output": transcript,
+                                     "returncode": result.returncode})
+            if result.returncode == 0:
+                for line in result.stdout.splitlines():
+                    fields = line.split()
+                    if len(fields) != 2 or not re.fullmatch(r"[a-zA-Z0-9@._+-]+", fields[0]):
+                        self.error(f"Invalid pacman transaction preview: {line}")
+                        return
+                    name, version = fields
+                    if name in pins:
+                        self.error(f"Pacman selected protected package {name} for installation")
+                        return
+                    plan["targets"][name] = version
+                return
+            additions = {}
+            provided = {
+                re.split(r"[<>=]", value, maxsplit=1)[0]
+                for name in pins for value in (name, *records[name]["Provides"]) if value != "None"
+            }
+            for line in transcript.splitlines():
+                broken = re.fullmatch(
+                    r":: installing (\S+) \([^)]+\) breaks dependency '([^']+)' required by (\S+)", line)
+                missing = re.fullmatch(r":: unable to satisfy dependency '([^']+)' required by (\S+)", line)
+                if broken and broken[3] in pins:
+                    additions[broken[1]] = f"preserves {broken[2]} required by {broken[3]}"
+                elif missing and re.split(r"[<>=]", missing[1], maxsplit=1)[0] in provided:
+                    additions[missing[2]] = f"requires {missing[1]}, unavailable with the approved stack"
+            additions = {name: reason for name, reason in additions.items()
+                         if name in packages and name not in pins}
+            if not additions:
+                self.error(f"Cannot resolve an update preserving the approved stack:\n{transcript}")
+                return
+            for name, reason in additions.items():
+                pins[name] = {"version": packages[name], "reason": reason}
+        self.error("Protected dependency planning did not converge")
+
+    def load_pins(self, path, previous):
+        record = json.loads(path.read_text())
+        plan = record["pin_plan"]
+        pins = plan["pins"]
+        if not isinstance(pins, dict):
+            raise ValueError("Invalid protected package inventory")
+        retired = {"paru", "paru-bin", "paru-git"}
+        baseline = {name: version for name, version in previous["packages"].items() if name not in retired}
+        planned = {name: version for name, version in record["packages"].items() if name not in retired}
+        if (record["errors"] or planned != baseline
+                or record["source_commit"] != self.report.get("source_commit")
+                or plan["policy"] != self.pin_policy() or not plan["attempts"]
+                or plan["attempts"][-1]["returncode"] != 0):
+            raise ValueError("Pin plan is failed, stale, or does not match this update's baseline/policy")
+        for name, item in pins.items():
+            if (not re.fullmatch(r"[a-zA-Z0-9@._+-]+", name) or not isinstance(item, dict)
+                    or item["version"] != previous["packages"].get(name)
+                    or not isinstance(item["reason"], str) or not item["reason"].strip()):
+                raise ValueError(f"Invalid protected package record: {name}")
+            if self.report["packages"].get(name) != item["version"]:
+                self.error(f"Protected package changed or was removed: {name}; expected {item['version']}")
+        self.report["pin_plan"] = plan
 
     def receipt(self, component, names):
         state = self.home / ".local/state/smplos/app-versions"
@@ -655,6 +774,7 @@ class Audit:
             self.error("Cannot compare installed packages with configured repository versions")
         self.report["repository_comparison_valid"] = valid
         statuses = self.report["package_status"] = {}
+        pins = self.report.get("pin_plan", {}).get("pins", {})
         for name, installed in sorted(self.report["packages"].items()):
             target = repositories.get(name, {})
             available = target.get("available")
@@ -667,13 +787,18 @@ class Audit:
                     self.error(f"Cannot compare installed and repository versions of {name}")
                     status = "unknown"
                 elif comparison.stdout.strip() == "-1":
-                    status = "pending"
-                    self.error(f"Package was not updated: {name} {installed} -> {available}")
+                    if name in pins and installed == pins[name]["version"]:
+                        status = "pinned"
+                    else:
+                        status = "pending"
+                        self.error(f"Package was not updated: {name} {installed} -> {available}")
                 elif comparison.stdout.strip() == "0":
                     status = "current"
                 else:
                     status = "newer-local"
             statuses[name] = {"installed": installed, "status": status, **target}
+            if name in pins:
+                statuses[name]["pin_reason"] = pins[name]["reason"]
         foreign = sum(item["status"] == "not-in-repositories" for item in statuses.values())
         if foreign:
             self.report["warnings"].append(
@@ -688,7 +813,14 @@ class Audit:
         result = self.command("pacman", "-Qu")
         if result is not None:
             self.report["pending_repo_updates"] = result.stdout.splitlines()
-            if result.stdout.strip() or result.stderr.strip() or result.returncode not in (0, 1):
+            pins = self.report.get("pin_plan", {}).get("pins", {})
+            unexpected = []
+            for line in result.stdout.splitlines():
+                fields = line.split()
+                if (len(fields) != 4 or fields[2] != "->" or fields[0] not in pins
+                        or fields[1] != pins[fields[0]]["version"]):
+                    unexpected.append(line)
+            if unexpected or result.stderr.strip() or result.returncode not in (0, 1):
                 self.error(f"Repository updates remain or could not be checked: {result.stdout}{result.stderr}")
         packages = self.report["packages"]
         recipe = self.repo / "src/shared/pkgbuilds/eww-smplos/PKGBUILD"
@@ -830,7 +962,12 @@ class Audit:
                 print(f"  {name}: {item.get('before') or 'not recorded'} -> {item['installed']}; "
                       f"target={target}; {item['status']}")
             print(f"  Compared {len(statuses)} installed packages; "
-                  f"{sum(item['status'] == 'pending' for item in statuses.values())} still pending.")
+                  f"{sum(item['status'] == 'pending' for item in statuses.values())} unexpectedly pending; "
+                  f"{sum(item['status'] == 'pinned' for item in statuses.values())} deliberately deferred.")
+        for name, item in sorted(self.report.get("pin_plan", {}).get("pins", {}).items()):
+            print(f"  Protected {name} {item['version']}: {item['reason']}")
+        if self.report.get("pin_plan", {}).get("pins"):
+            print("  Protected packages were retained, not updated; their security fixes may also be deferred.")
         for name, change in self.report.get("package_changes", {}).items():
             print(f"  Package change {name}: {change['before'] or 'absent'} -> {change['after'] or 'removed'}")
         for name, item in sorted(self.report.get("native_updates", {}).items()):
@@ -887,6 +1024,8 @@ def main():
     parser.add_argument("--snapshot", action="store_true", help="Inventory only, before update")
     parser.add_argument("--core-only", action="store_true", help="Verify core before optional app work")
     parser.add_argument("--classify-aur", action="store_true", help="Classify local foreign-package dependency closure")
+    parser.add_argument("--plan-pins", action="store_true", help="Resolve upgrades around the approved desktop stack")
+    parser.add_argument("--pins-report", type=Path, help="This run's successful protected-stack transaction plan")
     parser.add_argument("--optional-apps-report", type=Path,
                         help="Legacy option; no optional native apps are OS-managed")
     parser.add_argument("--optional-warning", action="append", default=[])
@@ -899,17 +1038,19 @@ def main():
     parser.add_argument("--brave-report", type=Path, help="Require Brave to meet this recorded AUR target")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    inventory_actions = (args.snapshot, args.classify_aur, args.capture_brave_target)
+    inventory_actions = (args.snapshot, args.classify_aur, args.capture_brave_target, args.plan_pins)
     verification_options = (
         args.before or args.apps_report or args.optional_apps_report or args.brave_report
-        or args.core_only or args.optional_warning or args.required_error
+        or args.core_only or args.optional_warning or args.required_error or args.pins_report
     )
     if sum(inventory_actions) > 1 or (
             (any(inventory_actions) or args.mode == "bootstrap") and verification_options):
         parser.error("inventory/bootstrap actions cannot be combined with installed-state verification options")
-    if args.mode != "full" and (args.classify_aur or args.capture_brave_target) or (
+    if args.mode != "full" and (args.classify_aur or args.capture_brave_target or args.plan_pins or args.pins_report) or (
             args.mode == "bootstrap" and args.snapshot):
         parser.error("this inventory action requires full mode")
+    if args.pins_report and not args.before:
+        parser.error("--pins-report requires this run's --before snapshot")
     if args.core_only and (args.optional_apps_report or args.brave_report or args.optional_warning):
         parser.error("core verification cannot include optional application results")
     home = Path.home()
@@ -927,7 +1068,12 @@ def main():
                 report["source_commit"] = commit.stdout.strip()
         else:
             audit.snapshot()
-        if args.classify_aur:
+        previous = json.loads(args.before.read_text()) if args.before else None
+        if args.pins_report:
+            audit.load_pins(args.pins_report, previous)
+        if args.plan_pins:
+            audit.plan_pins()
+        elif args.classify_aur:
             audit.aur_policy()
         elif not args.snapshot and not args.capture_brave_target:
             audit.verify(args.mode)
@@ -948,8 +1094,8 @@ def main():
         for error in args.required_error:
             audit.error(error)
         if args.before:
-            audit.changes(json.loads(args.before.read_text()))
-    except (OSError, RuntimeError, ValueError, KeyError) as error:
+            audit.changes(previous)
+    except (OSError, RuntimeError, ValueError, KeyError, TypeError) as error:
         audit.error(f"Update verification could not finish: {error}")
     try:
         save_report(args.output, report)

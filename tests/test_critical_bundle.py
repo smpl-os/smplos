@@ -1,6 +1,7 @@
-"""smplos-update: one-transaction system upgrades and the Hyprland series rule."""
+"""smplos-update: one-transaction upgrades with a protected desktop stack."""
 
 import os
+import fnmatch
 from pathlib import Path
 import re
 import shlex
@@ -29,10 +30,16 @@ def bundle():
 
 
 class PolicyTests(unittest.TestCase):
-    def test_only_the_compositor_and_portal_can_be_held(self):
+    def test_transition_roots_cover_desktop_graphics_and_capture_without_pinning_everything(self):
         lines = (POLICY / "critical-packages.txt").read_text().splitlines()
         held = [l.strip() for l in lines if l.strip() and not l.lstrip().startswith("#")]
-        self.assertEqual(held, ["hyprland", "xdg-desktop-portal-hyprland"])
+        for name in ("hyprland", "aquamarine", "hyprutils", "xdg-desktop-portal-hyprland",
+                     "linux-lts", "linux-lts-headers", "nvidia-open-dkms", "nvidia-utils",
+                     "lib32-nvidia-utils", "mesa", "lib32-mesa", "vulkan-radeon",
+                     "lib32-vulkan-radeon", "pipewire", "wireplumber", "obs-studio", "ffmpeg"):
+            self.assertTrue(any(fnmatch.fnmatchcase(name, pattern) for pattern in held), name)
+        for name in ("tailscale", "brave-bin", "glibc", "openssl", "curl"):
+            self.assertFalse(any(fnmatch.fnmatchcase(name, pattern) for pattern in held), name)
 
     def test_series_and_bundle(self):
         _, series, packages, optional = bundle()
@@ -78,7 +85,19 @@ class SystemUpgradeTests(unittest.TestCase):
         (bin_dir / "sudo").write_text('#!/bin/bash\nexec "$@"\n')
         for tool in ("pacman", "sudo"):
             (bin_dir / tool).chmod(0o755)
+        checker = bin_dir / "smplos-update-check"
+        checker.write_text("""#!/usr/bin/env python3
+import json, os, sys
+if not os.environ.get("AVAILABLE") or os.environ.get("PLAN_FAIL") == "1":
+    sys.exit(1)
+pins = {} if os.environ["AVAILABLE"].startswith("0.56.") else {
+    "hyprland": {"version": "0.56.0-2", "reason": "approved stack"}}
+with open(sys.argv[sys.argv.index("--output") + 1], "w") as stream:
+    json.dump({"errors": [], "pin_plan": {"pins": pins}}, stream)
+""")
+        checker.chmod(0o755)
         self.state = root / "state"
+        self.state.mkdir()
         self.home = root / "home"
         self.env = dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}", CALLS=str(self.calls),
                         HOME=str(self.home), LANG="es_ES.UTF-8", LC_ALL="")
@@ -92,6 +111,8 @@ class SystemUpgradeTests(unittest.TestCase):
             "UPDATE_MODE=full", "NETWORK_OK=1", "UPDATE_FAILED=0", "SYSTEM_UPGRADED=0",
             "check_update_power() { :; }",
             f"STATE_DIR={shlex.quote(str(self.state))}",
+            f"LOG_FILE={shlex.quote(str(Path(self.temp.name) / 'update.log'))}",
+            'STACK_PIN_IGNORE=""', "PINS_READY=0",
             'APPLIED_BUNDLE_FILE="$STATE_DIR/critical-bundle-applied"',
             'BUNDLE_SNAPSHOT_FILE="$STATE_DIR/critical-bundle-versions"',
             f"CRITICAL_BUNDLE_FILE={shlex.quote(str(conf))}",
@@ -120,23 +141,23 @@ class SystemUpgradeTests(unittest.TestCase):
         notifier = (ROOT / "src/shared/bin/smplos-reboot-notify").read_text()
         self.assertIn('MARKER="$HOME/.local/state/smplos/reboot-pending"', notifier)
 
-    def test_unvalidated_series_stops_the_entire_upgrade(self):
+    def test_unvalidated_series_uses_resolved_pins_instead_of_stopping_everything(self):
         out, calls = self.run_updater_step("system_upgrade", AVAILABLE="0.57.0-1")
-        self.assertEqual(calls, ["-Sy --noconfirm"])
-        self.assertIn("Hyprland 0.57.0-1", out)
-        self.assertIn("RESULT failed=1 upgraded=0", out)
+        self.assertEqual(calls, ["-Sy --noconfirm", "-Su --noconfirm --ignore hyprland"])
+        self.assertIn("RESULT failed=0 upgraded=1", out)
         self.assertFalse((self.home / ".local/state/smplos/reboot-pending").exists())
 
     def test_an_unknown_version_stops_the_entire_upgrade(self):
         out, calls = self.run_updater_step("system_upgrade", AVAILABLE="")
         self.assertEqual(calls, ["-Sy --noconfirm"])
-        self.assertIn("could not compare", out)
+        self.assertIn("no dependency-consistent update", out)
         self.assertIn("RESULT failed=1 upgraded=0", out)
 
     def test_held_series_that_blocks_the_upgrade_is_reported(self):
-        out, _ = self.run_updater_step("system_upgrade", AVAILABLE="0.57.0-1", SU_FAIL="1")
+        out, calls = self.run_updater_step("system_upgrade", AVAILABLE="0.57.0-1", PLAN_FAIL="1")
+        self.assertEqual(calls, ["-Sy --noconfirm"])
         self.assertIn("RESULT failed=1 upgraded=0", out)
-        self.assertIn("no partial library/driver upgrade", out)
+        self.assertIn("nothing will be forced", out)
 
     def test_failed_refresh_or_upgrade_is_reported_not_hidden(self):
         out, calls = self.run_updater_step("system_upgrade", AVAILABLE="0.56.2-4", SY_FAIL="1")

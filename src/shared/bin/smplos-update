@@ -355,6 +355,8 @@ BRAVE_TARGET_REQUESTED=0
 OPTIONAL_WARNINGS=()
 # Set only when this run's system upgrade completed; gates the bundle.
 SYSTEM_UPGRADED=0
+unset SMPLOS_UPDATE_PIN_IGNORE SMPLOS_UPDATE_PACMAN
+PIN_PACMAN=""
 
 # Prefer canonical scripts over historical user-local shadow copies.
 export PATH="/usr/local/sbin:/usr/local/bin:$PATH"
@@ -384,6 +386,8 @@ CRITICAL_PACKAGES=()
 CRITICAL_IGNORE=""
 APPS_MODE_IGNORE=""
 HYPRLAND_SERIES=""
+STACK_PIN_IGNORE=""
+PINS_READY=0
 NETWORK_OK=1
 CURRENT_STAGE=starting
 FINISHED=0
@@ -415,6 +419,7 @@ finish_update() {
         record_update_state interrupted || echo "ERROR: cannot record interrupted update" >&2
     fi
     stop_sudo_keepalive
+    [[ -z "$PIN_PACMAN" ]] || rm -f -- "$PIN_PACMAN"
     rm -f -- "$0"
     release_update_lock || return 1
     if [[ $FINISHED -eq 0 ]]; then
@@ -428,7 +433,15 @@ finish_update() {
 }
 
 # Noninteractive calls fail visibly instead of requesting another password.
-sudo() { command sudo -n "$@"; }
+sudo() {
+    [[ "${1:-}" != -k ]] || shift
+    if [[ "${1:-}" == pacman && -n "${SMPLOS_UPDATE_PACMAN:-}" ]]; then
+        shift
+        command sudo -n "$SMPLOS_UPDATE_PACMAN" "$@"
+    else
+        command sudo -n "$@"
+    fi
+}
 export -f sudo
 export SMPLOS_SUDO_READY=1
 
@@ -478,10 +491,12 @@ update_flatpak_scope() {
 }
 
 _yay_run() {
+    local pacman_args=()
+    [[ -z "${SMPLOS_UPDATE_PACMAN:-}" ]] || pacman_args=(--pacman "$SMPLOS_UPDATE_PACMAN")
     if command -v ionice &>/dev/null; then
-        nice -n 10 ionice -c 3 yay "$@"
+        nice -n 10 ionice -c 3 yay "$@" "${pacman_args[@]}"
     else
-        nice -n 10 yay "$@"
+        nice -n 10 yay "$@" "${pacman_args[@]}"
     fi
 }
 
@@ -543,25 +558,11 @@ mark_reboot_pending() {
     return 0
 }
 
-# Never upgrade libraries underneath a held compositor.
+# Let pacman resolve the remaining upgrade without replacing the protected stack.
 system_upgrade() {
-    local available before held=0
+    local before
     if ! sudo pacman -Sy --noconfirm; then
         echo "  WARNING: could not refresh package databases (check internet/mirrors)"
-        UPDATE_FAILED=1
-        return 0
-    fi
-    # pacman translates field labels; read them in the C locale.
-    available=$(LC_ALL=C pacman -Si hyprland 2>/dev/null | awk '/^Version/ {print $3; exit}')
-    if pacman -Q hyprland >/dev/null 2>&1 && [[ -z "$HYPRLAND_SERIES" || -z "$available" ]]; then
-        held=1
-        echo "  ERROR: could not compare Hyprland with the supported series."
-    elif pacman -Q hyprland >/dev/null 2>&1 && [[ "${available#*:}" != "$HYPRLAND_SERIES".* ]]; then
-        held=1
-        echo "  ERROR: Hyprland $available is outside the supported $HYPRLAND_SERIES series."
-    fi
-    if [[ $held -eq 1 ]]; then
-        echo "  Stopping the entire system upgrade; no partial library/driver upgrade will be attempted."
         UPDATE_FAILED=1
         return 0
     fi
@@ -580,15 +581,48 @@ system_upgrade() {
             return 0
         fi
     fi
+    if ! smplos-update-check --plan-pins --output "$LOG_FILE.pins.json"; then
+        echo "  ERROR: no dependency-consistent update could be planned; nothing will be forced."
+        UPDATE_FAILED=1
+        return 0
+    fi
+    if ! STACK_PIN_IGNORE=$(python3 - "$LOG_FILE.pins.json" <<'PY'
+import json, re, sys
+with open(sys.argv[1]) as stream:
+    report = json.load(stream)
+pins = report["pin_plan"]["pins"]
+if report["errors"] or not all(re.fullmatch(r"[a-zA-Z0-9@._+-]+", name) for name in pins):
+    sys.exit("ERROR: invalid protected-stack plan")
+print(",".join(sorted(pins)))
+PY
+    ); then
+        echo "  ERROR: cannot read the protected-stack plan."
+        UPDATE_FAILED=1
+        return 0
+    fi
+    PINS_READY=1
+    CRITICAL_IGNORE="$STACK_PIN_IGNORE"
     before=$(stack_versions)
     local conflict_args=()
     if pacman -Qq qemu-block-gluster >/dev/null 2>&1; then
         # Accept the official replacement conflict inside the full transaction.
         conflict_args=(--ask 4)
     fi
+    [[ -z "$STACK_PIN_IGNORE" ]] || conflict_args+=(--ignore "$STACK_PIN_IGNORE")
+    if [[ -n "$STACK_PIN_IGNORE" ]]; then
+        if ! PIN_PACMAN=$(mktemp "$STATE_DIR/pacman.XXXXXX") ||
+            ! printf '#!/bin/bash\nexport SMPLOS_UPDATE_PIN_IGNORE=%q\nexec %q "$@"\n' \
+                "$STACK_PIN_IGNORE" /usr/local/bin/smplos-pacman > "$PIN_PACMAN" ||
+            ! chmod 755 "$PIN_PACMAN"; then
+            echo "  ERROR: cannot prepare the protected-stack package guard."
+            UPDATE_FAILED=1
+            return 0
+        fi
+        export SMPLOS_UPDATE_PACMAN="$PIN_PACMAN"
+    fi
     if sudo pacman -Su --noconfirm "${conflict_args[@]}"; then
-        SYSTEM_UPGRADED=1
         refresh_bundle_snapshot
+        SYSTEM_UPGRADED=1
     else
         echo "  WARNING: system update failed"
         UPDATE_FAILED=1
@@ -661,6 +695,16 @@ critical_bundle_prompt_and_apply() {
     for optional in "${optional_packages[@]}"; do
         [[ "$(pacman -Qq "$optional" 2>/dev/null)" == "$optional" ]] && bundle_packages+=("$optional")
     done
+    local eligible=() spec
+    for spec in "${bundle_packages[@]}"; do
+        if [[ ",$STACK_PIN_IGNORE," == *",${spec%%=*},"* ]]; then
+            echo "  Retaining protected baseline package: ${spec%%=*}"
+        else
+            eligible+=("$spec")
+        fi
+    done
+    bundle_packages=("${eligible[@]}")
+    [[ ${#bundle_packages[@]} -gt 0 ]] || return 0
 
     echo "── Critical bundle ──"
     echo "  Applying $bundle_id: $bundle_desc"
@@ -916,8 +960,10 @@ elif [[ "$UPDATE_MODE" == full ]]; then
 fi
 
 update_stage core-verification
+pin_check_args=()
+[[ $PINS_READY -eq 0 ]] || pin_check_args=(--pins-report "$LOG_FILE.pins.json")
 if smplos-update-check --core-only --before "$LOG_FILE.before.json" \
-    --output "$LOG_FILE.core.json" --apps-report "$LOG_FILE.apps.json" --mode "$UPDATE_MODE"; then
+    --output "$LOG_FILE.core.json" --apps-report "$LOG_FILE.apps.json" --mode "$UPDATE_MODE" "${pin_check_args[@]}"; then
     if [[ $UPDATE_FAILED -eq 0 ]]; then
         CORE_VERIFIED=1
         update_stage core-verified
@@ -1021,7 +1067,7 @@ echo
 
 check_args=(--before "$LOG_FILE.before.json" --output "$LOG_FILE.after.json"
     --apps-report "$LOG_FILE.apps.json"
-    --mode "$UPDATE_MODE")
+    --mode "$UPDATE_MODE" "${pin_check_args[@]}")
 [[ $BRAVE_TARGET_REQUESTED -eq 0 ]] || check_args+=(--brave-report "$LOG_FILE.brave.json")
 for warning in "${OPTIONAL_WARNINGS[@]}"; do check_args+=(--optional-warning "$warning"); done
 [[ $UPDATE_FAILED -eq 0 ]] || check_args+=(--required-error "A required update operation failed; see $LOG_FILE")

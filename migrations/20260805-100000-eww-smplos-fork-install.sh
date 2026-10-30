@@ -98,7 +98,7 @@ if [[ $EUID -eq 0 ]]; then
     fi
     sudo userdel -r _ewwbuild 2>/dev/null || true
 else
-    if ! makepkg -s --noconfirm; then
+    if ! PACMAN="${SMPLOS_UPDATE_PACMAN:-${PACMAN:-pacman}}" makepkg -s --noconfirm; then
         echo "  ERROR: makepkg failed — will retry on next update"
         exit 1
     fi

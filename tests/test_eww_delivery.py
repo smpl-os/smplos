@@ -128,6 +128,7 @@ smplos_pkgbuild_install() {
         for name, body in {
             "makepkg": 'test -s ipc-repair.patch || exit 51\n'
                        'echo patch-present >> "$CALLS"\n'
+                       'echo "build-pacman $PACMAN" >> "$CALLS"\n'
                        'touch eww-smplos-test-x86_64.pkg.tar.zst\n',
             "fakeroot": "exit 0\n",
             "sudo": 'echo "install $*" >> "$CALLS"\n',
@@ -136,13 +137,16 @@ smplos_pkgbuild_install() {
             tool.write_text("#!/bin/sh\n" + body)
             tool.chmod(0o755)
         result = subprocess.run(
-            ["bash", "-c", 'source "$1"; smplos_pkgbuild_install "$2" --ask 4', "fixture",
+            ["bash", "-c", 'source "$1"; PACMAN=original-pacman; '
+             'smplos_pkgbuild_install "$2" --ask 4 && [[ "$PACMAN" == original-pacman ]]', "fixture",
              str(ROOT / "src/shared/lib/smplos-pkgbuild.sh"),
              str(self.repo / "src/shared/pkgbuilds/eww-smplos")],
-            env={**self.env, "PATH": f"{mock_bin}:{os.environ['PATH']}", "TMPDIR": str(scratch)},
+            env={**self.env, "PATH": f"{mock_bin}:{os.environ['PATH']}", "TMPDIR": str(scratch),
+                 "SMPLOS_UPDATE_PACMAN": str(mock_bin / "guarded-pacman")},
             capture_output=True, text=True, timeout=5)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("patch-present", self.calls.read_text())
+        self.assertIn(f"build-pacman {mock_bin / 'guarded-pacman'}", self.calls.read_text())
         self.assertIn("pacman -U --noconfirm --ask 4", self.calls.read_text())
         self.assertEqual(list(scratch.iterdir()), [])
 

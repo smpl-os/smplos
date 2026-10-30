@@ -907,7 +907,7 @@ class InstalledStateTests(unittest.TestCase):
         report = json.loads(output.read_text())
         self.assertEqual(report["package_status"]["glibc"]["status"], "pending")
         self.assertEqual(report["package_changes"]["glibc"], {"before": "2.41-1", "after": "2.42-1"})
-        self.assertIn("1 still pending", stdout.getvalue())
+        self.assertIn("1 unexpectedly pending", stdout.getvalue())
         self.assertIn("target=2.43-1; pending", stdout.getvalue())
         self.assertIn("Native release results unavailable", stderr.getvalue())
         self.assertIn("Verification report", stdout.getvalue())
@@ -1116,7 +1116,7 @@ case "$*" in
     -v|"rm -f /etc/sudoers.d/99-smplos-update-transient"|"rm -f /etc/pacman.d/hooks/90-rebuild-paru.hook") exit 0 ;;
     "python3 $HOME/.local/share/smplos/repo/src/shared/bin/smplos-update-handoff --repair-state --uid $UID")
         exit "${STATE_REPAIR_FAIL:-0}" ;;
-    pacman*|flatpak*) exec "$@" ;;
+    pacman*|flatpak*|"$HOME/.local/state/smplos/update/pacman."*) exec "$@" ;;
     *) echo "FORBIDDEN: sudo $*" >&2; exit 99 ;;
 esac
 """)
@@ -1149,11 +1149,17 @@ capture_brave=0
 [[ "$*" != *--capture-brave-target* ]] || capture_brave=1
 classify=0
 [[ "$*" != *--classify-aur* ]] || classify=1
+plan=0
+[[ "$*" != *--plan-pins* ]] || plan=1
 core=0
 [[ "$*" != *--core-only* ]] || core=1
 while [[ $# -gt 0 ]]; do
     if [[ "$1" == --output ]]; then
-        if [[ "$classify" == 1 ]]; then
+        if [[ "$plan" == 1 ]]; then
+            pins='{}'
+            [[ "${WITH_PINS:-0}" == 0 ]] || pins='{"hyprland":{"version":"0.56.2-1","reason":"approved stack"},"aquamarine":{"version":"0.15-1","reason":"ABI dependency"}}'
+            printf '{"errors":[],"pin_plan":{"pins":%s}}' "$pins" > "$2"
+        elif [[ "$classify" == 1 ]]; then
             required='[]'
             [[ "${CORE_AUR:-0}" == 0 ]] || required='["test-driver-dkms"]'
             printf '{"errors":[],"aur_policy":{"required":%s,"optional":["brave-bin"]}}' "$required" > "$2"
@@ -1165,6 +1171,7 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 [[ "$snapshot" != 1 ]] || exit 0
+[[ "$plan" != 1 ]] || exit "${PIN_PLAN_FAIL:-0}"
 [[ "$classify" != 1 ]] || exit "${AUR_POLICY_FAIL:-0}"
 [[ "$capture_brave" != 1 ]] || exit "${BRAVE_TARGET_FAIL:-0}"
 [[ "$core" != 1 ]] || exit "${VERIFY_FAIL:-0}"
@@ -1203,6 +1210,8 @@ fi
 """)
         self.mock("hyprctl", "exit 0\n")
         self.mock("sleep", "exit 0\n")
+        guard = (BIN / "smplos-pacman").read_text().replace("/usr/bin/pacman", str(self.bin / "pacman"))
+        self.mock("smplos-pacman", guard)
 
     def mock(self, name, text):
         path = self.bin / name
@@ -1398,6 +1407,63 @@ PY
         self.assertIn("check --before", calls)
         self.assertNotIn("Update complete!", result.stdout)
         self.assertIn("status=failed", (self.home / ".local/state/smplos/update/status").read_text())
+
+    def test_pins_reach_the_official_transaction_aur_and_both_verification_passes(self):
+        result = self.run_body(WITH_PINS="1", CORE_AUR="1")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        calls = self.calls.read_text().splitlines()
+        official = [line for line in calls if line.startswith("pacman -Su ") and "--print" not in line]
+        self.assertEqual(len(official), 1)
+        self.assertIn("--ignore aquamarine,hyprland", official[0])
+        self.assertIn("--hookdir ", official[0])
+        for line in calls:
+            if line.startswith("yay -Sua"):
+                self.assertIn("--ignore aquamarine,hyprland,", line)
+            if line.startswith(("check --core-only", "check --before")):
+                self.assertIn(f"--pins-report {self.log}.pins.json", line)
+        aur = [line for line in calls if line.startswith("yay -Sua")]
+        self.assertTrue(all("--pacman " in line for line in aur))
+        self.assertEqual(list((self.home / ".local/state/smplos/update").glob("pacman.*")), [])
+        self.assertIn("os-update --finalize", calls)
+
+    def test_failed_pin_resolution_stops_before_upgrade_and_optional_work(self):
+        result = self.run_body(PIN_PLAN_FAIL="1")
+        self.assertNotEqual(result.returncode, 0)
+        calls = self.calls.read_text()
+        self.assertNotIn("pacman -Su", calls)
+        self.assertNotIn("native-apps", calls)
+        self.assertNotIn("yay ", calls)
+        self.assertNotIn("--pins-report", calls)
+        self.assertIn("no dependency-consistent update", result.stdout)
+
+    def test_native_dependency_installs_and_makepkg_auth_keep_the_per_run_guard(self):
+        self.mock("smplos-update-apps", """echo "native-apps $*" >> "$CALLS"
+[[ -x "$SMPLOS_UPDATE_PACMAN" && -z "${PACMAN:-}" ]] || exit 99
+sudo pacman -S --noconfirm native-dependency || exit
+sudo -k "$SMPLOS_UPDATE_PACMAN" -S --noconfirm build-dependency
+""")
+        result = self.run_body(WITH_PINS="1")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        calls = self.calls.read_text()
+        for name in ("native-dependency", "build-dependency"):
+            transactions = [line for line in calls.splitlines()
+                            if line.startswith(f"pacman -S --noconfirm {name} ")]
+            self.assertEqual(len(transactions), 2)
+            self.assertIn("--print", transactions[0])
+            self.assertNotIn("--print", transactions[1])
+            self.assertTrue(all("--ignore aquamarine,hyprland --hookdir " in line for line in transactions))
+        self.assertNotIn("sudo -n -k", calls)
+
+    def test_guard_setup_failure_stops_before_packages_and_downstream_stages(self):
+        self.mock("mktemp", """[[ "$1" != *"/pacman."* ]] || exit 1
+exec /usr/bin/mktemp "$@"
+""")
+        result = self.run_body(WITH_PINS="1")
+        self.assertNotEqual(result.returncode, 0)
+        calls = self.calls.read_text()
+        for forbidden in ("pacman -Su", "native-apps", "yay ", "--deploy", "--finalize"):
+            self.assertNotIn(forbidden, calls)
+        self.assertIn("cannot prepare the protected-stack package guard", result.stdout)
 
     def test_deployment_native_and_audit_failures_never_publish_os_version_or_success(self):
         for failure in ("DEPLOY_FAIL", "APPS_FAIL", "VERIFY_FAIL", "FINALIZE_FAIL", "ORPHAN_CLEANUP_FAIL"):

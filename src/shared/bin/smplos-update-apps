@@ -89,7 +89,9 @@ if [[ "$GROUP" != optional && "${SMPLOS_SUDO_READY:-0}" != "1" && $CHECK_ONLY -e
     _SUDO_PID=$!
 fi
 if [[ $CHECK_ONLY -eq 0 ]]; then
-    sudo() { command sudo -n "$@"; }
+    if ! declare -F sudo >/dev/null; then
+        sudo() { command sudo -n "$@"; }
+    fi
     export -f sudo
 fi
 

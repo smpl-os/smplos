@@ -14,8 +14,10 @@ smplOS uses a **git-based update system**. The repo is cloned to
    saving passwords or installing passwordless sudo rules.
 3. Fast-forwards a clean `main` checkout, atomically syncs scripts/libraries,
    and re-executes the refreshed wrapper before package/config deployment.
-4. Inventories installed versions and performs the complete official package
-   upgrade, including the supported Hyprland series, libraries and drivers.
+4. Inventories installed versions and resolves the official package upgrade.
+   When Arch moves beyond the approved Hyprland series, retains the installed
+   desktop/graphics/capture stack and dependency-linked packages, updating the
+   remaining compatible packages in one transaction.
 5. Enrolls compatible Yay and updates required foreign drivers, public shared
    libraries and transitive dependencies of the core stack.
 6. Delivers core native releases (smpl-apps, st, Nemo, micro and control-surface), deploys essential
@@ -28,8 +30,9 @@ smplOS uses a **git-based update system**. The repo is cloned to
    with warnings**, not **Update incomplete**.
 
 The priority split applies to foreign/native apps and config migrations, not
-individual official packages: all official packages still upgrade together in
-one complete Arch transaction. `--mode apps` delivers the same core native
+individual official packages: all eligible official packages upgrade together in
+one dependency-checked Arch transaction. Deliberate desktop transition pins are
+recorded separately from unexpected pending updates. `--mode apps` delivers the same core native
 releases and scoped Flatpak updates, without claiming a base-system or
 desktop-config upgrade.
 
@@ -1209,20 +1212,52 @@ python3 -m unittest discover -s tests -p 'test_app_*.py' -v
 
 ## 7. Hyprland/EWW Update Strategy
 
-`smplos-update` upgrades the whole system, the Hyprland stack included, in
-**one** pacman transaction (`pacman -Sy`, then `pacman -Su`). Arch rebuilds
-Hyprland's libraries against new sonames in lockstep, so holding `hyprland`
-back while they move is a partial upgrade: it fails (`installing aquamarine
-(0.15.0-2) breaks dependency 'libaquamarine.so=12-64' required by hyprland`,
-which blocked every system update for a month), and installing the stack
-separately later can pair it with older system libraries than it was built
-against (current builds need `GLIBCXX_3.4.36`), so Hyprland cannot start.
+`smplos-update` refreshes official metadata, resolves the transaction with
+`pacman -Su --print`, then installs eligible packages in **one** pacman
+transaction. It never uses `--nodeps` or installs a new compositor separately
+from the libraries it needs.
 
 `HYPRLAND_SERIES` in `src/shared/update-policy/critical-bundle.conf` is the
 validated series (for example `0.56`): patch releases of it arrive with the
-normal upgrade. If Arch ships a newer series, or the available version cannot
-be established, **the entire official upgrade stops**. It does not hold the
-compositor and advance its libraries. Other custom `IgnorePkg`/`IgnoreGroup`
+normal upgrade. If Arch ships a different series, the updater retains the
+installed packages matching `critical-packages.txt`: compositor and Hypr
+libraries, portals/XWayland, kernels/headers, GPU drivers and 32-bit graphics,
+PipeWire/WirePlumber, OBS and FFmpeg. These are **transition pins on installed
+versions**, not a signed/independently qualified binary release channel.
+
+The planner asks pacman's real dependency solver to resolve the remaining
+upgrade. If a candidate library breaks a declared dependency of a protected
+package, that library is retained too. If an installed application's update
+requires an incompatible protected dependency, that application is deferred.
+This repeats until pacman can prepare a consistent transaction. Unknown solver
+errors, unresolvable conflicts, missing metadata and unsupported installed
+compositor versions remain blocking errors; packages are never forcibly
+removed or downgraded to make a plan pass. Moving an older compositor to a
+newly approved series is allowed when that series is available.
+
+Each run saves `<log>.pins.json` with the original package inventory, source and
+policy identity, solver attempts, retained versions/reasons and eligible targets.
+The same expanded pins reach the official and AUR upgrade stages; the baseline
+bundle must not explicitly reinstall pinned packages. A temporary per-run pacman
+wrapper also guards later native-package, Yay and makepkg dependency installations:
+it previews each mutation, applies the pins, and refuses operations that would
+change/remove protected packages. The wrapper is deleted when the run exits;
+each guarded transaction also uses a temporary abort-on-change package hook,
+covering removals that pacman's printed sync targets do not expose.
+No global pacman holds or persistent transaction hooks are installed.
+Core and final verification
+require every protected package to remain at its recorded version. Repository
+comparisons distinguish `pinned` from unexpectedly `pending`; a pin report from
+another baseline/policy or a failed plan is not accepted. An unrelated missed
+update, changed/removed protected package, broken library linkage, missing kernel
+module or stale native/config delivery still makes the update incomplete.
+
+Pins are reported explicitly, including the fact that their **security fixes can
+also be deferred**. Dependency consistency is not proof of game, NVENC, capture,
+audio or desktop runtime compatibility. Qualify those workflows before raising
+the approved series; retain ongoing security review/backports for held packages.
+This scoped, managed pin policy is not general support for arbitrary Arch
+partial upgrades. Other custom `IgnorePkg`/`IgnoreGroup`
 holds also block the upgrade until the user resolves them. A failed refresh
 or upgrade marks the update incomplete, and a changed
 compositor, kernel or graphics driver triggers the reboot reminder.
@@ -1245,7 +1280,8 @@ upgrade succeeded.
 2. If breaking: write a migration (section 5)
 3. Commit the migration + any updated default configs
 4. Raise `HYPRLAND_SERIES` once the new series works with smplOS
-   (`tests/test_critical_bundle.py` covers the update rules)
+   (`tests/test_critical_bundle.py` and `tests/test_update_pins.py` cover the
+   policy, dependency-aware planning and isolated real-pacman resolution)
 5. Push to `main`
 
 Users get: refreshed updater → complete base upgrade → required AUR dependencies

@@ -1,16 +1,38 @@
-# Hyprland packages smplOS holds back while Arch ships a Hyprland series that
-# smplOS has not validated yet (see HYPRLAND_SERIES in critical-bundle.conf).
-#
-# Normally nothing is held: smplos-update upgrades the whole system, the
-# Hyprland stack included, in ONE pacman transaction. Holding hyprland while
-# Arch rebuilds its libraries against new sonames is a partial upgrade: it
-# fails (`installing aquamarine (0.15.0-2) breaks dependency
-# 'libaquamarine.so=12-64' required by hyprland`) and blocked every system
-# update for a month in 2026. Only a new, unvalidated series is held, and if
-# other packages already require it the update reports that it waits for
-# smplOS to validate the series instead of installing a broken mix.
-#
-# Keep one package per line. No commas.
+# Installed desktop/graphics/capture packages retained when Arch moves beyond
+# HYPRLAND_SERIES in critical-bundle.conf. Shell-style package globs are allowed.
+# Pacman's dependency solver expands these roots only where needed to preserve
+# declared dependencies, including reverse dependencies. It never uses --nodeps.
+# Compatible updates outside this protected set continue in one transaction.
+# Advancing the approved series releases these transition pins.
 
-hyprland
-xdg-desktop-portal-hyprland
+hypr*
+aquamarine
+xdg-desktop-portal*
+xorg-xwayland
+linux
+linux-headers
+linux-lts
+linux-lts-headers
+linux-zen
+linux-zen-headers
+linux-hardened
+linux-hardened-headers
+linux-surface
+linux-surface-headers
+*nvidia*
+*mesa*
+*vulkan*
+amdvlk
+lib32-amdvlk
+xf86-video-*
+libdrm
+lib32-libdrm
+libva
+lib32-libva
+libvdpau
+intel-media-driver
+pipewire*
+libpipewire
+wireplumber
+obs-studio
+ffmpeg
