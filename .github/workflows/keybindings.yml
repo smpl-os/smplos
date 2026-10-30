@@ -6,9 +6,9 @@ name: Keybindings
 # such as a script a bind runs or a package list.
 #
 #   static  bindings_loader.lua parity and the static rules, with only Lua. Fast and exact.
-#   native  the same, plus `Hyprland --verify-config` on every bind, on the newest Arch Hyprland,
-#           which is what users get with their next update. It also runs weekly, so a Hyprland
-#           release that changes the Lua API under us fails here before it reaches anyone.
+#   native  the same, plus `Hyprland --verify-config` on every bind, on the approved shared
+#           update-policy/ci-baseline.json snapshot. Latest Arch is a separate warning workflow
+#           (keybindings-forward.yml), never the approved-release gate.
 #
 # The lab, which presses every chord in a headless Hyprland, needs a GPU render node and runs
 # locally: tools/keybind-check lab. DEVELOPMENT.md explains all of it. auto-release.yml calls this
@@ -57,25 +57,16 @@ jobs:
         run: |
           args=()
           if [ -n "$FILTER" ]; then args=(-k "$FILTER"); fi
-          PYTHONPATH=tests python3 -m unittest test_keybindings -v "${args[@]}"
+          PYTHONPATH=tests python3 -m unittest test_ci_baseline test_keybindings -v "${args[@]}"
 
   native:
     name: native (Hyprland --verify-config)
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    container: archlinux:latest
     env:
-      KEYBIND_CHECK_REQUIRE: lua,xkbcommon,hyprland
       PYTHONDONTWRITEBYTECODE: "1"
       FILTER: ${{ inputs.filter }}
     steps:
-      - name: Install Hyprland, Lua and Python
-        run: pacman -Syu --noconfirm --needed hyprland python lua libxkbcommon git
       - uses: actions/checkout@v5
-      - name: Show the tools under test
-        run: python3 --version && tools/keybind-check doctor
-      - name: Check every bind
-        run: |
-          args=()
-          if [ -n "$FILTER" ]; then args=(-k "$FILTER"); fi
-          PYTHONPATH=tests python3 -m unittest test_keybindings -v "${args[@]}"
+      - name: Check every bind on the approved coherent Arch baseline
+        run: python3 tools/ci_baseline.py --filter="$FILTER"
