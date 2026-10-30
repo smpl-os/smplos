@@ -56,6 +56,7 @@ class PolicyTests(unittest.TestCase):
 # QQ_<pkg> is what `pacman -Qq <pkg>` prints (a provider's name, for example).
 PACMAN = textwrap.dedent("""\
     #!/bin/bash
+    [[ "${1:-}" != --smplos-base-transaction ]] || shift
     echo "$*" >> "$CALLS"
     state="$(dirname "$CALLS")/upgraded"
     case "$1" in
@@ -88,9 +89,10 @@ class SystemUpgradeTests(unittest.TestCase):
         checker = bin_dir / "smplos-update-check"
         checker.write_text("""#!/usr/bin/env python3
 import json, os, sys
-if not os.environ.get("AVAILABLE") or os.environ.get("PLAN_FAIL") == "1":
+user_inventory = "--user-pins" in sys.argv
+if not user_inventory and (not os.environ.get("AVAILABLE") or os.environ.get("PLAN_FAIL") == "1"):
     sys.exit(1)
-pins = {} if os.environ["AVAILABLE"].startswith("0.56.") else {
+pins = {} if user_inventory or os.environ["AVAILABLE"].startswith("0.56.") else {
     "hyprland": {"version": "0.56.0-2", "reason": "approved stack"}}
 with open(sys.argv[sys.argv.index("--output") + 1], "w") as stream:
     json.dump({"errors": [], "pin_plan": {"pins": pins}}, stream)
@@ -120,7 +122,8 @@ with open(sys.argv[sys.argv.index("--output") + 1], "w") as stream:
             "DEFAULT_CRITICAL_PACKAGES=(hyprland)", "APPS_EXTRA_IGNORE=(pacman libalpm)",
             'REBOOT_MARKER="$HOME/.local/state/smplos/reboot-pending"',
             *(function(name) for name in ("csv_join", "load_critical_packages", "refresh_bundle_snapshot",
-                                          "stack_versions", "mark_reboot_pending", "system_upgrade",
+                                          "stack_versions", "mark_reboot_pending", "prepare_pin_guard",
+                                          "prepare_user_pin_guard", "system_upgrade",
                                           "critical_bundle_prompt_and_apply")),
             "load_critical_packages", body,
             'echo "RESULT failed=$UPDATE_FAILED upgraded=$SYSTEM_UPGRADED series=$HYPRLAND_SERIES"',

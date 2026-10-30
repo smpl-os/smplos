@@ -21,6 +21,10 @@ smplos_pkgbuild_version() {
 
 smplos_remove_retired_orphan() {
     local pkg="$1"
+    if [[ ",${SMPLOS_UPDATE_PIN_IGNORE:-}," == *",$pkg,"* ]]; then
+        echo "  $pkg is intentionally held - kept"
+        return 0
+    fi
     if ! pacman -Qq "$pkg" >/dev/null 2>&1; then
         echo "  $pkg not installed - nothing to do"
         return 0

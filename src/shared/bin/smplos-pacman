@@ -3,6 +3,11 @@
 set -euo pipefail
 
 die() { echo "ERROR: protected-stack transaction: $*" >&2; exit 1; }
+export SMPLOS_UPDATE_BASE_TRANSACTION=0
+if [[ "${1:-}" == --smplos-base-transaction ]]; then
+    export SMPLOS_UPDATE_BASE_TRANSACTION=1
+    shift
+fi
 pins="${SMPLOS_UPDATE_PIN_IGNORE:-}"
 [[ -z "$pins" || "$pins" =~ ^[a-zA-Z0-9@._+-]+(,[a-zA-Z0-9@._+-]+)*$ ]] ||
     die "invalid protected package list"
@@ -11,6 +16,7 @@ mutation=0
 query=0
 sync_or_upgrade=0
 for argument in "$@"; do
+    [[ "$argument" != -- ]] || break
     case "$argument" in
         -Q*|-D*|-T*|-F*|--query|--database|--deptest|--files) query=1 ;;
         --info|--list|--search|--print) query=1 ;;
@@ -24,34 +30,113 @@ for argument in "$@"; do
         -d|--nodeps|--assume-installed|--assume-installed=*) die "dependency checks cannot be disabled" ;;
     esac
 done
-if [[ -z "$pins" || $mutation -eq 0 || $query -eq 1 ]]; then
+if [[ $mutation -eq 0 || $query -eq 1 ]]; then
+    exec /usr/bin/pacman "$@"
+fi
+if [[ -z "$pins" && -z "${SMPLOS_UPDATE_PIN_PLAN:-}" ]]; then
     exec /usr/bin/pacman "$@"
 fi
 
 option_value=0
+terminated=0
+configuration=/etc/pacman.conf
+previous=""
 for argument in "$@"; do
-    if [[ $option_value -eq 1 ]]; then option_value=0; continue; fi
-    case "$argument" in
+    if [[ $option_value -eq 1 ]]; then
+        [[ "$previous" != --config ]] || configuration="$argument"
+        option_value=0
+        continue
+    fi
+    [[ "$argument" != -- || $terminated -eq 1 ]] || { terminated=1; continue; }
+    if [[ $terminated -eq 0 ]]; then case "$argument" in
         --ignore|--ignoregroup|--config|--root|--dbpath|--cachedir|--gpgdir|--hookdir|--logfile|--arch|--overwrite|--ask)
-            option_value=1; continue ;;
+            previous="$argument"; option_value=1; continue ;;
+        --config=*) configuration="${argument#*=}"; continue ;;
         -*) continue ;;
-    esac
+    esac; fi
     name="${argument%%[<>=]*}"
     [[ ",$pins," != *",$name,"* ]] || die "$name is deliberately retained; operation refused"
 done
-arguments=("$@")
-[[ $sync_or_upgrade -eq 0 ]] || arguments+=(--ignore "$pins")
-# Printed sync targets omit removals caused by replacements/conflicts.
 hook_dir=$(mktemp -d /tmp/smplos-pin-hook.XXXXXX) || die "cannot prepare transaction protection"
-trap 'rm -f -- "$hook_dir/00-smplos-protected-stack.hook"; rmdir -- "$hook_dir"' EXIT
-{
+trap 'rm -f -- "$hook_dir/"*; rmdir -- "$hook_dir"' EXIT
+guard_plan="${SMPLOS_UPDATE_PIN_PLAN:-}"
+if [[ -n "$guard_plan" ]]; then
+    checker=$(command -v smplos-update-check) || die "missing installed transaction checker"
+    cp -- "$checker" "$hook_dir/checker"
+fi
+python3 - "$guard_plan" "$hook_dir" "$configuration" "$@" <<'PY'
+import json, os, pathlib, subprocess, sys
+plan, directory, source = sys.argv[1:4]
+directory = pathlib.Path(directory)
+source = str(pathlib.Path(source).resolve())
+result = subprocess.run(["pacman-conf", "--config", source], capture_output=True, text=True, check=True)
+lines = result.stdout.splitlines()
+position = next((index for index, line in enumerate(lines) if line.startswith("[") and line != "[options]"), len(lines))
+extra = []
+arguments = iter(sys.argv[4:])
+for argument in arguments:
+    if argument == "--":
+        break
+    if argument == "--hookdir":
+        extra.append(f"HookDir = {next(arguments)}")
+    elif argument.startswith("--hookdir="):
+        extra.append(f"HookDir = {argument.split('=', 1)[1]}")
+    elif plan and (argument in ("--root", "--dbpath", "-r", "-b", "--sysroot") or
+                   argument.startswith(("--root=", "--dbpath=", "--sysroot=", "-r", "-b"))):
+        sys.exit("ERROR: guarded transactions cannot redirect the prepared package database/root")
+lines[position:position] = [*extra, f"HookDir = {directory}"]
+(directory / "pacman.conf").write_text("\n".join(lines) + "\n")
+if plan:
+    record = json.loads(pathlib.Path(plan).read_text())
+    if result.stdout != record["pin_plan"]["inputs"]["configuration"]:
+        sys.exit("ERROR: pacman configuration changed after update planning")
+    record["_guard_configuration"] = str(directory / "pacman.conf")
+    record["_guard_source_configuration"] = source
+    record["_guard_base"] = os.environ.get("SMPLOS_UPDATE_BASE_TRANSACTION") == "1"
+    (directory / "plan.json").write_text(json.dumps(record))
+PY
+extra=(--config "$hook_dir/pacman.conf")
+if [[ -n "$guard_plan" ]]; then
+    {
+        printf '[Trigger]\nOperation = Install\nOperation = Upgrade\nOperation = Remove\nType = Package\nTarget = *\n'
+        printf '\n[Action]\nDescription = Validating the locked smplOS package plan\nWhen = PreTransaction\n'
+        printf 'Exec = /usr/bin/python3 %s/checker --pin-guard %s/plan.json\nAbortOnFail\nNeedsTargets\n' "$hook_dir" "$hook_dir"
+    } > "$hook_dir/zzzz-smplos-plan.hook"
+else
+    [[ -n "$pins" ]] || exec /usr/bin/pacman "$@"
+fi
+if [[ -n "$pins" ]]; then {
     printf '[Trigger]\nOperation = Install\nOperation = Upgrade\nOperation = Remove\nType = Package\n'
     IFS=, read -r -a protected <<< "$pins"
     printf 'Target = %s\n' "${protected[@]}"
     printf '\n[Action]\nDescription = Refusing changes to the protected smplOS stack\nWhen = PreTransaction\nExec = /usr/bin/false\nAbortOnFail\n'
-} > "$hook_dir/00-smplos-protected-stack.hook"
-arguments+=(--hookdir "$hook_dir")
-if ! targets=$(LC_ALL=C /usr/bin/pacman "${arguments[@]}" --print --print-format '%n'); then
+} > "$hook_dir/00-smplos-protected-stack.hook"; fi
+[[ $sync_or_upgrade -eq 0 || -z "$pins" ]] || extra+=(--ignore "$pins")
+arguments=()
+preview=()
+inserted=0
+skip_hook=0
+for argument in "$@"; do
+    if [[ $skip_hook -eq 1 ]]; then skip_hook=0; continue; fi
+    if [[ $inserted -eq 0 ]]; then
+        case "$argument" in
+            --hookdir) skip_hook=1; continue ;;
+            --hookdir=*) continue ;;
+        esac
+    fi
+    if [[ "$argument" == -- && $inserted -eq 0 ]]; then
+        arguments+=("${extra[@]}")
+        preview+=("${extra[@]}" --print --print-format '%n')
+        inserted=1
+    fi
+    arguments+=("$argument")
+    preview+=("$argument")
+done
+if [[ $inserted -eq 0 ]]; then
+    arguments+=("${extra[@]}")
+    preview+=("${extra[@]}" --print --print-format '%n')
+fi
+if ! targets=$(LC_ALL=C /usr/bin/pacman "${preview[@]}"); then
     die "cannot resolve this operation without changing the protected stack"
 fi
 while IFS= read -r name; do
@@ -60,3 +145,6 @@ while IFS= read -r name; do
     [[ ",$pins," != *",$name,"* ]] || die "$name would change or be removed; operation refused"
 done <<< "$targets"
 /usr/bin/pacman "${arguments[@]}"
+if [[ -n "$guard_plan" && "${SMPLOS_UPDATE_BASE_TRANSACTION:-}" == 1 ]]; then
+    /usr/bin/python3 "$hook_dir/checker" --pin-commit "$hook_dir/plan.json"
+fi

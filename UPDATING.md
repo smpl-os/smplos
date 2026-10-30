@@ -1236,14 +1236,27 @@ removed or downgraded to make a plan pass. Moving an older compositor to a
 newly approved series is allowed when that series is available.
 
 Each run saves `<log>.pins.json` with the original package inventory, source and
-policy identity, solver attempts, retained versions/reasons and eligible targets.
+policy identity, solver attempts, retained versions/reasons, eligible targets and
+replacement removals. Effective `pacman-conf` output (including resolved
+Includes), configured sync database contents, `local/ALPM_DB_VERSION` and every
+installed package's `local/*/desc` are fingerprinted before and after planning.
 The same expanded pins reach the official and AUR upgrade stages; the baseline
 bundle must not explicitly reinstall pinned packages. A temporary per-run pacman
 wrapper also guards later native-package, Yay and makepkg dependency installations:
 it previews each mutation, applies the pins, and refuses operations that would
 change/remove protected packages. The wrapper is deleted when the run exits;
 each guarded transaction also uses a temporary abort-on-change package hook,
-covering removals that pacman's printed sync targets do not expose.
+covering removals that pacman's printed sync targets do not expose. A private
+canonical configuration preserves signature policy and existing hook directories,
+then adds the mandatory hook directory last so an existing mask cannot disable
+it. The base transaction's native `PreTransaction`/`AbortOnFail` hook compares the
+input fingerprint and actual install/upgrade/removal target set while pacman holds
+its authoritative database lock. Changed metadata (including a changed version
+under the same package name) fails closed before package writes. Pacman itself
+still resolves, downloads, verifies signatures and commits the transaction; there
+is no copied sync database or replacement transaction engine. Installed target
+versions and protected versions are checked again before enabling app/config
+delivery. Options are inserted before an original `--` terminator.
 No global pacman holds or persistent transaction hooks are installed.
 Core and final verification
 require every protected package to remain at its recorded version. Repository
@@ -1256,9 +1269,20 @@ Pins are reported explicitly, including the fact that their **security fixes can
 also be deferred**. Dependency consistency is not proof of game, NVENC, capture,
 audio or desktop runtime compatibility. Qualify those workflows before raising
 the approved series; retain ongoing security review/backports for held packages.
-This scoped, managed pin policy is not general support for arbitrary Arch
-partial upgrades. Other custom `IgnorePkg`/`IgnoreGroup`
-holds also block the upgrade until the user resolves them. A failed refresh
+Existing `IgnorePkg` patterns and `IgnoreGroup` holds are preserved, expanded
+against installed packages and repository group membership, and fed into the
+same dependency-consistent planner. They are never stripped or silently
+overridden. Held native **packages** (`nemo-smpl`, `control-surface`) and Brave
+are reported as retained, not as upgraded/current against a newer release.
+Standalone `/usr/local/bin` release artifacts are not pacman packages:
+`IgnorePkg = smpl-apps` does not pin the standalone native bundle.
+This is not general support for arbitrary Arch partial upgrades or a promise
+of runtime/ABI compatibility beyond declared package dependencies.
+Legacy dropped-package cleanup that would temporarily disable dependency
+checks is deferred rather than performed ahead of a constrained transaction;
+if the remaining native solver cannot prepare a consistent update, it stops
+with the actual dependency error instead of changing installed state unsafely.
+A failed refresh
 or upgrade marks the update incomplete, and a changed
 compositor, kernel or graphics driver triggers the reboot reminder.
 

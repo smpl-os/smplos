@@ -559,6 +559,32 @@ mark_reboot_pending() {
 }
 
 # Let pacman resolve the remaining upgrade without replacing the protected stack.
+prepare_pin_guard() {
+    local plan="$1"
+    STACK_PIN_IGNORE=$(python3 - "$plan" <<'PY'
+import json, re, sys
+with open(sys.argv[1]) as stream:
+    report = json.load(stream)
+pins = report["pin_plan"]["pins"]
+if report["errors"] or not all(re.fullmatch(r"[a-zA-Z0-9@._+-]+", name) for name in pins):
+    sys.exit("ERROR: invalid protected-stack plan")
+print(",".join(sorted(pins)))
+PY
+    ) || return 1
+    [[ -z "${PIN_PACMAN:-}" ]] || rm -f -- "$PIN_PACMAN"
+    PIN_PACMAN=$(mktemp "$STATE_DIR/pacman.XXXXXX") || return 1
+    printf '#!/bin/bash\nexport SMPLOS_UPDATE_PIN_IGNORE=%q\nexport SMPLOS_UPDATE_PIN_PLAN=%q\nexec %q "$@"\n' \
+        "$STACK_PIN_IGNORE" "$plan" /usr/local/bin/smplos-pacman > "$PIN_PACMAN" &&
+        chmod 755 "$PIN_PACMAN" || return 1
+    export SMPLOS_UPDATE_PIN_IGNORE="$STACK_PIN_IGNORE"
+    export SMPLOS_UPDATE_PACMAN="$PIN_PACMAN"
+}
+
+prepare_user_pin_guard() {
+    smplos-update-check --user-pins --output "$LOG_FILE.user-pins.json" &&
+        prepare_pin_guard "$LOG_FILE.user-pins.json"
+}
+
 system_upgrade() {
     local before
     if ! sudo pacman -Sy --noconfirm; then
@@ -566,10 +592,15 @@ system_upgrade() {
         UPDATE_FAILED=1
         return 0
     fi
+    if ! prepare_user_pin_guard; then
+        echo "  ERROR: cannot protect refreshed package/group holds before package retirement."
+        UPDATE_FAILED=1
+        return 0
+    fi
     # A retired helper's pinned libalpm dependency must not block the base upgrade.
     local package retired=()
     for package in paru paru-bin paru-git; do
-        if pacman -Qq "$package" >/dev/null 2>&1; then
+        if [[ ",$STACK_PIN_IGNORE," != *",$package,"* ]] && pacman -Qq "$package" >/dev/null 2>&1; then
             retired+=("$package")
         fi
     done
@@ -586,16 +617,7 @@ system_upgrade() {
         UPDATE_FAILED=1
         return 0
     fi
-    if ! STACK_PIN_IGNORE=$(python3 - "$LOG_FILE.pins.json" <<'PY'
-import json, re, sys
-with open(sys.argv[1]) as stream:
-    report = json.load(stream)
-pins = report["pin_plan"]["pins"]
-if report["errors"] or not all(re.fullmatch(r"[a-zA-Z0-9@._+-]+", name) for name in pins):
-    sys.exit("ERROR: invalid protected-stack plan")
-print(",".join(sorted(pins)))
-PY
-    ); then
+    if ! prepare_pin_guard "$LOG_FILE.pins.json"; then
         echo "  ERROR: cannot read the protected-stack plan."
         UPDATE_FAILED=1
         return 0
@@ -609,18 +631,7 @@ PY
         conflict_args=(--ask 4)
     fi
     [[ -z "$STACK_PIN_IGNORE" ]] || conflict_args+=(--ignore "$STACK_PIN_IGNORE")
-    if [[ -n "$STACK_PIN_IGNORE" ]]; then
-        if ! PIN_PACMAN=$(mktemp "$STATE_DIR/pacman.XXXXXX") ||
-            ! printf '#!/bin/bash\nexport SMPLOS_UPDATE_PIN_IGNORE=%q\nexec %q "$@"\n' \
-                "$STACK_PIN_IGNORE" /usr/local/bin/smplos-pacman > "$PIN_PACMAN" ||
-            ! chmod 755 "$PIN_PACMAN"; then
-            echo "  ERROR: cannot prepare the protected-stack package guard."
-            UPDATE_FAILED=1
-            return 0
-        fi
-        export SMPLOS_UPDATE_PACMAN="$PIN_PACMAN"
-    fi
-    if sudo pacman -Su --noconfirm "${conflict_args[@]}"; then
+    if sudo pacman --smplos-base-transaction -Su --noconfirm "${conflict_args[@]}"; then
         refresh_bundle_snapshot
         SYSTEM_UPGRADED=1
     else
@@ -765,28 +776,25 @@ detect_network() {
 prepare_pacman_transaction() {
     [[ "$NETWORK_OK" -eq 1 ]] || return 0
 
-    local migration
+    if ! prepare_user_pin_guard; then
+        echo "  ERROR: cannot protect configured package/group holds before package cleanup."
+        return 1
+    fi
+    local migration status
     for migration in 20260805-100050-clear-ignorepkg-hyprland-eww.sh \
                      20260805-100060-remove-dropped-lib32-gstreamer.sh; do
-        if ! bash "$SMPLOS_PATH/repo/migrations/$migration"; then
+        bash "$SMPLOS_PATH/repo/migrations/$migration"
+        status=$?
+        if [[ $status -eq 75 ]]; then
+            echo "  Package cleanup deferred; the native solver must retain dependency consistency."
+        elif [[ $status -ne 0 ]]; then
             echo "  ERROR: package preflight failed: $migration"
             UPDATE_FAILED=1
             return 1
         fi
     done
 
-    local directive values
-    for directive in IgnorePkg IgnoreGroup; do
-        values=$(pacman-conf "$directive") || {
-            echo "ERROR: cannot inspect pacman $directive policy"
-            return 1
-        }
-        if [[ -n "$values" ]]; then
-            echo "ERROR: custom $directive holds prevent a complete upgrade: $values"
-            echo "Resolve those holds before Update OS; they were not changed."
-            return 1
-        fi
-    done
+    return 0
 }
 
 # Log all output to file for debugging
@@ -989,9 +997,13 @@ update_stage aur
 if [[ "$UPDATE_MODE" == full && $CORE_VERIFIED -eq 1 && $AUR_POLICY_READY -eq 1 ]]; then
     echo "── Optional AUR apps (background priority) ──"
     if [[ "$NETWORK_OK" -eq 1 ]] && check_update_power; then
-        BRAVE_TARGET_REQUESTED=1
-        run_optional "Brave target capture" smplos-update-check \
-            --capture-brave-target --output "$LOG_FILE.brave.json"
+        if [[ ",$STACK_PIN_IGNORE," == *,brave-bin,* ]]; then
+            echo "  Brave is deliberately held, not upgraded; security updates may be deferred."
+        else
+            BRAVE_TARGET_REQUESTED=1
+            run_optional "Brave target capture" smplos-update-check \
+                --capture-brave-target --output "$LOG_FILE.brave.json"
+        fi
         if [[ -n "$OPTIONAL_AUR_PACKAGES" ]]; then
             run_optional "Optional AUR apps" _yay_run -Sua --noconfirm --sudoloop=false \
                 --sudo sudo --sudoflags=-n \

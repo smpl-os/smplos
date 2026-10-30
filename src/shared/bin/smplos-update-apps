@@ -191,7 +191,7 @@ if component:
             target = json.loads(metadata.read_text()).get("tag_name")
         except (ValueError, AttributeError):
             print(f"{component}: invalid release metadata", file=sys.stderr)
-    if not target and status != "failed":
+    if not target and status not in ("failed", "pinned"):
         status = "failed"
     report["components"][component] = {
         "before": before or None, "after": after or None, "target": target, "status": status,
@@ -669,6 +669,12 @@ record_app_result "" "" "" "" || { warn "Cannot initialize app update report"; e
 for component in smpl-apps st-smpl nemo-smpl micro-smpl control-surface; do
     [[ "${GROUP:-all}" != optional ]] || continue
     before=$(installed_component_version "$component")
+    if [[ "$component" == nemo-smpl || "$component" == control-surface ]] &&
+        [[ ",${SMPLOS_UPDATE_PIN_IGNORE:-}," == *",$component,"* ]]; then
+        log "$component: deliberately held at $before, not upgraded; security updates may be deferred."
+        record_app_result "$component" "$before" "$before" pinned || exit 1
+        continue
+    fi
     status=current
     function_name="update_${component//-/_}"
     # A separate shell retains errexit inside each component; independent apps

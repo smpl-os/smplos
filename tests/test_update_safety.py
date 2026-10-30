@@ -206,6 +206,7 @@ class InstalledStateTests(unittest.TestCase):
         elif args == ("pacman", "-Qi"):
             out = "".join(
                 f"Name : {name}\nProvides : {' '.join(self.provides.get(name, ['None']))}\n"
+                "Groups : None\n"
                 f"Depends On : {' '.join(self.dependencies.get(name, ['None']))}\n"
                 for name in self.packages
             )
@@ -817,6 +818,20 @@ class InstalledStateTests(unittest.TestCase):
         audit.release_results(path)
         self.assertIn("native release update was not completed", "\n".join(audit.report["errors"]))
 
+    def test_native_hold_requires_this_runs_unchanged_package_record(self):
+        self.packages["nemo-smpl"] = "1.0-1"
+        audit = CHECK.Audit(self.home, self.repo, self.root, self.runner)
+        audit.snapshot()
+        audit.report["pin_plan"] = {"pins": {"nemo-smpl": {"version": "1.0-1", "reason": "user IgnorePkg"}}}
+        result = {"status": "pinned", "before": "1.0-1", "after": "1.0-1", "target": None}
+        audit.release_component_result("nemo-smpl", result)
+        self.assertEqual(audit.report["errors"], [])
+        audit.release_component_result("smpl-apps", result)
+        self.assertIn("could not be verified", "\n".join(audit.report["errors"]))
+        audit.report["errors"] = []
+        audit.release_component_result("nemo-smpl", {**result, "after": "2.0-1"})
+        self.assertTrue(audit.report["errors"])
+
     def test_legacy_optional_reports_are_ignored_without_weakening_core_verification(self):
         self.packages.update({"nemo-smpl": "1.0-1", "grafium-bin": "1.0-1", "control-surface": "1.0-1"})
         for name in ("control-surfaced", "mouse-remapperd"):
@@ -1151,13 +1166,16 @@ classify=0
 [[ "$*" != *--classify-aur* ]] || classify=1
 plan=0
 [[ "$*" != *--plan-pins* ]] || plan=1
+[[ "$*" != *--user-pins* ]] || plan=2
 core=0
 [[ "$*" != *--core-only* ]] || core=1
 while [[ $# -gt 0 ]]; do
     if [[ "$1" == --output ]]; then
-        if [[ "$plan" == 1 ]]; then
+        if [[ "$plan" != 0 ]]; then
             pins='{}'
             [[ "${WITH_PINS:-0}" == 0 ]] || pins='{"hyprland":{"version":"0.56.2-1","reason":"approved stack"},"aquamarine":{"version":"0.15-1","reason":"ABI dependency"}}'
+            [[ "${CUSTOM_HOLD:-0}" == 0 ]] || pins='{"glibc":{"version":"2.42-1","reason":"user IgnorePkg"}}'
+            [[ "${HOLD_BRAVE:-0}" == 0 ]] || pins='{"brave-bin":{"version":"1-1","reason":"user IgnorePkg"}}'
             printf '{"errors":[],"pin_plan":{"pins":%s}}' "$pins" > "$2"
         elif [[ "$classify" == 1 ]]; then
             required='[]'
@@ -1171,6 +1189,7 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 [[ "$snapshot" != 1 ]] || exit 0
+[[ "$plan" != 2 ]] || exit 0
 [[ "$plan" != 1 ]] || exit "${PIN_PLAN_FAIL:-0}"
 [[ "$classify" != 1 ]] || exit "${AUR_POLICY_FAIL:-0}"
 [[ "$capture_brave" != 1 ]] || exit "${BRAVE_TARGET_FAIL:-0}"
@@ -1210,7 +1229,13 @@ fi
 """)
         self.mock("hyprctl", "exit 0\n")
         self.mock("sleep", "exit 0\n")
-        guard = (BIN / "smplos-pacman").read_text().replace("/usr/bin/pacman", str(self.bin / "pacman"))
+        guard = """echo "guard pins=$SMPLOS_UPDATE_PIN_IGNORE plan=$SMPLOS_UPDATE_PIN_PLAN $*" >> "$CALLS"
+if [[ "${1:-}" == --smplos-base-transaction ]]; then
+    [[ "${LOCKED_GUARD_FAIL:-0}" == 0 ]] || exit 1
+    shift
+fi
+exec pacman "$@"
+"""
         self.mock("smplos-pacman", guard)
 
     def mock(self, name, text):
@@ -1415,7 +1440,8 @@ PY
         official = [line for line in calls if line.startswith("pacman -Su ") and "--print" not in line]
         self.assertEqual(len(official), 1)
         self.assertIn("--ignore aquamarine,hyprland", official[0])
-        self.assertIn("--hookdir ", official[0])
+        self.assertTrue(any(line.startswith("guard pins=aquamarine,hyprland ") and
+                            "--smplos-base-transaction -Su" in line for line in calls))
         for line in calls:
             if line.startswith("yay -Sua"):
                 self.assertIn("--ignore aquamarine,hyprland,", line)
@@ -1447,11 +1473,10 @@ sudo -k "$SMPLOS_UPDATE_PACMAN" -S --noconfirm build-dependency
         calls = self.calls.read_text()
         for name in ("native-dependency", "build-dependency"):
             transactions = [line for line in calls.splitlines()
-                            if line.startswith(f"pacman -S --noconfirm {name} ")]
-            self.assertEqual(len(transactions), 2)
-            self.assertIn("--print", transactions[0])
-            self.assertNotIn("--print", transactions[1])
-            self.assertTrue(all("--ignore aquamarine,hyprland --hookdir " in line for line in transactions))
+                            if line == f"pacman -S --noconfirm {name}"]
+            self.assertEqual(len(transactions), 1)
+            self.assertTrue(any(line.startswith("guard pins=aquamarine,hyprland ") and
+                                line.endswith(f"-S --noconfirm {name}") for line in calls.splitlines()))
         self.assertNotIn("sudo -n -k", calls)
 
     def test_guard_setup_failure_stops_before_packages_and_downstream_stages(self):
@@ -1463,7 +1488,7 @@ exec /usr/bin/mktemp "$@"
         calls = self.calls.read_text()
         for forbidden in ("pacman -Su", "native-apps", "yay ", "--deploy", "--finalize"):
             self.assertNotIn(forbidden, calls)
-        self.assertIn("cannot prepare the protected-stack package guard", result.stdout)
+        self.assertIn("cannot protect configured package/group holds", result.stdout)
 
     def test_deployment_native_and_audit_failures_never_publish_os_version_or_success(self):
         for failure in ("DEPLOY_FAIL", "APPS_FAIL", "VERIFY_FAIL", "FINALIZE_FAIL", "ORPHAN_CLEANUP_FAIL"):
@@ -1551,12 +1576,24 @@ exec /usr/bin/mktemp "$@"
         self.assertNotIn("--finalize", calls)
         self.assertIn("check --before", calls)
 
-    def test_custom_package_holds_stop_before_any_package_transaction(self):
+    def test_custom_package_holds_allow_the_constrained_upgrade_and_delivery(self):
         result = self.run_body(CUSTOM_HOLD="1")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("pacman -Su --noconfirm --ignore glibc", self.calls.read_text())
+        self.assertIn("native-apps", self.calls.read_text())
+
+    def test_locked_guard_failure_never_enables_downstream_delivery(self):
+        result = self.run_body(LOCKED_GUARD_FAIL="1")
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("custom IgnorePkg", result.stdout)
-        self.assertNotIn("pacman -S", self.calls.read_text())
         self.assertNotIn("native-apps", self.calls.read_text())
+        self.assertNotIn("--deploy", self.calls.read_text())
+        self.assertNotIn("--finalize", self.calls.read_text())
+
+    def test_held_brave_does_not_claim_a_new_release_target_was_delivered(self):
+        result = self.run_body(HOLD_BRAVE="1")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertNotIn("--capture-brave-target", self.calls.read_text())
+        self.assertIn("Brave is deliberately held, not upgraded", result.stdout)
 
     def test_unexpected_exit_persists_interrupted_stage(self):
         self.mock("smplos-update-check", 'kill -TERM "$PPID"\n')

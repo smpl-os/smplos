@@ -1151,6 +1151,33 @@ rebuild-app-cache() { echo refreshed; }
         self.assertEqual(report["components"]["micro-smpl"]["status"], "current")
         self.assertIn("refreshed", result.stdout)
 
+    def test_native_package_holds_skip_release_install_without_pinning_standalone_apps(self):
+        path = ROOT / "src/shared/bin/smplos-update-apps"
+        main = path.read_text().split("# ── Main", 1)[1].split("\n", 1)[1]
+        script = function(path, "record_app_result") + """
+STATE_DIR="$HOME/state"; SMPLOS_PATH="$HOME/data"; CHECK_ONLY=0; QUIET=1; SMPLOS_APP_BINS=()
+REPORT_FILE="$HOME/apps.json"; REPORT_WORK="$HOME/results"; n_updated=0
+export SMPLOS_UPDATE_PIN_IGNORE="nemo-smpl,control-surface,smpl-apps"
+mkdir -p "$REPORT_WORK"
+installed_component_version() { echo 1.0-1; }
+warn() { echo "$*" >&2; }; log() { :; }
+release_target() { echo '{"tag_name":"v2.0"}' > "$SMPLOS_APP_RESULT_FILE"; }
+update_smpl_apps() { release_target; echo standalone-delivered; }
+update_st_smpl() { release_target; }
+update_micro_smpl() { release_target; }
+update_nemo_smpl() { echo forbidden-held-package; return 99; }
+update_control_surface() { echo forbidden-held-package; return 99; }
+rebuild-app-cache() { :; }
+""" + main
+        result = self.shell(script)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertNotIn("forbidden-held-package", result.stdout)
+        self.assertIn("standalone-delivered", result.stdout)
+        components = json.loads((self.home / "apps.json").read_text())["components"]
+        for component in ("nemo-smpl", "control-surface"):
+            self.assertEqual(components[component]["status"], "pinned")
+            self.assertIsNone(components[component]["target"])
+
     def test_native_groups_do_not_run_unrelated_components_or_overwrite_their_reports(self):
         path = ROOT / "src/shared/bin/smplos-update-apps"
         self.assertNotIn("grafium", path.read_text().lower())

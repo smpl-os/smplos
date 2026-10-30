@@ -72,6 +72,84 @@ def run(*args):
         raise RuntimeError(f"{' '.join(map(str, args))}: {error}") from error
 
 
+def package_inputs(command=run, configuration="/etc/pacman.conf"):
+    configuration_result = command("pacman-conf", "--config", configuration)
+    database = command("pacman-conf", "--config", configuration, "DBPath")
+    repositories = command("pacman-conf", "--config", configuration, "--repo-list")
+    for result in (configuration_result, database, repositories):
+        if result is None or result.returncode:
+            raise RuntimeError("Cannot read the complete pacman configuration")
+    directory = Path(database.stdout.strip())
+    if not directory.is_absolute() or "[options]" not in configuration_result.stdout:
+        raise ValueError("Invalid effective pacman configuration/database path")
+    checksum = hashlib.sha256(configuration_result.stdout.encode())
+    paths = [directory / "local/ALPM_DB_VERSION", *sorted((directory / "local").glob("*/desc")),
+             *(directory / "sync" / f"{name}.db" for name in repositories.stdout.splitlines())]
+    for path in paths:
+        checksum.update(str(path).encode() + b"\0")
+        checksum.update(path.read_bytes())
+    return {"configuration": configuration_result.stdout, "database": str(directory),
+            "fingerprint": checksum.hexdigest()}
+
+
+def verify_pin_transaction(path, targets=None):
+    record = json.loads(path.read_text())
+    plan = record["pin_plan"]
+    configuration = record["_guard_configuration"]
+    if targets is not None:
+        if not (Path(plan["inputs"]["database"]) / "db.lck").exists():
+            raise RuntimeError("Protected-stack hook requires pacman's active database lock")
+        current = run("pacman-conf", "--config", record["_guard_source_configuration"])
+        if current.returncode or current.stdout != plan["inputs"]["configuration"]:
+            raise RuntimeError("Pacman configuration changed after planning; retry Update OS")
+        if record.get("_guard_base"):
+            if package_inputs(configuration=record["_guard_source_configuration"])["fingerprint"] != plan["inputs"]["fingerprint"]:
+                raise RuntimeError("Package databases/configuration changed after planning; retry Update OS")
+            if targets != set(plan["targets"]) | set(plan["removals"]):
+                raise RuntimeError("Actual package targets differ from the prepared update plan")
+    result = run("pacman", "--config", configuration, "-Q")
+    if result.returncode and (result.returncode != 1 or result.stdout.strip() or result.stderr.strip()):
+        raise RuntimeError("Cannot verify installed package versions")
+    installed = dict(line.split() for line in result.stdout.splitlines())
+    for name, entry in plan["pins"].items():
+        if installed.get(name) != entry["version"] or targets is not None and name in targets:
+            raise RuntimeError(f"Protected package would change or was already changed: {name}")
+    if targets is None:
+        if not plan["targets"] and not plan["removals"] and (
+                package_inputs(configuration=record["_guard_source_configuration"])["fingerprint"] !=
+                plan["inputs"]["fingerprint"]):
+            raise RuntimeError("Package inputs changed during a no-op update; retry Update OS")
+        for name, version in plan["targets"].items():
+            if installed.get(name) != version:
+                raise RuntimeError(f"Prepared package target was not delivered: {name} {version}")
+        for name in plan["removals"]:
+            if name in installed and name not in plan["targets"]:
+                raise RuntimeError(f"Prepared package removal was not completed: {name}")
+
+
+def installed_closure(records, roots):
+    providers = {}
+    for name, record in records.items():
+        for value in (name, *record["Provides"]):
+            if value != "None":
+                providers.setdefault(re.split(r"[<>=]", value, maxsplit=1)[0], set()).add(name)
+    closure, pending = set(), list(roots)
+    while pending:
+        name = pending.pop()
+        if name in closure:
+            continue
+        closure.add(name)
+        for value in records[name]["Depends On"]:
+            if value == "None":
+                continue
+            dependency = re.split(r"[<>=]", value, maxsplit=1)[0]
+            candidates = {dependency} if dependency in records else providers.get(dependency, set())
+            if not candidates:
+                raise ValueError(f"Cannot resolve installed dependency {dependency} required by {name}")
+            pending.extend(candidates - closure)
+    return closure
+
+
 def save_report(path, report):
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, name = tempfile.mkstemp(prefix=".update-report-", dir=path.parent)
@@ -433,6 +511,14 @@ class Audit:
             self.release_component_result(component, result)
 
     def release_component_result(self, component, result):
+        if isinstance(result, dict) and result.get("status") == "pinned":
+            pin = self.report.get("pin_plan", {}).get("pins", {}).get(component)
+            installed = self.report["packages"].get(component)
+            if (component not in {"nemo-smpl", "control-surface"} or not pin or
+                    result.get("before") != pin["version"] or result.get("after") != installed or
+                    installed != pin["version"]):
+                self.error(f"{component}: held native package could not be verified against this run's pins")
+            return
         if not isinstance(result, dict) or result.get("status") not in ("current", "updated"):
             self.error(f"{component}: native release update was not completed; see native_updates/transcript")
             return
@@ -560,7 +646,7 @@ class Audit:
                         self.error(f"Duplicate installed package metadata: {value}")
                         return
                     record = records[value] = {}
-                field = key if key in ("Provides", "Depends On") else None
+                field = key if key in ("Provides", "Depends On", "Groups") else None
                 if record is not None and field:
                     record.setdefault(field, []).extend(value.split())
             elif line[:1].isspace() and record is not None and field:
@@ -576,11 +662,112 @@ class Audit:
         return {name: digest(directory / name)
                 for name in ("critical-packages.txt", "critical-bundle.conf")}
 
+    def configured_pins(self, records):
+        patterns, groups = [], []
+        for directive, output in (("IgnorePkg", patterns), ("IgnoreGroup", groups)):
+            result = self.command("pacman-conf", directive)
+            if result is None or result.returncode:
+                raise RuntimeError(f"Cannot inspect pacman {directive}")
+            output.extend(result.stdout.split())
+        self.ignored_patterns = patterns
+        self.ignored_candidates = set()
+        if groups and any("Groups" not in record for record in records.values()):
+            raise ValueError("Incomplete installed group metadata")
+        pins = {}
+        for name, version in self.report["packages"].items():
+            if any(fnmatch.fnmatchcase(name, pattern) for pattern in patterns):
+                pins[name] = {"version": version, "reason": "user IgnorePkg"}
+            elif any(fnmatch.fnmatchcase(group, pattern) for pattern in groups
+                     for group in records[name].get("Groups", []) if group != "None"):
+                pins[name] = {"version": version, "reason": "user IgnoreGroup"}
+        if groups:
+            result = self.command("pacman", "-Sgg")
+            if result is None or result.returncode not in (0, 1) or result.stderr.strip():
+                raise RuntimeError("Cannot inspect repository package groups")
+            for line in result.stdout.splitlines():
+                group, name = line.split()
+                if any(fnmatch.fnmatchcase(group, pattern) for pattern in groups):
+                    self.ignored_candidates.add(name)
+                    if name in self.report["packages"]:
+                        pins[name] = {"version": self.report["packages"][name], "reason": "user IgnoreGroup"}
+        required = installed_closure(records, pins)
+        for name in (required & {"paru", "paru-bin", "paru-git"}) - pins.keys():
+            pins[name] = {"version": self.report["packages"][name],
+                          "reason": "required by a configured hold; retirement deferred"}
+        return pins
+
+    def user_pin_plan(self):
+        inputs = package_inputs(self.command)
+        records = self.dependency_metadata()
+        if records is not None:
+            self.report["pin_plan"] = {
+                "pins": self.configured_pins(records), "inputs": inputs,
+                "targets": {}, "removals": {},
+            }
+            if package_inputs(self.command) != inputs:
+                self.error("Package databases/configuration changed while inventorying user holds; retry Update OS")
+
+    def ignored_candidate(self, name):
+        return name in self.ignored_candidates or any(fnmatch.fnmatchcase(name, pattern) for pattern in self.ignored_patterns)
+
+    def planned_removals(self, targets):
+        self.planned_metadata = {}
+        if not targets:
+            return {}
+        result = self.command("pacman", "-Si", *sorted(targets))
+        if result is None or result.returncode:
+            raise RuntimeError("Cannot inspect planned replacement metadata")
+        records, record, field = {}, None, None
+        for line in result.stdout.splitlines():
+            match = re.match(r"^([A-Za-z][A-Za-z ]*?)\s*:\s*(.*)$", line)
+            if match:
+                key, value = (part.strip() for part in match.groups())
+                if key == "Name":
+                    if value in records:
+                        raise ValueError(f"Duplicate repository metadata: {value}")
+                    record = records[value] = {}
+                field = key if key in ("Version", "Replaces", "Conflicts With", "Depends On", "Provides") else None
+                if record is not None and field:
+                    record.setdefault(field, []).extend(value.split())
+            elif line[:1].isspace() and record is not None and field:
+                record[field].extend(line.split())
+        if records.keys() != targets.keys():
+            raise ValueError("Incomplete planned replacement metadata")
+        self.planned_metadata = records
+        removals = {}
+        for name, metadata in records.items():
+            if (metadata.get("Version") != [targets[name]] or
+                    not {"Replaces", "Conflicts With"} <= metadata.keys()):
+                raise ValueError(f"Repository target changed during planning: {name}")
+            replacements = list(metadata.get("Replaces", []))
+            if name.startswith("qemu-"):
+                replacements += [item for item in metadata.get("Conflicts With", [])
+                                 if re.split(r"[<>=]", item, maxsplit=1)[0] == "qemu-block-gluster"]
+            for value in replacements:
+                match = re.fullmatch(r"([^<>=]+)(>=|<=|=|<|>)?(.*)", value)
+                package, operator, version = match.groups()
+                installed = self.report["packages"].get(package)
+                if installed is None:
+                    continue
+                if operator:
+                    comparison = self.command("vercmp", installed, version)
+                    if comparison is None or comparison.returncode or comparison.stdout.strip() not in ("-1", "0", "1"):
+                        raise RuntimeError(f"Cannot compare replacement version for {package}")
+                    if int(comparison.stdout) not in {"=": {0}, "<": {-1}, ">": {1}, "<=": {-1, 0}, ">=": {0, 1}}[operator]:
+                        continue
+                removals[package] = installed
+        return removals
+
     def plan_pins(self):
         packages = self.report["packages"]
-        pins = {}
+        inputs = package_inputs(self.command)
+        records = self.dependency_metadata()
+        if records is None:
+            return
+        pins = self.configured_pins(records)
         plan = self.report["pin_plan"] = {
-            "policy": self.pin_policy(), "pins": pins, "targets": {}, "attempts": [],
+            "policy": self.pin_policy(), "pins": pins, "targets": {}, "removals": {}, "attempts": [],
+            "inputs": inputs,
         }
         if "hyprland" in packages:
             bundle = (self.repo / "src/shared/update-policy/critical-bundle.conf").read_text()
@@ -607,13 +794,10 @@ class Audit:
                         raise ValueError(f"Invalid protected package pattern: {pattern}")
                     for name, version in packages.items():
                         if fnmatch.fnmatchcase(name, pattern):
-                            pins[name] = {"version": version, "reason": f"approved desktop stack ({series[0]})"}
+                            pins.setdefault(name, {"version": version, "reason": f"approved desktop stack ({series[0]})"})
                 if "hyprland" not in pins:
                     self.error("Protected stack policy does not include Hyprland")
                     return
-        records = self.dependency_metadata()
-        if records is None:
-            return
         for _ in range(len(packages) + 1):
             arguments = ["pacman", "-Su", "--print", "--print-format", "%n %v", "--noconfirm"]
             if "qemu-block-gluster" in packages:
@@ -637,20 +821,53 @@ class Audit:
                         self.error(f"Pacman selected protected package {name} for installation")
                         return
                     plan["targets"][name] = version
+                plan["removals"] = self.planned_removals(plan["targets"])
+                blocked = {name for name in plan["targets"] if self.ignored_candidate(name)}
+                for name, metadata in self.planned_metadata.items():
+                    if any(re.split(r"[<>=]", value, maxsplit=1)[0] in pins and
+                           re.split(r"[<>=]", value, maxsplit=1)[0] in plan["removals"]
+                           for value in metadata.get("Replaces", []) + metadata.get("Conflicts With", [])):
+                        blocked.add(name)
+                while blocked:
+                    provided = {re.split(r"[<>=]", value, maxsplit=1)[0] for name in blocked
+                                for value in (name, *self.planned_metadata[name].get("Provides", []))}
+                    dependents = {name for name, metadata in self.planned_metadata.items()
+                                  if any(re.split(r"[<>=]", value, maxsplit=1)[0] in provided
+                                         for value in metadata.get("Depends On", []))}
+                    if dependents <= blocked:
+                        break
+                    blocked.update(dependents)
+                additions = blocked.intersection(packages).difference(pins)
+                if blocked:
+                    if not additions:
+                        self.error("Configured holds prevent the prepared dependency/replacement transaction")
+                        return
+                    for name in additions:
+                        pins[name] = {"version": packages[name], "reason": "preserves configured dependency/replacement holds"}
+                    plan["targets"] = {}
+                    plan["removals"] = {}
+                    continue
+                if package_inputs(self.command) != inputs:
+                    self.error("Package databases/configuration changed during planning; retry Update OS")
                 return
             additions = {}
             provided = {
                 re.split(r"[<>=]", value, maxsplit=1)[0]
                 for name in pins for value in (name, *records[name]["Provides"]) if value != "None"
             }
+            required = installed_closure(records, pins)
             for line in transcript.splitlines():
                 broken = re.fullmatch(
                     r":: installing (\S+) \([^)]+\) breaks dependency '([^']+)' required by (\S+)", line)
                 missing = re.fullmatch(r":: unable to satisfy dependency '([^']+)' required by (\S+)", line)
-                if broken and broken[3] in pins:
+                if broken and broken[3] in required:
+                    if broken[3] not in pins:
+                        additions[broken[3]] = "installed dependency of the protected stack"
                     additions[broken[1]] = f"preserves {broken[2]} required by {broken[3]}"
                 elif missing and re.split(r"[<>=]", missing[1], maxsplit=1)[0] in provided:
                     additions[missing[2]] = f"requires {missing[1]}, unavailable with the approved stack"
+                elif missing and self.ignored_candidate(re.split(r"[<>=]", missing[1], maxsplit=1)[0]):
+                    additions[missing[2]] = f"requires {missing[1]}, blocked by a configured package/group hold"
             additions = {name: reason for name, reason in additions.items()
                          if name in packages and name not in pins}
             if not additions:
@@ -676,6 +893,7 @@ class Audit:
             raise ValueError("Pin plan is failed, stale, or does not match this update's baseline/policy")
         for name, item in pins.items():
             if (not re.fullmatch(r"[a-zA-Z0-9@._+-]+", name) or not isinstance(item, dict)
+                    or not isinstance(item["version"], str) or not item["version"]
                     or item["version"] != previous["packages"].get(name)
                     or not isinstance(item["reason"], str) or not item["reason"].strip()):
                 raise ValueError(f"Invalid protected package record: {name}")
@@ -817,7 +1035,8 @@ class Audit:
             unexpected = []
             for line in result.stdout.splitlines():
                 fields = line.split()
-                if (len(fields) != 4 or fields[2] != "->" or fields[0] not in pins
+                if (len(fields) not in (4, 5) or len(fields) == 5 and fields[4] != "[ignored]" or
+                        fields[2] != "->" or fields[0] not in pins
                         or fields[1] != pins[fields[0]]["version"]):
                     unexpected.append(line)
             if unexpected or result.stderr.strip() or result.returncode not in (0, 1):
@@ -1020,11 +1239,20 @@ class Audit:
 
 
 def main():
+    if len(sys.argv) == 3 and sys.argv[1] in ("--pin-guard", "--pin-commit"):
+        try:
+            targets = set(sys.stdin.read().splitlines()) if sys.argv[1] == "--pin-guard" else None
+            verify_pin_transaction(Path(sys.argv[2]), targets)
+        except (OSError, ValueError, KeyError, TypeError, RuntimeError) as error:
+            print(f"ERROR: protected-stack transaction: {error}", file=sys.stderr)
+            return 1
+        return 0
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--snapshot", action="store_true", help="Inventory only, before update")
     parser.add_argument("--core-only", action="store_true", help="Verify core before optional app work")
     parser.add_argument("--classify-aur", action="store_true", help="Classify local foreign-package dependency closure")
     parser.add_argument("--plan-pins", action="store_true", help="Resolve upgrades around the approved desktop stack")
+    parser.add_argument("--user-pins", action="store_true", help="Inventory configured package/group holds before cleanup")
     parser.add_argument("--pins-report", type=Path, help="This run's successful protected-stack transaction plan")
     parser.add_argument("--optional-apps-report", type=Path,
                         help="Legacy option; no optional native apps are OS-managed")
@@ -1038,7 +1266,7 @@ def main():
     parser.add_argument("--brave-report", type=Path, help="Require Brave to meet this recorded AUR target")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    inventory_actions = (args.snapshot, args.classify_aur, args.capture_brave_target, args.plan_pins)
+    inventory_actions = (args.snapshot, args.classify_aur, args.capture_brave_target, args.plan_pins, args.user_pins)
     verification_options = (
         args.before or args.apps_report or args.optional_apps_report or args.brave_report
         or args.core_only or args.optional_warning or args.required_error or args.pins_report
@@ -1046,7 +1274,7 @@ def main():
     if sum(inventory_actions) > 1 or (
             (any(inventory_actions) or args.mode == "bootstrap") and verification_options):
         parser.error("inventory/bootstrap actions cannot be combined with installed-state verification options")
-    if args.mode != "full" and (args.classify_aur or args.capture_brave_target or args.plan_pins or args.pins_report) or (
+    if args.mode != "full" and (args.classify_aur or args.capture_brave_target or args.plan_pins or args.user_pins or args.pins_report) or (
             args.mode == "bootstrap" and args.snapshot):
         parser.error("this inventory action requires full mode")
     if args.pins_report and not args.before:
@@ -1071,7 +1299,9 @@ def main():
         previous = json.loads(args.before.read_text()) if args.before else None
         if args.pins_report:
             audit.load_pins(args.pins_report, previous)
-        if args.plan_pins:
+        if args.user_pins:
+            audit.user_pin_plan()
+        elif args.plan_pins:
             audit.plan_pins()
         elif args.classify_aur:
             audit.aur_policy()
