@@ -60,6 +60,31 @@ automatic rollback or boot recovery are provided by this flow.
 OS-owned changes reach users after merging to `main` and running the updater.
 Changes to independently built apps also require a release in their own repo.
 
+### Nemo startup with a saved Overview tab
+
+A saved `overview:///` tab could leave Nemo running without any mapped window:
+the Overview widget did not signal that its slot was ready, so startup waited
+indefinitely before showing the restored window. The workspace-local launcher
+then reported **Timed out waiting for a new nemo window**. This is a native
+`nemo-smpl` readiness bug, not a reason to reset preferences, discard saved tabs,
+disable restoration or change the shortcut to always open Home.
+
+The corrected native release shares normal view readiness with Overview and
+uses the canonical location-change path, including cancellation of pending
+directory loads. Normal Update OS delivers the latest published, checksum- and
+package-validated [Nemo release](https://github.com/smpl-os/nemo-smpl/releases).
+No binding migration is needed. Finish file operations before closing and
+reopening Nemo to load the new executable; updating does not stop its process.
+Opening Home explicitly with `nemo "$HOME"` can make a window available while
+the old executable is still running without resetting saved preferences.
+
+Release qualification must cover saved Overview tabs in single and split panes,
+an active Overview tab, switching between Overview and folders, and a second
+no-argument launch forwarded over D-Bus to the existing process. Confirm actual
+mapped windows, not just a successful launcher exit or a running PID. Exercise
+the unchanged `focus-or-launch --current-workspace nemo nemo` entry point after
+installing the corrected package as well.
+
 ### Numbered workspace keyboard focus
 
 The pointer-independent last-used-window fix is in the OS-owned
