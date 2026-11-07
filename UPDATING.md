@@ -69,9 +69,9 @@ then reported **Timed out waiting for a new nemo window**. This is a native
 `nemo-smpl` readiness bug, not a reason to reset preferences, discard saved tabs,
 disable restoration or change the shortcut to always open Home.
 
-The corrected native release shares normal view readiness with Overview and
-uses the canonical location-change path, including cancellation of pending
-directory loads. Normal Update OS delivers the latest published, checksum- and
+The corrected native release, **nemo-smpl v1.4.85**, shares normal view readiness
+with Overview and uses the canonical location-change path, including
+cancellation of pending directory loads. Normal Update OS delivers the latest published, checksum- and
 package-validated [Nemo release](https://github.com/smpl-os/nemo-smpl/releases).
 No binding migration is needed. Finish file operations before closing and
 reopening Nemo to load the new executable; updating does not stop its process.
