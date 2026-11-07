@@ -3,6 +3,23 @@
 set -euo pipefail
 
 die() { echo "ERROR: protected-stack transaction: $*" >&2; exit 1; }
+refresh_only() {
+    local sync=0 refresh=0 value=0 argument
+    for argument in "$@"; do
+        if [[ $value -eq 1 ]]; then value=0; continue; fi
+        case "$argument" in
+            -S|--sync) sync=1 ;;
+            -Sy|-Syy) sync=1; refresh=1 ;;
+            -y|-yy|--refresh) refresh=1 ;;
+            --noconfirm|--confirm|--noprogressbar|--debug) ;;
+            --config|--root|--dbpath|--cachedir|--gpgdir|--hookdir|--logfile|--arch)
+                value=1 ;;
+            --config=*|--root=*|--dbpath=*|--cachedir=*|--gpgdir=*|--hookdir=*|--logfile=*|--arch=*) ;;
+            *) return 1 ;;
+        esac
+    done
+    [[ $sync -eq 1 && $refresh -eq 1 && $value -eq 0 ]]
+}
 export SMPLOS_UPDATE_BASE_TRANSACTION=0
 if [[ "${1:-}" == --smplos-base-transaction ]]; then
     export SMPLOS_UPDATE_BASE_TRANSACTION=1
@@ -31,6 +48,10 @@ for argument in "$@"; do
     esac
 done
 if [[ $mutation -eq 0 || $query -eq 1 ]]; then
+    exec /usr/bin/pacman "$@"
+fi
+# Database-only refresh precedes planning and has no package transaction to guard.
+if refresh_only "$@"; then
     exec /usr/bin/pacman "$@"
 fi
 if [[ -z "$pins" && -z "${SMPLOS_UPDATE_PIN_PLAN:-}" ]]; then

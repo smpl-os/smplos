@@ -85,6 +85,13 @@ mapped windows, not just a successful launcher exit or a running PID. Exercise
 the unchanged `focus-or-launch --current-workspace nemo nemo` entry point after
 installing the corrected package as well.
 
+If Update OS reports `unexpected pacman preview: :: Synchronizing package
+databases...`, the package guard rejected a database-only refresh before native
+delivery. The guard now runs refresh-only commands once without a transaction
+preview; installs, upgrades and removals still require protected-stack checks.
+Retry with the corrected updater. This failure does not indicate that the
+published Nemo package was installed.
+
 ### Numbered workspace keyboard focus
 
 The pointer-independent last-used-window fix is in the OS-owned

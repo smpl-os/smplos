@@ -271,10 +271,15 @@ with open(os.environ["CALLS"], "a") as stream:
 if "--config" in sys.argv:
     from pathlib import Path
     hook_dir = Path(sys.argv[sys.argv.index("--config") + 1]).parent
-    Path(os.environ["HOOK_CAPTURE"]).write_text((hook_dir / "00-smplos-protected-stack.hook").read_text())
+    hook = hook_dir / "00-smplos-protected-stack.hook"
+    if hook.exists():
+        Path(os.environ["HOOK_CAPTURE"]).write_text(hook.read_text())
 if "--print" in sys.argv:
     print(os.environ.get("TARGETS", "editor"))
     sys.exit(int(os.environ.get("PREVIEW_FAIL", "0")))
+if "-Sy" in sys.argv:
+    print(":: Synchronizing package databases...")
+    sys.exit(int(os.environ.get("REFRESH_FAIL", "0")))
 """)
         mock_pacman.chmod(0o755)
         configuration = self.base / "pacman-conf"
@@ -313,6 +318,28 @@ if "--print" in sys.argv:
         result, calls = self.run_guard("-S", "--ignore", "hyprland", "editor")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(len(calls), 2)
+
+    def test_database_only_refresh_runs_once_without_preview_or_stale_plan(self):
+        for args in (("-Sy", "--noconfirm"), ("-Syy",),
+                     ("--sync", "--refresh", "--config", "/etc/pacman.conf")):
+            with self.subTest(args=args):
+                result, calls = self.run_guard(*args, SMPLOS_UPDATE_PIN_PLAN="/missing/stale-plan.json")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(calls, [list(args)])
+        result, calls = self.run_guard("-Sy", "--noconfirm", REFRESH_FAIL="1")
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(calls, [["-Sy", "--noconfirm"]])
+
+    def test_refresh_with_install_or_upgrade_still_guards_package_targets(self):
+        for args in (("-Sy", "editor"), ("-Syu", "--noconfirm"),
+                     ("--sync", "--refresh", "--sysupgrade"),
+                     ("-Sy", "--", "editor")):
+            with self.subTest(args=args):
+                result, calls = self.run_guard(*args, TARGETS="display-lib")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("refused", result.stderr)
+                self.assertEqual(len(calls), 1)
+                self.assertIn("--print", calls[0])
 
     def test_added_options_precede_the_argument_terminator(self):
         result, calls = self.run_guard("-S", "--", "editor")
@@ -561,6 +588,19 @@ class NativeLockedGuardTests(unittest.TestCase):
 
     def command(self, *arguments):
         return subprocess.run(arguments, env=self.environment, capture_output=True, text=True, timeout=30)
+
+    def test_database_refresh_then_guarded_upgrade_with_real_pacman(self):
+        self.package("smplos-fixture", "1-1")
+        shutil.copyfile(self.db / "sync/test.db", self.repository / "test.db")
+        self.prepare()
+        result = self.execute("-Sy", "--noconfirm")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("Synchronizing package databases", result.stdout)
+        self.assertFalse((self.base / "payload-smplos-fixture").exists())
+        self.prepare(targets={"smplos-fixture": "1-1"})
+        result = self.execute("-S", "--noconfirm", "smplos-fixture", base=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertTrue((self.base / "payload-smplos-fixture").exists())
 
     def prepare(self, targets=None, pins=None, removals=None):
         self.pins = pins or {}
