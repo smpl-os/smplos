@@ -60,6 +60,21 @@ automatic rollback or boot recovery are provided by this flow.
 OS-owned changes reach users after merging to `main` and running the updater.
 Changes to independently built apps also require a release in their own repo.
 
+### Foreground Polkit authentication
+
+Use `smplos-update --auth polkit` to authenticate individual privileged operations
+through foreground desktop dialogs instead of terminal sudo prompts. The
+coordinator remains the desktop user; package guards, bootstrap and verification
+are unchanged. A dismissed dialog fails the affected operation explicitly.
+Polkit may request authentication again for later operations; no password or
+passwordless rule is stored.
+
+To use this mode from App Center as well, save the single word `polkit` in
+`~/.config/smplos/update-auth`. An absent preference retains the existing sudo
+workflow. `--auth sudo|polkit` overrides the saved choice for one invocation;
+`SMPLOS_UPDATE_AUTH` can select it for an enclosing launcher. Invalid preferences
+are errors.
+
 ### Nemo startup with a saved Overview tab
 
 A saved `overview:///` tab could leave Nemo running without any mapped window:

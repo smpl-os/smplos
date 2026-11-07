@@ -11,6 +11,22 @@
 
 set -o pipefail
 
+if [[ -z "${SMPLOS_UPDATE_AUTH+x}" && -e "$HOME/.config/smplos/update-auth" ]]; then
+    SMPLOS_UPDATE_AUTH=$(cat -- "$HOME/.config/smplos/update-auth") || exit 1
+fi
+SMPLOS_UPDATE_AUTH="${SMPLOS_UPDATE_AUTH-sudo}"
+
+smplos_privileged() {
+    if [[ "${SMPLOS_UPDATE_AUTH:-sudo}" == polkit ]]; then
+        local executable
+        executable=$(command -v "$1") || return 1
+        shift
+        command pkexec "$executable" "$@"
+    else
+        command sudo -n "$@"
+    fi
+}
+
 # Apps mode never performs a partial host-package upgrade.
 UPDATE_MODE="full"
 BOOTSTRAP_ONLY=0
@@ -22,15 +38,25 @@ while [[ $# -gt 0 ]]; do
                 echo "Usage: smplos-update [--mode full|apps]" >&2; exit 1;
             }
             UPDATE_MODE="$2"; shift ;;
+        --auth)
+            [[ "${2:-}" == sudo || "${2:-}" == polkit ]] || {
+                echo "ERROR: --auth requires sudo or polkit" >&2; exit 1;
+            }
+            SMPLOS_UPDATE_AUTH="$2"; shift ;;
         --bootstrap-only) BOOTSTRAP_ONLY=1 ;;
         --legacy-handoff)
             [[ -n "${2:-}" ]] || { echo "Missing handoff record" >&2; exit 1; }
             LEGACY_HANDOFF="$2"; shift ;;
-        -h|--help) echo "Usage: smplos-update [--mode full|apps] [--bootstrap-only]"; exit 0 ;;
+        -h|--help) echo "Usage: smplos-update [--mode full|apps] [--auth sudo|polkit] [--bootstrap-only]"; exit 0 ;;
         *) echo "Unknown option: $1" >&2; exit 1 ;;
     esac
     shift
 done
+[[ "$SMPLOS_UPDATE_AUTH" == sudo || "$SMPLOS_UPDATE_AUTH" == polkit ]] || {
+    echo "ERROR: invalid update authentication preference: $SMPLOS_UPDATE_AUTH" >&2; exit 1;
+}
+export SMPLOS_UPDATE_AUTH
+export -f smplos_privileged
 
 # ── Notification helper ──────────────────────────────────────────────────────
 # Never emit the "Cannot autolaunch D-Bus without X11 $DISPLAY" noise when
@@ -208,6 +234,12 @@ check_reboot_before_update() {
 }
 authenticate_update() {
     [[ "${SMPLOS_SUDO_READY:-0}" != 1 ]] || return 0
+    if [[ "$SMPLOS_UPDATE_AUTH" == polkit ]]; then
+        command -v pkexec >/dev/null || startup_fail "Polkit authentication requires pkexec."
+        smplos_privileged /usr/bin/true || startup_fail "Polkit authentication cancelled or failed; update not started."
+        export SMPLOS_SUDO_READY=1
+        return 0
+    fi
     command sudo -v || startup_fail "Authentication failed; update not started."
     (
         trap - EXIT INT HUP
@@ -229,7 +261,7 @@ repair_update_state() {
         return 1
     }
     echo "Checking legacy updater-state ownership."
-    command sudo -n python3 "$helper" --repair-state --uid "$UID"
+    smplos_privileged python3 "$helper" --repair-state --uid "$UID"
 }
 trap 'stop_sudo_keepalive; release_update_lock' EXIT
 trap 'exit 130' INT
@@ -284,8 +316,8 @@ if ! check_update_power 2>&1 | tee -a "$SMPLOS_UPDATE_LOG_FILE"; then
     exit 1
 fi
 authenticate_update
-sudo() { command sudo -n "$@"; }
-export -f sudo
+sudo() { smplos_privileged "$@"; }
+export -f sudo smplos_privileged
 
 # Refresh the orchestration itself before migrations or package transactions.
 # Never let a legacy installed helper perform the first Git synchronization.
@@ -344,7 +376,7 @@ cat > "$UPDATE_SCRIPT" << PREAMBLE || bootstrap_fail "Cannot write update preamb
 #!/bin/bash
 UPDATE_MODE="$UPDATE_MODE"
 PREAMBLE
-declare -f check_update_power stop_sudo_keepalive release_update_lock >> "$UPDATE_SCRIPT" || bootstrap_fail "Cannot write update helpers."
+declare -f check_update_power stop_sudo_keepalive release_update_lock smplos_privileged >> "$UPDATE_SCRIPT" || bootstrap_fail "Cannot write update helpers."
 
 # Append the body (single-quoted: no substitution; uses UPDATE_MODE set above)
 cat >> "$UPDATE_SCRIPT" << 'EOF' || bootstrap_fail "Cannot write updater body."
@@ -357,6 +389,7 @@ OPTIONAL_WARNINGS=()
 SYSTEM_UPGRADED=0
 unset SMPLOS_UPDATE_PIN_IGNORE SMPLOS_UPDATE_PACMAN
 PIN_PACMAN=""
+SMPLOS_UPDATE_SUDO=sudo
 
 # Prefer canonical scripts over historical user-local shadow copies.
 export PATH="/usr/local/sbin:/usr/local/bin:$PATH"
@@ -420,6 +453,7 @@ finish_update() {
     fi
     stop_sudo_keepalive
     [[ -z "$PIN_PACMAN" ]] || rm -f -- "$PIN_PACMAN"
+    [[ "$SMPLOS_UPDATE_SUDO" == sudo ]] || rm -f -- "$SMPLOS_UPDATE_SUDO"
     rm -f -- "$0"
     release_update_lock || return 1
     if [[ $FINISHED -eq 0 ]]; then
@@ -432,17 +466,17 @@ finish_update() {
     return "$status"
 }
 
-# Noninteractive calls fail visibly instead of requesting another password.
+# Privileged operations keep the desktop-user coordinator and chosen authentication.
 sudo() {
-    [[ "${1:-}" != -k ]] || shift
+    while [[ "${1:-}" == -k || "${1:-}" == -n ]]; do shift; done
     if [[ "${1:-}" == pacman && -n "${SMPLOS_UPDATE_PACMAN:-}" ]]; then
         shift
-        command sudo -n "$SMPLOS_UPDATE_PACMAN" "$@"
+        smplos_privileged "$SMPLOS_UPDATE_PACMAN" "$@"
     else
-        command sudo -n "$@"
+        smplos_privileged "$@"
     fi
 }
-export -f sudo
+export -f sudo smplos_privileged
 export SMPLOS_SUDO_READY=1
 
 csv_join() {
@@ -808,6 +842,16 @@ mkdir -p "$LOG_DIR"
     trap 'exit 130' INT
     trap 'exit 143' TERM
     trap 'exit 129' HUP
+    if [[ "${SMPLOS_UPDATE_AUTH:-sudo}" == polkit ]]; then
+        SMPLOS_UPDATE_SUDO=$(mktemp "$STATE_DIR/privileged.XXXXXX") || exit 1
+        {
+            echo '#!/bin/bash'
+            declare -f smplos_privileged sudo
+            echo 'sudo "$@"'
+        } > "$SMPLOS_UPDATE_SUDO" || exit 1
+        chmod 700 "$SMPLOS_UPDATE_SUDO" || exit 1
+        export SMPLOS_UPDATE_SUDO
+    fi
     sudo rm -f /etc/sudoers.d/99-smplos-update-transient || exit 1
     sudo rm -f /etc/pacman.d/hooks/90-rebuild-paru.hook || exit 1
     if [[ -f "$STATE_DIR/status" ]] && grep -q '^status=\(running\|interrupted\)$' "$STATE_DIR/status"; then
@@ -923,7 +967,7 @@ PY
         UPDATE_FAILED=1
     fi
     if [[ $AUR_POLICY_READY -eq 1 && -n "$CORE_AUR_PACKAGES" ]]; then
-        if ! _yay_run -Sua --noconfirm --sudoloop=false --sudo sudo --sudoflags=-n \
+        if ! _yay_run -Sua --noconfirm --sudoloop=false --sudo "$SMPLOS_UPDATE_SUDO" --sudoflags=-n \
             --ignore "$CRITICAL_IGNORE,nemo-smpl,control-surface,grafium-bin,eww-smplos${OPTIONAL_AUR_PACKAGES:+,$OPTIONAL_AUR_PACKAGES}"; then
             echo "  ERROR: required AUR drivers/libraries were not updated."
             UPDATE_FAILED=1
@@ -1006,7 +1050,7 @@ if [[ "$UPDATE_MODE" == full && $CORE_VERIFIED -eq 1 && $AUR_POLICY_READY -eq 1 
         fi
         if [[ -n "$OPTIONAL_AUR_PACKAGES" ]]; then
             run_optional "Optional AUR apps" _yay_run -Sua --noconfirm --sudoloop=false \
-                --sudo sudo --sudoflags=-n \
+                --sudo "$SMPLOS_UPDATE_SUDO" --sudoflags=-n \
                 --ignore "$CRITICAL_IGNORE,nemo-smpl,control-surface,grafium-bin,eww-smplos${CORE_AUR_PACKAGES:+,$CORE_AUR_PACKAGES}"
         fi
     else

@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import stat
 import subprocess
 import sys
@@ -65,6 +66,11 @@ def digest(path):
 
 
 def run(*args):
+    if args[:2] == ("sudo", "-n") and os.environ.get("SMPLOS_UPDATE_AUTH") == "polkit":
+        executable = shutil.which(args[2])
+        if not executable:
+            raise RuntimeError(f"Privileged verification command not found: {args[2]}")
+        args = ("pkexec", executable, *args[3:])
     try:
         return subprocess.run(args, capture_output=True, text=True, timeout=45,
                               env={**os.environ, "LC_ALL": "C"})
