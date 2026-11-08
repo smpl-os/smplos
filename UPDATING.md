@@ -262,40 +262,32 @@ packages, or through `xvfb-run -a /usr/bin/python3 src/test-gtk-defaults.py`.
 
 ### OpenChamber theme bridge delivery
 
-The bridge is OS-owned; OpenChamber's renderer and local control API are
-independently released. Publish and verify the compatible OpenChamber release
-**before** publishing the OS bridge. A successful broadcast or a custom JSON
-file on disk is not proof that a window applied the palette or background alpha.
-Keep the bridge unpublished until the app's capability and renderer-acknowledgment
-contract and per-app transparent-window launcher have been verified together.
-The bridge requires protocol 1 from authenticated `theme.capabilities`, live
-window probes, custom themes, background alpha in `(0,1]` and a bounded
-acknowledgment deadline. Translucent themes require each target's actual native
-transparent readiness. `theme.set` must return matching renderer-applied theme
-IDs and alpha for the same windows after persistence; broadcast delivery alone
-is rejected. Each HTTP request allows 15 seconds for the app's 10-second bound.
-Failure after publication can be partial and must remain explicitly unconfirmed.
-Do not infer compositor properties from renderer acknowledgment.
+The bridge is OS-owned; OpenChamber's renderer and file watchers are
+independently delivered. Verify the coordinated OpenChamber fork build
+**before** publishing the OS bridge. This replacement uses local custom-theme
+files and existing version-1 `preferences.json`, with desktop-only theme
+selection overrides. It does not call any theme control or capability API.
+Unrelated settings, preferences, base values and other surfaces are preserved.
+Private verified backups precede replacement, and a final reread rejects
+detected concurrent changes before each atomic rename.
 
-The first compatible published app is
-[KonTy/openchamber v2.5.2](https://github.com/KonTy/openchamber/releases/tag/v2.5.2),
-source `506a35feeabd4dfb95917bf533cb1ceb6332aff9`, built and tested by
-[Linux release workflow 40133651791](https://github.com/KonTy/openchamber/actions/runs/40133651791).
-Its public `provenance.json` and `SHA256SUMS` identify the independent packages;
-the bridge does not download them. Packaged isolated two-window runs exercised
-the actual bridge through Amber, Catppuccin and Amber, checked exact palette,
-alpha, acknowledgments and durable selection, and rejected translucent themes
-before writes on framed/explicitly opaque launches. Bearer-only local control
-was verified with UI password authentication still enabled. Native readiness
-and renderer CSS were checked; compositor output remains unmeasured by these
-packaged tests.
+The former OpenChamber 2.5.2 API release is not sufficient for this path.
+The app must watch preferences as well as custom palettes, retain last-valid
+state on invalid input, and handle selection and palette arrival in either
+order. A custom JSON file on disk is not proof of renderer application.
+File-only qualification cannot probe window readiness or acknowledge rendering;
+verify the combined maintained app and bridge across multiple windows, exact
+palette changes and opaque/translucent round trips before release. Native alpha
+still requires a transparent desktop launch. Do not infer native/compositor
+output from successful file publication. Detected conflicts after palette
+publication can leave a partial result and must be reported.
 
 Normal script synchronization installs `theme-set-openchamber` alongside
 `theme-set`, and normal Hyprland config synchronization delivers the native-alpha
 tag in both `windows.lua` and `windows.conf`. The existing final opacity policy
 must remain last. The ISO copies the same script and compositor trees; no
 separate migration or hardcoded installer list is necessary. The optional app
-phase invokes `theme-set --apps`; the core-only phase does not contact
+phase invokes `theme-set --apps`; the core-only phase does not change
 OpenChamber. Bridge errors are visible but do not abort other theme consumers.
 
 This does not enroll OpenChamber as a core OS binary or install an app package.

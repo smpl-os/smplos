@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
-"""Publish the active smplOS palette through OpenChamber's custom-theme API."""
+"""Publish the active smplOS palette for OpenChamber's local file watchers."""
 
 import hashlib
-import http.client
 import json
 import math
 import os
@@ -10,6 +9,7 @@ from pathlib import Path
 import re
 import sys
 import tempfile
+import time
 import tomllib
 
 
@@ -84,8 +84,9 @@ def targets(home):
         paths = [Path(os.environ.get("OPENCHAMBER_DATA_DIR", home / ".config/openchamber"))]
     if any(not path.is_absolute() for path in paths):
         raise ValueError("OpenChamber data directories must be absolute paths")
-    if not override.exists() and "OPENCHAMBER_DATA_DIR" not in os.environ and not (paths[0] / "settings.json").exists():
-        return []
+    if not override.exists() and "OPENCHAMBER_DATA_DIR" not in os.environ:
+        if not any((paths[0] / name).exists() for name in ("settings.json", "preferences.json")):
+            return []
     return list(dict.fromkeys(paths))
 
 
@@ -101,122 +102,138 @@ def backup(home, path, content):
         descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(descriptor, "wb") as output:
             output.write(content)
+            output.flush()
+            os.fsync(output.fileno())
     target.chmod(0o600)
     if target.read_bytes() != content:
         raise OSError(f"Cannot verify configuration backup for {path}")
 
 
-def control(port, headers, action, input_value=None):
-    payload = {"action": action}
-    if input_value is not None:
-        payload["input"] = input_value
-    connection = http.client.HTTPConnection("127.0.0.1", port, timeout=15)
+def unique_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"Duplicate JSON key: {key}")
+        result[key] = value
+    return result
+
+
+def invalid_constant(value):
+    raise ValueError(f"Invalid JSON constant: {value}")
+
+
+def finite_decimal(value):
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError("OpenChamber preferences contain a nonfinite number")
+    return number
+
+
+def preferences(content):
+    document = json.loads(content, object_pairs_hook=unique_object,
+                          parse_constant=invalid_constant, parse_float=finite_decimal)
+    if (not isinstance(document, dict) or type(document.get("version")) is not int
+            or document["version"] != 1 or not isinstance(document.get("fields"), dict)):
+        raise ValueError("OpenChamber preferences must be a version-1 document with fields")
+    for key, field in document["fields"].items():
+        if (not isinstance(field, dict)
+                or ("value" not in field and not isinstance(field.get("surfaces"), dict))):
+            raise ValueError(f"Invalid OpenChamber preference field: {key}")
+        if "surfaces" in field and not isinstance(field["surfaces"], dict):
+            raise ValueError(f"Invalid OpenChamber preference surfaces: {key}")
+        if ("updatedAt" in field
+                and (type(field["updatedAt"]) not in (int, float)
+                     or not 0 <= field["updatedAt"] <= 9_007_199_254_740_991)):
+            raise ValueError(f"Invalid OpenChamber preference timestamp: {key}")
+        surfaces = field.get("surfaces", {})
+        if set(surfaces) - {"web", "desktop", "vscode", "mobile"}:
+            raise ValueError(f"Invalid OpenChamber preference surface name: {key}")
+        records = list(surfaces.values())
+        if "value" in field:
+            records.append(field)
+        for record in records:
+            if (not isinstance(record, dict) or "value" not in record
+                    or ("updatedAt" in record and
+                        (type(record["updatedAt"]) not in (int, float)
+                         or not 0 <= record["updatedAt"] <= 9_007_199_254_740_991))):
+                raise ValueError(f"Invalid OpenChamber preference value/timestamp: {key}")
+    return document
+
+
+def selection(document, theme):
+    fields = document["fields"]
+    updates = {
+        "themeId": theme["metadata"]["id"],
+        "useSystemTheme": False,
+        f'{theme["metadata"]["variant"]}ThemeId': theme["metadata"]["id"],
+    }
+    timestamp = time.time_ns() // 1_000_000
+    for key in updates:
+        field = fields.get(key, {})
+        records = list(field.get("surfaces", {}).values())
+        if "value" in field:
+            records.append(field)
+        timestamp = max([timestamp] + [record.get("updatedAt", 0) + 1 for record in records])
+    if timestamp > 9_007_199_254_740_991:
+        raise ValueError("OpenChamber preference timestamps cannot be advanced safely")
+    changed = False
+    for key, value in updates.items():
+        field = fields.setdefault(key, {"updatedAt": 0})
+        surfaces = field.setdefault("surfaces", {})
+        if surfaces.get("desktop", {}).get("value") != value:
+            surfaces["desktop"] = {**surfaces.get("desktop", {}),
+                                   "value": value, "updatedAt": timestamp}
+            changed = True
+    return changed
+
+
+def atomic_write(path, content, previous):
+    temporary = None
     try:
-        connection.request("POST", "/api/openchamber/control", json.dumps(payload), headers)
-        response = connection.getresponse()
-        if not 200 <= response.status < 300:
-            raise ValueError(
-                f"OpenChamber {action} returned HTTP {response.status}; application is unconfirmed")
-        content = response.read(65537)
-        if len(content) > 65536:
-            raise ValueError(f"OpenChamber {action} response exceeds 64 KiB")
-        reply = json.loads(content)
-        if not isinstance(reply, dict):
-            raise ValueError(f"OpenChamber {action} response must be an object")
-        return reply
+        with tempfile.NamedTemporaryFile(dir=path.parent, prefix=f"{path.name}.",
+                                         suffix=".tmp", delete=False) as output:
+            temporary = Path(output.name)
+            output.write(content)
+            output.flush()
+            os.fsync(output.fileno())
+        current = path.read_bytes() if path.exists() else None
+        if path.is_symlink() or current != previous:
+            raise ValueError(f"{path.name} changed during publication; refusing to overwrite concurrent edits")
+        temporary.replace(path)
     finally:
-        connection.close()
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
-def window_states(windows):
-    if not isinstance(windows, list) or not windows:
-        raise ValueError("OpenChamber has no acknowledged theme windows")
-    states = {}
-    for window in windows:
-        if not isinstance(window, dict):
-            raise ValueError("OpenChamber window acknowledgment must be an object")
-        identity = window.get("connectionId")
-        if not isinstance(identity, str) or not identity or identity in states:
-            raise ValueError("OpenChamber connection IDs must be nonempty and unique")
-        if type(window.get("transparentWindow")) is not bool:
-            raise ValueError("OpenChamber native transparency readiness is unknown")
-        states[identity] = window
-    return states
-
-
-def capabilities(port, headers, opacity):
-    reply = control(port, headers, "theme.capabilities")
-    if (type(reply.get("protocolVersion")) is not int or reply["protocolVersion"] != 1
-            or reply.get("customThemes") is not True or reply.get("backgroundOpacity") is not True):
-        raise ValueError("OpenChamber does not support the required theme protocol")
-    bounds = reply.get("opacityRange")
-    if (not isinstance(bounds, dict) or type(bounds.get("minExclusive")) not in (int, float)
-            or bounds["minExclusive"] != 0 or type(bounds.get("max")) not in (int, float)
-            or bounds["max"] != 1):
-        raise ValueError("OpenChamber background opacity range is unsupported")
-    timeout = reply.get("ackTimeoutMs")
-    if type(timeout) is not int or not 0 < timeout <= 10000:
-        raise ValueError("OpenChamber acknowledgment timeout is unsupported")
-    windows = window_states(reply.get("windows"))
-    if opacity < 1 and any(not window["transparentWindow"] for window in windows.values()):
-        raise ValueError("OpenChamber requires a native transparent window for this theme; reopen a compatible desktop build")
-    return windows
-
-
-def confirm_application(reply, expected, theme):
-    applied = window_states(reply.get("applied"))
-    if (set(applied) != set(expected) or type(reply.get("delivered")) is not int
-            or reply["delivered"] != len(expected)):
-        raise ValueError("OpenChamber window set changed; theme application is unconfirmed")
-    for identity, window in applied.items():
-        opacity = window.get("backgroundOpacity")
-        if (window.get("themeId") != theme["metadata"]["id"]
-                or type(opacity) not in (int, float)
-                or opacity != theme["config"]["backgroundOpacity"]
-                or window["transparentWindow"] != expected[identity]["transparentWindow"]):
-            raise ValueError("OpenChamber renderer did not acknowledge the requested theme and alpha")
+def encoded(document):
+    return (json.dumps(document, separators=(",", ":"), allow_nan=False) + "\n").encode()
 
 
 def publish(home, directory, theme):
-    settings_path = directory / "settings.json"
-    saved = settings_path.read_bytes()
-    settings = json.loads(saved)
-    if not isinstance(settings, dict):
-        raise ValueError("OpenChamber settings must be a JSON object")
-    port = settings.get("desktopLocalPort")
-    if type(port) is not int or not 1 <= port <= 65535:
-        raise ValueError("OpenChamber desktopLocalPort must be an integer in [1,65535]")
-    headers = {"Content-Type": "application/json"}
-    if "desktopLocalClientToken" in settings:
-        token = settings["desktopLocalClientToken"]
-        if not isinstance(token, str) or not token or any(ord(char) < 33 or ord(char) > 126 for char in token):
-            raise ValueError("OpenChamber desktopLocalClientToken is invalid")
-        headers["Authorization"] = f"Bearer {token}"
-    windows = capabilities(port, headers, theme["config"]["backgroundOpacity"])
-    backup(home, settings_path, saved)
-    theme_id = theme["metadata"]["id"]
+    path = directory / "preferences.json"
+    if path.is_symlink():
+        raise ValueError("Refusing to replace symlinked OpenChamber preferences")
+    saved = path.read_bytes()
+    document = preferences(saved)
+    changed = selection(document, theme)
     folder = directory / "themes"
-    folder.mkdir(parents=True, exist_ok=True)
-    target = folder / f"{theme_id}.json"
-    content = (json.dumps(theme, separators=(",", ":")) + "\n").encode()
+    target = folder / f'{theme["metadata"]["id"]}.json'
+    if folder.is_symlink() or target.is_symlink():
+        raise ValueError("Refusing to replace symlinked OpenChamber themes")
+    content = encoded(theme)
     previous = target.read_bytes() if target.exists() else None
+    if changed:
+        backup(home, path, saved)
     if previous != content:
         if previous is not None:
             backup(home, target, previous)
-        temporary = None
+        folder.mkdir(parents=True, exist_ok=True)
+        atomic_write(target, content, previous)
+    if changed:
         try:
-            with tempfile.NamedTemporaryFile(dir=folder, prefix=f"{theme_id}.", suffix=".tmp", delete=False) as output:
-                temporary = Path(output.name)
-                output.write(content)
-            temporary.replace(target)
-        finally:
-            if temporary is not None:
-                temporary.unlink(missing_ok=True)
-    try:
-        reply = control(port, headers, "theme.set", {"id": theme_id})
-        confirm_application(reply, windows, theme)
-    except (OSError, ValueError, http.client.HTTPException) as error:
-        raise ValueError(f"Theme application is unconfirmed and may be partial: {error}") from error
+            atomic_write(path, encoded(document), saved)
+        except (OSError, ValueError) as error:
+            raise ValueError(f"Palette published but selection is unconfirmed: {error}") from error
 
 
 def main():
@@ -236,7 +253,7 @@ def main():
     for directory in directories:
         try:
             publish(home, directory, theme)
-        except (OSError, ValueError, http.client.HTTPException) as error:
+        except (OSError, ValueError) as error:
             warn(f"{directory}: {error}")
             failed = True
     return int(failed)
