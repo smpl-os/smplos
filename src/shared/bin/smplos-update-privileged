@@ -18,6 +18,7 @@ import time
 
 
 MAX_REQUEST = 24 * 1024 * 1024
+PRIVILEGED_PATH = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 
 
 def identity(pid):
@@ -91,7 +92,8 @@ def serve(directory, owner, uid, start):
     if not authorized(owner, uid, owner, start):
         raise ValueError("Update coordinator identity changed before authentication")
     user = pwd.getpwuid(uid)
-    environment = {**os.environ, "SUDO_USER": user.pw_name, "SUDO_UID": str(uid),
+    environment = {**os.environ, "PATH": PRIVILEGED_PATH,
+                   "SUDO_USER": user.pw_name, "SUDO_UID": str(uid),
                    "SUDO_GID": str(user.pw_gid)}
     parent = os.open(directory, os.O_DIRECTORY | os.O_NOFOLLOW)
     broker = None
@@ -126,9 +128,9 @@ def serve(directory, owner, uid, start):
         bound = True
         os.chown("socket", uid, -1, dir_fd=broker, follow_symlinks=False)
         os.chmod("socket", 0o600, dir_fd=broker)
-        os.fchmod(broker, 0o711)
         listener.listen()
         listener.settimeout(0.5)
+        os.fchmod(broker, 0o711)
         while authorized(owner, uid, owner, start):
             try:
                 connection, _ = listener.accept()
@@ -199,8 +201,11 @@ def request(path, arguments=None, server_uid=0):
 def wait_ready(path, pid):
     deadline = time.monotonic() + 600
     while time.monotonic() < deadline:
-        if Path(path).is_socket():
-            return 0
+        try:
+            if Path(path).is_socket():
+                return 0
+        except PermissionError:
+            pass
         try:
             os.kill(pid, 0)
         except ProcessLookupError:

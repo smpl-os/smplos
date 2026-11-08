@@ -24,8 +24,15 @@ LOADER.exec_module(AUTH)
 class PrivilegedChannelTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        self.directory = Path(self.temp.name)
+        self.directory = Path(self.temp.name) / "run"
+        self.directory.mkdir(mode=0o700)
         self.channel = self.directory / "broker/socket"
+        self.canonical = Path(self.temp.name) / "canonical"
+        self.canonical.mkdir()
+        self.privileged_path = f"{self.canonical}:{AUTH.PRIVILEGED_PATH}"
+        patch = mock.patch.object(AUTH, "PRIVILEGED_PATH", self.privileged_path)
+        patch.start()
+        self.addCleanup(patch.stop)
         self.errors = []
         uid, _, start = AUTH.identity(os.getpid())
 
@@ -80,6 +87,23 @@ class PrivilegedChannelTests(unittest.TestCase):
         self.assertIn(b"No such file", error)
         result, output, _ = self.request([sys.executable, "-c", "print('ready')"])
         self.assertEqual((result, output), (0, b"ready\n"))
+
+    def test_sanitized_caller_path_does_not_hide_the_installed_transaction_checker(self):
+        checker = self.canonical / "smplos-update-check"
+        checker.write_text("#!/bin/sh\nprintf 'transaction-checker-ready\\n'\n")
+        checker.chmod(0o755)
+        with mock.patch.dict(os.environ, {"PATH": "/usr/bin:/bin"}):
+            result, output, error = self.request(
+                ["/usr/bin/bash", "-c",
+                 "checker=$(command -v smplos-update-check) || exit 91; exec \"$checker\""])
+        self.assertEqual(result, 0, error)
+        self.assertEqual(output, b"transaction-checker-ready\n")
+
+    def test_command_environment_uses_a_fixed_canonical_path(self):
+        result, output, error = self.request(
+            [sys.executable, "-c", "import os; print(os.environ['PATH'])"])
+        self.assertEqual(result, 0, error)
+        self.assertEqual(output.decode().strip(), self.privileged_path)
 
     def test_stale_owner_and_unrelated_processes_are_rejected(self):
         uid, _, start = AUTH.identity(os.getpid())

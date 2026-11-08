@@ -74,6 +74,9 @@ returns each actual exit status. It exits when the run closes or its coordinator
 exits; an already-running operation finishes before the helper exits. No password,
 permanent service or passwordless rule is stored. Package guards and verification
 remain mandatory.
+The helper uses a fixed canonical system `PATH`, including `/usr/local/bin`,
+so Polkit's sanitized environment cannot hide the installed transaction checker.
+It never imports the caller's executable search path.
 
 An update started by the former per-operation Polkit entrypoint cannot reuse that
 legacy authentication. After the verified script refresh, it stops without
