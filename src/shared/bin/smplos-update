@@ -350,7 +350,11 @@ if ! check_update_power 2>&1 | tee -a "$SMPLOS_UPDATE_LOG_FILE"; then
 fi
 authenticate_update
 sudo() { smplos_privileged "$@"; }
-export -f sudo smplos_privileged
+# Migrations using pkexec must reuse this run's authorization and package guard.
+pkexec() {
+    sudo "$@"
+}
+export -f sudo pkexec smplos_privileged
 
 # Refresh the orchestration itself before migrations or package transactions.
 # Never let a legacy installed helper perform the first Git synchronization.
@@ -409,7 +413,7 @@ cat > "$UPDATE_SCRIPT" << PREAMBLE || bootstrap_fail "Cannot write update preamb
 #!/bin/bash
 UPDATE_MODE="$UPDATE_MODE"
 PREAMBLE
-declare -f check_update_power stop_sudo_keepalive release_update_lock smplos_privileged >> "$UPDATE_SCRIPT" || bootstrap_fail "Cannot write update helpers."
+declare -f check_update_power stop_sudo_keepalive release_update_lock smplos_privileged pkexec >> "$UPDATE_SCRIPT" || bootstrap_fail "Cannot write update helpers."
 
 # Append the body (single-quoted: no substitution; uses UPDATE_MODE set above)
 cat >> "$UPDATE_SCRIPT" << 'EOF' || bootstrap_fail "Cannot write updater body."
@@ -509,7 +513,7 @@ sudo() {
         smplos_privileged "$@"
     fi
 }
-export -f sudo smplos_privileged
+export -f sudo pkexec smplos_privileged
 export SMPLOS_SUDO_READY=1
 
 csv_join() {

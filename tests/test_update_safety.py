@@ -1390,7 +1390,7 @@ exec pacman "$@"
         body = self.source.split('cat >> "$UPDATE_SCRIPT" << \'EOF\'', 1)[1].split("\n", 1)[1].split("\nEOF\n", 1)[0]
         script = self.base / "run-update.sh"
         helpers = "\n".join(function(BIN / "smplos-update", name) for name in
-                            ("stop_sudo_keepalive", "release_update_lock", "smplos_privileged"))
+                            ("stop_sudo_keepalive", "release_update_lock", "smplos_privileged", "pkexec"))
         script.write_text(helpers +
                           f'\nUPDATE_MODE={mode}\n' + """
 mkdir -p "$HOME/.local/state/smplos/update"
@@ -1596,11 +1596,33 @@ PY
         self.assertIn("os-update --finalize", calls)
 
     def test_full_polkit_flow_preserves_native_dependency_guards_and_completion(self):
-        self.mock("pkexec", """echo "polkit $*" >> "$CALLS"
-case "$*" in
-    *"rm -f /etc/sudoers.d/99-smplos-update-transient"|*"rm -f /etc/pacman.d/hooks/90-rebuild-paru.hook") exit 0 ;;
-esac
-exec "$@"
+        self.mock("pkexec", 'echo "FORBIDDEN additional authentication" >&2; exit 99\n')
+        migration = ROOT / "migrations/20261030-120000-printing-platform.sh"
+        (self.repo / "migrations" / migration.name).write_text(migration.read_text())
+        self.mock("smplos-os-update", f"""echo "os-update $*" >> "$CALLS"
+if [[ "$1" == --deploy ]]; then
+    bash "{BIN / 'smplos-migrate'}" --phase core
+fi
+""")
+        installed = self.home / "printing-packages"
+        installed.write_text("")
+        pacman = (self.bin / "pacman").read_text()
+        self.mock("pacman", pacman + """
+if [[ "$1" == -Q ]]; then
+    case "$2" in
+        cups|cups-filters|python-pycups|avahi) grep -qx "$2" "$PRINTING_PACKAGES"; exit ;;
+    esac
+elif [[ "$1" == -S ]]; then
+    for argument in "$@"; do
+        case "$argument" in
+            cups|cups-filters|python-pycups|avahi) echo "$argument" >> "$PRINTING_PACKAGES" ;;
+        esac
+    done
+fi
+""")
+        self.mock("systemctl", """echo "printing-service $*" >> "$CALLS"
+if [[ "$1" == is-enabled ]]; then echo disabled; exit 0; fi
+[[ "${PRINTING_SERVICE_FAIL:-0}" == 0 ]]
 """)
         helper = self.base / "privileged-helper.py"
         helper.write_text("""import os, subprocess, sys
@@ -1628,11 +1650,29 @@ PY
         self.mock("smplos-update-apps", """echo "native-apps $*" >> "$CALLS"
 sudo pacman -S --noconfirm native-dependency
 """)
-        result = self.run_body(
-            WITH_PINS="1", CORE_AUR="1", SMPLOS_UPDATE_AUTH="polkit",
-            SMPLOS_UPDATE_PRIVILEGED_HELPER=str(helper),
-            SMPLOS_UPDATE_PRIVILEGED_SOCKET=str(self.base / "channel"),
-        )
+        variables = {
+            "WITH_PINS": "1", "CORE_AUR": "1", "SMPLOS_UPDATE_AUTH": "polkit",
+            "SMPLOS_UPDATE_PRIVILEGED_HELPER": str(helper),
+            "SMPLOS_UPDATE_PRIVILEGED_SOCKET": str(self.base / "channel"),
+            "PRINTING_PACKAGES": str(installed),
+        }
+        failed = self.run_body(**variables, PRINTING_SERVICE_FAIL="1")
+        self.assertNotEqual(failed.returncode, 0, failed.stdout + failed.stderr)
+        self.assertIn("printing-platform failed", failed.stdout)
+        self.assertNotIn("os-update --finalize", self.calls.read_text())
+        self.assertIn("status=failed\n", Path(str(self.log) + ".result").read_text())
+        marker = self.home / ".local/state/smplos/migrations" / migration.name
+        self.assertFalse(marker.exists())
+        calls = self.calls.read_text()
+        printing_transaction = "-S --needed --noconfirm cups cups-filters python-pycups avahi"
+        self.assertTrue(any(
+            line.startswith("guard pins=aquamarine,hyprland ") and
+            line.endswith(printing_transaction) for line in calls.splitlines()
+        ))
+        self.assertEqual(installed.read_text().splitlines(),
+                         ["cups", "cups-filters", "python-pycups", "avahi"])
+        self.calls.write_text("")
+        result = self.run_body(**variables)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         calls = self.calls.read_text()
         self.assertIn("guard pins=aquamarine,hyprland", calls)
@@ -1641,6 +1681,10 @@ sudo pacman -S --noconfirm native-dependency
         self.assertFalse(list((self.home / ".local/state/smplos/update").glob("privileged.*")))
         self.assertIn("os-update --finalize", calls)
         self.assertIn("status=complete\n", Path(str(self.log) + ".result").read_text())
+        self.assertTrue(marker.exists())
+        self.assertIn("printing-service enable --now cups.socket", calls)
+        self.assertIn("printing-service enable --now avahi-daemon.service", calls)
+        self.assertNotIn(printing_transaction, calls)
         self.assertNotIn("pkexec", calls)
 
     def test_failed_pin_resolution_stops_before_upgrade_and_optional_work(self):

@@ -65,6 +65,8 @@ Changes to independently built apps also require a release in their own repo.
 **One password prompt for the entire update.** Use `smplos-update --auth polkit`
 for one upfront foreground authorization, shared by bootstrap, package upgrades,
 native app delivery and final verification. Later operations never reauthenticate.
+Shell migrations that call `pkexec` also reuse the authenticated dispatcher;
+their package operations retain the same per-run dependency/pin guard.
 A cancelled authorization or lost authenticated channel stops the update
 explicitly; neither triggers another prompt or a sudo fallback.
 

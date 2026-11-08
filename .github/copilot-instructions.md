@@ -36,6 +36,8 @@ Any privileged helper must be temporary, scoped to that coordinator's run and
 closed at completion or interruption. Never store passwords or install a
 permanent passwordless rule. Cover the one-authorization contract across the
 real subprocess and bootstrap/reexec boundaries with regressions.
+Include the actual core migrations: shell `pkexec` calls must reuse the update
+dispatcher, preserve package guards and propagate failures without reauthenticating.
 
 ## For AI Assistants: Debugging UI Code Efficiently
 
