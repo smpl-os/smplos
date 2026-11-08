@@ -1,0 +1,246 @@
+#!/usr/bin/env python3
+"""One authenticated, coordinator-scoped privilege channel for an OS update."""
+
+import argparse
+import base64
+import json
+import os
+from pathlib import Path
+import pwd
+import selectors
+import socket
+import stat
+import struct
+import subprocess
+import sys
+import tempfile
+import time
+
+
+MAX_REQUEST = 24 * 1024 * 1024
+
+
+def identity(pid):
+    process = Path(f"/proc/{pid}")
+    fields = (process / "stat").read_text().rsplit(") ", 1)[1].split()
+    return process.stat().st_uid, int(fields[1]), fields[19]
+
+
+def authorized(pid, uid, owner, start):
+    try:
+        owner_uid, _, owner_start = identity(owner)
+        if (owner_uid, owner_start) != (uid, start):
+            return False
+        for _ in range(256):
+            user, parent, _ = identity(pid)
+            if user != uid:
+                return False
+            if pid == owner:
+                return True
+            if parent <= 1 or parent == pid:
+                return False
+            pid = parent
+    except (FileNotFoundError, ProcessLookupError):
+        return False
+    return False
+
+
+def send(connection, message):
+    connection.sendall(json.dumps(message).encode() + b"\n")
+
+
+def execute(connection, request, environment):
+    arguments = request["argv"]
+    if (not isinstance(arguments, list) or not arguments or
+            not all(isinstance(arg, str) and "\0" not in arg for arg in arguments) or
+            not os.path.isabs(arguments[0])):
+        raise ValueError("Privileged commands require an absolute executable and string arguments")
+    incoming = base64.b64decode(request["stdin"], validate=True)
+    connected = True
+    with tempfile.TemporaryFile() as source:
+        source.write(incoming)
+        source.seek(0)
+        with subprocess.Popen(arguments, stdin=source, stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE, cwd=request["cwd"], env=environment) as child:
+            with selectors.DefaultSelector() as streams:
+                streams.register(child.stdout, selectors.EVENT_READ, "stdout")
+                streams.register(child.stderr, selectors.EVENT_READ, "stderr")
+                while streams.get_map():
+                    for key, _ in streams.select():
+                        data = os.read(key.fileobj.fileno(), 65536)
+                        if not data:
+                            streams.unregister(key.fileobj)
+                            continue
+                        if connected:
+                            try:
+                                send(connection, {"stream": key.data,
+                                                  "data": base64.b64encode(data).decode()})
+                            except (BrokenPipeError, ConnectionResetError):
+                                connected = False
+            result = child.wait()
+    if connected:
+        send(connection, {"result": result if result >= 0 else 128 - result})
+
+
+def serve(directory, owner, uid, start):
+    directory = Path(directory)
+    status = directory.lstat()
+    if (directory.resolve() != directory or not stat.S_ISDIR(status.st_mode) or
+            status.st_uid != uid or stat.S_IMODE(status.st_mode) != 0o700):
+        raise ValueError("Privilege channel requires the coordinator's private directory")
+    if not authorized(owner, uid, owner, start):
+        raise ValueError("Update coordinator identity changed before authentication")
+    user = pwd.getpwuid(uid)
+    environment = {**os.environ, "SUDO_USER": user.pw_name, "SUDO_UID": str(uid),
+                   "SUDO_GID": str(user.pw_gid)}
+    parent = os.open(directory, os.O_DIRECTORY | os.O_NOFOLLOW)
+    broker = None
+    listener = socket.socket(socket.AF_UNIX)
+    cleaned = False
+    bound = False
+
+    def cleanup():
+        nonlocal cleaned
+        if cleaned:
+            return
+        cleaned = True
+        listener.close()
+        if broker is not None:
+            if bound:
+                os.unlink("socket", dir_fd=broker)
+            os.close(broker)
+            os.rmdir("broker", dir_fd=parent)
+        current = directory.lstat()
+        original = os.fstat(parent)
+        if (current.st_dev, current.st_ino) != (original.st_dev, original.st_ino):
+            raise ValueError("Privilege channel path changed before cleanup")
+        os.rmdir(directory)
+        os.close(parent)
+
+    try:
+        os.mkdir("broker", mode=0o700, dir_fd=parent)
+        broker = os.open("broker", os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=parent)
+        if os.fstat(broker).st_uid != os.geteuid():
+            raise ValueError("Privilege channel directory ownership changed")
+        listener.bind(f"/proc/self/fd/{broker}/socket")
+        bound = True
+        os.chown("socket", uid, -1, dir_fd=broker, follow_symlinks=False)
+        os.chmod("socket", 0o600, dir_fd=broker)
+        os.fchmod(broker, 0o711)
+        listener.listen()
+        listener.settimeout(0.5)
+        while authorized(owner, uid, owner, start):
+            try:
+                connection, _ = listener.accept()
+            except socket.timeout:
+                continue
+            with connection:
+                pid, peer_uid, _ = struct.unpack(
+                    "3i", connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
+                try:
+                    if peer_uid != uid or not authorized(pid, uid, owner, start):
+                        raise PermissionError("Privilege request is not from this update coordinator")
+                    connection.settimeout(30)
+                    with connection.makefile("rb") as stream:
+                        line = stream.readline(MAX_REQUEST + 1)
+                    if len(line) > MAX_REQUEST or not line.endswith(b"\n"):
+                        raise ValueError("Invalid or oversized privilege request")
+                    request = json.loads(line)
+                    connection.settimeout(None)
+                    if request["operation"] == "stop":
+                        cleanup()
+                        send(connection, {"result": 0})
+                        return
+                    if request["operation"] != "execute":
+                        raise ValueError("Unknown privilege request")
+                    execute(connection, request, environment)
+                except (OSError, ValueError, KeyError, TypeError) as error:
+                    print(f"Privileged update request failed: {error}", file=sys.stderr, flush=True)
+                    try:
+                        send(connection, {"error": str(error), "result": 1})
+                    except (BrokenPipeError, ConnectionResetError):
+                        pass
+    finally:
+        cleanup()
+
+
+def request(path, arguments=None, server_uid=0):
+    with socket.socket(socket.AF_UNIX) as connection:
+        connection.connect(str(path))
+        _, uid, _ = struct.unpack(
+            "3i", connection.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 12))
+        if uid != server_uid:
+            raise PermissionError("Privilege channel is not owned by the authenticated administrator")
+        if arguments is None:
+            message = {"operation": "stop"}
+        else:
+            incoming = b"" if sys.stdin.isatty() else sys.stdin.buffer.read(MAX_REQUEST + 1)
+            if len(incoming) > MAX_REQUEST:
+                raise ValueError("Privilege request input exceeds the update channel limit")
+            message = {"operation": "execute", "argv": arguments, "cwd": os.getcwd(),
+                       "stdin": base64.b64encode(incoming).decode()}
+        encoded = json.dumps(message).encode() + b"\n"
+        if len(encoded) > MAX_REQUEST:
+            raise ValueError("Privilege request exceeds the update channel limit")
+        connection.sendall(encoded)
+        with connection.makefile("rb") as stream:
+            for line in stream:
+                response = json.loads(line)
+                if "error" in response:
+                    print(f"ERROR: {response['error']}", file=sys.stderr)
+                if "result" in response:
+                    return response["result"]
+                output = sys.stdout.buffer if response["stream"] == "stdout" else sys.stderr.buffer
+                output.write(base64.b64decode(response["data"], validate=True))
+                output.flush()
+        raise RuntimeError("Privilege channel closed without an operation result")
+
+
+def wait_ready(path, pid):
+    deadline = time.monotonic() + 600
+    while time.monotonic() < deadline:
+        if Path(path).is_socket():
+            return 0
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            raise RuntimeError("Polkit authentication cancelled or failed")
+        except PermissionError:
+            pass
+        time.sleep(0.1)
+    raise RuntimeError("Timed out waiting for foreground Polkit authentication")
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    operation = parser.add_mutually_exclusive_group(required=True)
+    operation.add_argument("--serve", nargs=4, metavar=("DIRECTORY", "OWNER", "UID", "START"))
+    operation.add_argument("--request", metavar="SOCKET")
+    operation.add_argument("--stop", metavar="SOCKET")
+    operation.add_argument("--wait", nargs=2, metavar=("SOCKET", "PID"))
+    operation.add_argument("--identity", type=int, metavar="PID")
+    parser.add_argument("argv", nargs=argparse.REMAINDER)
+    args = parser.parse_args()
+    try:
+        if args.serve:
+            directory, owner, uid, start = args.serve
+            if os.geteuid() != 0 or os.environ.get("PKEXEC_UID") != uid:
+                raise PermissionError("The update privilege channel requires foreground Polkit authentication")
+            serve(directory, int(owner), int(uid), start)
+            return 0
+        if args.identity is not None:
+            print(identity(args.identity)[2])
+            return 0
+        if args.wait:
+            return wait_ready(args.wait[0], int(args.wait[1]))
+        if args.stop:
+            return request(args.stop)
+        arguments = args.argv[1:] if args.argv[:1] == ["--"] else args.argv
+        return request(args.request, arguments)
+    except (OSError, RuntimeError, ValueError) as error:
+        print(f"ERROR: {error}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

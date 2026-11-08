@@ -21,7 +21,7 @@ smplos_privileged() {
         local executable
         executable=$(command -v "$1") || return 1
         shift
-        command pkexec "$executable" "$@"
+        python3 "$SMPLOS_UPDATE_PRIVILEGED_HELPER" --request "$SMPLOS_UPDATE_PRIVILEGED_SOCKET" -- "$executable" "$@"
     else
         command sudo -n "$@"
     fi
@@ -181,6 +181,17 @@ stop_sudo_keepalive() {
         wait "$SMPLOS_SUDO_KEEPALIVE_PID" 2>/dev/null || true
         unset SMPLOS_SUDO_KEEPALIVE_PID
     fi
+    if [[ -n "${SMPLOS_UPDATE_PRIVILEGED_DIR:-}" ]]; then
+        if [[ -S "$SMPLOS_UPDATE_PRIVILEGED_SOCKET" ]]; then
+            python3 "$SMPLOS_UPDATE_PRIVILEGED_HELPER" --stop "$SMPLOS_UPDATE_PRIVILEGED_SOCKET" ||
+                echo "ERROR: could not close the authenticated update channel" >&2
+        fi
+        if [[ -d "$SMPLOS_UPDATE_PRIVILEGED_DIR" ]]; then
+            rmdir -- "$SMPLOS_UPDATE_PRIVILEGED_DIR" ||
+                echo "ERROR: could not remove the update authentication directory" >&2
+        fi
+        unset SMPLOS_UPDATE_PRIVILEGED_DIR
+    fi
 }
 release_update_lock() {
     if [[ "${SMPLOS_UPDATE_LOCKED:-0}" == 1 ]]; then
@@ -233,10 +244,32 @@ check_reboot_before_update() {
     esac
 }
 authenticate_update() {
-    [[ "${SMPLOS_SUDO_READY:-0}" != 1 ]] || return 0
+    if [[ "${SMPLOS_SUDO_READY:-0}" == 1 ]]; then
+        if [[ "$SMPLOS_UPDATE_AUTH" == polkit && "${SMPLOS_UPDATE_PRIVILEGED_OWNER:-}" != "$$" ]]; then
+            startup_fail "The legacy authentication session cannot be reused. Restart Update OS using the refreshed entrypoint."
+        fi
+        return 0
+    fi
     if [[ "$SMPLOS_UPDATE_AUTH" == polkit ]]; then
         command -v pkexec >/dev/null || startup_fail "Polkit authentication requires pkexec."
-        smplos_privileged /usr/bin/true || startup_fail "Polkit authentication cancelled or failed; update not started."
+        SMPLOS_UPDATE_PRIVILEGED_HELPER="${SELF%/*}/smplos-update-privileged"
+        [[ -r "$SMPLOS_UPDATE_PRIVILEGED_HELPER" ]] ||
+            startup_fail "The single-authentication update helper is missing."
+        local owner_start
+        owner_start=$(python3 "$SMPLOS_UPDATE_PRIVILEGED_HELPER" --identity "$$") ||
+            startup_fail "Cannot establish update coordinator identity."
+        SMPLOS_UPDATE_PRIVILEGED_DIR=$(mktemp -d /tmp/smplos-update-auth.XXXXXX) ||
+            startup_fail "Cannot prepare the private update authentication channel."
+        SMPLOS_UPDATE_PRIVILEGED_SOCKET="$SMPLOS_UPDATE_PRIVILEGED_DIR/broker/socket"
+        command pkexec --disable-internal-agent /usr/bin/python3 "$SMPLOS_UPDATE_PRIVILEGED_HELPER" \
+            --serve "$SMPLOS_UPDATE_PRIVILEGED_DIR" "$$" "$UID" "$owner_start" &
+        SMPLOS_UPDATE_PRIVILEGED_PID=$!
+        SMPLOS_UPDATE_PRIVILEGED_OWNER=$$
+        export SMPLOS_UPDATE_PRIVILEGED_HELPER SMPLOS_UPDATE_PRIVILEGED_DIR \
+            SMPLOS_UPDATE_PRIVILEGED_SOCKET SMPLOS_UPDATE_PRIVILEGED_PID SMPLOS_UPDATE_PRIVILEGED_OWNER
+        python3 "$SMPLOS_UPDATE_PRIVILEGED_HELPER" --wait "$SMPLOS_UPDATE_PRIVILEGED_SOCKET" \
+            "$SMPLOS_UPDATE_PRIVILEGED_PID" ||
+            startup_fail "Polkit authentication cancelled or failed; update not started."
         export SMPLOS_SUDO_READY=1
         return 0
     fi

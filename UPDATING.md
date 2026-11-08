@@ -62,12 +62,23 @@ Changes to independently built apps also require a release in their own repo.
 
 ### Foreground Polkit authentication
 
-Use `smplos-update --auth polkit` to authenticate individual privileged operations
-through foreground desktop dialogs instead of terminal sudo prompts. The
-coordinator remains the desktop user; package guards, bootstrap and verification
-are unchanged. A dismissed dialog fails the affected operation explicitly.
-Polkit may request authentication again for later operations; no password or
-passwordless rule is stored.
+**One password prompt for the entire update.** Use `smplos-update --auth polkit`
+for one upfront foreground authorization, shared by bootstrap, package upgrades,
+native app delivery and final verification. Later operations never reauthenticate.
+A cancelled authorization or lost authenticated channel stops the update
+explicitly; neither triggers another prompt or a sudo fallback.
+
+The coordinator remains the desktop user. A temporary root helper accepts only
+requests from that coordinator and its descendants, streams command output and
+returns each actual exit status. It exits when the run closes or its coordinator
+exits; an already-running operation finishes before the helper exits. No password,
+permanent service or passwordless rule is stored. Package guards and verification
+remain mandatory.
+
+An update started by the former per-operation Polkit entrypoint cannot reuse that
+legacy authentication. After the verified script refresh, it stops without
+asking again; restart the refreshed entrypoint to begin the single-authentication
+run.
 
 To use this mode from App Center as well, save the single word `polkit` in
 `~/.config/smplos/update-auth`. An absent preference retains the existing sudo

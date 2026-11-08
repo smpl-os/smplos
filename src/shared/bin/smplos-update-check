@@ -70,7 +70,11 @@ def run(*args):
         executable = shutil.which(args[2])
         if not executable:
             raise RuntimeError(f"Privileged verification command not found: {args[2]}")
-        args = ("pkexec", executable, *args[3:])
+        helper = os.environ.get("SMPLOS_UPDATE_PRIVILEGED_HELPER")
+        channel = os.environ.get("SMPLOS_UPDATE_PRIVILEGED_SOCKET")
+        if not helper or not channel:
+            raise RuntimeError("The authenticated update channel is missing; verification cannot reauthenticate")
+        args = ("python3", helper, "--request", channel, "--", executable, *args[3:])
     try:
         return subprocess.run(args, capture_output=True, text=True, timeout=45,
                               env={**os.environ, "LC_ALL": "C"})

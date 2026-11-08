@@ -43,12 +43,25 @@ class UpdateAuthenticationTests(unittest.TestCase):
             path.chmod(0o755)
         self.env = {**os.environ, "PATH": f"{self.base}:/usr/bin:/bin",
                     "CALLS": str(self.calls), "SMPLOS_SUDO_READY": "0"}
+        helper = self.base / "smplos-update-privileged"
+        helper.write_text(
+            'import os, sys\n'
+            'with open(os.environ["CALLS"], "a") as stream:\n'
+            '    stream.write("\\n".join(["helper", *sys.argv[1:]]) + "\\n")\n'
+            'if "--identity" in sys.argv:\n'
+            '    print("0")\n'
+            '    sys.exit(0)\n'
+            'sys.exit(int(os.environ.get("AUTH_STATUS", "0")))\n')
+        self.env.update(SELF=str(self.base / "smplos-update"),
+                        SMPLOS_UPDATE_PRIVILEGED_HELPER=str(helper),
+                        SMPLOS_UPDATE_PRIVILEGED_SOCKET=str(self.base / "socket"))
 
     def run_auth(self, body, **env):
         helpers = "\n".join(function(BIN / "smplos-update", name)
-                            for name in ("smplos_privileged", "authenticate_update"))
+                            for name in ("smplos_privileged", "authenticate_update", "stop_sudo_keepalive"))
         return subprocess.run(
-            ["bash", "-c", helpers + '\nstartup_fail() { echo "$*" >&2; exit 1; }\n' + body],
+            ["bash", "-c", helpers + '\nstartup_fail() { echo "$*" >&2; exit 1; }\n'
+             'trap stop_sudo_keepalive EXIT\n' + body],
             env={**self.env, **env}, text=True, capture_output=True, timeout=5,
         )
 
@@ -56,7 +69,8 @@ class UpdateAuthenticationTests(unittest.TestCase):
         result = self.run_auth("smplos_privileged pacman -Sy --noconfirm", SMPLOS_UPDATE_AUTH="polkit")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(self.calls.read_text().splitlines(),
-                         ["pkexec", str(self.base / "pacman"), "-Sy", "--noconfirm"])
+                         ["helper", "--request", str(self.base / "socket"), "--",
+                          str(self.base / "pacman"), "-Sy", "--noconfirm"])
 
     def test_sudo_backend_remains_noninteractive(self):
         result = self.run_auth("smplos_privileged pacman -Su", SMPLOS_UPDATE_AUTH="sudo")
@@ -69,7 +83,9 @@ class UpdateAuthenticationTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("cancelled or failed", result.stderr)
         self.assertNotIn("SHOULD-NOT-RUN", result.stdout)
-        self.assertEqual(self.calls.read_text().splitlines(), ["pkexec", "/usr/bin/true"])
+        calls = self.calls.read_text().splitlines()
+        self.assertEqual(calls.count("pkexec"), 1)
+        self.assertNotIn("sudo", calls)
 
     def test_polkit_authentication_has_no_sudo_keepalive(self):
         result = self.run_auth(
@@ -80,12 +96,53 @@ class UpdateAuthenticationTests(unittest.TestCase):
         self.assertEqual(result.stdout.strip(), "1:none")
 
     def test_python_verifier_uses_the_same_authentication_backend(self):
-        with mock.patch.dict(os.environ, {"SMPLOS_UPDATE_AUTH": "polkit"}), \
+        with mock.patch.dict(os.environ, {
+                "SMPLOS_UPDATE_AUTH": "polkit", "SMPLOS_UPDATE_PRIVILEGED_HELPER": "/helper",
+                "SMPLOS_UPDATE_PRIVILEGED_SOCKET": "/channel"}), \
                 mock.patch.object(CHECK.shutil, "which", return_value="/usr/bin/stat"), \
                 mock.patch.object(CHECK.subprocess, "run") as execute:
             CHECK.run("sudo", "-n", "stat", "-L", "--", "/boot/vmlinuz-linux-lts")
         self.assertEqual(execute.call_args.args[0],
-                         ("pkexec", "/usr/bin/stat", "-L", "--", "/boot/vmlinuz-linux-lts"))
+                         ("python3", "/helper", "--request", "/channel", "--",
+                          "/usr/bin/stat", "-L", "--", "/boot/vmlinuz-linux-lts"))
+
+    def test_one_authorization_covers_repeated_auth_calls_and_privileged_operations(self):
+        result = self.run_auth(
+            "authenticate_update; smplos_privileged pacman -Sy; "
+            "authenticate_update; smplos_privileged pacman -Su",
+            SMPLOS_UPDATE_AUTH="polkit",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        calls = self.calls.read_text().splitlines()
+        self.assertEqual(calls.count("pkexec"), 1)
+        self.assertEqual(calls.count("--request"), 2)
+        self.assertNotIn("sudo", calls)
+
+    def test_lost_privilege_channel_never_reauthenticates(self):
+        result = self.run_auth(
+            "authenticate_update; export AUTH_STATUS=1; "
+            "smplos_privileged pacman -Su",
+            SMPLOS_UPDATE_AUTH="polkit",
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.calls.read_text().splitlines().count("pkexec"), 1)
+
+    def test_verification_cannot_reauthenticate_without_the_channel(self):
+        with mock.patch.dict(os.environ, {
+                "SMPLOS_UPDATE_AUTH": "polkit", "SMPLOS_UPDATE_PRIVILEGED_HELPER": "",
+                "SMPLOS_UPDATE_PRIVILEGED_SOCKET": ""}), \
+                mock.patch.object(CHECK.subprocess, "run") as execute:
+            with self.assertRaisesRegex(RuntimeError, "cannot reauthenticate"):
+                CHECK.run("sudo", "-n", "stat", "/boot")
+        execute.assert_not_called()
+
+    def test_legacy_authentication_stops_without_another_password_prompt(self):
+        result = self.run_auth("authenticate_update",
+                               SMPLOS_UPDATE_AUTH="polkit", SMPLOS_SUDO_READY="1",
+                               SMPLOS_UPDATE_PRIVILEGED_OWNER="")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Restart Update OS", result.stderr)
+        self.assertFalse(self.calls.exists())
 
     def test_saved_authentication_and_explicit_override_reject_invalid_values(self):
         home = self.base / "home"
@@ -1545,6 +1602,18 @@ case "$*" in
 esac
 exec "$@"
 """)
+        helper = self.base / "privileged-helper.py"
+        helper.write_text("""import os, subprocess, sys
+arguments = sys.argv[sys.argv.index("--") + 1:]
+with open(os.environ["CALLS"], "a") as stream:
+    stream.write("polkit " + " ".join(arguments) + "\\n")
+if arguments[1:] in (
+    ["-f", "/etc/sudoers.d/99-smplos-update-transient"],
+    ["-f", "/etc/pacman.d/hooks/90-rebuild-paru.hook"],
+):
+    sys.exit(0)
+sys.exit(subprocess.call(arguments))
+""")
         self.mock("yay", """echo "yay $*" >> "$CALLS"
 python3 - "$@" <<'PY'
 import subprocess
@@ -1559,7 +1628,11 @@ PY
         self.mock("smplos-update-apps", """echo "native-apps $*" >> "$CALLS"
 sudo pacman -S --noconfirm native-dependency
 """)
-        result = self.run_body(WITH_PINS="1", CORE_AUR="1", SMPLOS_UPDATE_AUTH="polkit")
+        result = self.run_body(
+            WITH_PINS="1", CORE_AUR="1", SMPLOS_UPDATE_AUTH="polkit",
+            SMPLOS_UPDATE_PRIVILEGED_HELPER=str(helper),
+            SMPLOS_UPDATE_PRIVILEGED_SOCKET=str(self.base / "channel"),
+        )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         calls = self.calls.read_text()
         self.assertIn("guard pins=aquamarine,hyprland", calls)
@@ -1568,6 +1641,7 @@ sudo pacman -S --noconfirm native-dependency
         self.assertFalse(list((self.home / ".local/state/smplos/update").glob("privileged.*")))
         self.assertIn("os-update --finalize", calls)
         self.assertIn("status=complete\n", Path(str(self.log) + ".result").read_text())
+        self.assertNotIn("pkexec", calls)
 
     def test_failed_pin_resolution_stops_before_upgrade_and_optional_work(self):
         result = self.run_body(PIN_PLAN_FAIL="1")
@@ -1846,14 +1920,16 @@ exec /usr/bin/mktemp "$@"
                     ["flock", "-n", str(state / "update.lock"), "true"]).returncode, 0)
                 self.assertEqual((state / "status").read_text(), f"status={status}\n" + completed)
 
-    def test_refresh_reexecutes_new_wrapper_keeps_lock_and_authenticates_once(self):
-        # Exercise the real front-end/bootstrap, replacing only terminal/root
-        # presentation guards and the separately tested hardware power reader.
+    def bootstrap_frontend(self):
         source = self.source.split("UPDATE_SCRIPT=$(mktemp", 1)[0]
         source = source.replace("if [[ ! -t 1 && $EUID -ne 0 ]]; then", "if false; then")
         source = source.replace("if [[ $EUID -eq 0 ]]; then", "if false; then", 1)
         source = source.replace(function(BIN / "smplos-update", "check_update_power"),
                                 'check_update_power() {\n return "${POWER_FAIL:-0}"\n}')
+        return source
+
+    def test_refresh_reexecutes_new_wrapper_keeps_lock_and_authenticates_once(self):
+        source = self.bootstrap_frontend()
         old = self.base / "old-update"
         fresh = self.bin / "smplos-update"
         old.write_text(source + "\necho OLD-WRAPPER\n")
@@ -1887,6 +1963,53 @@ exec /usr/bin/mktemp "$@"
         self.assertNotIn("WRAPPER", result.stdout)
         self.assertNotIn("pacman ", self.calls.read_text())
         self.assertIn("No package upgrade was started", result.stdout + result.stderr)
+
+    def test_polkit_bootstrap_reexec_preserves_one_authenticated_channel(self):
+        source = self.bootstrap_frontend()
+        old = self.base / "old-update"
+        fresh = self.bin / "smplos-update"
+        old.write_text(source + "\necho OLD-WRAPPER\n")
+        fresh.write_text(source + "\necho NEW-WRAPPER\n")
+        fresh.chmod(0o755)
+        helper = f"""import importlib.machinery, importlib.util, os, sys
+loader = importlib.machinery.SourceFileLoader("auth", {str(BIN / "smplos-update-privileged")!r})
+spec = importlib.util.spec_from_loader(loader.name, loader)
+auth = importlib.util.module_from_spec(spec)
+loader.exec_module(auth)
+args = sys.argv[1:]
+if args[0] == "--identity":
+    print(auth.identity(int(args[1]))[2])
+elif args[0] == "--serve":
+    auth.serve(args[1], int(args[2]), int(args[3]), args[4])
+elif args[0] == "--wait":
+    sys.exit(auth.wait_ready(args[1], int(args[2])))
+elif args[0] == "--stop":
+    sys.exit(auth.request(args[1], server_uid=os.geteuid()))
+else:
+    command = args[args.index("--") + 1:]
+    command = [{str(self.bin / "sudo")!r}, "-n", os.path.basename(command[0]), *command[1:]]
+    sys.exit(auth.request(args[1], command, server_uid=os.geteuid()))
+"""
+        for directory in (self.base, self.bin):
+            (directory / "smplos-update-privileged").write_text(helper)
+        self.mock("pkexec", """echo "pkexec $*" >> "$CALLS"
+[[ "$1" != --disable-internal-agent ]] || shift
+exec "$@"
+""")
+        result = subprocess.run(
+            ["bash", str(old), "--auth", "polkit"], capture_output=True, text=True,
+            env=self.env, timeout=15,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("NEW-WRAPPER", result.stdout)
+        self.assertNotIn("OLD-WRAPPER", result.stdout)
+        calls = self.calls.read_text()
+        self.assertEqual(sum(line.startswith("pkexec ") for line in calls.splitlines()), 1)
+        self.assertEqual(calls.count("os-update --scripts"), 1)
+        self.assertNotIn("sudo -v", calls)
+        self.assertEqual(subprocess.run(
+            ["flock", "-n", str(self.home / ".local/state/smplos/update/update.lock"),
+             "true"]).returncode, 0)
 
     def test_terminal_launch_preserves_scripts_only_enrollment(self):
         self.mock("fixture-terminal", 'echo "terminal $*" >> "$CALLS"\n')

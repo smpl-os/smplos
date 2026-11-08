@@ -23,6 +23,20 @@ ask first.**
 
 ---
 
+## Update OS: One Password Prompt
+
+Authenticate once for the entire Update OS run, including bootstrap, package
+upgrades, native app delivery, subprocesses and final verification. Never invoke
+fresh authentication for individual privileged operations. If authorization is
+cancelled or the authenticated channel fails, stop explicitly; do not ask again
+or fall back to another authentication backend.
+
+Keep the desktop-user coordinator and all package/dependency/verification gates.
+Any privileged helper must be temporary, scoped to that coordinator's run and
+closed at completion or interruption. Never store passwords or install a
+permanent passwordless rule. Cover the one-authorization contract across the
+real subprocess and bootstrap/reexec boundaries with regressions.
+
 ## For AI Assistants: Debugging UI Code Efficiently
 
 Hard-won lessons from a 3-hour session that should have taken 30 minutes.
