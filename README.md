@@ -322,6 +322,9 @@ On Hyprland, messenger shortcuts such as <kbd>Super</kbd>+<kbd>Shift</kbd>+<kbd>
 for Signal open on the keyboard-focused monitor, even if the mouse is elsewhere.
 Hiding the messenger returns focus to the previous window if it still exists on
 that workspace; it does not bring back a window you moved or closed.
+If a notification has already focused the messenger, the toggle recovers the
+most recently focused eligible window on the underlying workspace instead of
+jumping to its first scrolling column.
 
 #### Monitor-owned workspaces
 

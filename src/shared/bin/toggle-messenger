@@ -148,6 +148,7 @@ POS_Y=0
 ABS_X=0
 ABS_Y=0
 TARGET_WORKSPACE=""
+TARGET_MONITOR=""
 
 fail() {
   echo "toggle-messenger: $*" >&2
@@ -190,6 +191,8 @@ calc_position() {
   fi
   TARGET_WORKSPACE=$(jq -er '.activeWorkspace.id | numbers' <<< "$mon_json") \
     || fail "Cannot determine the focused workspace"
+  TARGET_MONITOR=$(jq -er '.id | numbers' <<< "$mon_json") \
+    || fail "Cannot determine the focused monitor identity"
   local mon_w mon_h mon_x mon_y scale transform
   mon_w=$(echo "$mon_json" | jq -r '.width')
   mon_h=$(echo "$mon_json" | jq -r '.height')
@@ -221,17 +224,43 @@ calc_position() {
 }
 
 remember_focus() {
-  hyprctl -j activewindow | jq -c \
-    '{address: (.address // ""), workspace: .workspace.id, monitor}' > "$FOCUS_STATE.tmp" \
+  local active clients
+  active=$(hyprctl -j activewindow) || fail "Cannot query the current window"
+  if jq -e --arg messenger "${addr:-}" --argjson workspace "$TARGET_WORKSPACE" \
+    --argjson monitor "$TARGET_MONITOR" '
+      .address != $messenger and (.address // "") != ""
+      and .workspace.id == $workspace and .monitor == $monitor
+      and .mapped != false and .hidden != true' <<< "$active" >/dev/null; then
+    jq -c '{address, workspace: .workspace.id, monitor}' <<< "$active" > "$FOCUS_STATE.tmp" \
+      || fail "Cannot remember the current window"
+  else
+    # Notification activation can focus the stashed messenger before the toggle.
+    # Recover the underlying workspace's MRU, not clients' arbitrary list order.
+    clients=$(hyprctl -j clients) || fail "Cannot query window focus history"
+    jq -c --arg messenger "${addr:-}" --argjson workspace "$TARGET_WORKSPACE" \
+      --argjson monitor "$TARGET_MONITOR" '
+        [.[] | select(.address != $messenger
+          and .workspace.id == $workspace and .monitor == $monitor
+          and .mapped != false and .hidden != true
+          and (.focusHistoryID | type) == "number" and .focusHistoryID >= 0)]
+        | sort_by(.focusHistoryID) | first
+        | {address: (.address // ""), workspace: $workspace, monitor: $monitor}
+      ' <<< "$clients" > "$FOCUS_STATE.tmp" \
+      || fail "Cannot remember the previous window"
+  fi
+  mv -f "$FOCUS_STATE.tmp" "$FOCUS_STATE" \
     || fail "Cannot remember the current window"
-  mv -f "$FOCUS_STATE.tmp" "$FOCUS_STATE"
 }
 
 return_focus_target() {
-  [[ -f "$FOCUS_STATE" ]] || return 0
   local active saved clients
   active=$(hyprctl -j activewindow) || fail "Cannot query the focused window"
   [[ "$(jq -r '.address // ""' <<< "$active")" == "$addr" ]] || return 0
+  if [[ ! -f "$FOCUS_STATE" ]] || jq -e --arg messenger "$addr" \
+    '.address == $messenger or .workspace < 0' "$FOCUS_STATE" >/dev/null; then
+    calc_position
+    remember_focus
+  fi
   saved=$(jq -ec '.' "$FOCUS_STATE") || fail "Invalid saved focus state"
   clients=$(hyprctl -j clients) || fail "Cannot query the previous window"
   jq -r --argjson saved "$saved" --argjson active "$active" '

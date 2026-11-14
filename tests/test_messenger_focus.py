@@ -153,6 +153,62 @@ class MessengerFocusTests(unittest.TestCase):
         self.assertEqual(sum("address:0x10" in c[1] for c in focus_calls), 2)
         self.assertFalse(self.focus_state.exists())
 
+    def notification_focus(self):
+        state = self.state()
+        state.update(active="0x20", monitor=0)
+        state["clients"][1]["monitor"] = 0
+        state["monitors"][0]["specialWorkspace"] = state["clients"][1]["workspace"]
+        state["clients"][0]["focusHistoryID"] = 2
+        state["clients"].append({
+            "address": "0x40", "class": "terminal", "mapped": True, "monitor": 0,
+            "workspace": {"id": 2, "name": "2"}, "focusHistoryID": 1,
+        })
+        self.save(state)
+
+    def test_notification_revealed_special_returns_to_mru_not_first_window(self):
+        self.notification_focus()
+        self.toggle()
+        self.assertEqual(json.loads(self.focus_state.read_text())["address"], "0x40")
+        self.toggle()
+        self.assertEqual(self.state()["active"], "0x40")
+        self.assertEqual(self.state()["clients"][1]["workspace"]["name"], "special:messenger_signal")
+
+    def test_notification_on_normal_workspace_without_saved_focus_recovers_mru(self):
+        self.notification_focus()
+        state = self.state()
+        state["clients"][1]["workspace"] = {"id": 2, "name": "2"}
+        state["monitors"][0]["specialWorkspace"] = {"id": 0, "name": ""}
+        self.save(state)
+        self.toggle()
+        self.assertEqual(self.state()["active"], "0x40")
+
+    def test_legacy_saved_self_focus_is_recovered(self):
+        self.notification_focus()
+        state = self.state()
+        state["clients"][1]["workspace"] = {"id": 2, "name": "2"}
+        state["monitors"][0]["specialWorkspace"] = {"id": 0, "name": ""}
+        self.save(state)
+        self.runtime.mkdir()
+        self.focus_state.write_text(json.dumps({
+            "address": "0x20", "workspace": -97, "monitor": 0,
+        }))
+        self.toggle()
+        self.assertEqual(self.state()["active"], "0x40")
+
+    def test_notification_focus_history_excludes_hidden_and_other_workspace_windows(self):
+        self.notification_focus()
+        state = self.state()
+        state["clients"].extend([
+            {"address": "0x50", "mapped": True, "hidden": True, "monitor": 0,
+             "workspace": {"id": 2, "name": "2"}, "focusHistoryID": 0},
+            {"address": "0x60", "mapped": True, "monitor": 0,
+             "workspace": {"id": 3, "name": "3"}, "focusHistoryID": 0},
+        ])
+        self.save(state)
+        self.toggle()
+        self.toggle()
+        self.assertEqual(self.state()["active"], "0x40")
+
     def test_portrait_monitor_geometry_stays_correct(self):
         state = self.state()
         state.update(active="0x30", monitor=1)
