@@ -53,3 +53,28 @@ class DeliveryTests(unittest.TestCase):
                     self.assertIn("retry Update OS", result.stdout)
                 else:
                     self.assertRegex(result.stdout, "NOT activated|no daemon restart")
+
+    def test_dispatcher_repair_reenrolls_existing_machines_without_restarting_daemon(self):
+        repo = path.parents[4]
+        script = repo / "migrations/20261114-030000-signal-notification-dispatch.sh"
+        self.assertIn("SMPLOS_UPDATE_PRIORITY=core", script.read_text())
+        self.assertNotRegex(script.read_text(), r"\b(kill|pkill|killall|dunstctl|hyprctl|systemctl|pkexec|sudo)\b")
+        for installed, fail, expected in (("", "0", 0), ("1.13.2-1", "0", 0),
+                                         ("1.13.2-2", "0", 0), ("1.13.2-1", "1", 1)):
+            with self.subTest(installed=installed, fail=fail), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                lib = root / "src/shared/lib/smplos-pkgbuild.sh"
+                lib.parent.mkdir(parents=True)
+                lib.write_text(
+                    'smplos_pkgbuild_version() { printf "1.13.2-2\\n"; }\n'
+                    'smplos_pkg_version() { printf "%s\\n" "$CURRENT_VERSION"; }\n'
+                    'smplos_pkgbuild_install() {\n'
+                    '  [[ "$TEST_FAIL" == 0 ]] || return 1\n'
+                    '  CURRENT_VERSION=1.13.2-2\n'
+                    '}\n')
+                result = subprocess.run(
+                    ["/bin/bash", str(script)], text=True, capture_output=True, timeout=5,
+                    env={"PATH": temp, "SMPLOS_REPO": temp,
+                         "CURRENT_VERSION": installed, "TEST_FAIL": fail})
+                self.assertEqual(expected, result.returncode, result.stdout + result.stderr)
+                self.assertIn("retry Update OS" if expected else "next click", result.stdout)

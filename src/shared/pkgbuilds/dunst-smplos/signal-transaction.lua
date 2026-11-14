@@ -11,7 +11,7 @@ local function require_live(pid, start, parent)
 end
 
 local function checked(dispatcher)
-    local result = dispatcher()
+    local result = hl.dispatch(dispatcher)
     assert(type(result) == "table" and result.ok == true, "activation dispatcher failed")
 end
 

@@ -530,7 +530,8 @@ buttons (including non-activating actions), other applications, and ordinary
 Signal tray/deep-link/second-instance activation keep their native paths.
 No global or Signal-wide activation suppression rule is installed.
 The transaction uses Hyprland's Lua window/monitor APIs, validated against
-0.56.2. Outside Hyprland, native forwarding is unchanged.
+0.56.2. Dispatcher objects execute through `hl.dispatch(...)`, not direct
+function calls. Outside Hyprland, native forwarding is unchanged.
 
 Before forwarding the native `ActionInvoked`, Dunst directly executes a fixed
 helper with only the recipient's unique bus name. The helper verifies that its
@@ -577,6 +578,13 @@ files does **not** activate the hook in an already-running Dunst. Keep that
 daemon and its in-memory history running until a separately agreed activation;
 do not restart Dunst, Signal, Hyprland or unrelated services as a deployment
 shortcut. No native smpl-apps release is needed for this package.
+
+Migration `20261114-030000-signal-notification-dispatch.sh` repairs the dispatcher
+API on machines that already completed the original enrollment, delivering
+`dunst-smplos 1.13.2-2`. The running patched Dunst loads the Lua transaction
+afresh on each click, so this repair takes effect without restarting Dunst or
+losing its in-memory notification history. A stock/unpatched running Dunst still
+requires the separately agreed activation described above.
 
 ---
 

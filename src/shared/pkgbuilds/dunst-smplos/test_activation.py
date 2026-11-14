@@ -185,6 +185,11 @@ io.open = function(path)
             close=function() end}
 end
 hl = {
+ dispatch=function(dispatcher)
+    assert(type(dispatcher) == "table" and type(dispatcher.run) == "function",
+        "expected a Hyprland dispatcher object")
+    return dispatcher.run()
+ end,
  get_windows=function() return windows end,
  get_active_window=function() return active end,
  get_config=function(key)
@@ -193,7 +198,7 @@ hl = {
     return auto_close
  end,
  dsp={
-  window={move=function(value) return function()
+  window={move=function(value) return {run=function()
     events[#events+1] = "move"
     assert(value.window == signal and value.workspace == 2 and value.silent)
     if case == "move_error" then return {ok=false} end
@@ -201,14 +206,14 @@ hl = {
     -- Native Window::moveToWorkspace closes the monitor's special, not necessarily old.
     if old.special and old.is_empty and auto_close then old_monitor:set_special_workspace({}) end
     return {ok=true}
-  end end},
-  focus=function(value) return function()
+  end} end},
+  focus=function(value) return {run=function()
     events[#events+1] = "focus"
     assert(value.window == signal)
     if case == "focus_error" then return {ok=false} end
     if case ~= "focus_noop" then active=signal end
     return {ok=true}
-  end end,
+  end} end,
  },
 }
 local before = unrelated.workspace
