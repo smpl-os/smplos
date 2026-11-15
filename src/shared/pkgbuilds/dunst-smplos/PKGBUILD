@@ -1,0 +1,51 @@
+# Maintainer: smplOS <https://github.com/smpl-os>
+pkgname=dunst-smplos
+pkgver=1.13.2
+pkgrel=2
+pkgdesc='Dunst with bounded, notification-only Signal workspace preparation'
+url='https://dunst-project.org/'
+arch=(x86_64)
+license=(BSD-3-Clause)
+depends=(libxinerama dbus systemd wayland libxss pango gdk-pixbuf2 libxrandr glib2 python)
+makedepends=(libnotify wayland-protocols lua perl)
+optdepends=('libnotify: dunstify')
+provides=("dunst=$pkgver")
+conflicts=(dunst)
+replaces=(dunst)
+backup=(etc/dunst/dunstrc)
+options=(!debug)
+source=("dunst-$pkgver.tar.gz::https://github.com/dunst-project/dunst/archive/v$pkgver.tar.gz"
+        pre-forward.patch smplos-action.h signal-notification-activate signal-transaction.lua
+        test_activation.py)
+sha256sums=('c68645cecef4a45840cd67c19a18a3a21ecae6b331e9864c2b745c31aee5fc85'
+            'f530eb5e4d25aeaa5e44465d9e7ce5e1130f96d5f2224f1221b080703312e85b'
+            '427a43cd9bfb23a3c74df1cc860e266c4d39eb97e2cb51b80cda0f8fff694040'
+            '80af4bd4e9bceff3f6b2f681d851b9ee8a55e25d360f3a7ecf8bf4837ca640db'
+            'cbacc43a9e211634fd267e259f2930c13a36557e30a8b595d69de5d9f0003c4b'
+            '99f6a9c8c613324cbf29f4c4b1335a72ad140910a27cd44f8db1381517cbf730')
+
+prepare() {
+    cd "dunst-$pkgver"
+    patch -Np1 -i "$srcdir/pre-forward.patch" || return 1
+    cp "$srcdir/smplos-action.h" src/
+}
+
+build() {
+    cd "dunst-$pkgver"
+    make PREFIX=/usr SYSCONFDIR=/etc X11INC=/usr/include/X11 X11LIB=/usr/lib/X11 \
+        POD2MAN=/usr/bin/core_perl/pod2man all
+}
+
+check() {
+    SMPLOS_DUNST_SOURCE="$srcdir/dunst-$pkgver" python "$srcdir/test_activation.py"
+}
+
+package() {
+    cd "dunst-$pkgver"
+    make DESTDIR="$pkgdir" SYSCONFDIR=/etc PREFIX=/usr \
+        POD2MAN=/usr/bin/core_perl/pod2man install
+    install -Dm755 dunstify "$pkgdir/usr/bin/dunstify"
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+    install -Dm755 "$srcdir/signal-notification-activate" "$pkgdir/usr/lib/smplos/signal-notification-activate"
+    install -Dm644 "$srcdir/signal-transaction.lua" "$pkgdir/usr/lib/smplos/signal-transaction.lua"
+}

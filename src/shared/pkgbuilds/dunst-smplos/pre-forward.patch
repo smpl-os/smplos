@@ -1,0 +1,20 @@
+--- a/src/dbus.c
++++ b/src/dbus.c
+@@ -21,6 +21,7 @@
+ #include "settings.h"
+ #include "utils.h"
+ #include "settings_data.h"
++#include "smplos-action.h"
+ 
+ #define FDN_PATH "/org/freedesktop/Notifications"
+ #define FDN_IFAC "org.freedesktop.Notifications"
+@@ -1171,6 +1172,9 @@
+                 return;
+         }
+ 
++        smplos_signal_pre_forward(n->dbus_client, identifier,
++                                  n->appname, n->desktop_entry);
++
+         GVariant *body = g_variant_new("(us)", n->id, identifier);
+         GError *err = NULL;
+ 

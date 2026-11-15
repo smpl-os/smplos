@@ -11,7 +11,9 @@ yay_works() { yay --version >/dev/null 2>&1 && yay -Q pacman >/dev/null 2>&1; }
 if [[ "${SMPLOS_SUDO_READY:-0}" != 1 ]]; then
     command sudo -v || die "Authentication failed."
 fi
-sudo() { command sudo -n "$@"; }
+if ! declare -F sudo >/dev/null; then
+    sudo() { command sudo -n "$@"; }
+fi
 export -f sudo
 
 repo="${SMPLOS_PATH:-$HOME/.local/share/smplos}/repo"

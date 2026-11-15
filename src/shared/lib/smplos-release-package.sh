@@ -36,11 +36,12 @@ smplos_verify_release_checksum() {
 }
 
 smplos_package_current() {
-    local package="$1" release="${2#v}" installed comparison
+    local package="$1" release="${2#v}" installed comparison target
+    target="${3:-$release-1}"
     installed=$(pacman -Q "$package" 2>/dev/null) || return 1
     installed="${installed#* }"
-    comparison=$(vercmp "$installed" "$release-1") || return 2
-    if [[ $comparison -ge 0 ]] && pacman -Qk "$package" >/dev/null 2>&1; then
+    comparison=$(vercmp "$installed" "$target") || return 2
+    if [[ $comparison -ge 0 ]] && pacman -Qkk "$package" >/dev/null 2>&1; then
         return 0
     fi
     if [[ $comparison -gt 0 ]]; then

@@ -234,9 +234,11 @@ EOF
   # of /usr/local/bin so they are never treated as executables.
   if [[ -d /root/smplos/lib ]]; then
     mkdir -p /mnt/usr/local/lib/smplos
-    cp /root/smplos/lib/*.sh /mnt/usr/local/lib/smplos/ 2>/dev/null || true
-    install -m644 /root/smplos/lib/smplos-hypridle-migrate.py /mnt/usr/local/lib/smplos/ || return 1
-    chmod 644 /mnt/usr/local/lib/smplos/*.sh 2>/dev/null || true
+    local lib
+    for lib in /root/smplos/lib/*.sh /root/smplos/lib/*.py; do
+      [[ -f "$lib" ]] || continue
+      install -m644 "$lib" /mnt/usr/local/lib/smplos/ || return 1
+    done
   fi
 
   # Compositor plugins (smpl-hud, ...) built for this ISO's Hyprland. Each file

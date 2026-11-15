@@ -219,6 +219,11 @@ Pair Bluetooth;settings --tab connections --highlight "Pair Bluetooth";settings;
 Connect Bluetooth;settings --tab connections --highlight "Connect Bluetooth";settings;bluetooth;1
 Headphones;settings --tab connections --highlight "Headphones";settings;bluetooth;1
 Discoverable;settings --tab connections --highlight "Discoverable";settings;bluetooth;1
+Volume;smplos-settings audio;settings;audio-volume-high;1
+Sound;smplos-settings audio;settings;audio-volume-high;1
+Speakers;smplos-settings audio;settings;audio-volume-high;1
+Output Device;smplos-settings audio;settings;audio-volume-high;1
+Input Device;smplos-settings audio;settings;audio-input-microphone;1
 EOF
 }
 

@@ -29,6 +29,149 @@ CHECK = importlib.util.module_from_spec(SPEC)
 LOADER.exec_module(CHECK)
 
 
+class UpdateAuthenticationTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.base = Path(self.temp.name)
+        self.calls = self.base / "calls"
+        for command in ("pkexec", "sudo", "pacman"):
+            path = self.base / command
+            path.write_text("#!/bin/bash\n"
+                            f"printf '%s\\n' '{command}' \"$@\" >> \"$CALLS\"\n"
+                            'exit "${AUTH_STATUS:-0}"\n')
+            path.chmod(0o755)
+        self.env = {**os.environ, "PATH": f"{self.base}:/usr/bin:/bin",
+                    "CALLS": str(self.calls), "SMPLOS_SUDO_READY": "0"}
+        helper = self.base / "smplos-update-privileged"
+        helper.write_text(
+            'import os, sys\n'
+            'with open(os.environ["CALLS"], "a") as stream:\n'
+            '    stream.write("\\n".join(["helper", *sys.argv[1:]]) + "\\n")\n'
+            'if "--identity" in sys.argv:\n'
+            '    print("0")\n'
+            '    sys.exit(0)\n'
+            'sys.exit(int(os.environ.get("AUTH_STATUS", "0")))\n')
+        self.env.update(SELF=str(self.base / "smplos-update"),
+                        SMPLOS_UPDATE_PRIVILEGED_HELPER=str(helper),
+                        SMPLOS_UPDATE_PRIVILEGED_SOCKET=str(self.base / "socket"))
+
+    def run_auth(self, body, **env):
+        helpers = "\n".join(function(BIN / "smplos-update", name)
+                            for name in ("smplos_privileged", "authenticate_update", "stop_sudo_keepalive"))
+        return subprocess.run(
+            ["bash", "-c", helpers + '\nstartup_fail() { echo "$*" >&2; exit 1; }\n'
+             'trap stop_sudo_keepalive EXIT\n' + body],
+            env={**self.env, **env}, text=True, capture_output=True, timeout=5,
+        )
+
+    def test_polkit_runs_only_the_resolved_privileged_command(self):
+        result = self.run_auth("smplos_privileged pacman -Sy --noconfirm", SMPLOS_UPDATE_AUTH="polkit")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.calls.read_text().splitlines(),
+                         ["helper", "--request", str(self.base / "socket"), "--",
+                          str(self.base / "pacman"), "-Sy", "--noconfirm"])
+
+    def test_sudo_backend_remains_noninteractive(self):
+        result = self.run_auth("smplos_privileged pacman -Su", SMPLOS_UPDATE_AUTH="sudo")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.calls.read_text().splitlines(), ["sudo", "-n", "pacman", "-Su"])
+
+    def test_polkit_cancellation_has_no_terminal_sudo_fallback(self):
+        result = self.run_auth("authenticate_update; echo SHOULD-NOT-RUN",
+                               SMPLOS_UPDATE_AUTH="polkit", AUTH_STATUS="126")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("cancelled or failed", result.stderr)
+        self.assertNotIn("SHOULD-NOT-RUN", result.stdout)
+        calls = self.calls.read_text().splitlines()
+        self.assertEqual(calls.count("pkexec"), 1)
+        self.assertNotIn("sudo", calls)
+
+    def test_polkit_authentication_has_no_sudo_keepalive(self):
+        result = self.run_auth(
+            'authenticate_update; echo "$SMPLOS_SUDO_READY:${SMPLOS_SUDO_KEEPALIVE_PID:-none}"',
+            SMPLOS_UPDATE_AUTH="polkit",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "1:none")
+
+    def test_python_verifier_uses_the_same_authentication_backend(self):
+        with mock.patch.dict(os.environ, {
+                "SMPLOS_UPDATE_AUTH": "polkit", "SMPLOS_UPDATE_PRIVILEGED_HELPER": "/helper",
+                "SMPLOS_UPDATE_PRIVILEGED_SOCKET": "/channel"}), \
+                mock.patch.object(CHECK.shutil, "which", return_value="/usr/bin/stat"), \
+                mock.patch.object(CHECK.subprocess, "run") as execute:
+            CHECK.run("sudo", "-n", "stat", "-L", "--", "/boot/vmlinuz-linux-lts")
+        self.assertEqual(execute.call_args.args[0],
+                         ("python3", "/helper", "--request", "/channel", "--",
+                          "/usr/bin/stat", "-L", "--", "/boot/vmlinuz-linux-lts"))
+
+    def test_one_authorization_covers_repeated_auth_calls_and_privileged_operations(self):
+        result = self.run_auth(
+            "authenticate_update; smplos_privileged pacman -Sy; "
+            "authenticate_update; smplos_privileged pacman -Su",
+            SMPLOS_UPDATE_AUTH="polkit",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        calls = self.calls.read_text().splitlines()
+        self.assertEqual(calls.count("pkexec"), 1)
+        self.assertEqual(calls.count("--request"), 2)
+        self.assertNotIn("sudo", calls)
+
+    def test_lost_privilege_channel_never_reauthenticates(self):
+        result = self.run_auth(
+            "authenticate_update; export AUTH_STATUS=1; "
+            "smplos_privileged pacman -Su",
+            SMPLOS_UPDATE_AUTH="polkit",
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(self.calls.read_text().splitlines().count("pkexec"), 1)
+
+    def test_verification_cannot_reauthenticate_without_the_channel(self):
+        with mock.patch.dict(os.environ, {
+                "SMPLOS_UPDATE_AUTH": "polkit", "SMPLOS_UPDATE_PRIVILEGED_HELPER": "",
+                "SMPLOS_UPDATE_PRIVILEGED_SOCKET": ""}), \
+                mock.patch.object(CHECK.subprocess, "run") as execute:
+            with self.assertRaisesRegex(RuntimeError, "cannot reauthenticate"):
+                CHECK.run("sudo", "-n", "stat", "/boot")
+        execute.assert_not_called()
+
+    def test_legacy_authentication_stops_without_another_password_prompt(self):
+        result = self.run_auth("authenticate_update",
+                               SMPLOS_UPDATE_AUTH="polkit", SMPLOS_SUDO_READY="1",
+                               SMPLOS_UPDATE_PRIVILEGED_OWNER="")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Restart Update OS", result.stderr)
+        self.assertFalse(self.calls.exists())
+
+    def test_saved_authentication_and_explicit_override_reject_invalid_values(self):
+        home = self.base / "home"
+        preference = home / ".config/smplos/update-auth"
+        preference.parent.mkdir(parents=True)
+        source = (BIN / "smplos-update").read_text().split("export -f smplos_privileged", 1)[0]
+        script = self.base / "auth-selection"
+        script.write_text(source + '\nprintf "%s" "$SMPLOS_UPDATE_AUTH"\n')
+        env = {**self.env, "HOME": str(home)}
+        env.pop("SMPLOS_UPDATE_AUTH", None)
+        for saved, args, expected in (
+            ("polkit\n", [], "polkit"),
+            ("sudo\n", [], "sudo"),
+            ("", [], None),
+            ("invalid\n", [], None),
+            ("invalid\n", ["--auth", "polkit"], "polkit"),
+        ):
+            with self.subTest(saved=saved, args=args):
+                preference.write_text(saved)
+                result = subprocess.run(["bash", str(script), *args], env=env,
+                                        capture_output=True, text=True, timeout=5)
+                if expected is None:
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("invalid update authentication preference", result.stderr)
+                else:
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(result.stdout, expected)
+
+
 class PowerPreflightTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -206,6 +349,7 @@ class InstalledStateTests(unittest.TestCase):
         elif args == ("pacman", "-Qi"):
             out = "".join(
                 f"Name : {name}\nProvides : {' '.join(self.provides.get(name, ['None']))}\n"
+                "Groups : None\n"
                 f"Depends On : {' '.join(self.dependencies.get(name, ['None']))}\n"
                 for name in self.packages
             )
@@ -801,7 +945,7 @@ class InstalledStateTests(unittest.TestCase):
         self.assertEqual(report["native_files"][str(binary)]["status"], "mismatch")
 
     def test_native_target_is_checked_independently_of_a_success_result(self):
-        self.packages.update({"nemo-smpl": "1.0-1", "grafium-bin": "1.0-1"})
+        self.packages.update({"nemo-smpl": "1.0-1", "grafium-bin": "1.0-1", "control-surface": "1.0-1"})
         components = {
             name: {"status": "current", "target": "v1.0"} for name in CHECK.RELEASE_COMPONENTS
         }
@@ -817,8 +961,24 @@ class InstalledStateTests(unittest.TestCase):
         audit.release_results(path)
         self.assertIn("native release update was not completed", "\n".join(audit.report["errors"]))
 
+    def test_native_hold_requires_this_runs_unchanged_package_record(self):
+        self.packages["nemo-smpl"] = "1.0-1"
+        audit = CHECK.Audit(self.home, self.repo, self.root, self.runner)
+        audit.snapshot()
+        audit.report["pin_plan"] = {"pins": {"nemo-smpl": {"version": "1.0-1", "reason": "user IgnorePkg"}}}
+        result = {"status": "pinned", "before": "1.0-1", "after": "1.0-1", "target": None}
+        audit.release_component_result("nemo-smpl", result)
+        self.assertEqual(audit.report["errors"], [])
+        audit.release_component_result("smpl-apps", result)
+        self.assertIn("could not be verified", "\n".join(audit.report["errors"]))
+        audit.report["errors"] = []
+        audit.release_component_result("nemo-smpl", {**result, "after": "2.0-1"})
+        self.assertTrue(audit.report["errors"])
+
     def test_legacy_optional_reports_are_ignored_without_weakening_core_verification(self):
-        self.packages.update({"nemo-smpl": "1.0-1", "grafium-bin": "1.0-1"})
+        self.packages.update({"nemo-smpl": "1.0-1", "grafium-bin": "1.0-1", "control-surface": "1.0-1"})
+        for name in ("control-surfaced", "mouse-remapperd"):
+            self.write(self.root / "usr/bin" / name, b"\x7fELF" + name.encode())
         components = {name: {"status": "current", "target": "v1.0"}
                       for name in CHECK.RELEASE_COMPONENTS}
         components["smpl-apps"]["target"] = "v0.8.28"
@@ -852,8 +1012,25 @@ class InstalledStateTests(unittest.TestCase):
         audit.release_results(core)
         self.assertIn("native release update was not completed", "\n".join(audit.report["errors"]))
 
+    def test_input_release_and_package_revision_are_independent_required_targets(self):
+        self.packages["control-surface"] = "0.8.37-1"
+        result = {"status": "updated", "target": "v0.8.38", "package_target": "0.8.38-1"}
+        audit = CHECK.Audit(self.home, self.repo, self.root, self.runner)
+        audit.snapshot()
+        audit.release_component_result("control-surface", result)
+        self.assertIn("did not reach release target", "\n".join(audit.report["errors"]))
+        for component in ("control-surface", "nemo-smpl"):
+            self.packages[component] = "0.8.38-1"
+            for package_target in ("0.8.38-2", "0.8.37-1", None):
+                with self.subTest(component=component, package_target=package_target):
+                    audit = CHECK.Audit(self.home, self.repo, self.root, self.runner)
+                    audit.snapshot()
+                    audit.release_component_result(component, {**result, "package_target": package_target})
+                    self.assertTrue(audit.report["errors"])
+
     def test_legacy_grafium_native_result_is_not_a_current_managed_component(self):
         self.packages["nemo-smpl"] = "1.0-1"
+        self.packages["control-surface"] = "1.0-1"
         components = {name: {"status": "current", "target": "v1.0"}
                       for name in CHECK.RELEASE_COMPONENTS}
         components["smpl-apps"]["target"] = "v0.8.28"
@@ -888,13 +1065,49 @@ class InstalledStateTests(unittest.TestCase):
         report = json.loads(output.read_text())
         self.assertEqual(report["package_status"]["glibc"]["status"], "pending")
         self.assertEqual(report["package_changes"]["glibc"], {"before": "2.41-1", "after": "2.42-1"})
-        self.assertIn("1 still pending", stdout.getvalue())
+        self.assertIn("1 unexpectedly pending", stdout.getvalue())
         self.assertIn("target=2.43-1; pending", stdout.getvalue())
         self.assertIn("Native release results unavailable", stderr.getvalue())
         self.assertIn("Verification report", stdout.getvalue())
 
 
 class ManagedConfigDeliveryTests(unittest.TestCase):
+    def test_clip_command_is_installed_executable_by_script_sync(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            base = Path(temporary)
+            repo, home, installed = base / "repo", base / "home", base / "installed"
+            source = repo / "src/shared/bin/clip"
+            source.parent.mkdir(parents=True)
+            source.write_bytes((BIN / "clip").read_bytes())
+            installed.mkdir()
+            target = installed / "clip"
+            script = function(BIN / "smplos-os-update", "sync_scripts")
+            script = script.replace('dest="/usr/local/bin/$name"', 'dest="$INSTALLED/$name"')
+            script += """
+install_system_file() { install -m "$3" "$1" "$2"; }
+sync_libs() { :; }
+header() { :; }; ok() { :; }; die() { echo "$*" >&2; exit 1; }
+sync_scripts
+"""
+            env = {**os.environ, "SMPLOS_REPO": str(repo), "HOME": str(home),
+                   "INSTALLED": str(installed)}
+
+            def deploy():
+                result = subprocess.run(
+                    ["bash", "-eu", "-c", script], env=env,
+                    capture_output=True, text=True, timeout=10,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+
+            deploy()
+            self.assertEqual(target.read_bytes(), source.read_bytes())
+            self.assertTrue(os.access(target, os.X_OK))
+            deploy()
+            self.assertEqual(target.read_bytes(), source.read_bytes())
+            target.chmod(0o644)
+            deploy()
+            self.assertTrue(os.access(target, os.X_OK))
+
     def test_fragments_and_scripts_publish_before_entrypoints_without_touching_palette(self):
         with tempfile.TemporaryDirectory() as temporary:
             base = Path(temporary)
@@ -1061,7 +1274,7 @@ case "$*" in
     -v|"rm -f /etc/sudoers.d/99-smplos-update-transient"|"rm -f /etc/pacman.d/hooks/90-rebuild-paru.hook") exit 0 ;;
     "python3 $HOME/.local/share/smplos/repo/src/shared/bin/smplos-update-handoff --repair-state --uid $UID")
         exit "${STATE_REPAIR_FAIL:-0}" ;;
-    pacman*|flatpak*) exec "$@" ;;
+    pacman*|flatpak*|"$HOME/.local/state/smplos/update/pacman."*) exec "$@" ;;
     *) echo "FORBIDDEN: sudo $*" >&2; exit 99 ;;
 esac
 """)
@@ -1094,11 +1307,20 @@ capture_brave=0
 [[ "$*" != *--capture-brave-target* ]] || capture_brave=1
 classify=0
 [[ "$*" != *--classify-aur* ]] || classify=1
+plan=0
+[[ "$*" != *--plan-pins* ]] || plan=1
+[[ "$*" != *--user-pins* ]] || plan=2
 core=0
 [[ "$*" != *--core-only* ]] || core=1
 while [[ $# -gt 0 ]]; do
     if [[ "$1" == --output ]]; then
-        if [[ "$classify" == 1 ]]; then
+        if [[ "$plan" != 0 ]]; then
+            pins='{}'
+            [[ "${WITH_PINS:-0}" == 0 ]] || pins='{"hyprland":{"version":"0.56.2-1","reason":"approved stack"},"aquamarine":{"version":"0.15-1","reason":"ABI dependency"}}'
+            [[ "${CUSTOM_HOLD:-0}" == 0 ]] || pins='{"glibc":{"version":"2.42-1","reason":"user IgnorePkg"}}'
+            [[ "${HOLD_BRAVE:-0}" == 0 ]] || pins='{"brave-bin":{"version":"1-1","reason":"user IgnorePkg"}}'
+            printf '{"errors":[],"pin_plan":{"pins":%s}}' "$pins" > "$2"
+        elif [[ "$classify" == 1 ]]; then
             required='[]'
             [[ "${CORE_AUR:-0}" == 0 ]] || required='["test-driver-dkms"]'
             printf '{"errors":[],"aur_policy":{"required":%s,"optional":["brave-bin"]}}' "$required" > "$2"
@@ -1110,6 +1332,8 @@ while [[ $# -gt 0 ]]; do
     shift
 done
 [[ "$snapshot" != 1 ]] || exit 0
+[[ "$plan" != 2 ]] || exit 0
+[[ "$plan" != 1 ]] || exit "${PIN_PLAN_FAIL:-0}"
 [[ "$classify" != 1 ]] || exit "${AUR_POLICY_FAIL:-0}"
 [[ "$capture_brave" != 1 ]] || exit "${BRAVE_TARGET_FAIL:-0}"
 [[ "$core" != 1 ]] || exit "${VERIFY_FAIL:-0}"
@@ -1148,6 +1372,14 @@ fi
 """)
         self.mock("hyprctl", "exit 0\n")
         self.mock("sleep", "exit 0\n")
+        guard = """echo "guard pins=$SMPLOS_UPDATE_PIN_IGNORE plan=$SMPLOS_UPDATE_PIN_PLAN $*" >> "$CALLS"
+if [[ "${1:-}" == --smplos-base-transaction ]]; then
+    [[ "${LOCKED_GUARD_FAIL:-0}" == 0 ]] || exit 1
+    shift
+fi
+exec pacman "$@"
+"""
+        self.mock("smplos-pacman", guard)
 
     def mock(self, name, text):
         path = self.bin / name
@@ -1158,7 +1390,7 @@ fi
         body = self.source.split('cat >> "$UPDATE_SCRIPT" << \'EOF\'', 1)[1].split("\n", 1)[1].split("\nEOF\n", 1)[0]
         script = self.base / "run-update.sh"
         helpers = "\n".join(function(BIN / "smplos-update", name) for name in
-                            ("stop_sudo_keepalive", "release_update_lock"))
+                            ("stop_sudo_keepalive", "release_update_lock", "smplos_privileged", "pkexec"))
         script.write_text(helpers +
                           f'\nUPDATE_MODE={mode}\n' + """
 mkdir -p "$HOME/.local/state/smplos/update"
@@ -1344,6 +1576,155 @@ PY
         self.assertNotIn("Update complete!", result.stdout)
         self.assertIn("status=failed", (self.home / ".local/state/smplos/update/status").read_text())
 
+    def test_pins_reach_the_official_transaction_aur_and_both_verification_passes(self):
+        result = self.run_body(WITH_PINS="1", CORE_AUR="1")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        calls = self.calls.read_text().splitlines()
+        official = [line for line in calls if line.startswith("pacman -Su ") and "--print" not in line]
+        self.assertEqual(len(official), 1)
+        self.assertIn("--ignore aquamarine,hyprland", official[0])
+        self.assertTrue(any(line.startswith("guard pins=aquamarine,hyprland ") and
+                            "--smplos-base-transaction -Su" in line for line in calls))
+        for line in calls:
+            if line.startswith("yay -Sua"):
+                self.assertIn("--ignore aquamarine,hyprland,", line)
+            if line.startswith(("check --core-only", "check --before")):
+                self.assertIn(f"--pins-report {self.log}.pins.json", line)
+        aur = [line for line in calls if line.startswith("yay -Sua")]
+        self.assertTrue(all("--pacman " in line for line in aur))
+        self.assertEqual(list((self.home / ".local/state/smplos/update").glob("pacman.*")), [])
+        self.assertIn("os-update --finalize", calls)
+
+    def test_full_polkit_flow_preserves_native_dependency_guards_and_completion(self):
+        self.mock("pkexec", 'echo "FORBIDDEN additional authentication" >&2; exit 99\n')
+        migration = ROOT / "migrations/20261030-120000-printing-platform.sh"
+        (self.repo / "migrations" / migration.name).write_text(migration.read_text())
+        self.mock("smplos-os-update", f"""echo "os-update $*" >> "$CALLS"
+if [[ "$1" == --deploy ]]; then
+    bash "{BIN / 'smplos-migrate'}" --phase core
+fi
+""")
+        installed = self.home / "printing-packages"
+        installed.write_text("")
+        pacman = (self.bin / "pacman").read_text()
+        self.mock("pacman", pacman + """
+if [[ "$1" == -Q ]]; then
+    case "$2" in
+        cups|cups-filters|python-pycups|avahi) grep -qx "$2" "$PRINTING_PACKAGES"; exit ;;
+    esac
+elif [[ "$1" == -S ]]; then
+    for argument in "$@"; do
+        case "$argument" in
+            cups|cups-filters|python-pycups|avahi) echo "$argument" >> "$PRINTING_PACKAGES" ;;
+        esac
+    done
+fi
+""")
+        self.mock("systemctl", """echo "printing-service $*" >> "$CALLS"
+if [[ "$1" == is-enabled ]]; then echo disabled; exit 0; fi
+[[ "${PRINTING_SERVICE_FAIL:-0}" == 0 ]]
+""")
+        helper = self.base / "privileged-helper.py"
+        helper.write_text("""import os, subprocess, sys
+arguments = sys.argv[sys.argv.index("--") + 1:]
+with open(os.environ["CALLS"], "a") as stream:
+    stream.write("polkit " + " ".join(arguments) + "\\n")
+if arguments[1:] in (
+    ["-f", "/etc/sudoers.d/99-smplos-update-transient"],
+    ["-f", "/etc/pacman.d/hooks/90-rebuild-paru.hook"],
+):
+    sys.exit(0)
+sys.exit(subprocess.call(arguments))
+""")
+        self.mock("yay", """echo "yay $*" >> "$CALLS"
+python3 - "$@" <<'PY'
+import subprocess
+import sys
+args = sys.argv[1:]
+privileged = args[args.index("--sudo") + 1]
+sys.exit(subprocess.run([privileged, "-n", "pacman", "-S", "--noconfirm",
+                        "aur-dependency"]).returncode)
+PY
+""")
+        self.mock("sudo", 'echo "FORBIDDEN terminal sudo" >&2; exit 99\n')
+        self.mock("smplos-update-apps", """echo "native-apps $*" >> "$CALLS"
+sudo pacman -S --noconfirm native-dependency
+""")
+        variables = {
+            "WITH_PINS": "1", "CORE_AUR": "1", "SMPLOS_UPDATE_AUTH": "polkit",
+            "SMPLOS_UPDATE_PRIVILEGED_HELPER": str(helper),
+            "SMPLOS_UPDATE_PRIVILEGED_SOCKET": str(self.base / "channel"),
+            "PRINTING_PACKAGES": str(installed),
+        }
+        failed = self.run_body(**variables, PRINTING_SERVICE_FAIL="1")
+        self.assertNotEqual(failed.returncode, 0, failed.stdout + failed.stderr)
+        self.assertIn("printing-platform failed", failed.stdout)
+        self.assertNotIn("os-update --finalize", self.calls.read_text())
+        self.assertIn("status=failed\n", Path(str(self.log) + ".result").read_text())
+        marker = self.home / ".local/state/smplos/migrations" / migration.name
+        self.assertFalse(marker.exists())
+        calls = self.calls.read_text()
+        printing_transaction = "-S --needed --noconfirm cups cups-filters python-pycups avahi"
+        self.assertTrue(any(
+            line.startswith("guard pins=aquamarine,hyprland ") and
+            line.endswith(printing_transaction) for line in calls.splitlines()
+        ))
+        self.assertEqual(installed.read_text().splitlines(),
+                         ["cups", "cups-filters", "python-pycups", "avahi"])
+        self.calls.write_text("")
+        result = self.run_body(**variables)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        calls = self.calls.read_text()
+        self.assertIn("guard pins=aquamarine,hyprland", calls)
+        self.assertIn("pacman -S --noconfirm native-dependency", calls)
+        self.assertIn("pacman -S --noconfirm aur-dependency", calls)
+        self.assertFalse(list((self.home / ".local/state/smplos/update").glob("privileged.*")))
+        self.assertIn("os-update --finalize", calls)
+        self.assertIn("status=complete\n", Path(str(self.log) + ".result").read_text())
+        self.assertTrue(marker.exists())
+        self.assertIn("printing-service enable --now cups.socket", calls)
+        self.assertIn("printing-service enable --now avahi-daemon.service", calls)
+        self.assertNotIn(printing_transaction, calls)
+        self.assertNotIn("pkexec", calls)
+
+    def test_failed_pin_resolution_stops_before_upgrade_and_optional_work(self):
+        result = self.run_body(PIN_PLAN_FAIL="1")
+        self.assertNotEqual(result.returncode, 0)
+        calls = self.calls.read_text()
+        self.assertNotIn("pacman -Su", calls)
+        self.assertNotIn("native-apps", calls)
+        self.assertNotIn("yay ", calls)
+        self.assertNotIn("--pins-report", calls)
+        self.assertIn("no dependency-consistent update", result.stdout)
+
+    def test_native_dependency_installs_and_makepkg_auth_keep_the_per_run_guard(self):
+        self.mock("smplos-update-apps", """echo "native-apps $*" >> "$CALLS"
+[[ -x "$SMPLOS_UPDATE_PACMAN" && -z "${PACMAN:-}" ]] || exit 99
+sudo pacman -S --noconfirm native-dependency || exit
+sudo -k "$SMPLOS_UPDATE_PACMAN" -S --noconfirm build-dependency
+""")
+        result = self.run_body(WITH_PINS="1")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        calls = self.calls.read_text()
+        for name in ("native-dependency", "build-dependency"):
+            transactions = [line for line in calls.splitlines()
+                            if line == f"pacman -S --noconfirm {name}"]
+            self.assertEqual(len(transactions), 1)
+            self.assertTrue(any(line.startswith("guard pins=aquamarine,hyprland ") and
+                                line.endswith(f"-S --noconfirm {name}") for line in calls.splitlines()))
+        self.assertNotIn("sudo -n -k", calls)
+
+    def test_guard_setup_failure_stops_before_packages_and_downstream_stages(self):
+        self.mock("mktemp", """[[ "$1" != *"/pacman."* ]] || exit 1
+exec /usr/bin/mktemp "$@"
+""")
+        result = self.run_body(WITH_PINS="1")
+        self.assertNotEqual(result.returncode, 0)
+        calls = self.calls.read_text()
+        for forbidden in ("pacman -Su", "native-apps", "yay ", "--deploy", "--finalize"):
+            self.assertNotIn(forbidden, calls)
+        self.assertIn("cannot protect configured package/group holds", result.stdout)
+
     def test_deployment_native_and_audit_failures_never_publish_os_version_or_success(self):
         for failure in ("DEPLOY_FAIL", "APPS_FAIL", "VERIFY_FAIL", "FINALIZE_FAIL", "ORPHAN_CLEANUP_FAIL"):
             with self.subTest(failure=failure):
@@ -1390,8 +1771,20 @@ PY
         calls = self.calls.read_text()
         self.assertNotIn("yay -Sua", calls)
         self.assertNotIn("--capture-brave-target", calls)
-        self.assertIn("--brave-report", calls)
+        self.assertNotIn("--brave-report", calls)
         self.assertNotIn("--finalize", calls)
+
+    def test_core_failure_does_not_verify_a_brave_target_that_was_never_requested(self):
+        for failure in ("BASE_FAIL", "DEPLOY_FAIL", "APPS_FAIL", "VERIFY_FAIL"):
+            with self.subTest(failure=failure):
+                self.calls.write_text("")
+                result = self.run_body(**{failure: "1"})
+                self.assertNotEqual(result.returncode, 0)
+                calls = self.calls.read_text()
+                self.assertNotIn("--capture-brave-target", calls)
+                self.assertNotIn("--brave-report", calls)
+                self.assertIn("check --before", calls)
+                self.assertNotIn("--finalize", calls)
 
     def test_retired_paru_cannot_block_base_with_old_libalpm_dependencies(self):
         result = self.run_body(PARU_INSTALLED="1")
@@ -1418,12 +1811,24 @@ PY
         self.assertNotIn("--finalize", calls)
         self.assertIn("check --before", calls)
 
-    def test_custom_package_holds_stop_before_any_package_transaction(self):
+    def test_custom_package_holds_allow_the_constrained_upgrade_and_delivery(self):
         result = self.run_body(CUSTOM_HOLD="1")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertIn("pacman -Su --noconfirm --ignore glibc", self.calls.read_text())
+        self.assertIn("native-apps", self.calls.read_text())
+
+    def test_locked_guard_failure_never_enables_downstream_delivery(self):
+        result = self.run_body(LOCKED_GUARD_FAIL="1")
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("custom IgnorePkg", result.stdout)
-        self.assertNotIn("pacman -S", self.calls.read_text())
         self.assertNotIn("native-apps", self.calls.read_text())
+        self.assertNotIn("--deploy", self.calls.read_text())
+        self.assertNotIn("--finalize", self.calls.read_text())
+
+    def test_held_brave_does_not_claim_a_new_release_target_was_delivered(self):
+        result = self.run_body(HOLD_BRAVE="1")
+        self.assertEqual(result.returncode, 0, result.stdout)
+        self.assertNotIn("--capture-brave-target", self.calls.read_text())
+        self.assertIn("Brave is deliberately held, not upgraded", result.stdout)
 
     def test_unexpected_exit_persists_interrupted_stage(self):
         self.mock("smplos-update-check", 'kill -TERM "$PPID"\n')
@@ -1478,7 +1883,7 @@ PY
                 aur = [line for line in calls.splitlines() if line.startswith("yay -Sua")]
                 self.assertEqual(len(aur), 2 if mode == "full" else 0)
                 for line in aur:
-                    self.assertIn("nemo-smpl,grafium-bin,eww-smplos", line)
+                    self.assertIn("nemo-smpl,control-surface,grafium-bin,eww-smplos", line)
 
     def test_required_foreign_driver_updates_before_native_and_failure_remains_blocking(self):
         result = self.run_body(CORE_AUR="1")
@@ -1559,14 +1964,16 @@ PY
                     ["flock", "-n", str(state / "update.lock"), "true"]).returncode, 0)
                 self.assertEqual((state / "status").read_text(), f"status={status}\n" + completed)
 
-    def test_refresh_reexecutes_new_wrapper_keeps_lock_and_authenticates_once(self):
-        # Exercise the real front-end/bootstrap, replacing only terminal/root
-        # presentation guards and the separately tested hardware power reader.
+    def bootstrap_frontend(self):
         source = self.source.split("UPDATE_SCRIPT=$(mktemp", 1)[0]
         source = source.replace("if [[ ! -t 1 && $EUID -ne 0 ]]; then", "if false; then")
         source = source.replace("if [[ $EUID -eq 0 ]]; then", "if false; then", 1)
         source = source.replace(function(BIN / "smplos-update", "check_update_power"),
                                 'check_update_power() {\n return "${POWER_FAIL:-0}"\n}')
+        return source
+
+    def test_refresh_reexecutes_new_wrapper_keeps_lock_and_authenticates_once(self):
+        source = self.bootstrap_frontend()
         old = self.base / "old-update"
         fresh = self.bin / "smplos-update"
         old.write_text(source + "\necho OLD-WRAPPER\n")
@@ -1600,6 +2007,53 @@ PY
         self.assertNotIn("WRAPPER", result.stdout)
         self.assertNotIn("pacman ", self.calls.read_text())
         self.assertIn("No package upgrade was started", result.stdout + result.stderr)
+
+    def test_polkit_bootstrap_reexec_preserves_one_authenticated_channel(self):
+        source = self.bootstrap_frontend()
+        old = self.base / "old-update"
+        fresh = self.bin / "smplos-update"
+        old.write_text(source + "\necho OLD-WRAPPER\n")
+        fresh.write_text(source + "\necho NEW-WRAPPER\n")
+        fresh.chmod(0o755)
+        helper = f"""import importlib.machinery, importlib.util, os, sys
+loader = importlib.machinery.SourceFileLoader("auth", {str(BIN / "smplos-update-privileged")!r})
+spec = importlib.util.spec_from_loader(loader.name, loader)
+auth = importlib.util.module_from_spec(spec)
+loader.exec_module(auth)
+args = sys.argv[1:]
+if args[0] == "--identity":
+    print(auth.identity(int(args[1]))[2])
+elif args[0] == "--serve":
+    auth.serve(args[1], int(args[2]), int(args[3]), args[4])
+elif args[0] == "--wait":
+    sys.exit(auth.wait_ready(args[1], int(args[2])))
+elif args[0] == "--stop":
+    sys.exit(auth.request(args[1], server_uid=os.geteuid()))
+else:
+    command = args[args.index("--") + 1:]
+    command = [{str(self.bin / "sudo")!r}, "-n", os.path.basename(command[0]), *command[1:]]
+    sys.exit(auth.request(args[1], command, server_uid=os.geteuid()))
+"""
+        for directory in (self.base, self.bin):
+            (directory / "smplos-update-privileged").write_text(helper)
+        self.mock("pkexec", """echo "pkexec $*" >> "$CALLS"
+[[ "$1" != --disable-internal-agent ]] || shift
+exec "$@"
+""")
+        result = subprocess.run(
+            ["bash", str(old), "--auth", "polkit"], capture_output=True, text=True,
+            env=self.env, timeout=15,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("NEW-WRAPPER", result.stdout)
+        self.assertNotIn("OLD-WRAPPER", result.stdout)
+        calls = self.calls.read_text()
+        self.assertEqual(sum(line.startswith("pkexec ") for line in calls.splitlines()), 1)
+        self.assertEqual(calls.count("os-update --scripts"), 1)
+        self.assertNotIn("sudo -v", calls)
+        self.assertEqual(subprocess.run(
+            ["flock", "-n", str(self.home / ".local/state/smplos/update/update.lock"),
+             "true"]).returncode, 0)
 
     def test_terminal_launch_preserves_scripts_only_enrollment(self):
         self.mock("fixture-terminal", 'echo "terminal $*" >> "$CALLS"\n')

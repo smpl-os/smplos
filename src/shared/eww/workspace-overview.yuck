@@ -20,13 +20,13 @@
             :tooltip {workspace-state.error != "" ? workspace-state.error : "Monitor layout and workspace selection"}
       (box :orientation "h" :space-evenly false :spacing 3
         (label :class "workspace-monitor-label"
-               :text {workspace-state.focused_label != "" ? workspace-state.focused_label : "WS"})
+               :text {jq(workspace-state, '.focused_special // false') == true ? 'S' : (workspace-state.focused_label != "" ? workspace-state.focused_label : "WS")})
         (label :class "workspace-bar-error" :text "!"
                :visible {workspace-state.error != ""} :tooltip {workspace-state.error})))
-    (box :visible {ws-style == "numbers"} :orientation "h" :space-evenly false :spacing ws-spacing
+    (box :visible {ws-style == "numbers" && jq(workspace-state, '.focused_special // false') == false} :orientation "h" :space-evenly false :spacing ws-spacing
       (for ws in {workspace-state.current}
         (workspace-bar-choice :ws ws :square false)))
-    (box :visible {ws-style == "squares"} :orientation "v" :space-evenly false :valign "center" :spacing ws-spacing
+    (box :visible {ws-style == "squares" && jq(workspace-state, '.focused_special // false') == false} :orientation "v" :space-evenly false :valign "center" :spacing ws-spacing
       (box :orientation "h" :space-evenly false :halign "start" :spacing ws-spacing
         (for ws in {jq(workspace-state.current, ".[0:${ceil(arraylength(workspace-state.current) / 2)}]")}
           (workspace-bar-choice :ws ws :square true)))
@@ -67,11 +67,11 @@
             :timeout "3s"
             :onclick "eww --config \"$HOME/.config/eww\" close workspace-overview && workspace-ctl focus-monitor ${monitor.id}"
       (box :orientation "h" :space-evenly false :spacing 8
-        (label :class "workspace-monitor-label" :text {monitor.label})
+        (label :class "workspace-monitor-label" :text {jq(monitor, '.special_visible // false') == true ? 'S' : monitor.label})
         (label :text {monitor.connector} :truncate true :hexpand true :xalign 0)
         (label :class "workspace-monitor-current"
                :text "${monitor.focused ? 'Focused - ' : ''}WS ${monitor.active_workspace}")))
-    (scroll :hscroll true :vscroll false :height 40
+    (scroll :hscroll true :vscroll false :height 40 :visible {jq(monitor, '.special_visible // false') == false}
       (box :orientation "h" :space-evenly false :spacing 5
         (for ws in {monitor.workspaces}
           (workspace-choice :ws ws))))))

@@ -333,6 +333,9 @@ bwrap_args=(
   --bind "$profile_dir" "$profile_dir"
 )
 
+# Keep the resolver symlink valid and follow DNS-file replacements across VPN changes.
+[[ -d /run/systemd/resolve ]] && bwrap_args+=(--ro-bind /run/systemd/resolve /run/systemd/resolve)
+
 # GPU: bind /dev/dri so hardware-accelerated rendering works inside the sandbox
 [[ -d /dev/dri ]] && bwrap_args+=(--dev-bind /dev/dri /dev/dri)
 

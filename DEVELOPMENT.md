@@ -467,9 +467,44 @@ the Hyprland version.
 and on demand:
 
 - `static` has only Lua and libxkbcommon: the static rules and loader parity.
-- `native` runs in the newest Arch container with its current Hyprland, which is what users get with
-  their next update, and adds `Hyprland --verify-config` for every bind. The Monday run is the early
-  warning that a new Hyprland changed the Lua API under the loader.
+- `native` adds `Hyprland --verify-config` for every bind on the approved stack. It reads
+  `src/shared/update-policy/ci-baseline.json` after checkout, checks the exact package against
+  `HYPRLAND_SERIES` in `critical-bundle.conf`, and starts a digest-pinned disposable Arch container.
+  The **whole container system**, not just Hyprland, is synchronized (including downgrades) against
+  the dated Arch Linux Archive's core/extra repositories only. Every installed package must match
+  that snapshot, the exact Hyprland package and executable must match policy, and the complete
+  package inventory is logged. Missing policy, unavailable snapshots/images, dependency errors or
+  version drift fail the gate; there is no fallback to current mirrors.
+
+The initial baseline is the **2026/10/28** archive, containing **hyprland 0.56.2-4**,
+matching the passing [native run 40747213246](https://github.com/smpl-os/smplos/actions/runs/40747213246).
+The official Arch bootstrap image is version `20261025.0.616225`, pinned by digest in the JSON.
+The archive's `extra.db` records the Hyprland package SHA-256 as
+`163bc740241880192d90027fad39ddb809b1705b04800a1f0185a58f3ce0884a`;
+pacman still requires package signatures. `critical-packages.txt` remains the broad installed-stack
+transition-root policy, **not** a list of exact CI versions. This CI baseline does not change
+live-system updates or ISO build repositories.
+
+To reproduce the required native job without touching host packages or the running compositor:
+
+```bash
+python3 tools/ci_baseline.py --check                    # policy validation only
+python3 tools/ci_baseline.py                            # disposable Docker container
+python3 tools/ci_baseline.py --runtime podman            # rootless Podman alternative
+python3 tools/ci_baseline.py --runtime podman --filter CheckerSelfTests
+PYTHONPATH=tests python3 -m unittest test_ci_baseline -v
+```
+
+When approving a new stack, update `HYPRLAND_SERIES` and the baseline JSON together. Verify the
+dated archive actually contains the selected exact Hyprland package and coherent dependencies,
+resolve and verify the official bootstrap image digest, then run the native job in full. Merely
+changing the series or using an individual old package with newest libraries is not sufficient.
+
+`.github/workflows/keybindings-forward.yml` separately checks **latest Arch** on pull requests,
+weekly and on demand. Its `forward compatibility (non-blocking)` job reports upstream drift
+without blocking approved releases; it is not called by Auto Release and must not be a required
+branch-protection check. Its rejection assertions are intentionally unchanged: a changed upstream
+diagnostic remains visible rather than being hidden to make the approved gate green.
 
 `auto-release.yml` calls this workflow and its version bump `needs` it, so every automatic release
 waits for both jobs and a failing shortcut stops the release. Fix it and push, or re-run the failed
@@ -482,7 +517,22 @@ never sits pending. The lab is the one check left to run by hand before a releas
 
 ## Adding a Settings Entry
 
-The start menu has a **Settings** category. Each entry there launches a system tool -- Appearance opens the theme picker, Audio opens pavucontrol, etc. Here's how to add a new one.
+The start menu has a **Settings** category. Each entry there launches a system tool -- Appearance opens the theme picker, Audio opens an installed mixer, etc. Here's how to add a new one.
+
+Audio prefers `pavucontrol`, `pwvucontrol`, `pavucontrol-qt`, `qasmixer`, then
+`alsamixergui`. Without a graphical mixer, it opens `wiremix`, `pulsemixer`,
+`ncpamixer`, `pamix`, or finally `alsamixer` through `terminal -e`.
+No package installation or audio configuration changes happen on launch.
+ALSA mixers expose hardware controls such as microphone boost; PipeWire and
+PulseAudio mixers additionally expose device and application-stream routing.
+Missing mixers or a missing terminal launcher produce an actionable error;
+a selected tool's launch/runtime failure is not concealed by opening another.
+Focused headless checks: `python -m unittest discover -s tests -p 'test_audio_settings.py' -v`.
+
+Searching for Volume, Sound, Speakers, Output Device or Input Device and
+right-clicking the bar's volume icon use this same Audio dispatcher. The aliases
+are search-only; Audio remains the browsable Settings entry. Normal Update OS
+syncs both scripts and the EWW widget, then rebuilds the app cache.
 
 ### Overview
 
@@ -570,10 +620,14 @@ Open `src/shared/bin/smplos-settings` and add a `case` branch for your new categ
 
 ```bash
   my-entry)
-    command -v my-tui &>/dev/null && exec term my-tui
+    command -v my-tui &>/dev/null && term my-tui
     die "my-tui not found"
     ;;
 ```
+
+`term` is a shell function that execs `terminal -e`; do not write `exec term`.
+Display's Wayland `wlr-randr`, Network's `nmtui` and Bluetooth's `bluetuith`
+fallbacks use this helper when their preferred graphical tool is unavailable.
 
 Don't forget to update the usage string at the bottom of the file:
 

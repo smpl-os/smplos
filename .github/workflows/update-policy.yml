@@ -6,6 +6,7 @@ on:
       - ".github/workflows/update-policy.yml"
       - "src/shared/update-policy/**"
       - "src/shared/bin/smplos-update"
+      - "src/shared/bin/smplos-pacman"
       - "src/shared/bin/smplos-update-*"
       - "src/shared/bin/smplos-reboot-notify"
       - "src/shared/lib/smplos-reboot.sh"
@@ -25,6 +26,12 @@ on:
       - "src/shared/bin/heal-paru"
       - "src/shared/bin/rebuild-paru"
       - "src/shared/lib/smplos-pkgbuild.sh"
+      - "src/shared/lib/smplos-control-surface.sh"
+      - "src/shared/lib/smplos-release-package.sh"
+      - "src/shared/pkgbuilds/control-surface/**"
+      - "src/build-iso.sh"
+      - "tests/test_keypad.py"
+      - "tests/test_mouse.py"
       - "src/shared/pkgbuilds/yay-bin/**"
       - "src/shared/pkgbuilds/eww-smplos/**"
       - "src/shared/packages-aur.txt"
@@ -50,12 +57,14 @@ on:
       - "tests/test_logseq_retirement.py"
       - "tests/test_theme_switching.py"
       - "tests/test_critical_bundle.py"
+      - "tests/test_update_pins.py"
   push:
     branches: [main]
     paths:
       - ".github/workflows/update-policy.yml"
       - "src/shared/update-policy/**"
       - "src/shared/bin/smplos-update"
+      - "src/shared/bin/smplos-pacman"
       - "src/shared/bin/smplos-update-*"
       - "src/shared/bin/smplos-reboot-notify"
       - "src/shared/lib/smplos-reboot.sh"
@@ -75,6 +84,12 @@ on:
       - "src/shared/bin/heal-paru"
       - "src/shared/bin/rebuild-paru"
       - "src/shared/lib/smplos-pkgbuild.sh"
+      - "src/shared/lib/smplos-control-surface.sh"
+      - "src/shared/lib/smplos-release-package.sh"
+      - "src/shared/pkgbuilds/control-surface/**"
+      - "src/build-iso.sh"
+      - "tests/test_keypad.py"
+      - "tests/test_mouse.py"
       - "src/shared/pkgbuilds/yay-bin/**"
       - "src/shared/pkgbuilds/eww-smplos/**"
       - "src/shared/packages-aur.txt"
@@ -100,6 +115,7 @@ on:
       - "tests/test_logseq_retirement.py"
       - "tests/test_theme_switching.py"
       - "tests/test_critical_bundle.py"
+      - "tests/test_update_pins.py"
   workflow_dispatch:
 
 permissions:
@@ -117,7 +133,7 @@ jobs:
           python-version: "3.12"
       - name: Check shell syntax
         run: |
-          for script in src/shared/bin/smplos-update src/shared/bin/smplos-os-update \
+          for script in src/shared/bin/smplos-update src/shared/bin/smplos-os-update src/shared/bin/smplos-pacman \
             src/shared/bin/smplos-migrate src/shared/bin/theme-set src/shared/bin/theme-set-st src/builder/build.sh \
             src/shared/bin/generate-messenger-bindings \
             src/shared/lib/smplos-update-entry.sh \
@@ -127,11 +143,13 @@ jobs:
             src/shared/bin/smplos-ensure-yay src/shared/bin/heal-paru src/shared/bin/rebuild-paru \
             src/shared/pkgbuilds/yay-bin/PKGBUILD src/shared/pkgbuilds/eww-smplos/PKGBUILD src/shared/lib/smplos-pkgbuild.sh \
             src/shared/lib/smplos-app-bundle.sh src/shared/installer/automated_script.sh \
+            src/shared/lib/smplos-control-surface.sh src/shared/lib/smplos-release-package.sh \
+            src/shared/pkgbuilds/control-surface/PKGBUILD src/build-iso.sh \
             src/shared/update-policy/critical-bundle.conf migrations/*.sh; do
             bash -n "$script" || exit 1
           done
-      - name: Check one-transaction upgrades and the Hyprland series rule
-        run: python3 -m unittest discover -s tests -p 'test_critical_bundle.py' -v
+      - name: Check protected-stack planning and one-transaction upgrades
+        run: PYTHONPATH=tests python3 -m unittest test_critical_bundle test_update_pins -v
       - name: Install isolated notification test dependencies
         run: sudo apt-get update -qq && sudo apt-get install -y dunst xvfb xauth lua5.4
       - name: Check update safeguards, diagnostics and delivery
@@ -141,6 +159,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_update_handoff.py' -v
           python3 -m unittest discover -s tests -p 'test_yay_delivery.py' -v
           python3 -m unittest discover -s tests -p 'test_app_delivery.py' -v
+          PYTHONPATH=tests python3 -m unittest test_keypad test_mouse -v
           python3 -m unittest discover -s tests -p 'test_bar_ctl.py' -v
           python3 -m unittest discover -s tests -p 'test_eww_delivery.py' -v
           python3 -m unittest discover -s tests -p 'test_dropped_packages.py' -v
@@ -150,3 +169,13 @@ jobs:
         run: |
           sudo -n env PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tests \
             "$(command -v python3)" -m unittest test_update_handoff.PrivilegedHandoffTests -v
+
+  pinned-transaction:
+    runs-on: ubuntu-latest
+    container: archlinux:base
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install test dependencies
+        run: pacman -Syu --noconfirm --needed python fakeroot
+      - name: Exercise real pacman dependency resolution against isolated fixture databases
+        run: PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=tests python3 -m unittest test_update_pins -v

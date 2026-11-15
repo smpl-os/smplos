@@ -322,6 +322,9 @@ On Hyprland, messenger shortcuts such as <kbd>Super</kbd>+<kbd>Shift</kbd>+<kbd>
 for Signal open on the keyboard-focused monitor, even if the mouse is elsewhere.
 Hiding the messenger returns focus to the previous window if it still exists on
 that workspace; it does not bring back a window you moved or closed.
+If a notification has already focused the messenger, the toggle recovers the
+most recently focused eligible window on the underlying workspace instead of
+jumping to its first scrolling column.
 
 #### Monitor-owned workspaces
 
@@ -385,6 +388,12 @@ workspace to its home instead of swapping it onto another monitor. Local
 next/previous navigation stays within the focused monitor's homes. Window
 transfer uses physical monitor geometry and the destination's visible workspace;
 an explicit whole-workspace transfer changes that workspace's saved home.
+On the supported Hyprland Lua configuration, **Super+1-9/0** explicitly focuses
+the target workspace's last-used window, including when that workspace is already
+visible on another monitor and the pointer is there while you type elsewhere.
+Hidden targets open with their remembered window focused; empty targets activate
+without retaining a keyboard recipient on another output. The global mouse-focus
+policy and custom commands in your shared bindings file are unchanged.
 In fixed-home mode, disconnected homes fall back to a connected display without
 forgetting their ownership, and return when their home reconnects.
 
@@ -418,6 +427,31 @@ Use `workspace-ctl init --preserve` to stop automatic reassignment and keep the
 current saved homes. An opt-out is preserved across updates and logins, even if
 `disable` is run before the first automatic setup.
 
+### Printing
+
+The coordinated native **Settings > Printing** release shows CUPS printer
+status, active queues and retained job history, with explicit controls for your
+own jobs and connectivity/VPN warnings. The OS helper and printing dependencies
+ship offline in every edition and enroll through full Update OS. Existing
+printers, defaults, jobs and network policy are preserved; an idle queue is not
+proof that a printer is reachable. See [printing support and protocol](PRINTING.md)
+for delivery requirements, service opt-outs, history limits and safe controls.
+
+### Media helpers
+
+Every edition includes the Bash command `clip` to trim video or audio without
+re-encoding. It works from any shell, including Fish:
+
+```fish
+clip 274.09 276.33 input.mp4 output.mp4
+```
+
+Arguments are start time, end time (not duration), input file and output file.
+Quote paths containing spaces. Stream copying is fast and lossless, but video
+cuts can be limited by keyframe positions.
+Existing installations receive `/usr/local/bin/clip` through **Update OS**
+without changing personal shell configuration.
+
 ### Themes
 
 Switch the system theme (terminal, bar, borders, lock screen, editor) with a single command:
@@ -427,6 +461,64 @@ theme-set catppuccin     # or: dracula, nord, gruvbox, rose-pine, ...
 ```
 
 Or open the theme picker from the start menu's Settings tab.
+
+#### OpenChamber live themes (requires a compatible OpenChamber build)
+
+`theme-set-openchamber` translates the active `colors.toml` into an OpenChamber
+custom theme named `smplos-<theme>` and publishes the desktop selection in the
+existing version-1 `preferences.json`. **Only local files are used: no theme
+control APIs, capability requests, or API fallback.** Amber keeps its actual
+black/orange palette, not a nearest built-in substitute. Light/dark variant
+follows `light.mode`; background-only opacity follows `app_background_opacity`,
+then explicit `popup_opacity`, then 1.0. Foreground colors stay opaque.
+
+This requires the coordinated OpenChamber fork build with settings and
+preferences file watchers; the older 2.5.2 API integration and an upstream
+custom-theme-folder watcher alone do not establish desktop selection reload.
+File publication is not proof of renderer application or native transparency
+readiness. Live alpha still requires a native transparent desktop launch;
+framed or explicitly opaque windows cannot show translucent backgrounds.
+The helper neither launches nor restarts the app, and never changes launch
+settings. Hyprland keeps `openchamber` self-managed alpha so compositor fading
+does not dim its text.
+
+The helper runs in `theme-set`'s optional app stage, including the existing
+**Super+Shift+T** picker path. `$OPENCHAMBER_DATA_DIR` selects an absolute local
+instance directory; the default is `~/.config/openchamber`. No installed config
+means no work.
+For an isolated instance, `~/.config/smplos/openchamber-data-dirs` can list
+absolute data directories, one per line (blank lines and `#` comments allowed).
+That list **replaces** the default target, so a demo need not touch the real app.
+Remove the override after the demo.
+
+To exercise only the bridge from a source checkout against an isolated local
+instance that already has valid preferences:
+
+```bash
+OPENCHAMBER_DATA_DIR=/absolute/path/to/isolated-instance src/shared/bin/theme-set-openchamber
+```
+
+The active palette still comes from `~/.config/smplos/current`. For fully
+isolated file qualification, set `HOME` to a temporary home with its own active
+theme and existing instance preferences. The normal `theme-set --apps` entry
+point calls the same helper when it is available on `PATH`.
+
+Only custom themes with the `smplos-` prefix and desktop theme preference
+overrides are written. Existing matching palettes and preferences receive
+verified, private backups under
+`~/.local/state/smplos/openchamber-theme-backups/` before changes. Unrelated
+preferences, base values, other surfaces, `settings.json`, sessions and other
+custom palettes are preserved. The global theme variant is not changed.
+The desktop `themeId`, `useSystemTheme=false`, and matching `lightThemeId` or
+`darkThemeId` select the actual palette; the opposite variant's selection is
+preserved rather than inventing or relabeling a companion palette.
+Malformed, unreadable, missing or unsupported-version preferences are rejected
+without overwriting them. Atomic publication includes a final reread to detect
+concurrent edits; detected conflicts warn rather than overwrite another writer.
+Publication can be partial if a conflict occurs after the palette is written.
+This is an optimistic check, not a transaction shared with the app.
+Errors do not block other theme consumers. Zero background opacity is
+unsupported and reported rather than silently changed.
 
 #### Copilot desktop theme sync (experimental, opt-in)
 
@@ -991,7 +1083,7 @@ Each theme is a directory under `src/shared/themes/<name>/` containing:
 | `nemo.css` | Generated by Python | Nemo native controls, live light/dark contrast and capability-gated background alpha |
 | `neovim.lua` | Hand-authored | Lazy.nvim colorscheme spec |
 | `vscode.json` | Hand-authored | VS Code/Codium/Cursor theme name + extension ID |
-| `icons.theme` | Hand-authored | GTK icon theme name |
+| `icons.theme` | Hand-authored | Legacy metadata; stock value is `Adwaita` |
 | `light.mode` | Hand-authored (optional) | Marker file - if present, GTK + browser use light mode |
 | `tide.theme` | Hand-authored | Tide prompt colors (git, pwd, vi-mode segments) |
 | `backgrounds/` | Hand-authored | Wallpapers bundled with the theme |
@@ -1154,7 +1246,7 @@ The generator provides three variants of each color variable:
 3. **Add optional hand-authored files:**
    - `neovim.lua` - Lazy.nvim colorscheme plugin spec
    - `vscode.json` - `{"name": "Theme Name", "extension": "publisher.extension-id"}`
-   - `icons.theme` - GTK icon theme name (e.g., `Papirus-Dark`)
+   - `icons.theme` - legacy icon metadata (`Adwaita`); palettes no longer select icon packs
    - `light.mode` - Create this empty file if the theme is light
    - `backgrounds/` - Add wallpapers (named `1-name.png`, `2-name.png`, etc.)
    - `preview.png` - Screenshot for the theme picker

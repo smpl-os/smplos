@@ -67,6 +67,13 @@ These are app-specific preset payloads used by selectors in `colors.toml`:
 - `backgrounds/`
 - `preview.png`
 
+`icons.theme` is compatibility metadata and stock themes use `Adwaita`.
+Palette switches no longer select icon packs: GTK keeps an installed user-selected
+icon theme, or repairs an unavailable selection to the bundled Adwaita icons.
+Do not add palette-specific Yaru selections or global `GTK_THEME` overrides.
+Third-party GTK applications keep standard widget styling and receive the
+light/dark preference; Nemo's app-local CSS remains separate.
+
 ### Bundled wallpapers
 
 Put wallpaper images directly in `backgrounds/` (`.png`, `.jpg`, `.jpeg`, or

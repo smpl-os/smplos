@@ -91,6 +91,19 @@ class DroppedLib32GstreamerTests(MigrationHarness):
         self.assertEqual(result.returncode, 0)
         self.assertEqual(calls, [])
 
+    def test_user_held_dropped_package_is_not_removed(self):
+        result, calls = self.run_migration(LIB32, SMPLOS_UPDATE_PIN_IGNORE="lib32-audit")
+        self.assertEqual(result.returncode, 75, result.stdout)
+        self.assertEqual(calls, ["-Sy --noconfirm"])
+
+    def test_guarded_update_never_temporarily_disables_dependency_checks(self):
+        result, calls = self.run_migration(
+            LIB32, IN_REPO="lib32-systemd", DEPS_lib32_systemd="systemd-libs",
+            REQ_lib32_libcap="lib32-systemd", SMPLOS_UPDATE_PACMAN="/private/guard",
+        )
+        self.assertEqual(result.returncode, 75, result.stdout)
+        self.assertEqual(calls, ["-Sy --noconfirm"])
+
     def test_offline_defers_without_failing_the_update(self):
         result, calls = self.run_migration(LIB32, OFFLINE="1")
         self.assertEqual(result.returncode, 75)

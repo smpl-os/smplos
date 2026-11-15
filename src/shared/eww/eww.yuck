@@ -177,7 +177,7 @@
   (eventbox :onscroll "volume-ctl {} 5"
     (button :class "tray-volume"
             :onclick "popup-toggle quick-settings"
-            :onrightclick "pavucontrol &"
+            :onrightclick "smplos-settings audio &"
             :tooltip "Volume: ${volume-data.level}%"
       (label :class "icon" :text {volume-data.icon}))))
 

@@ -21,8 +21,10 @@
 #               control-surface) is left alone.
 #
 #            4. Install (or update) the keypad app, the control-surface
-#               package: a pinned smpl-apps release asset, packaged by
-#               src/shared/pkgbuilds/control-surface. Fresh installs get it
+#               package: a smpl-apps release asset, packaged by
+#               src/shared/pkgbuilds/control-surface. Update OS delivers the
+#               latest published release before this offline reconciliation.
+#               Fresh installs get it
 #               from the ISO. Nothing runs until a keypad is plugged in; the
 #               unit's ConditionPathExists keeps it inert until it's there.
 #               Validate its runtime before changing working keypad units.
@@ -124,20 +126,24 @@ fi
 # ── 3. The keypad app: deliver and validate before switching units ──────────
 deferred=0
 PKG_DIR="$REPO/src/shared/pkgbuilds/control-surface"
-want=$(sed -n 's/^pkgver=//p' "$PKG_DIR/PKGBUILD" 2>/dev/null | head -1 || true)
 # shellcheck source=../src/shared/lib/smplos-pkgbuild.sh
-if [[ -z "$want" ]] || ! source "$REPO/src/shared/lib/smplos-pkgbuild.sh" 2>/dev/null; then
+if ! source "$REPO/src/shared/lib/smplos-pkgbuild.sh" ||
+    ! source "$REPO/src/shared/lib/smplos-control-surface.sh" ||
+    ! want=$(smplos_pkgbuild_version "$PKG_DIR"); then
     echo "  ERROR: control-surface package recipe or installer not found in repo" >&2
     exit 1
 else
-    have=$(smplos_pkg_version control-surface)
-    if [[ -n "$have" ]] && (( $(vercmp "$have" "$want") >= 0 )); then
-        echo "  control-surface $have already installed"
-    elif smplos_pkgbuild_install "$PKG_DIR"; then
-        changed "Installed control-surface $(smplos_pkg_version control-surface) (the keypad app)"
+    if smplos_control_surface_current "$want"; then
+        echo "  control-surface $(smplos_pkg_version control-surface) already installed"
+    elif [[ $? -eq 2 ]]; then
+        exit 75
     else
-        echo "  Could not install control-surface now; will retry on the next update"
-        deferred=1
+        if smplos_control_surface_install "$PKG_DIR"; then
+            changed "Installed control-surface $(smplos_pkg_version control-surface) (the keypad app)"
+        else
+            echo "  Could not install control-surface now; will retry on the next update"
+            deferred=1
+        fi
     fi
 fi
 

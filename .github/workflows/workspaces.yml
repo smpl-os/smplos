@@ -17,7 +17,9 @@ on:
       - "src/compositors/hyprland/hypr/**"
       - "migrations/*workspace*.sh"
       - "tests/test_workspace*.py"
+      - "tests/test_messenger_focus.py"
       - "tests/test_bar_ctl.py"
+      - "tests/test_webapp_dns.py"
   push:
     branches: [main]
     paths:
@@ -35,7 +37,9 @@ on:
       - "src/compositors/hyprland/hypr/**"
       - "migrations/*workspace*.sh"
       - "tests/test_workspace*.py"
+      - "tests/test_messenger_focus.py"
       - "tests/test_bar_ctl.py"
+      - "tests/test_webapp_dns.py"
   workflow_dispatch:
 
 permissions:
@@ -53,5 +57,9 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends jq lua5.4
       - name: Check workspace behavior and rollout
         run: python3 -m unittest discover -s tests -p 'test_workspace*.py' -v
+      - name: Check messenger focus restoration
+        run: python3 -m unittest discover -s tests -p 'test_messenger_focus.py' -v
       - name: Check taskbar preference application
         run: python3 -m unittest discover -s tests -p 'test_bar_ctl.py' -v
+      - name: Check web-app sandbox DNS
+        run: python3 -m unittest discover -s tests -p 'test_webapp_dns.py' -v

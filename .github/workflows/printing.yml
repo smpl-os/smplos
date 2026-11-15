@@ -1,0 +1,46 @@
+name: Printing platform
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/printing.yml"
+      - "src/shared/bin/smplos-printing"
+      - "src/shared/lib/smplos-printing.py"
+      - "src/shared/bin/smplos-settings"
+      - "src/shared/packages.txt"
+      - "src/builder/build.sh"
+      - "src/shared/installer/install.sh"
+      - "migrations/*printing*.sh"
+      - "tests/test_printing.py"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/printing.yml"
+      - "src/shared/bin/smplos-printing"
+      - "src/shared/lib/smplos-printing.py"
+      - "src/shared/bin/smplos-settings"
+      - "src/shared/packages.txt"
+      - "src/builder/build.sh"
+      - "src/shared/installer/install.sh"
+      - "migrations/*printing*.sh"
+      - "tests/test_printing.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  printing:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check isolated CUPS protocol and delivery
+        run: |
+          python3 -m unittest discover -s tests -p test_printing.py -v
+          for script in src/builder/build.sh src/shared/installer/install.sh \
+            src/shared/bin/smplos-settings migrations/*printing*.sh; do
+            bash -n "$script" || exit 1
+          done

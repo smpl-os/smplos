@@ -30,6 +30,7 @@ if not (type(features.get("apiVersion")) is int and features.get("apiVersion") =
         and features.get("identifyWheels") is True
         and features.get("guidedCalibration") is True
         and features.get("guidedSetup") is True
+        and features.get("tiltNavigationGestures") is True
         and features.get("kdenliveApi") is True
         and features.get("passthrough") is True):
     sys.exit("mouse-remapperd does not support the required mouse remapping API")

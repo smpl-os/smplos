@@ -12,6 +12,9 @@ yay-bin
 # builds from github.com/smpl-os/eww at a pinned commit.
 eww-smplos
 
+# Bounded Signal notification pre-forward hook; no daemon restart on install.
+dunst-smplos
+
 # Screenshot annotation tool (pre-compiled binary)
 satty-bin
 

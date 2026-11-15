@@ -20,15 +20,15 @@ class SettingsDispatchTests(unittest.TestCase):
         self.bin.mkdir()
         self.log = Path(tmp.name) / "calls.log"
 
-    def install(self, name):
+    def install(self, name, body=""):
         tool = self.bin / name
-        tool.write_text(f'#!/bin/bash\necho "{name} $*" >> "{self.log}"\n')
+        tool.write_text(f'#!/bin/bash\necho "{name} $*" >> "{self.log}"\n{body}\n')
         tool.chmod(0o755)
 
-    def dispatch(self, *args):
+    def dispatch(self, *args, **env):
         # Only the mocks are on PATH, so no real tool or settings app can answer.
         return subprocess.run(["/bin/bash", str(DISPATCHER), *args],
-                              env={"PATH": str(self.bin)},
+                              env={"PATH": str(self.bin), **env},
                               capture_output=True, text=True, timeout=15)
 
     def calls(self):
@@ -52,6 +52,51 @@ class SettingsDispatchTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 1)
                 self.assertEqual(len(self.calls()), 1, self.calls())
                 self.assertIn("Settings app not found", self.calls()[0])
+
+    def test_terminal_fallbacks_execute_the_tool_inside_terminal(self):
+        self.install("terminal", '[ "$1" = "-e" ] || exit 99\nshift\nexec "$@"')
+        for category, tool in (("display", "wlr-randr"), ("network", "nmtui"),
+                               ("bluetooth", "bluetuith")):
+            with self.subTest(category=category):
+                self.log.unlink(missing_ok=True)
+                self.install(tool)
+                result = self.dispatch(category, WAYLAND_DISPLAY="wayland-fixture")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(self.calls(), [f"terminal -e {tool}", f"{tool} "])
+
+    def test_graphical_tools_still_take_precedence_over_terminal_fallbacks(self):
+        self.install("terminal")
+        for category, gui, tui in (("display", "wdisplays", "wlr-randr"),
+                                   ("network", "nm-connection-editor", "nmtui"),
+                                   ("bluetooth", "blueman-manager", "bluetuith")):
+            with self.subTest(category=category):
+                self.log.unlink(missing_ok=True)
+                self.install(gui)
+                self.install(tui)
+                result = self.dispatch(category, WAYLAND_DISPLAY="wayland-fixture")
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(self.calls(), [f"{gui} "])
+
+    def test_wayland_display_fallback_is_not_used_on_x11(self):
+        for tool in ("terminal", "wlr-randr", "notify-send"):
+            self.install(tool)
+        result = self.dispatch("display")
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(self.calls(), [
+            "notify-send smplOS Settings No display tool found (install arandr)",
+        ])
+
+    def test_terminal_fallbacks_propagate_tool_failures(self):
+        self.install("terminal", 'shift\nexec "$@"')
+        for category, tool in (("display", "wlr-randr"), ("network", "nmtui"),
+                               ("bluetooth", "bluetuith")):
+            with self.subTest(category=category):
+                self.log.unlink(missing_ok=True)
+                self.install(tool, "echo 'tool failed' >&2\nexit 42")
+                result = self.dispatch(category, WAYLAND_DISPLAY="wayland-fixture")
+                self.assertEqual(result.returncode, 42)
+                self.assertIn("tool failed", result.stderr)
+                self.assertEqual(self.calls(), [f"terminal -e {tool}", f"{tool} "])
 
     def test_unknown_name_prints_a_usage_line_naming_every_tab(self):
         result = self.dispatch("no-such-tab")

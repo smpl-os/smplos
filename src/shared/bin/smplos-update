@@ -11,6 +11,22 @@
 
 set -o pipefail
 
+if [[ -z "${SMPLOS_UPDATE_AUTH+x}" && -e "$HOME/.config/smplos/update-auth" ]]; then
+    SMPLOS_UPDATE_AUTH=$(cat -- "$HOME/.config/smplos/update-auth") || exit 1
+fi
+SMPLOS_UPDATE_AUTH="${SMPLOS_UPDATE_AUTH-sudo}"
+
+smplos_privileged() {
+    if [[ "${SMPLOS_UPDATE_AUTH:-sudo}" == polkit ]]; then
+        local executable
+        executable=$(command -v "$1") || return 1
+        shift
+        python3 "$SMPLOS_UPDATE_PRIVILEGED_HELPER" --request "$SMPLOS_UPDATE_PRIVILEGED_SOCKET" -- "$executable" "$@"
+    else
+        command sudo -n "$@"
+    fi
+}
+
 # Apps mode never performs a partial host-package upgrade.
 UPDATE_MODE="full"
 BOOTSTRAP_ONLY=0
@@ -22,15 +38,25 @@ while [[ $# -gt 0 ]]; do
                 echo "Usage: smplos-update [--mode full|apps]" >&2; exit 1;
             }
             UPDATE_MODE="$2"; shift ;;
+        --auth)
+            [[ "${2:-}" == sudo || "${2:-}" == polkit ]] || {
+                echo "ERROR: --auth requires sudo or polkit" >&2; exit 1;
+            }
+            SMPLOS_UPDATE_AUTH="$2"; shift ;;
         --bootstrap-only) BOOTSTRAP_ONLY=1 ;;
         --legacy-handoff)
             [[ -n "${2:-}" ]] || { echo "Missing handoff record" >&2; exit 1; }
             LEGACY_HANDOFF="$2"; shift ;;
-        -h|--help) echo "Usage: smplos-update [--mode full|apps] [--bootstrap-only]"; exit 0 ;;
+        -h|--help) echo "Usage: smplos-update [--mode full|apps] [--auth sudo|polkit] [--bootstrap-only]"; exit 0 ;;
         *) echo "Unknown option: $1" >&2; exit 1 ;;
     esac
     shift
 done
+[[ "$SMPLOS_UPDATE_AUTH" == sudo || "$SMPLOS_UPDATE_AUTH" == polkit ]] || {
+    echo "ERROR: invalid update authentication preference: $SMPLOS_UPDATE_AUTH" >&2; exit 1;
+}
+export SMPLOS_UPDATE_AUTH
+export -f smplos_privileged
 
 # ── Notification helper ──────────────────────────────────────────────────────
 # Never emit the "Cannot autolaunch D-Bus without X11 $DISPLAY" noise when
@@ -155,6 +181,17 @@ stop_sudo_keepalive() {
         wait "$SMPLOS_SUDO_KEEPALIVE_PID" 2>/dev/null || true
         unset SMPLOS_SUDO_KEEPALIVE_PID
     fi
+    if [[ -n "${SMPLOS_UPDATE_PRIVILEGED_DIR:-}" ]]; then
+        if [[ -S "$SMPLOS_UPDATE_PRIVILEGED_SOCKET" ]]; then
+            python3 "$SMPLOS_UPDATE_PRIVILEGED_HELPER" --stop "$SMPLOS_UPDATE_PRIVILEGED_SOCKET" ||
+                echo "ERROR: could not close the authenticated update channel" >&2
+        fi
+        if [[ -d "$SMPLOS_UPDATE_PRIVILEGED_DIR" ]]; then
+            rmdir -- "$SMPLOS_UPDATE_PRIVILEGED_DIR" ||
+                echo "ERROR: could not remove the update authentication directory" >&2
+        fi
+        unset SMPLOS_UPDATE_PRIVILEGED_DIR
+    fi
 }
 release_update_lock() {
     if [[ "${SMPLOS_UPDATE_LOCKED:-0}" == 1 ]]; then
@@ -207,7 +244,35 @@ check_reboot_before_update() {
     esac
 }
 authenticate_update() {
-    [[ "${SMPLOS_SUDO_READY:-0}" != 1 ]] || return 0
+    if [[ "${SMPLOS_SUDO_READY:-0}" == 1 ]]; then
+        if [[ "$SMPLOS_UPDATE_AUTH" == polkit && "${SMPLOS_UPDATE_PRIVILEGED_OWNER:-}" != "$$" ]]; then
+            startup_fail "The legacy authentication session cannot be reused. Restart Update OS using the refreshed entrypoint."
+        fi
+        return 0
+    fi
+    if [[ "$SMPLOS_UPDATE_AUTH" == polkit ]]; then
+        command -v pkexec >/dev/null || startup_fail "Polkit authentication requires pkexec."
+        SMPLOS_UPDATE_PRIVILEGED_HELPER="${SELF%/*}/smplos-update-privileged"
+        [[ -r "$SMPLOS_UPDATE_PRIVILEGED_HELPER" ]] ||
+            startup_fail "The single-authentication update helper is missing."
+        local owner_start
+        owner_start=$(python3 "$SMPLOS_UPDATE_PRIVILEGED_HELPER" --identity "$$") ||
+            startup_fail "Cannot establish update coordinator identity."
+        SMPLOS_UPDATE_PRIVILEGED_DIR=$(mktemp -d /tmp/smplos-update-auth.XXXXXX) ||
+            startup_fail "Cannot prepare the private update authentication channel."
+        SMPLOS_UPDATE_PRIVILEGED_SOCKET="$SMPLOS_UPDATE_PRIVILEGED_DIR/broker/socket"
+        command pkexec --disable-internal-agent /usr/bin/python3 "$SMPLOS_UPDATE_PRIVILEGED_HELPER" \
+            --serve "$SMPLOS_UPDATE_PRIVILEGED_DIR" "$$" "$UID" "$owner_start" &
+        SMPLOS_UPDATE_PRIVILEGED_PID=$!
+        SMPLOS_UPDATE_PRIVILEGED_OWNER=$$
+        export SMPLOS_UPDATE_PRIVILEGED_HELPER SMPLOS_UPDATE_PRIVILEGED_DIR \
+            SMPLOS_UPDATE_PRIVILEGED_SOCKET SMPLOS_UPDATE_PRIVILEGED_PID SMPLOS_UPDATE_PRIVILEGED_OWNER
+        python3 "$SMPLOS_UPDATE_PRIVILEGED_HELPER" --wait "$SMPLOS_UPDATE_PRIVILEGED_SOCKET" \
+            "$SMPLOS_UPDATE_PRIVILEGED_PID" ||
+            startup_fail "Polkit authentication cancelled or failed; update not started."
+        export SMPLOS_SUDO_READY=1
+        return 0
+    fi
     command sudo -v || startup_fail "Authentication failed; update not started."
     (
         trap - EXIT INT HUP
@@ -229,7 +294,7 @@ repair_update_state() {
         return 1
     }
     echo "Checking legacy updater-state ownership."
-    command sudo -n python3 "$helper" --repair-state --uid "$UID"
+    smplos_privileged python3 "$helper" --repair-state --uid "$UID"
 }
 trap 'stop_sudo_keepalive; release_update_lock' EXIT
 trap 'exit 130' INT
@@ -284,8 +349,12 @@ if ! check_update_power 2>&1 | tee -a "$SMPLOS_UPDATE_LOG_FILE"; then
     exit 1
 fi
 authenticate_update
-sudo() { command sudo -n "$@"; }
-export -f sudo
+sudo() { smplos_privileged "$@"; }
+# Migrations using pkexec must reuse this run's authorization and package guard.
+pkexec() {
+    sudo "$@"
+}
+export -f sudo pkexec smplos_privileged
 
 # Refresh the orchestration itself before migrations or package transactions.
 # Never let a legacy installed helper perform the first Git synchronization.
@@ -344,16 +413,20 @@ cat > "$UPDATE_SCRIPT" << PREAMBLE || bootstrap_fail "Cannot write update preamb
 #!/bin/bash
 UPDATE_MODE="$UPDATE_MODE"
 PREAMBLE
-declare -f check_update_power stop_sudo_keepalive release_update_lock >> "$UPDATE_SCRIPT" || bootstrap_fail "Cannot write update helpers."
+declare -f check_update_power stop_sudo_keepalive release_update_lock smplos_privileged pkexec >> "$UPDATE_SCRIPT" || bootstrap_fail "Cannot write update helpers."
 
 # Append the body (single-quoted: no substitution; uses UPDATE_MODE set above)
 cat >> "$UPDATE_SCRIPT" << 'EOF' || bootstrap_fail "Cannot write updater body."
 set -o pipefail
 UPDATE_FAILED=0
 CORE_VERIFIED=0
+BRAVE_TARGET_REQUESTED=0
 OPTIONAL_WARNINGS=()
 # Set only when this run's system upgrade completed; gates the bundle.
 SYSTEM_UPGRADED=0
+unset SMPLOS_UPDATE_PIN_IGNORE SMPLOS_UPDATE_PACMAN
+PIN_PACMAN=""
+SMPLOS_UPDATE_SUDO=sudo
 
 # Prefer canonical scripts over historical user-local shadow copies.
 export PATH="/usr/local/sbin:/usr/local/bin:$PATH"
@@ -383,6 +456,8 @@ CRITICAL_PACKAGES=()
 CRITICAL_IGNORE=""
 APPS_MODE_IGNORE=""
 HYPRLAND_SERIES=""
+STACK_PIN_IGNORE=""
+PINS_READY=0
 NETWORK_OK=1
 CURRENT_STAGE=starting
 FINISHED=0
@@ -414,6 +489,8 @@ finish_update() {
         record_update_state interrupted || echo "ERROR: cannot record interrupted update" >&2
     fi
     stop_sudo_keepalive
+    [[ -z "$PIN_PACMAN" ]] || rm -f -- "$PIN_PACMAN"
+    [[ "$SMPLOS_UPDATE_SUDO" == sudo ]] || rm -f -- "$SMPLOS_UPDATE_SUDO"
     rm -f -- "$0"
     release_update_lock || return 1
     if [[ $FINISHED -eq 0 ]]; then
@@ -426,9 +503,17 @@ finish_update() {
     return "$status"
 }
 
-# Noninteractive calls fail visibly instead of requesting another password.
-sudo() { command sudo -n "$@"; }
-export -f sudo
+# Privileged operations keep the desktop-user coordinator and chosen authentication.
+sudo() {
+    while [[ "${1:-}" == -k || "${1:-}" == -n ]]; do shift; done
+    if [[ "${1:-}" == pacman && -n "${SMPLOS_UPDATE_PACMAN:-}" ]]; then
+        shift
+        smplos_privileged "$SMPLOS_UPDATE_PACMAN" "$@"
+    else
+        smplos_privileged "$@"
+    fi
+}
+export -f sudo pkexec smplos_privileged
 export SMPLOS_SUDO_READY=1
 
 csv_join() {
@@ -477,10 +562,12 @@ update_flatpak_scope() {
 }
 
 _yay_run() {
+    local pacman_args=()
+    [[ -z "${SMPLOS_UPDATE_PACMAN:-}" ]] || pacman_args=(--pacman "$SMPLOS_UPDATE_PACMAN")
     if command -v ionice &>/dev/null; then
-        nice -n 10 ionice -c 3 yay "$@"
+        nice -n 10 ionice -c 3 yay "$@" "${pacman_args[@]}"
     else
-        nice -n 10 yay "$@"
+        nice -n 10 yay "$@" "${pacman_args[@]}"
     fi
 }
 
@@ -542,32 +629,49 @@ mark_reboot_pending() {
     return 0
 }
 
-# Never upgrade libraries underneath a held compositor.
+# Let pacman resolve the remaining upgrade without replacing the protected stack.
+prepare_pin_guard() {
+    local plan="$1"
+    STACK_PIN_IGNORE=$(python3 - "$plan" <<'PY'
+import json, re, sys
+with open(sys.argv[1]) as stream:
+    report = json.load(stream)
+pins = report["pin_plan"]["pins"]
+if report["errors"] or not all(re.fullmatch(r"[a-zA-Z0-9@._+-]+", name) for name in pins):
+    sys.exit("ERROR: invalid protected-stack plan")
+print(",".join(sorted(pins)))
+PY
+    ) || return 1
+    [[ -z "${PIN_PACMAN:-}" ]] || rm -f -- "$PIN_PACMAN"
+    PIN_PACMAN=$(mktemp "$STATE_DIR/pacman.XXXXXX") || return 1
+    printf '#!/bin/bash\nexport SMPLOS_UPDATE_PIN_IGNORE=%q\nexport SMPLOS_UPDATE_PIN_PLAN=%q\nexec %q "$@"\n' \
+        "$STACK_PIN_IGNORE" "$plan" /usr/local/bin/smplos-pacman > "$PIN_PACMAN" &&
+        chmod 755 "$PIN_PACMAN" || return 1
+    export SMPLOS_UPDATE_PIN_IGNORE="$STACK_PIN_IGNORE"
+    export SMPLOS_UPDATE_PACMAN="$PIN_PACMAN"
+}
+
+prepare_user_pin_guard() {
+    smplos-update-check --user-pins --output "$LOG_FILE.user-pins.json" &&
+        prepare_pin_guard "$LOG_FILE.user-pins.json"
+}
+
 system_upgrade() {
-    local available before held=0
+    local before
     if ! sudo pacman -Sy --noconfirm; then
         echo "  WARNING: could not refresh package databases (check internet/mirrors)"
         UPDATE_FAILED=1
         return 0
     fi
-    # pacman translates field labels; read them in the C locale.
-    available=$(LC_ALL=C pacman -Si hyprland 2>/dev/null | awk '/^Version/ {print $3; exit}')
-    if pacman -Q hyprland >/dev/null 2>&1 && [[ -z "$HYPRLAND_SERIES" || -z "$available" ]]; then
-        held=1
-        echo "  ERROR: could not compare Hyprland with the supported series."
-    elif pacman -Q hyprland >/dev/null 2>&1 && [[ "${available#*:}" != "$HYPRLAND_SERIES".* ]]; then
-        held=1
-        echo "  ERROR: Hyprland $available is outside the supported $HYPRLAND_SERIES series."
-    fi
-    if [[ $held -eq 1 ]]; then
-        echo "  Stopping the entire system upgrade; no partial library/driver upgrade will be attempted."
+    if ! prepare_user_pin_guard; then
+        echo "  ERROR: cannot protect refreshed package/group holds before package retirement."
         UPDATE_FAILED=1
         return 0
     fi
     # A retired helper's pinned libalpm dependency must not block the base upgrade.
     local package retired=()
     for package in paru paru-bin paru-git; do
-        if pacman -Qq "$package" >/dev/null 2>&1; then
+        if [[ ",$STACK_PIN_IGNORE," != *",$package,"* ]] && pacman -Qq "$package" >/dev/null 2>&1; then
             retired+=("$package")
         fi
     done
@@ -579,15 +683,28 @@ system_upgrade() {
             return 0
         fi
     fi
+    if ! smplos-update-check --plan-pins --output "$LOG_FILE.pins.json"; then
+        echo "  ERROR: no dependency-consistent update could be planned; nothing will be forced."
+        UPDATE_FAILED=1
+        return 0
+    fi
+    if ! prepare_pin_guard "$LOG_FILE.pins.json"; then
+        echo "  ERROR: cannot read the protected-stack plan."
+        UPDATE_FAILED=1
+        return 0
+    fi
+    PINS_READY=1
+    CRITICAL_IGNORE="$STACK_PIN_IGNORE"
     before=$(stack_versions)
     local conflict_args=()
     if pacman -Qq qemu-block-gluster >/dev/null 2>&1; then
         # Accept the official replacement conflict inside the full transaction.
         conflict_args=(--ask 4)
     fi
-    if sudo pacman -Su --noconfirm "${conflict_args[@]}"; then
-        SYSTEM_UPGRADED=1
+    [[ -z "$STACK_PIN_IGNORE" ]] || conflict_args+=(--ignore "$STACK_PIN_IGNORE")
+    if sudo pacman --smplos-base-transaction -Su --noconfirm "${conflict_args[@]}"; then
         refresh_bundle_snapshot
+        SYSTEM_UPGRADED=1
     else
         echo "  WARNING: system update failed"
         UPDATE_FAILED=1
@@ -660,6 +777,16 @@ critical_bundle_prompt_and_apply() {
     for optional in "${optional_packages[@]}"; do
         [[ "$(pacman -Qq "$optional" 2>/dev/null)" == "$optional" ]] && bundle_packages+=("$optional")
     done
+    local eligible=() spec
+    for spec in "${bundle_packages[@]}"; do
+        if [[ ",$STACK_PIN_IGNORE," == *",${spec%%=*},"* ]]; then
+            echo "  Retaining protected baseline package: ${spec%%=*}"
+        else
+            eligible+=("$spec")
+        fi
+    done
+    bundle_packages=("${eligible[@]}")
+    [[ ${#bundle_packages[@]} -gt 0 ]] || return 0
 
     echo "── Critical bundle ──"
     echo "  Applying $bundle_id: $bundle_desc"
@@ -720,28 +847,25 @@ detect_network() {
 prepare_pacman_transaction() {
     [[ "$NETWORK_OK" -eq 1 ]] || return 0
 
-    local migration
+    if ! prepare_user_pin_guard; then
+        echo "  ERROR: cannot protect configured package/group holds before package cleanup."
+        return 1
+    fi
+    local migration status
     for migration in 20260805-100050-clear-ignorepkg-hyprland-eww.sh \
                      20260805-100060-remove-dropped-lib32-gstreamer.sh; do
-        if ! bash "$SMPLOS_PATH/repo/migrations/$migration"; then
+        bash "$SMPLOS_PATH/repo/migrations/$migration"
+        status=$?
+        if [[ $status -eq 75 ]]; then
+            echo "  Package cleanup deferred; the native solver must retain dependency consistency."
+        elif [[ $status -ne 0 ]]; then
             echo "  ERROR: package preflight failed: $migration"
             UPDATE_FAILED=1
             return 1
         fi
     done
 
-    local directive values
-    for directive in IgnorePkg IgnoreGroup; do
-        values=$(pacman-conf "$directive") || {
-            echo "ERROR: cannot inspect pacman $directive policy"
-            return 1
-        }
-        if [[ -n "$values" ]]; then
-            echo "ERROR: custom $directive holds prevent a complete upgrade: $values"
-            echo "Resolve those holds before Update OS; they were not changed."
-            return 1
-        fi
-    done
+    return 0
 }
 
 # Log all output to file for debugging
@@ -755,6 +879,16 @@ mkdir -p "$LOG_DIR"
     trap 'exit 130' INT
     trap 'exit 143' TERM
     trap 'exit 129' HUP
+    if [[ "${SMPLOS_UPDATE_AUTH:-sudo}" == polkit ]]; then
+        SMPLOS_UPDATE_SUDO=$(mktemp "$STATE_DIR/privileged.XXXXXX") || exit 1
+        {
+            echo '#!/bin/bash'
+            declare -f smplos_privileged sudo
+            echo 'sudo "$@"'
+        } > "$SMPLOS_UPDATE_SUDO" || exit 1
+        chmod 700 "$SMPLOS_UPDATE_SUDO" || exit 1
+        export SMPLOS_UPDATE_SUDO
+    fi
     sudo rm -f /etc/sudoers.d/99-smplos-update-transient || exit 1
     sudo rm -f /etc/pacman.d/hooks/90-rebuild-paru.hook || exit 1
     if [[ -f "$STATE_DIR/status" ]] && grep -q '^status=\(running\|interrupted\)$' "$STATE_DIR/status"; then
@@ -870,8 +1004,8 @@ PY
         UPDATE_FAILED=1
     fi
     if [[ $AUR_POLICY_READY -eq 1 && -n "$CORE_AUR_PACKAGES" ]]; then
-        if ! _yay_run -Sua --noconfirm --sudoloop=false --sudo sudo --sudoflags=-n \
-            --ignore "$CRITICAL_IGNORE,nemo-smpl,grafium-bin,eww-smplos${OPTIONAL_AUR_PACKAGES:+,$OPTIONAL_AUR_PACKAGES}"; then
+        if ! _yay_run -Sua --noconfirm --sudoloop=false --sudo "$SMPLOS_UPDATE_SUDO" --sudoflags=-n \
+            --ignore "$CRITICAL_IGNORE,nemo-smpl,control-surface,grafium-bin,eww-smplos${OPTIONAL_AUR_PACKAGES:+,$OPTIONAL_AUR_PACKAGES}"; then
             echo "  ERROR: required AUR drivers/libraries were not updated."
             UPDATE_FAILED=1
         fi
@@ -915,8 +1049,10 @@ elif [[ "$UPDATE_MODE" == full ]]; then
 fi
 
 update_stage core-verification
+pin_check_args=()
+[[ $PINS_READY -eq 0 ]] || pin_check_args=(--pins-report "$LOG_FILE.pins.json")
 if smplos-update-check --core-only --before "$LOG_FILE.before.json" \
-    --output "$LOG_FILE.core.json" --apps-report "$LOG_FILE.apps.json" --mode "$UPDATE_MODE"; then
+    --output "$LOG_FILE.core.json" --apps-report "$LOG_FILE.apps.json" --mode "$UPDATE_MODE" "${pin_check_args[@]}"; then
     if [[ $UPDATE_FAILED -eq 0 ]]; then
         CORE_VERIFIED=1
         update_stage core-verified
@@ -942,12 +1078,17 @@ update_stage aur
 if [[ "$UPDATE_MODE" == full && $CORE_VERIFIED -eq 1 && $AUR_POLICY_READY -eq 1 ]]; then
     echo "── Optional AUR apps (background priority) ──"
     if [[ "$NETWORK_OK" -eq 1 ]] && check_update_power; then
-        run_optional "Brave target capture" smplos-update-check \
-            --capture-brave-target --output "$LOG_FILE.brave.json"
+        if [[ ",$STACK_PIN_IGNORE," == *,brave-bin,* ]]; then
+            echo "  Brave is deliberately held, not upgraded; security updates may be deferred."
+        else
+            BRAVE_TARGET_REQUESTED=1
+            run_optional "Brave target capture" smplos-update-check \
+                --capture-brave-target --output "$LOG_FILE.brave.json"
+        fi
         if [[ -n "$OPTIONAL_AUR_PACKAGES" ]]; then
             run_optional "Optional AUR apps" _yay_run -Sua --noconfirm --sudoloop=false \
-                --sudo sudo --sudoflags=-n \
-                --ignore "$CRITICAL_IGNORE,nemo-smpl,grafium-bin,eww-smplos${CORE_AUR_PACKAGES:+,$CORE_AUR_PACKAGES}"
+                --sudo "$SMPLOS_UPDATE_SUDO" --sudoflags=-n \
+                --ignore "$CRITICAL_IGNORE,nemo-smpl,control-surface,grafium-bin,eww-smplos${CORE_AUR_PACKAGES:+,$CORE_AUR_PACKAGES}"
         fi
     else
         optional_warning "Optional AUR updates deferred: network and external power are required."
@@ -1019,8 +1160,8 @@ echo
 
 check_args=(--before "$LOG_FILE.before.json" --output "$LOG_FILE.after.json"
     --apps-report "$LOG_FILE.apps.json"
-    --mode "$UPDATE_MODE")
-[[ "$UPDATE_MODE" != full ]] || check_args+=(--brave-report "$LOG_FILE.brave.json")
+    --mode "$UPDATE_MODE" "${pin_check_args[@]}")
+[[ $BRAVE_TARGET_REQUESTED -eq 0 ]] || check_args+=(--brave-report "$LOG_FILE.brave.json")
 for warning in "${OPTIONAL_WARNINGS[@]}"; do check_args+=(--optional-warning "$warning"); done
 [[ $UPDATE_FAILED -eq 0 ]] || check_args+=(--required-error "A required update operation failed; see $LOG_FILE")
 AUDIT_WARNINGS=0

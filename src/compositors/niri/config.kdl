@@ -184,9 +184,6 @@ environment {
     // XCompose
     XCOMPOSEFILE "~/.XCompose"
 
-    // GTK file dialogs default to dark; theme-set overrides for light themes
-    // by writing ~/.config/environment.d/gtk.conf
-    GTK_THEME "Adwaita:dark"
 }
 
 // ── XWayland satellite (legacy X11 apps) ─────────────────────────────────

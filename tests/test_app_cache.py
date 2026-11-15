@@ -184,6 +184,15 @@ class AppCacheTests(unittest.TestCase):
                 self.assertNotRegex(row[1], r"--tab (wifi|bluetooth)\b",
                                     "the standalone tabs are only kept as aliases")
 
+    def test_audio_search_aliases_share_the_mixer_dispatcher_and_stay_search_only(self):
+        rows = self.settings_rows()
+        self.assertEqual(rows["Audio"], ["Audio", "smplos-settings audio",
+                                        "settings", "audio-volume-high"])
+        for name in ("Volume", "Sound", "Speakers", "Output Device", "Input Device"):
+            with self.subTest(alias=name):
+                icon = "audio-input-microphone" if name == "Input Device" else "audio-volume-high"
+                self.assertEqual(rows[name], [name, "smplos-settings audio", "settings", icon, "1"])
+
     def test_settings_index_deep_links_get_an_icon_per_tab_and_section(self):
         self.cache.parent.mkdir(parents=True)
         (self.cache.parent / "settings_index").write_text(

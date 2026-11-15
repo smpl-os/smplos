@@ -786,6 +786,67 @@ sync_apps
         self.assertNotIn(CALENDAR_SERVICE, (self.home / "binary-installs").read_text())
         self.assert_service(self.home / ".config/systemd/user")
 
+    def test_os_update_delivers_launcher_scripts_cache_and_volume_widget(self):
+        scripts = ("smplos-settings", "rebuild-app-cache")
+        for relative in (*(f"bin/{name}" for name in scripts),
+                         "eww/eww.yuck", "eww/eww.scss"):
+            target = self.project / "src/shared" / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(ROOT / "src/shared" / relative, target)
+        installed = self.base / "installed-bin"
+        installed.mkdir()
+        for name in scripts:
+            (installed / name).write_text("#!/bin/bash\nexit 97\n")
+        eww = self.home / ".config/eww/eww.yuck"
+        eww.parent.mkdir(parents=True)
+        eww.write_text("old widget\n")
+        cache = self.home / ".cache/smplos/app_index"
+        cache.parent.mkdir(parents=True)
+        cache.write_text("old cache\n")
+        self.mock("find", """#!/bin/bash
+[[ "$1" == /var/lib/flatpak/* ]] && exit 0
+exec /usr/bin/find "$@"
+""")
+        updater = ROOT / "src/shared/bin/smplos-os-update"
+        sync = function(updater, "sync_scripts")
+        self.assertIn('dest="/usr/local/bin/$name"', sync)
+        sync = sync.replace('dest="/usr/local/bin/$name"', 'dest="$FIXTURE_BIN/$name"')
+        script = """
+SMPLOS_REPO="$PROJECT_ROOT"
+header() { :; }; ok() { echo "$*"; }; die() { echo "$*" >&2; exit 1; }
+as_invoker() { "$@"; }
+sudo() {
+    [[ "$1" == install || "$1" == mktemp || "$1" == mv || "$1" == rm ]] || return 99
+    [[ "${@: -1}" == "$FIXTURE_BIN/"* ]] || return 99
+    "$@"
+}
+sync_libs() { :; }; sync_config_defaults() { :; }
+"""
+        script += "\n".join((function(updater, "install_system_file"), sync,
+                              function(updater, "copy_user_config"),
+                              function(updater, "sync_configs")))
+        script += "\nsync_scripts\nsync_configs\nrebuild-app-cache\n" * 2
+        result = self.shell(
+            script, FIXTURE_BIN=str(installed), PATH=f"{installed}:{self.env['PATH']}",
+            XDG_DATA_HOME=str(self.base / "data-home"),
+            XDG_DATA_DIRS=str(self.base / "data-dirs"),
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        script_count = len(list((self.project / "src/shared/bin").iterdir()))
+        self.assertIn(f"All {script_count} scripts are current", result.stdout)
+        self.assertIn("All configs are current", result.stdout)
+        for name in scripts:
+            self.assertEqual((installed / name).read_bytes(),
+                             (ROOT / "src/shared/bin" / name).read_bytes())
+            self.assertEqual((installed / name).stat().st_mode & 0o777, 0o755)
+        self.assertEqual(eww.read_bytes(), (ROOT / "src/shared/eww/eww.yuck").read_bytes())
+        self.assertEqual(eww.stat().st_mode & 0o777, 0o644)
+        rows = {row[0]: row for row in
+                (line.split(";") for line in cache.read_text().splitlines())}
+        for name in ("Volume", "Sound", "Speakers", "Output Device", "Input Device"):
+            self.assertEqual(rows[name][1], "smplos-settings audio")
+            self.assertEqual(rows[name][-1], "1")
+
     def test_update_mains_refresh_even_without_new_binaries_and_report_failure(self):
         for name in ("smplos-os-update", "smplos-update-apps"):
             path = ROOT / "src/shared/bin" / name
@@ -801,7 +862,7 @@ SELF_UPDATED=1; SELF_CANONICAL="$HOME/no-installed-script"
 header() { :; }; ok() { :; }; warn() { echo "$*" >&2; }
 die() { echo "$*" >&2; exit 1; }
 pull_updates() { return 1; }
-sync_scripts() { :; }; sync_configs() { :; }; sync_themes() { :; }
+sync_scripts() { echo scripts-synced; }; sync_configs() { echo configs-synced; }; sync_themes() { :; }
 sync_apps() { :; }; sync_hypr_configs() { :; }; sync_user_units() { :; }; run_migrations() { :; }
 sync_plugins() { :; }
 sync_keypad_support() { :; }
@@ -809,7 +870,7 @@ sync_mouse_support() { :; }
 sync_hypridle_config() { :; }
 cleanup_shadow_bins() { :; }; post_deploy() { :; }
 update_smpl_apps() { :; }; update_st_smpl() { :; }; update_nemo_smpl() { :; }
-update_micro_smpl() { :; }
+update_micro_smpl() { :; }; update_control_surface() { :; }
 rebuild-app-cache() { echo refreshed; return "$CACHE_STATUS"; }
 """
             for status in ("0", "1"):
@@ -817,6 +878,9 @@ rebuild-app-cache() { echo refreshed; return "$CACHE_STATUS"; }
                     result = self.shell(stubs + main, CACHE_STATUS=status)
                     self.assertEqual(result.stdout.count("refreshed"), 1)
                     self.assertEqual(result.returncode, int(status), result.stderr)
+                    if name == "smplos-os-update":
+                        self.assertEqual(result.stdout.count("scripts-synced"), 1)
+                        self.assertEqual(result.stdout.count("configs-synced"), 1)
             if name == "smplos-os-update":
                 result = self.shell(stubs + "\nSCRIPTS_ONLY=1\n" + main, CACHE_STATUS="0")
                 self.assertEqual(result.stdout.count("refreshed"), 1)
@@ -826,10 +890,11 @@ rebuild-app-cache() { echo refreshed; return "$CACHE_STATUS"; }
 
     def test_new_user_cache_is_generated_not_shipped(self):
         builder = (ROOT / "src/builder/build.sh").read_text()
-        self.assertIn('cp "$SRC_DIR/shared/lib/"*.sh "$airootfs/usr/local/lib/smplos/"',
+        self.assertIn('install -m644 "$lib" "$airootfs/usr/local/lib/smplos/"',
                       builder)
-        self.assertIn('cp "$SRC_DIR/shared/lib/"*.sh "$airootfs/root/smplos/lib/"',
+        self.assertIn('install -m644 "$lib" "$airootfs/root/smplos/lib/"',
                       builder)
+        self.assertIn('in "$SRC_DIR/shared/lib/"*.sh "$SRC_DIR/shared/lib/"*.py', builder)
         self.assertIn('ln -sf ../smplos-app-cache.service', builder)
         self.assertIn('ln -sf ../smplos-app-cache.path', builder)
         installer = (ROOT / "src/shared/installer/install.sh").read_text()
@@ -883,9 +948,12 @@ header() { :; }; warn() { :; }
     def package_mocks(self):
         self.mock("pacman", """#!/bin/bash
 case "$1" in
--Q) [[ -n "${INSTALLED_VERSION:-}" ]] || exit 1; echo "$2 $INSTALLED_VERSION";;
--Qk) exit "${MISSING_FILES:-0}";;
--U) echo "$*" >> "$HOME/pacman.log"; exit "${INSTALL_FAIL:-0}";;
+-Q) if [[ -f "$HOME/package-version" ]]; then echo "$2 $(cat "$HOME/package-version")";
+    else [[ -n "${INSTALLED_VERSION:-}" ]] || exit 1; echo "$2 $INSTALLED_VERSION"; fi;;
+-Qkk) exit "${MISSING_FILES:-0}";;
+-U) echo "$*" >> "$HOME/pacman.log"
+    if [[ "${INSTALL_FAIL:-0}" = 0 && "${INSTALL_NOOP:-0}" = 0 ]]; then echo "${PACKAGE_TARGET:-1.4.72-1}" > "$HOME/package-version"; fi
+    exit "${INSTALL_FAIL:-0}";;
 *) exit 99;;
 esac
 """)
@@ -937,6 +1005,26 @@ update_nemo_smpl
         result = self.nemo_update()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue((self.home / "pacman.log").exists())
+
+    def test_nemo_success_exit_without_installation_does_not_record_the_target(self):
+        self.nemo_release()
+        self.package_mocks()
+        result = self.nemo_update(INSTALLED_VERSION="1.4.71-1", INSTALL_NOOP="1")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("did not reach intact package", result.stderr)
+        self.assertFalse((self.home / "state/nemo-smpl").exists())
+
+    def test_nemo_package_revision_is_not_hidden_by_unchanged_release_tag(self):
+        self.nemo_release()
+        self.package_mocks()
+        release = Path(self.env["NEMO_RELEASE_JSON"])
+        release.write_text(release.read_text().replace("1.4.72-1-", "1.4.72-2-"))
+        checksums = Path(self.env["CHECKSUMS"])
+        checksums.write_text(checksums.read_text().replace("1.4.72-1-", "1.4.72-2-"))
+        result = self.nemo_update(INSTALLED_VERSION="1.4.72-1", PACKAGE_TARGET="1.4.72-2")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((self.home / "pacman.log").exists())
+        self.assertEqual((self.home / "package-version").read_text().strip(), "1.4.72-2")
 
     def test_nemo_checksum_missing_worker_or_install_failure_never_records_version(self):
         self.package_mocks()
@@ -1019,6 +1107,7 @@ update_smpl_apps() { echo native-start; false; echo must-not-reach; }
 update_st_smpl() { echo terminal; }
 update_nemo_smpl() { echo nemo; }
 update_micro_smpl() { echo editor; }
+update_control_surface() { echo mouse-keypad; }
 update_grafium() { echo forbidden-grafium; return 99; }
 rebuild-app-cache() { echo cache; }
 """
@@ -1044,6 +1133,7 @@ update_smpl_apps() { release_target; echo attempted-new-suite; false; echo must-
 update_st_smpl() { release_target; n_updated=1; }
 update_nemo_smpl() { release_target; }
 update_micro_smpl() { release_target; }
+update_control_surface() { release_target; }
 update_grafium() { echo forbidden-grafium; return 99; }
 rebuild-app-cache() { echo refreshed; }
 """ + main
@@ -1052,7 +1142,7 @@ rebuild-app-cache() { echo refreshed; }
         self.assertNotIn("must-not-reach", result.stdout)
         report = json.loads((self.home / "apps.json").read_text())
         self.assertEqual(set(report["components"]),
-                         {"smpl-apps", "st-smpl", "nemo-smpl", "micro-smpl"})
+                         {"smpl-apps", "st-smpl", "nemo-smpl", "micro-smpl", "control-surface"})
         self.assertNotIn("forbidden-grafium", result.stdout)
         self.assertEqual(report["components"]["smpl-apps"],
                          {"before": "v1.0", "after": "v1.0", "target": "v2.0", "status": "failed"})
@@ -1060,6 +1150,33 @@ rebuild-app-cache() { echo refreshed; }
         self.assertEqual(report["components"]["st-smpl"]["status"], "updated")
         self.assertEqual(report["components"]["micro-smpl"]["status"], "current")
         self.assertIn("refreshed", result.stdout)
+
+    def test_native_package_holds_skip_release_install_without_pinning_standalone_apps(self):
+        path = ROOT / "src/shared/bin/smplos-update-apps"
+        main = path.read_text().split("# ── Main", 1)[1].split("\n", 1)[1]
+        script = function(path, "record_app_result") + """
+STATE_DIR="$HOME/state"; SMPLOS_PATH="$HOME/data"; CHECK_ONLY=0; QUIET=1; SMPLOS_APP_BINS=()
+REPORT_FILE="$HOME/apps.json"; REPORT_WORK="$HOME/results"; n_updated=0
+export SMPLOS_UPDATE_PIN_IGNORE="nemo-smpl,control-surface,smpl-apps"
+mkdir -p "$REPORT_WORK"
+installed_component_version() { echo 1.0-1; }
+warn() { echo "$*" >&2; }; log() { :; }
+release_target() { echo '{"tag_name":"v2.0"}' > "$SMPLOS_APP_RESULT_FILE"; }
+update_smpl_apps() { release_target; echo standalone-delivered; }
+update_st_smpl() { release_target; }
+update_micro_smpl() { release_target; }
+update_nemo_smpl() { echo forbidden-held-package; return 99; }
+update_control_surface() { echo forbidden-held-package; return 99; }
+rebuild-app-cache() { :; }
+""" + main
+        result = self.shell(script)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertNotIn("forbidden-held-package", result.stdout)
+        self.assertIn("standalone-delivered", result.stdout)
+        components = json.loads((self.home / "apps.json").read_text())["components"]
+        for component in ("nemo-smpl", "control-surface"):
+            self.assertEqual(components[component]["status"], "pinned")
+            self.assertIsNone(components[component]["target"])
 
     def test_native_groups_do_not_run_unrelated_components_or_overwrite_their_reports(self):
         path = ROOT / "src/shared/bin/smplos-update-apps"
@@ -1088,6 +1205,7 @@ update_smpl_apps() { release_target; }
 update_st_smpl() { release_target; }
 update_nemo_smpl() { release_target; }
 update_micro_smpl() { release_target; }
+update_control_surface() { release_target; }
 update_grafium() { echo forbidden-grafium; return 99; }
 rebuild-app-cache() { :; }
 """
@@ -1097,7 +1215,7 @@ rebuild-app-cache() { :; }
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertNotIn("forbidden-grafium", result.stdout)
                 self.assertEqual(set(json.loads((self.home / f"{group}.json").read_text())["components"]),
-                                 {"smpl-apps", "st-smpl", "nemo-smpl", "micro-smpl"})
+                                 {"smpl-apps", "st-smpl", "nemo-smpl", "micro-smpl", "control-surface"})
         original = (self.home / "core.json").read_bytes()
         optional = self.shell(script + main, GROUP="optional")
         self.assertEqual(optional.returncode, 0, optional.stderr)

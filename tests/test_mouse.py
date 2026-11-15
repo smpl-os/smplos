@@ -13,7 +13,8 @@ RULE = ROOT / "src/shared/system/udev/70-smplos-mice.rules"
 UNIT = ROOT / "src/shared/configs/systemd/user/mouse-remap.service"
 FEATURES = dict(apiVersion=1, vendor="1532", product="00b4", learning=True,
                 identify=True, identifyWheels=True, guidedCalibration=True, guidedSetup=True,
-                kdenliveApi=True, passthrough=True, appProfiles="hyprland")
+                tiltNavigationGestures=True, kdenliveApi=True,
+                passthrough=True, appProfiles="hyprland")
 
 
 class MouseIntegrationTests(KeypadCase):
@@ -100,12 +101,15 @@ class MouseIntegrationTests(KeypadCase):
                    json.dumps(dict(FEATURES, identifyWheels=False)),
                    json.dumps(dict(FEATURES, guidedCalibration=False)),
                    json.dumps(dict(FEATURES, guidedSetup=False)),
+                   json.dumps(dict(FEATURES, tiltNavigationGestures=False)),
                    json.dumps({key: value for key, value in FEATURES.items()
                                if key != "identifyWheels"}),
                    json.dumps({key: value for key, value in FEATURES.items()
                                if key != "guidedCalibration"}),
                    json.dumps({key: value for key, value in FEATURES.items()
                                if key != "guidedSetup"}),
+                   json.dumps({key: value for key, value in FEATURES.items()
+                               if key != "tiltNavigationGestures"}),
                    json.dumps(dict(FEATURES, kdenliveApi=False)),
                    json.dumps(dict(FEATURES, passthrough=False))]
         for features in invalid:

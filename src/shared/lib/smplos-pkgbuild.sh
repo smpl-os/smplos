@@ -8,8 +8,23 @@ smplos_pkg_version() {
     { pacman -Q "$1" 2>/dev/null || true; } | awk '{print $2}'
 }
 
+smplos_pkgbuild_version() {
+    local version revision
+    version=$(sed -n 's/^pkgver=\([0-9][0-9.]*\)$/\1/p' "$1/PKGBUILD") || return 1
+    revision=$(sed -n 's/^pkgrel=\([0-9][0-9.]*\)$/\1/p' "$1/PKGBUILD") || return 1
+    [[ -n "$version" && -n "$revision" && "$version$revision" != *$'\n'* ]] || {
+        echo "  ERROR: cannot read full package version from $1/PKGBUILD" >&2
+        return 1
+    }
+    printf '%s-%s\n' "$version" "$revision"
+}
+
 smplos_remove_retired_orphan() {
     local pkg="$1"
+    if [[ ",${SMPLOS_UPDATE_PIN_IGNORE:-}," == *",$pkg,"* ]]; then
+        echo "  $pkg is intentionally held - kept"
+        return 0
+    fi
     if ! pacman -Qq "$pkg" >/dev/null 2>&1; then
         echo "  $pkg not installed - nothing to do"
         return 0
@@ -47,7 +62,7 @@ smplos_pkgbuild_install() {
     fi
     build=$(mktemp -d "${TMPDIR:-/tmp}/smplos-pkgbuild.XXXXXX") || return 1
     cp -a "$dir/." "$build/" || { rm -rf "$build"; return 1; }
-    if (cd "$build" && makepkg -s --noconfirm); then
+    if (cd "$build" && PACMAN="${SMPLOS_UPDATE_PACMAN:-${PACMAN:-pacman}}" makepkg -s --noconfirm); then
         pkg=$(find "$build" -maxdepth 1 -name '*.pkg.tar.*' ! -name '*-debug-*' | head -1)
         [[ -n "$pkg" ]] && sudo pacman -U --noconfirm "$@" "$pkg" && rc=0
     fi

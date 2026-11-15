@@ -83,7 +83,7 @@ hl.window_rule({
 
 -- Native backgrounds and Rofi own alpha; whole-surface opacity fades text.
 hl.window_rule({
-    match = { class = "^(rofi|grafium|nemo|org\\.Nemo\\.nemo-float)$" },
+    match = { class = "^(rofi|grafium|nemo|org\\.Nemo\\.nemo-float|openchamber)$" },
     tag = "+self-managed-alpha",
 })
 

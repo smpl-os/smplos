@@ -124,6 +124,16 @@ mv ~/.config/hypr/hyprland.conf.disabled ~/.config/hypr/hyprland.conf
   to disk every 15s so a forced power-off loses little.
 * **Keybindings**: edit `src/shared/configs/smplos/bindings.conf` (hyprlang).
   The Lua side reads the exact same file via `bindings_loader.lua`.
+  Absolute numbered `workspace` actions resolve the target's `last_window`
+  on every press and explicitly focus it, independent of the pointer-selected
+  monitor. Invalid remembered windows fall back to the target's eligible MRU
+  window; empty targets use native workspace activation after restoring the
+  keyboard monitor. This avoids Hyprland 0.56's workspace-only no-op when
+  `follow_mouse=2` selects a monitor without moving keyboard focus.
+  Workspace homes are never reconciled or moved by numbered navigation.
+  Relative/named selectors, move-window actions and custom `exec` bindings
+  retain their previous paths. The classic hyprlang provider retains native
+  dispatcher behavior.
 * **Theme variables**: edit by running `theme-set <name>`. Both providers pick
   up the new values on next reload / restart.
 * **Window/layer rules**: edit either `windows.conf` *or* `windows.lua`,

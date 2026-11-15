@@ -1,0 +1,263 @@
+#!/usr/bin/env python3
+"""Publish the active smplOS palette for OpenChamber's local file watchers."""
+
+import hashlib
+import json
+import math
+import os
+from pathlib import Path
+import re
+import sys
+import tempfile
+import time
+import tomllib
+
+
+ROLES = {
+    "primary": {"base": "accent"},
+    "surface": {
+        "background": "background", "foreground": "foreground", "muted": "surface",
+        "mutedForeground": "muted", "elevated": "bg_light",
+    },
+    "interactive": {"border": "bg_lighter"},
+    "status": {
+        "error": "danger", "warning": "warning", "success": "success", "info": "info",
+    },
+}
+SYNTAX = {
+    "comment": "autosuggestion", "keyword": "accent_alt", "string": "cursor",
+    "number": "warning", "function": "accent", "variable": "foreground",
+    "type": "info_bright", "operator": "cursor",
+}
+
+
+def warn(message):
+    print(f"theme-set-openchamber: {message}", file=sys.stderr)
+
+
+def palette(current):
+    name = (current / "theme.name").read_text().strip()
+    if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", name):
+        raise ValueError("Active theme name must be a lowercase hyphenated identifier")
+    theme = current / "theme"
+    with (theme / "colors.toml").open("rb") as source:
+        colors = tomllib.load(source)
+    colors.setdefault("autosuggestion", colors.get("muted"))
+    for key in {key for group in ROLES.values() for key in group.values()} | set(SYNTAX.values()):
+        if not isinstance(colors.get(key), str) or not re.fullmatch(r"#[0-9a-fA-F]{6}", colors[key]):
+            raise ValueError(f"Missing or invalid opaque theme color: {key}")
+    for key in ("app_background_opacity", "popup_opacity"):
+        if key not in colors:
+            continue
+        value = colors[key]
+        if isinstance(value, bool) or not re.fullmatch(r"(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)", str(value)):
+            raise ValueError(f"{key} must be a finite decimal in [0,1]")
+        number = float(value)
+        if not math.isfinite(number) or not 0 <= number <= 1:
+            raise ValueError(f"{key} must be a finite decimal in [0,1]")
+    opacity = float(colors.get("app_background_opacity", colors.get("popup_opacity", 1)))
+    if opacity == 0:
+        raise ValueError("OpenChamber requires background opacity above zero")
+    mapped = {
+        group: {role: colors[key] for role, key in roles.items()}
+        for group, roles in ROLES.items()
+    }
+    mapped["syntax"] = {"base": {role: colors[key] for role, key in SYNTAX.items()}}
+    return {
+        "metadata": {
+            "id": f"smplos-{name}", "name": f"smplOS {name.replace('-', ' ').title()}",
+            "variant": "light" if (theme / "light.mode").exists() else "dark",
+        },
+        "colors": mapped,
+        "config": {"backgroundOpacity": opacity},
+    }
+
+
+def targets(home):
+    override = home / ".config/smplos/openchamber-data-dirs"
+    if override.exists():
+        paths = [Path(line.strip()) for line in override.read_text().splitlines()
+                 if line.strip() and not line.lstrip().startswith("#")]
+        if not paths:
+            raise ValueError("openchamber-data-dirs contains no targets")
+    else:
+        paths = [Path(os.environ.get("OPENCHAMBER_DATA_DIR", home / ".config/openchamber"))]
+    if any(not path.is_absolute() for path in paths):
+        raise ValueError("OpenChamber data directories must be absolute paths")
+    if not override.exists() and "OPENCHAMBER_DATA_DIR" not in os.environ:
+        if not any((paths[0] / name).exists() for name in ("settings.json", "preferences.json")):
+            return []
+    return list(dict.fromkeys(paths))
+
+
+def backup(home, path, content):
+    root = home / ".local/state/smplos/openchamber-theme-backups"
+    root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    root.chmod(0o700)
+    directory = root / hashlib.sha256(str(path.parent).encode()).hexdigest()[:16]
+    directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+    directory.chmod(0o700)
+    target = directory / f"{path.name}.{hashlib.sha256(content).hexdigest()}"
+    if not target.exists():
+        descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(descriptor, "wb") as output:
+            output.write(content)
+            output.flush()
+            os.fsync(output.fileno())
+    target.chmod(0o600)
+    if target.read_bytes() != content:
+        raise OSError(f"Cannot verify configuration backup for {path}")
+
+
+def unique_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"Duplicate JSON key: {key}")
+        result[key] = value
+    return result
+
+
+def invalid_constant(value):
+    raise ValueError(f"Invalid JSON constant: {value}")
+
+
+def finite_decimal(value):
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError("OpenChamber preferences contain a nonfinite number")
+    return number
+
+
+def preferences(content):
+    document = json.loads(content, object_pairs_hook=unique_object,
+                          parse_constant=invalid_constant, parse_float=finite_decimal)
+    if (not isinstance(document, dict) or type(document.get("version")) is not int
+            or document["version"] != 1 or not isinstance(document.get("fields"), dict)):
+        raise ValueError("OpenChamber preferences must be a version-1 document with fields")
+    for key, field in document["fields"].items():
+        if (not isinstance(field, dict)
+                or ("value" not in field and not isinstance(field.get("surfaces"), dict))):
+            raise ValueError(f"Invalid OpenChamber preference field: {key}")
+        if "surfaces" in field and not isinstance(field["surfaces"], dict):
+            raise ValueError(f"Invalid OpenChamber preference surfaces: {key}")
+        if ("updatedAt" in field
+                and (type(field["updatedAt"]) not in (int, float)
+                     or not 0 <= field["updatedAt"] <= 9_007_199_254_740_991)):
+            raise ValueError(f"Invalid OpenChamber preference timestamp: {key}")
+        surfaces = field.get("surfaces", {})
+        if set(surfaces) - {"web", "desktop", "vscode", "mobile"}:
+            raise ValueError(f"Invalid OpenChamber preference surface name: {key}")
+        records = list(surfaces.values())
+        if "value" in field:
+            records.append(field)
+        for record in records:
+            if (not isinstance(record, dict) or "value" not in record
+                    or ("updatedAt" in record and
+                        (type(record["updatedAt"]) not in (int, float)
+                         or not 0 <= record["updatedAt"] <= 9_007_199_254_740_991))):
+                raise ValueError(f"Invalid OpenChamber preference value/timestamp: {key}")
+    return document
+
+
+def selection(document, theme):
+    fields = document["fields"]
+    updates = {
+        "themeId": theme["metadata"]["id"],
+        "useSystemTheme": False,
+        f'{theme["metadata"]["variant"]}ThemeId': theme["metadata"]["id"],
+    }
+    timestamp = time.time_ns() // 1_000_000
+    for key in updates:
+        field = fields.get(key, {})
+        records = list(field.get("surfaces", {}).values())
+        if "value" in field:
+            records.append(field)
+        timestamp = max([timestamp] + [record.get("updatedAt", 0) + 1 for record in records])
+    if timestamp > 9_007_199_254_740_991:
+        raise ValueError("OpenChamber preference timestamps cannot be advanced safely")
+    changed = False
+    for key, value in updates.items():
+        field = fields.setdefault(key, {"updatedAt": 0})
+        surfaces = field.setdefault("surfaces", {})
+        if surfaces.get("desktop", {}).get("value") != value:
+            surfaces["desktop"] = {**surfaces.get("desktop", {}),
+                                   "value": value, "updatedAt": timestamp}
+            changed = True
+    return changed
+
+
+def atomic_write(path, content, previous):
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=path.parent, prefix=f"{path.name}.",
+                                         suffix=".tmp", delete=False) as output:
+            temporary = Path(output.name)
+            output.write(content)
+            output.flush()
+            os.fsync(output.fileno())
+        current = path.read_bytes() if path.exists() else None
+        if path.is_symlink() or current != previous:
+            raise ValueError(f"{path.name} changed during publication; refusing to overwrite concurrent edits")
+        temporary.replace(path)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
+def encoded(document):
+    return (json.dumps(document, separators=(",", ":"), allow_nan=False) + "\n").encode()
+
+
+def publish(home, directory, theme):
+    path = directory / "preferences.json"
+    if path.is_symlink():
+        raise ValueError("Refusing to replace symlinked OpenChamber preferences")
+    saved = path.read_bytes()
+    document = preferences(saved)
+    changed = selection(document, theme)
+    folder = directory / "themes"
+    target = folder / f'{theme["metadata"]["id"]}.json'
+    if folder.is_symlink() or target.is_symlink():
+        raise ValueError("Refusing to replace symlinked OpenChamber themes")
+    content = encoded(theme)
+    previous = target.read_bytes() if target.exists() else None
+    if changed:
+        backup(home, path, saved)
+    if previous != content:
+        if previous is not None:
+            backup(home, target, previous)
+        folder.mkdir(parents=True, exist_ok=True)
+        atomic_write(target, content, previous)
+    if changed:
+        try:
+            atomic_write(path, encoded(document), saved)
+        except (OSError, ValueError) as error:
+            raise ValueError(f"Palette published but selection is unconfirmed: {error}") from error
+
+
+def main():
+    if len(sys.argv) != 1:
+        warn("Usage: theme-set-openchamber (syncs the active smplOS theme)")
+        return 1
+    home = Path.home()
+    try:
+        directories = targets(home)
+        if not directories:
+            return 0
+        theme = palette(home / ".config/smplos/current")
+    except (OSError, ValueError) as error:
+        warn(str(error))
+        return 1
+    failed = False
+    for directory in directories:
+        try:
+            publish(home, directory, theme)
+        except (OSError, ValueError) as error:
+            warn(f"{directory}: {error}")
+            failed = True
+    return int(failed)
+
+
+if __name__ == "__main__":
+    sys.exit(main())

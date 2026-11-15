@@ -152,8 +152,9 @@ def neighbor(monitors, current, direction):
 def empty_state(error=""):
     return {
         "enabled": False, "error": error, "focused_monitor": "", "focused_label": "",
-        "focused_workspace": 0, "current": [], "monitors": [], "disconnected": [],
-        "map_width": 560, "map_height": 260, "assignment": "preserve", "escape_available": False,
+        "focused_workspace": 0, "focused_special": False, "current": [], "monitors": [],
+        "disconnected": [], "map_width": 560, "map_height": 260, "assignment": "preserve",
+        "escape_available": False,
     }
 
 
@@ -661,6 +662,10 @@ class Policy:
         scale = min(560 / width, 260 / height)
         for monitor in monitors:
             monitor["focused"] = monitor["id"] == current["id"]
+            # Native contract: a monitor's special overlay is visible iff its
+            # raw specialWorkspace id is non-zero (negative while open). The
+            # normal activeWorkspace id stays positive and independent.
+            monitor["special_visible"] = monitor["special_workspace"] != 0
             monitor["map_x"] = round((monitor["x"] - min_x) * scale)
             monitor["map_y"] = round((monitor["y"] - min_y) * scale)
             monitor["map_width"] = max(1, round(monitor["width"] * scale))
@@ -673,6 +678,7 @@ class Policy:
             "assignment": profile.get("assignment", "preserve"),
             "escape_available": self.backend.escape_available(),
             "focused_label": current["label"], "focused_workspace": current["active_workspace"],
+            "focused_special": current["special_workspace"] != 0,
             "current": [w for w in all_workspaces if w["effective_monitor"] == current["id"]],
             "monitors": spatial_order(monitors),
             "disconnected": [

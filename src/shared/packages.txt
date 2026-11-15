@@ -45,6 +45,8 @@ gtk3
 gtk4
 gtk4-layer-shell    # Wayland layer-shell for GTK4 apps
 libadwaita          # GTK4 UI library
+adwaita-icon-theme  # Standard GTK icons; no palette-specific icon packs
+hicolor-icon-theme # Icon lookup fallback
 qt5ct
 kvantum
 kvantum-qt5
@@ -64,7 +66,7 @@ noto-fonts-emoji
 
 # ── Notifications ────────────────────────────────────────────
 libnotify
-dunst
+# Dunst is supplied by the offline custom dunst-smplos package.
 
 # ── Polkit ───────────────────────────────────────────────────
 polkit-gnome
@@ -107,6 +109,13 @@ reflector
 bluez
 bluez-utils
 blueman
+
+# Local print queues, driverless IPP/filtering and DNS-SD address resolution.
+# No cups-browsed (auto-created queues) or duplicate printer GUI.
+cups
+cups-filters
+python-pycups
+avahi
 
 # ── Display Extras ───────────────────────────────────────────
 gammastep

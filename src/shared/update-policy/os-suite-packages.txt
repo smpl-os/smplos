@@ -11,6 +11,8 @@
 # Window manager / shell
 eww
 hyprland
+dunst
+dunst-smplos
 
 # Terminal
 st

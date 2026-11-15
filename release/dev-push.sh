@@ -45,7 +45,10 @@ log "Bin: $(find "$SHARE/bin" -type f | wc -l) files"
 
 # Shared shell libraries (sourceable, not executable)
 if [[ -d "$SRC_DIR/shared/lib" ]]; then
-    cp "$SRC_DIR/shared/lib/"*.sh "$SHARE/lib/" 2>/dev/null || true
+    for lib in "$SRC_DIR/shared/lib/"*.sh "$SRC_DIR/shared/lib/"*.py; do
+        [[ -f "$lib" ]] || continue
+        install -m644 "$lib" "$SHARE/lib/" || exit 1
+    done
     log "Lib: $(find "$SHARE/lib" -type f | wc -l) files"
 fi
 

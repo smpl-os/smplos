@@ -185,7 +185,8 @@ class FullOpacityPolicyTests(unittest.TestCase):
         neutral = "1.0 override 1.0 override 1.0 override"
         native = ("settings", "app-center", "webapp-center", "sync-center", "start-menu",
                   "notif-center", "smpl-calendar", "smpl-calendar-details", "hints-overlay",
-                  "nemo", "org.Nemo.nemo-float", "grafium", "st", "st-256color", "terminal", "rofi")
+                  "nemo", "org.Nemo.nemo-float", "grafium", "openchamber",
+                  "st", "st-256color", "terminal", "rofi")
         cases = [(app, {}, neutral) for app in native]
         cases += [(app, props, neutral) for app, props in (
             ("mpv", {}), ("steam_app_1234", {}), ("com.gabm.satty", {}),
@@ -244,7 +245,8 @@ class FullOpacityPolicyTests(unittest.TestCase):
                          "browser_opacity": "0.6", "messenger_opacity": "0.7"})
         native = ("settings", "app-center", "webapp-center", "sync-center", "start-menu",
                   "notif-center", "smpl-calendar", "smpl-calendar-details", "hints-overlay",
-                  "nemo", "org.Nemo.nemo-float", "grafium", "st", "st-256color", "terminal", "rofi")
+                  "nemo", "org.Nemo.nemo-float", "grafium", "openchamber",
+                  "st", "st-256color", "terminal", "rofi")
         for index, colors in enumerate(palettes):
             for provider in providers:
                 rules = conf_rules(colors)[0] if provider == "conf" else lua_rules(colors)

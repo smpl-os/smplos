@@ -795,13 +795,19 @@ local function op(kind)
 end
 hl = {
   workspace_rule=function(_) end,
+  get_workspaces=function() return {} end,
+  get_windows=function() return {} end,
+  get_active_window=function() return nil end,
+  dispatch=function(action)
+    print(action.kind .. ":" .. (type(action.value) == "string" and action.value or "table"))
+  end,
   dsp={
     focus=op("native-focus"), exec_cmd=op("exec"),
     window={move=op("native-send")},
     workspace={move=op("native-workspace-move"), toggle_special=op("special")}
   },
   bind=function(_, action, _)
-    print(action.kind .. ":" .. (type(action.value) == "string" and action.value or "table"))
+    if type(action) == "function" then action() else hl.dispatch(action) end
   end
 }
 dofile(arg[1])
@@ -819,7 +825,8 @@ dofile(arg[2]).load(arg[3])
         (directory / "workspace-rules.lua").write_text('hl.workspace_rule({workspace="1", monitor="DP-1"})\n')
         enabled = subprocess.run(command_args, input=script, text=True, capture_output=True,
                                  env=env, check=True).stdout
-        self.assertIn("exec:workspace-ctl select 1", enabled)
+        self.assertIn("native-focus:table", enabled)
+        self.assertNotIn("exec:workspace-ctl select 1\n", enabled)
         self.assertIn("exec:workspace-ctl select +1", enabled)
         self.assertIn("exec:workspace-ctl send 1 --silent", enabled)
         self.assertIn("exec:workspace-ctl move-workspace up", enabled)

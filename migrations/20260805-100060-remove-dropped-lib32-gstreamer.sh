@@ -75,6 +75,16 @@ for pkg in "${remove[@]}"; do
 done
 
 flags=(-R --noconfirm)
+if [[ $skip_dependency_check -eq 1 && -n "${SMPLOS_UPDATE_PACMAN:-}" ]]; then
+    echo "  Cleanup would temporarily break dependencies; retaining packages and deferring to the protected update solver."
+    exit 75
+fi
+for pkg in "${remove[@]}"; do
+    if [[ ",${SMPLOS_UPDATE_PIN_IGNORE:-}," == *",$pkg,"* ]]; then
+        echo "  $pkg is intentionally held; retaining dropped packages."
+        exit 75
+    fi
+done
 [[ $skip_dependency_check -eq 1 ]] && flags=(-Rdd --noconfirm)
 echo "  Removing packages Arch dropped from multilib: ${remove[*]}"
 if ! sudo pacman "${flags[@]}" "${remove[@]}"; then

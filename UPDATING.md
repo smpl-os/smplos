@@ -14,11 +14,13 @@ smplOS uses a **git-based update system**. The repo is cloned to
    saving passwords or installing passwordless sudo rules.
 3. Fast-forwards a clean `main` checkout, atomically syncs scripts/libraries,
    and re-executes the refreshed wrapper before package/config deployment.
-4. Inventories installed versions and performs the complete official package
-   upgrade, including the supported Hyprland series, libraries and drivers.
+4. Inventories installed versions and resolves the official package upgrade.
+   When Arch moves beyond the approved Hyprland series, retains the installed
+   desktop/graphics/capture stack and dependency-linked packages, updating the
+   remaining compatible packages in one transaction.
 5. Enrolls compatible Yay and updates required foreign drivers, public shared
    libraries and transitive dependencies of the core stack.
-6. Delivers core native releases (smpl-apps, st, Nemo and micro), deploys essential
+6. Delivers core native releases (smpl-apps, st, Nemo, micro and control-surface), deploys essential
    desktop configs/themes and core migrations, reconciles services and checks
    that the EWW bar is open. Persists a verified core checkpoint.
 7. Attempts ordinary application configs/integrations and optional migrations,
@@ -28,8 +30,9 @@ smplOS uses a **git-based update system**. The repo is cloned to
    with warnings**, not **Update incomplete**.
 
 The priority split applies to foreign/native apps and config migrations, not
-individual official packages: all official packages still upgrade together in
-one complete Arch transaction. `--mode apps` delivers the same core native
+individual official packages: all eligible official packages upgrade together in
+one dependency-checked Arch transaction. Deliberate desktop transition pins are
+recorded separately from unexpected pending updates. `--mode apps` delivers the same core native
 releases and scoped Flatpak updates, without claiming a base-system or
 desktop-config upgrade.
 
@@ -56,6 +59,250 @@ automatic rollback or boot recovery are provided by this flow.
 
 OS-owned changes reach users after merging to `main` and running the updater.
 Changes to independently built apps also require a release in their own repo.
+
+### Foreground Polkit authentication
+
+**One password prompt for the entire update.** Use `smplos-update --auth polkit`
+for one upfront foreground authorization, shared by bootstrap, package upgrades,
+native app delivery and final verification. Later operations never reauthenticate.
+Shell migrations that call `pkexec` also reuse the authenticated dispatcher;
+their package operations retain the same per-run dependency/pin guard.
+A cancelled authorization or lost authenticated channel stops the update
+explicitly; neither triggers another prompt or a sudo fallback.
+
+The coordinator remains the desktop user. A temporary root helper accepts only
+requests from that coordinator and its descendants, streams command output and
+returns each actual exit status. It exits when the run closes or its coordinator
+exits; an already-running operation finishes before the helper exits. No password,
+permanent service or passwordless rule is stored. Package guards and verification
+remain mandatory.
+The helper uses a fixed canonical system `PATH`, including `/usr/local/bin`,
+so Polkit's sanitized environment cannot hide the installed transaction checker.
+It never imports the caller's executable search path.
+
+An update started by the former per-operation Polkit entrypoint cannot reuse that
+legacy authentication. After the verified script refresh, it stops without
+asking again; restart the refreshed entrypoint to begin the single-authentication
+run.
+
+To use this mode from App Center as well, save the single word `polkit` in
+`~/.config/smplos/update-auth`. An absent preference retains the existing sudo
+workflow. `--auth sudo|polkit` overrides the saved choice for one invocation;
+`SMPLOS_UPDATE_AUTH` can select it for an enclosing launcher. Invalid preferences
+are errors.
+
+### Nemo startup with a saved Overview tab
+
+A saved `overview:///` tab could leave Nemo running without any mapped window:
+the Overview widget did not signal that its slot was ready, so startup waited
+indefinitely before showing the restored window. The workspace-local launcher
+then reported **Timed out waiting for a new nemo window**. This is a native
+`nemo-smpl` readiness bug, not a reason to reset preferences, discard saved tabs,
+disable restoration or change the shortcut to always open Home.
+
+The corrected native release, **nemo-smpl v1.4.85**, shares normal view readiness
+with Overview and uses the canonical location-change path, including
+cancellation of pending directory loads. Normal Update OS delivers the latest published, checksum- and
+package-validated [Nemo release](https://github.com/smpl-os/nemo-smpl/releases).
+No binding migration is needed. Finish file operations before closing and
+reopening Nemo to load the new executable; updating does not stop its process.
+Opening Home explicitly with `nemo "$HOME"` can make a window available while
+the old executable is still running without resetting saved preferences.
+
+Release qualification must cover saved Overview tabs in single and split panes,
+an active Overview tab, switching between Overview and folders, and a second
+no-argument launch forwarded over D-Bus to the existing process. Confirm actual
+mapped windows, not just a successful launcher exit or a running PID. Exercise
+the unchanged `focus-or-launch --current-workspace nemo nemo` entry point after
+installing the corrected package as well.
+
+If Update OS reports `unexpected pacman preview: :: Synchronizing package
+databases...`, the package guard rejected a database-only refresh before native
+delivery. The guard now runs refresh-only commands once without a transaction
+preview; installs, upgrades and removals still require protected-stack checks.
+Retry with the corrected updater. This failure does not indicate that the
+published Nemo package was installed.
+
+### Numbered workspace keyboard focus
+
+The pointer-independent last-used-window fix is in the OS-owned
+`src/compositors/hyprland/hypr/bindings_loader.lua`. Normal Update OS delivers
+it with the Hyprland Lua modules; no native release, compositor upgrade or
+binding migration is needed. Existing shared binding files and mouse-focus
+preferences are preserved. Reload the Lua configuration when ready to apply
+the delivered loader; do not interrupt a typing session for a test.
+
+For a coordinated local trial, first save and verify a copy of the installed
+`~/.config/hypr/bindings_loader.lua`, then replace only that module with this
+version and run `hyprctl reload config-only`. Do not replace personal
+`bindings.conf`, workspace homes or pointer settings. Confirm
+`hyprctl -j configerrors` has no nonempty errors. On Hyprland 0.56, type in
+workspace 1 while the pointer is over an older window on visible workspace 4;
+Super+4 must focus workspace 4's last-used window, not the hovered one.
+Repeat with workspace 4 hidden, with the pointer on either monitor, and with
+an empty target. Modified move-window shortcuts must still move windows.
+This fix targets the Lua provider; the classic hyprlang fallback is unchanged.
+
+Regression checks (no interaction with the live desktop):
+
+```bash
+PYTHONPATH=tests python -m unittest test_workspace_shortcuts test_keybindings
+KEYBIND_LAB=1 PYTHONPATH=tests python -m unittest test_workspace_shortcuts
+```
+
+The second command requires the isolated headless keybinding lab prerequisites
+and checks real window focus, monitor ownership and virtual Super+4 presses on
+two outputs, with both workspace-policy modes and cursor-warp preferences.
+
+### Clip command delivery
+
+`src/shared/bin/clip` is a Bash executable shared by every edition and usable
+from Fish, Bash or other shells. The ISO build installs shared commands, and
+normal Update OS syncs them to `/usr/local/bin/` with executable permissions.
+No separate migration or shell-config rewrite is needed. All four values are
+arguments: `clip <start> <end> <inputfile> <outputfile>`.
+FFmpeg is already in the shared package list.
+
+### Web-app DNS after VPN/resolver changes
+
+The web-app launcher exposes `/run/systemd/resolve` read-only when present,
+so `/etc/resolv.conf` remains readable inside Bubblewrap when it points to
+systemd-resolved. Binding the directory also follows atomic DNS-file updates.
+Web apps keep the host network, DNS routing and VPN policy; no public-DNS
+override, VPN exclusion or browser-profile reset is needed. Static resolver
+files remain available through the existing read-only `/etc` mount.
+
+Update OS delivers the launcher. Close and reopen existing web-app windows
+after updating: a running sandbox keeps its original mounts. Profiles,
+cookies and logins are not cleared.
+
+### Standalone mouse-remapper adoption
+
+Older development installs can have an unowned `/usr/bin/mouse-remapperd`
+before the `control-surface` package starts shipping it. The repeated keypad
+package reconciliation checks ownership and the daemon's read-only feature API
+in an isolated profile. A recognized, regular standalone executable can be
+adopted with an exact-path pacman overwrite in the validated package transaction.
+Other packages' files retain normal pacman conflict checks; unrecognized files,
+directories and symlinks are left untouched with an explicit retry error.
+Mouse/keypad mappings, custom units and other user data are not removed.
+
+If a required deployment fails, optional AUR work is skipped. Final verification
+only requests a Brave target report when target capture was actually attempted,
+so a skipped stage does not generate a misleading missing-report warning.
+
+### Latest managed releases and testing notices
+
+Update OS follows the latest published stable releases of our native apps;
+mouse/keypad daemons no longer wait for a manually bumped OS recipe.
+`control-surface` uses the **same captured smpl-apps release** as Settings,
+including the release asset's required SHA256 digest. The local packaging step
+validates both daemons against the installed runtime before installation.
+ISO builds resolve the latest archive and its digest together, then embed the
+resulting package in the offline mirror. The checked-in recipe is only an
+offline bootstrap snapshot, not an update hold.
+
+Changed native components print **Testing needed** with before/after versions.
+This is a notice, not an approval gate; the update continues and records its
+captured targets. Reopen changed apps or log out/in before testing the new
+mouse/keypad daemons. Upgrading files does not replace already-running processes.
+Mappings, custom units, application settings and databases remain untouched.
+
+Package comparisons include `pkgrel`, not just the release tag. Missing or
+unowned input daemons cannot count as a current package. Installation is checked
+again before success is recorded, and final verification independently compares
+installed package versions against captured targets. A stale marker or a zero
+installer exit code alone is not success. Failed/incomplete releases remain
+explicitly retryable; healthy newer installed versions are never downgraded.
+Yay does not independently replace the release-managed control-surface package.
+
+### Standard GTK defaults and missing-icon repair
+
+Stock palettes no longer select Yaru icon packs that smplOS does not ship.
+Adwaita and hicolor icon packages are explicit ISO dependencies; a required core
+migration installs missing packages only after the complete system upgrade.
+The shared GTK preference helper repairs an unavailable icon-theme selection to
+installed Adwaita, retains installed personal icon themes, and keeps GSettings
+and GTK3/GTK4 settings.ini icon selections consistent. Theme switching ignores
+legacy `icons.theme` metadata, including in custom palettes.
+
+Light/dark changes use standard GSettings and GTK preferences, not a global
+`GTK_THEME` override. GTK4 settings no longer contain GTK3-only mnemonic keys.
+Fonts, cursors, other personal settings and app-local CSS are preserved; Nemo's
+native CSS/theme delivery is unchanged. Before changing existing settings, the
+helper saves and verifies originals under
+`~/.local/state/smplos/backups/gtk/` (private directory/files, content-addressed
+backups retained across retries). GSettings originals are readable JSON.
+
+Update OS delivers the helper and migration, refreshes stock themes through the
+existing verified-backup path, and reapplies the active palette. Known stock
+overrides are also removed from environment.d and existing Hyprland/Niri config
+files, including Niri's stored assembly input. Finalization clears the systemd
+and D-Bus activation overrides and Hyprland's launcher environment. Running apps
+and terminals retain their inherited environment; log out/in after updating
+before comparing apps on either machine. No installed app is forcibly closed.
+Custom explicit `GTK_THEME` configuration on disk is not removed.
+
+For the Mission Center regression, after Update OS and a new login, check
+`gsettings get org.gnome.desktop.interface icon-theme` (normally `Adwaita`),
+then launch the unmodified pacman `missioncenter` package. Switch between a
+light and a dark smplOS palette and repeat: icon selection must remain installed,
+GTK4 must not emit unknown-mnemonic-setting warnings, and startup must not
+stack-overflow. The updater does not install or replace Mission Center or btop.
+An unavailable icon theme alone may still fall back successfully on a clean
+profile. The reproduced crash also used a user-local `hicolor/index.theme`
+listing only application-icon directories, hiding the standard status-icon
+fallback directories. The repair preserves that user file and supplies a valid
+selected theme instead.
+
+`src/test-gtk-defaults.py` exercises a private profile and bus, including a
+shortened local hicolor index, actual GTK3 settings and live libadwaita
+dark/light/dark transitions. Run it with the system Python/GTK introspection
+packages, or through `xvfb-run -a /usr/bin/python3 src/test-gtk-defaults.py`.
+
+### OpenChamber theme bridge delivery
+
+The bridge is OS-owned; OpenChamber's renderer and file watchers are
+independently delivered. Verify the coordinated OpenChamber fork build
+**before** publishing the OS bridge. This replacement uses local custom-theme
+files and existing version-1 `preferences.json`, with desktop-only theme
+selection overrides. It does not call any theme control or capability API.
+Unrelated settings, preferences, base values and other surfaces are preserved.
+Private verified backups precede replacement, and a final reread rejects
+detected concurrent changes before each atomic rename.
+
+The former OpenChamber 2.5.2 API release is not sufficient for this path.
+The app must watch preferences as well as custom palettes, retain last-valid
+state on invalid input, and handle selection and palette arrival in either
+order. A custom JSON file on disk is not proof of renderer application.
+File-only qualification cannot probe window readiness or acknowledge rendering;
+verify the combined maintained app and bridge across multiple windows, exact
+palette changes and opaque/translucent round trips before release. Native alpha
+still requires a transparent desktop launch. Do not infer native/compositor
+output from successful file publication. Detected conflicts after palette
+publication can leave a partial result and must be reported.
+
+Normal script synchronization installs `theme-set-openchamber` alongside
+`theme-set`, and normal Hyprland config synchronization delivers the native-alpha
+tag in both `windows.lua` and `windows.conf`. The existing final opacity policy
+must remain last. The ISO copies the same script and compositor trees; no
+separate migration or hardcoded installer list is necessary. The optional app
+phase invokes `theme-set --apps`; the core-only phase does not change
+OpenChamber. Bridge errors are visible but do not abort other theme consumers.
+
+This does not enroll OpenChamber as a core OS binary or install an app package.
+Its independent compatible release must already be installed and running.
+Never launch/restart it from `theme-set`, rewrite personal desktop launchers,
+set transparent-window environment flags globally, or point production users
+at a temporary demo data directory. Package/release installation is separate
+from bridge delivery. Test delivery against an isolated HOME and local server,
+not the maintainer's real settings or sessions.
+
+Settings backups can contain the local API bearer token. Keep backup roots
+and target directories mode 0700 and files mode 0600; never include their
+contents in logs, CI artifacts or release uploads. Preserve backups and
+custom-only themes. Remove only the temporary demo target override after a
+demo, not the app's settings or session data.
 
 ### Completion receipts and App Center
 
@@ -269,6 +516,76 @@ EWW fragments, and Hyprland Lua modules into both the live system and installer
 payload. Monitor identities and workspace assignments are generated on the
 target machine; no developer profile is shipped.
 
+Plain Super+number bindings use Hyprland's native workspace focus, with homes
+provided by the generated workspace rules. The binding itself does not invoke
+policy reconciliation, reload configuration, or dispatch window/workspace moves.
+Relative/previous navigation still resolves monitor-local IDs through
+`workspace-ctl`; modified send/move shortcuts remain explicit moves.
+
+#### Signal notification activation
+
+The custom `dunst-smplos` package pins Dunst 1.13.2 and adds a synchronous
+pre-forward hook for Signal's **default notification action only**. Action
+buttons (including non-activating actions), other applications, and ordinary
+Signal tray/deep-link/second-instance activation keep their native paths.
+No global or Signal-wide activation suppression rule is installed.
+The transaction uses Hyprland's Lua window/monitor APIs, validated against
+0.56.2. Dispatcher objects execute through `hl.dispatch(...)`, not direct
+function calls. Outside Hyprland, native forwarding is unchanged.
+
+Before forwarding the native `ActionInvoked`, Dunst directly executes a fixed
+helper with only the recipient's unique bus name. The helper verifies that its
+actual, stable parent is the current Notifications bus owner's PID, resolves
+the recipient's live PID, rechecks identities, then submits one non-yielding
+Lua transaction. That transaction reads the **currently active window's normal
+workspace**, moves only the uniquely identified existing Signal window there,
+and focuses it. If Signal was already active on normal workspace 3, it stays
+there; another app active on workspace 2 with Signal parked on normal workspace
+3 or a special workspace targets 2. This boundary is the compositor transaction,
+not a promise of click-instant ordering against independent user focus changes.
+
+Moving grouped/pinned/swallowing Signal or auto-joining a destination group is
+rejected before mutation rather than changing the user's grouping policy or moving
+unrelated group members. Already-on-target Signal can be focused without a move.
+An empty old special workspace is closed only on its exact old monitor, only
+if that monitor still shows the same special; other specials are never toggled.
+The preflight also rejects emptying a hidden special when native
+`misc.close_special_on_empty` would close a different visible special; it does
+not override that global/user setting.
+Missing/ambiguous recipients, no normal active target, identity changes,
+unsupported APIs, failed dispatches/postconditions and timeouts produce a fixed
+warning and preserve ordinary native forwarding. A failure after a successful
+move can leave that exact window moved; this is not an all-or-nothing rollback
+of compositor effects.
+
+The two-second native deadline kills the helper's process group and reaps the
+direct child **before** forwarding on failure. The helper creates no child
+processes, listener or background service. Queued Lua checks the helper's live
+PID/start time/non-zombie state before any query/mutation, rejecting late work
+after the helper exits. Normal acknowledgment means synchronous completion,
+not just enqueueing; dispatcher error tables and no-op successes are checked
+explicitly. This path is independent of EWW, workspace reconciliation and saved
+workspace state. It reads no window titles, notification bodies, contacts,
+activation tokens, saved history or Signal profile, and creates no additional
+notification persistence. Dunst's existing notification handling/history stays
+unchanged.
+
+The ISO embeds the custom package in its offline mirror. Migration
+`20261028-080000-signal-notification-workspace.sh` builds/installs the same pinned
+recipe for existing systems, with explicit retryable failures. There is no
+package install script, service restart or live configuration change. Replacing
+files does **not** activate the hook in an already-running Dunst. Keep that
+daemon and its in-memory history running until a separately agreed activation;
+do not restart Dunst, Signal, Hyprland or unrelated services as a deployment
+shortcut. No native smpl-apps release is needed for this package.
+
+Migration `20261114-030000-signal-notification-dispatch.sh` repairs the dispatcher
+API on machines that already completed the original enrollment, delivering
+`dunst-smplos 1.13.2-2`. The running patched Dunst loads the Lua transaction
+afresh on each click, so this repair takes effect without restarting Dunst or
+losing its in-memory notification history. A stock/unpatched running Dunst still
+requires the separately agreed activation described above.
+
 ---
 
 ## 2. Updating Configs (EWW, Hyprland, foot, etc.)
@@ -309,10 +626,10 @@ Write a migration. See section 5 below.
 ### Device-triggered keypad delivery
 
 Normal OS updates reconcile keypad integration on every run, not only once
-per migration: the canonical `control-surface.service`, udev rules and pinned
-`control-surface` package from **smpl-apps v0.8.34** must all be available.
-That release builds the keypad daemon on its Qt 6.11 baseline, compatible with
-the installed Qt 6.11.2 runtime; v0.8.27 incorrectly required Qt 6.12.
+per migration: the canonical `control-surface.service`, udev rules and
+latest published `control-surface` package must all be available.
+Update OS delivers that package alongside its matching smpl-apps release.
+Runtime validation remains required: v0.8.27 incorrectly required Qt 6.12.
 The catch-up migration `20261009-010000-keypad-login-recovery.sh` covers
 already-marked installs. Package/build/privilege failures remain explicit
 and retryable; a missing recipe is an error, not a pending placeholder.
@@ -338,6 +655,30 @@ on the next login or plug-in. Fresh ISOs carry the same unit and hook and
 install the daemon from their offline mirror; rebuilding smpl-apps is not
 required for this OS-only fix. See [keypad lifecycle](KEYPAD.md#lifecycle-and-footprint).
 
+### Printing platform delivery
+
+Publish the compatible native Settings release in **smpl-apps** and deliver it
+through the existing complete native bundle. The OS half installs
+`smplos-printing` and its shared Python module through normal script/library
+sync. Its core printing migration enrolls `cups`, `cups-filters`,
+`python-pycups` and `avahi` after the complete official upgrade, using the
+managed transaction guard so stack pins and user holds remain effective.
+Scripts-only enrollment defers missing packages instead of doing a partial
+Arch upgrade. Failed packages or service enrollment remain retryable.
+
+Fresh ISOs embed those packages and dependencies through the shared package
+list/offline mirror and enable local CUPS socket activation plus Avahi. Updates
+enable services only for newly enrolled packages and preserve existing
+disabled/masked service policy. Neither path edits queues, defaults, spool
+documents, job history, VPN policy or firewall rules. Existing disabled Avahi
+is a visible discovery warning, not permission to override an opt-out.
+
+Keep protocol v1 and both release halves coordinated: older native Settings
+has no panel; new Settings reports a missing/failed helper explicitly. Use
+`settings --tab printing` / `smplos-settings printing`. See
+[printing contract and safety](PRINTING.md) for exact schema, visible history
+scope, UUID-guarded own-job controls and uncertain-action handling.
+
 ### Mouse remapping delivery
 
 The Razer Naga V2 HyperSpeed (`1532:00b4`) backend lives alongside the keypad
@@ -362,19 +703,25 @@ The existing backed-up unit reconciliation also handles the mouse unit, with a
 separate `mouse-units` ownership stamp. Custom units, links, drop-ins and saved
 mouse/keypad profiles are preserved.
 
-**Native delivery:** the pinned **control-surface v0.8.34** package includes
-`mouse-remapperd`, and the matching published **smpl-apps v0.8.34** bundle
-delivers Settings with complete guided setup. Both archives were built and
-validated on the pinned Qt 6.11.2/glibc 2.44 baseline. The package checksum pins
-the actual published archive, not a local development build.
+**Native delivery:** the latest published **control-surface** package includes
+`mouse-remapperd`, and the matching published **smpl-apps** bundle delivers
+Settings with complete guided setup. The selected asset's published SHA256
+verifies the actual release archive, not a local development build.
 The mouse migration and
 every normal update probe `mouse-remapperd features --json` in an isolated home,
 requiring learning, identify (including wheel/tilt), guided side-grid
-calibration, complete guided setup (`guidedSetup`), Kdenlive API and passthrough capabilities,
+calibration, complete guided setup (`guidedSetup`), single-gesture tilt
+navigation (`tiltNavigationGestures`), Kdenlive API and passthrough capabilities,
 before replacing the unit or granting device access. Missing, incompatible or
 broken binaries explicitly defer integration; an ordinary OS update reports
 the missing delivery instead of silently claiming remapping is installed.
 Local development deployment can install the validated build directly.
+
+Horizontal tilt resolved to mouse Back/Forward emits one navigation action
+per gesture, including when held. A 100 ms quiet gap re-arms it because this
+mouse reports repeated scroll events rather than a tilt release; very fast
+consecutive tilts can merge, while reversing direction acts immediately.
+Other mapped actions and ordinary scrolling remain detent-based.
 
 The backend also provides guarded, explicitly confirmed onboard DPI-button
 backup/apply/restore commands. These are one-shot operations, not a resident
@@ -654,6 +1001,17 @@ actually contain the compatible binaries before advertising native alpha on an
 ISO. Installation itself remains offline. Do not point at an unpublished local
 commit or claim a release version that has not been published.
 
+**Skia CPU app delivery:** rendering is owned by the published smpl-apps
+binaries and their shared initialization, including the pinned Skia/softbuffer
+alpha patches. Normal Update OS resolves the latest published release and
+installs its complete native bundle; no OS version pin, renderer environment
+override, theme reset beyond the existing update policy, or special migration
+is needed for this renderer change. The ISO fetch paths also discover the
+latest release. Preserve the existing palette roles and compositor alpha/blur
+rules: CPU rendering must not fade text/icons or replace app-owned background
+alpha with whole-window opacity. Reopen apps for the new renderer; running
+apps are not stopped by delivery, and background daemons adopt it at next login.
+
 ### Native delivery checks and recovery
 
 For a coordinated rollout, publish and verify the native release assets before
@@ -869,7 +1227,7 @@ to keep the OS update running.
 
 ---
 
-## 6. Updating Forked Apps (smpl-apps, st-smpl, nemo-smpl)
+## 6. Updating Forked Apps (smpl-apps, st-smpl, nemo-smpl, micro, control-surface)
 
 These apps live in separate repos and are distributed as GitHub releases.
 `smplos-update-apps` downloads them automatically.
@@ -881,8 +1239,10 @@ These apps live in separate repos and are distributed as GitHub releases.
 2. Dispatch its manual `Release` workflow (`.github/workflows/release.yml`).
 3. The workflow increments the workspace patch version, builds the release
    workspace, and publishes `v<VERSION>` with
-   `smpl-apps-<VERSION>-x86_64.tar.gz` plus individual binary assets.
-4. Confirm the complete tarball is attached before treating the release as
+   `smpl-apps-<VERSION>-x86_64.tar.gz`, the matching
+   `control-surface-<VERSION>-x86_64.tar.gz`, plus individual binary assets.
+4. Confirm both complete archives are attached and control-surface has a GitHub
+   asset SHA256 digest before treating the release as
    available. An OS release alone does not rebuild or publish `start-menu`.
 
 **st-smpl** (C — terminal emulator):
@@ -970,21 +1330,77 @@ python3 -m unittest discover -s tests -p 'test_app_*.py' -v
 
 ## 7. Hyprland/EWW Update Strategy
 
-`smplos-update` upgrades the whole system, the Hyprland stack included, in
-**one** pacman transaction (`pacman -Sy`, then `pacman -Su`). Arch rebuilds
-Hyprland's libraries against new sonames in lockstep, so holding `hyprland`
-back while they move is a partial upgrade: it fails (`installing aquamarine
-(0.15.0-2) breaks dependency 'libaquamarine.so=12-64' required by hyprland`,
-which blocked every system update for a month), and installing the stack
-separately later can pair it with older system libraries than it was built
-against (current builds need `GLIBCXX_3.4.36`), so Hyprland cannot start.
+`smplos-update` refreshes official metadata, resolves the transaction with
+`pacman -Su --print`, then installs eligible packages in **one** pacman
+transaction. It never uses `--nodeps` or installs a new compositor separately
+from the libraries it needs.
 
 `HYPRLAND_SERIES` in `src/shared/update-policy/critical-bundle.conf` is the
 validated series (for example `0.56`): patch releases of it arrive with the
-normal upgrade. If Arch ships a newer series, or the available version cannot
-be established, **the entire official upgrade stops**. It does not hold the
-compositor and advance its libraries. Other custom `IgnorePkg`/`IgnoreGroup`
-holds also block the upgrade until the user resolves them. A failed refresh
+normal upgrade. If Arch ships a different series, the updater retains the
+installed packages matching `critical-packages.txt`: compositor and Hypr
+libraries, portals/XWayland, kernels/headers, GPU drivers and 32-bit graphics,
+PipeWire/WirePlumber, OBS and FFmpeg. These are **transition pins on installed
+versions**, not a signed/independently qualified binary release channel.
+
+The planner asks pacman's real dependency solver to resolve the remaining
+upgrade. If a candidate library breaks a declared dependency of a protected
+package, that library is retained too. If an installed application's update
+requires an incompatible protected dependency, that application is deferred.
+This repeats until pacman can prepare a consistent transaction. Unknown solver
+errors, unresolvable conflicts, missing metadata and unsupported installed
+compositor versions remain blocking errors; packages are never forcibly
+removed or downgraded to make a plan pass. Moving an older compositor to a
+newly approved series is allowed when that series is available.
+
+Each run saves `<log>.pins.json` with the original package inventory, source and
+policy identity, solver attempts, retained versions/reasons, eligible targets and
+replacement removals. Effective `pacman-conf` output (including resolved
+Includes), configured sync database contents, `local/ALPM_DB_VERSION` and every
+installed package's `local/*/desc` are fingerprinted before and after planning.
+The same expanded pins reach the official and AUR upgrade stages; the baseline
+bundle must not explicitly reinstall pinned packages. A temporary per-run pacman
+wrapper also guards later native-package, Yay and makepkg dependency installations:
+it previews each mutation, applies the pins, and refuses operations that would
+change/remove protected packages. The wrapper is deleted when the run exits;
+each guarded transaction also uses a temporary abort-on-change package hook,
+covering removals that pacman's printed sync targets do not expose. A private
+canonical configuration preserves signature policy and existing hook directories,
+then adds the mandatory hook directory last so an existing mask cannot disable
+it. The base transaction's native `PreTransaction`/`AbortOnFail` hook compares the
+input fingerprint and actual install/upgrade/removal target set while pacman holds
+its authoritative database lock. Changed metadata (including a changed version
+under the same package name) fails closed before package writes. Pacman itself
+still resolves, downloads, verifies signatures and commits the transaction; there
+is no copied sync database or replacement transaction engine. Installed target
+versions and protected versions are checked again before enabling app/config
+delivery. Options are inserted before an original `--` terminator.
+No global pacman holds or persistent transaction hooks are installed.
+Core and final verification
+require every protected package to remain at its recorded version. Repository
+comparisons distinguish `pinned` from unexpectedly `pending`; a pin report from
+another baseline/policy or a failed plan is not accepted. An unrelated missed
+update, changed/removed protected package, broken library linkage, missing kernel
+module or stale native/config delivery still makes the update incomplete.
+
+Pins are reported explicitly, including the fact that their **security fixes can
+also be deferred**. Dependency consistency is not proof of game, NVENC, capture,
+audio or desktop runtime compatibility. Qualify those workflows before raising
+the approved series; retain ongoing security review/backports for held packages.
+Existing `IgnorePkg` patterns and `IgnoreGroup` holds are preserved, expanded
+against installed packages and repository group membership, and fed into the
+same dependency-consistent planner. They are never stripped or silently
+overridden. Held native **packages** (`nemo-smpl`, `control-surface`) and Brave
+are reported as retained, not as upgraded/current against a newer release.
+Standalone `/usr/local/bin` release artifacts are not pacman packages:
+`IgnorePkg = smpl-apps` does not pin the standalone native bundle.
+This is not general support for arbitrary Arch partial upgrades or a promise
+of runtime/ABI compatibility beyond declared package dependencies.
+Legacy dropped-package cleanup that would temporarily disable dependency
+checks is deferred rather than performed ahead of a constrained transaction;
+if the remaining native solver cannot prepare a consistent update, it stops
+with the actual dependency error instead of changing installed state unsafely.
+A failed refresh
 or upgrade marks the update incomplete, and a changed
 compositor, kernel or graphics driver triggers the reboot reminder.
 
@@ -1006,7 +1422,8 @@ upgrade succeeded.
 2. If breaking: write a migration (section 5)
 3. Commit the migration + any updated default configs
 4. Raise `HYPRLAND_SERIES` once the new series works with smplOS
-   (`tests/test_critical_bundle.py` covers the update rules)
+   (`tests/test_critical_bundle.py` and `tests/test_update_pins.py` cover the
+   policy, dependency-aware planning and isolated real-pacman resolution)
 5. Push to `main`
 
 Users get: refreshed updater → complete base upgrade → required AUR dependencies
@@ -1246,7 +1663,7 @@ inventory without network access. Core stack roots, public shared libraries,
 kernel modules/DKMS sources and their transitive package/provider dependencies
 are required; ordinary foreign apps are optional. Private browser/editor
 libraries and debug source trees do not make those apps core. Independently
-managed Nemo/EWW releases are excluded from Yay transactions. Grafium is
+managed Nemo/EWW/control-surface packages are excluded from Yay transactions. Grafium is
 separately recorded under `app_updates_only` and excluded from both OS AUR groups.
 Incomplete
 or unresolved dependency metadata fails classification explicitly, never
@@ -1274,8 +1691,8 @@ and remain in the overall update status. The AUR transaction disables Yay's
 own sudo loop (`--sudoloop=false`) and uses the update's cached, noninteractive
 sudo context. Native App Center/Settings must also be delivered from
 **smpl-apps v0.8.29** or newer, with their Yay callers, before the migration
-is considered complete. That coordinated release includes the pinned keypad
-package above.
+is considered complete. Subsequent updates follow the latest published
+smpl-apps and matching keypad/mouse release together.
 
 ### Bringing older fleet machines onto this updater
 
