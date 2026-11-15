@@ -102,6 +102,8 @@ diagnostics stay readable without changing the monochrome desktop accents.
 Ordinary bar icons, the clock and monitor labels use the theme foreground;
 selected workspaces and recording backgrounds use the accent. This shared
 role mapping applies automatically to every theme, including future themes.
+`src/shared/lib/smplos-theme-svg.py` bakes the same color roles for theme
+switches, keypad migrations and ISO builds, including glass foreground colors.
 
 With the matching `smpl-hud` build, the minimal white halo is static and
 focused-window-only. It reaches 18 logical px at strength 0.90 before falloff;

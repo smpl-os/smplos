@@ -318,6 +318,17 @@ class ThemeSwitchingTests(unittest.TestCase):
         shutil.copytree(ROOT / "src/shared/icons/status", template)
         return self.home / ".config/eww/icons/status"
 
+    def test_bad_icon_palette_keeps_the_previous_rendered_icons(self):
+        icons = self.install_status_icons()
+        self.assertEqual(self.switch("new").returncode, 0)
+        previous = (icons / "start.svg").read_bytes()
+        palette = self.stock / "new/colors.toml"
+        palette.write_text(palette.read_text().replace("#c1c497", "invalid"))
+        result = self.switch("new")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Cannot bake status icon", result.stderr)
+        self.assertEqual((icons / "start.svg").read_bytes(), previous)
+
     def test_shared_status_icon_templates_follow_foreground_not_selection_for_new_themes(self):
         icons = self.install_status_icons()
         result = self.switch("new")

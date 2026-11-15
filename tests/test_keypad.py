@@ -509,7 +509,7 @@ class LifecycleTests(unittest.TestCase):
         tray = yuck[yuck.index("(defwidget tray []"):]
         self.assertIn("(tray-keypad)", tray[:tray.index("\n\n")])
         self.assertIn(".tray-keypad", (ROOT / "src/shared/eww/eww.scss").read_text())
-        self.assertIn("{{accent}}", (ROOT / "src/shared/icons/status/keypad.svg").read_text())
+        self.assertIn("{{fg}}", (ROOT / "src/shared/icons/status/keypad.svg").read_text())
         self.assertFalse((ROOT / "src/shared/icons/status/keypad-bootloader.svg").exists())
         settings = (ROOT / "src/shared/bin/smplos-settings").read_text()
         self.assertIn("exec settings --tab keypad", settings)
@@ -821,7 +821,7 @@ class MigrationTests(KeypadCase):
         self.env.update(SMPLOS_REPO=str(ROOT), SMPLOS_UDEV_RULES_DIR=str(self.udev))
         theme = self.home / ".config/smplos/current/theme"
         theme.mkdir(parents=True)
-        (theme / "colors.toml").write_text('accent = "#123abc"\n')
+        (theme / "colors.toml").write_text('accent = "#123abc"\nforeground = "#abcdef"\n')
         (self.home / ".config/eww").mkdir(parents=True)
         self.units = self.home / ".config/systemd/user"
         self.unit_state = self.home / ".local/state/smplos/keypad-units"
@@ -840,7 +840,8 @@ class MigrationTests(KeypadCase):
         self.assertEqual((self.units / "control-surface.service").read_text(), UNIT.read_text())
         self.assertFalse(list(self.units.glob("*.wants/control-surface.service")))
         baked = (self.home / ".config/eww/icons/status/keypad.svg").read_text()
-        self.assertIn('stroke="#123abc"', baked)
+        self.assertIn('stroke="#abcdef"', baked)
+        self.assertNotIn("{{", baked)
         calls = self.calls_made()
         self.assertIn("udevadm control --reload-rules", calls)
         self.assertIn(f"udevadm trigger --action=change --parent-match={pad.resolve()}", calls)

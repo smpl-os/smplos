@@ -102,10 +102,9 @@ if [[ $rules_changed -eq 1 ]]; then
     fi
 fi
 
-# ── 2. Tray icon: template + bake with the current theme's accent ─────────────
+# ── 2. Tray icon: template + bake with shared theme color roles ──────────────
 TPL_DIR="$HOME/.local/share/smplos/icons/status"
 EWW_ICONS="$HOME/.config/eww/icons/status"
-accent=$(grep '^accent' "$HOME/.config/smplos/current/theme/colors.toml" 2>/dev/null | head -1 | sed 's/.*"\(#[^"]*\)".*/\1/' || true)
 src="$REPO/src/shared/icons/status/keypad.svg"
 if [[ -f "$src" ]]; then
     if ! cmp -s "$src" "$TPL_DIR/keypad.svg" 2>/dev/null; then
@@ -115,9 +114,11 @@ if [[ -f "$src" ]]; then
     fi
     if [[ -d "$HOME/.config/eww" ]]; then
         mkdir -p "$EWW_ICONS"
-        baked=$(sed "s/{{accent}}/${accent:-#888888}/g" "$src")
-        if [[ "$baked" != "$(cat "$EWW_ICONS/keypad.svg" 2>/dev/null)" ]]; then
-            printf '%s\n' "$baked" > "$EWW_ICONS/keypad.svg"
+        previous=$(cat "$EWW_ICONS/keypad.svg" 2>/dev/null || true)
+        python3 "$REPO/src/shared/lib/smplos-theme-svg.py" \
+            "$HOME/.config/smplos/current/theme/colors.toml" "$src" "$EWW_ICONS/keypad.svg" \
+            || { echo "Cannot bake keypad tray icon" >&2; exit 1; }
+        if [[ "$previous" != "$(cat "$EWW_ICONS/keypad.svg")" ]]; then
             changed "Baked tray icon keypad.svg"
         fi
     fi

@@ -1401,17 +1401,11 @@ DCONF_PROFILE
             mkdir -p "$skel/.local/share/smplos/icons/status"
             cp "$SRC_DIR/shared/icons/status/"*.svg "$skel/.local/share/smplos/icons/status/"
             # Bake for the default theme
-            local _accent _fg_dim _fg _bg
-            _accent=$(grep '^accent' "$theme_src/colors.toml" | head -1 | sed 's/.*"\(#[^"]*\)".*/\1/')
-            _fg_dim=$(grep '^color15\|^foreground' "$theme_src/colors.toml" | head -1 | sed 's/.*"\(#[^"]*\)".*/\1/')
-            _fg=$(grep '^foreground' "$theme_src/colors.toml" | head -1 | sed 's/.*"\(#[^"]*\)".*/\1/')
-            _bg=$(grep '^background' "$theme_src/colors.toml" | head -1 | sed 's/.*"\(#[^"]*\)".*/\1/')
-            _accent=${_accent:-#89b4fa}; _fg_dim=${_fg_dim:-#a6adc8}
-            _fg=${_fg:-#cdd6f4}; _bg=${_bg:-#1e1e2e}
             mkdir -p "$skel/.config/eww/icons/status"
             for svg in "$skel/.local/share/smplos/icons/status/"*.svg; do
-                sed "s/{{accent}}/$_accent/g; s/{{fg-dim}}/$_fg_dim/g; s/{{fg}}/$_fg/g; s/{{bg}}/$_bg/g" "$svg" \
-                    > "$skel/.config/eww/icons/status/$(basename "$svg")"
+                python3 "$SRC_DIR/shared/lib/smplos-theme-svg.py" "$theme_src/colors.toml" \
+                    "$svg" "$skel/.config/eww/icons/status/$(basename "$svg")" \
+                    || { log_error "Failed to bake status icon $(basename "$svg")"; return 1; }
             done
         fi
         mkdir -p "$skel/.config/hypr" && cp "$theme_src/hyprland.conf" "$skel/.config/hypr/theme.conf" 2>/dev/null || true
