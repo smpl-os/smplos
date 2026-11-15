@@ -1,0 +1,34 @@
+# Blueprint prompt: monochrome segments with orange highlights.
+set -U tide_pwd_bg_color 000000
+set -U tide_pwd_color_anchors FF8A30
+set -U tide_pwd_color_dirs FFFFFF
+set -U tide_pwd_color_truncated_dirs 999999
+
+set -U tide_git_bg_color FF8A30
+set -U tide_git_bg_color_unstable FF8A30
+set -U tide_git_bg_color_urgent FF8A30
+set -U tide_git_color_branch 000000
+set -U tide_git_color_conflicted 000000
+set -U tide_git_color_dirty 000000
+set -U tide_git_color_operation 000000
+set -U tide_git_color_staged 000000
+set -U tide_git_color_stash 000000
+set -U tide_git_color_untracked 000000
+set -U tide_git_color_upstream 000000
+
+set -U tide_character_color FFFFFF
+set -U tide_character_color_failure FF8A30
+set -U tide_cmd_duration_bg_color 000000
+set -U tide_cmd_duration_color FF8A30
+set -U tide_status_bg_color 000000
+set -U tide_status_bg_color_failure FF8A30
+set -U tide_status_color FFFFFF
+set -U tide_status_color_failure 000000
+set -U tide_prompt_color_frame_and_connection 999999
+set -U tide_prompt_color_separator_same_color 555555
+set -U tide_context_bg_color 000000
+set -U tide_context_color_default FFFFFF
+set -U tide_context_color_root FF8A30
+set -U tide_context_color_ssh FFFFFF
+set -U tide_jobs_bg_color 000000
+set -U tide_jobs_color FFFFFF

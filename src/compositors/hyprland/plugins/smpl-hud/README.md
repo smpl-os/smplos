@@ -62,6 +62,9 @@ Hyprland config reload, which `theme-set` triggers. Values are clamped.
 | `$themeHudSweep` | `hud_sweep` | `false` | `true` / `false`; a soft glow drifts along the focused window's outline, the dots of a `panel` move along its lines, and the characters of a `matrix` fall and its lamps drift along its top and bottom; `false` keeps all of them still, so a `matrix` shows only its outline and halo |
 | `$themeHudSweepSpeed` | `hud_sweep_speed` | `80` | 10 to 400 px per second (the dots of a `panel` run 0.8 times as fast, the characters of a `matrix` fall 0.6 times as fast) |
 | `$themeHudSweepLength` | `hud_sweep_length` | `180` | 40 to 600 px along the line; for a `matrix`, the longest a lamp gets, which also decides how many fit on an edge |
+| `$themeHudGlowFocusedOnly` | `hud_glow_focused_only` | `false` | `true` hides the halo on unfocused windows; the border line stays visible. Static halos need no animation timer (`blueprint`) |
+| `$themeHudGlowRange` | `hud_glow_range` | `0` | 0 keeps the style's outer halo width; 1 to 64 sets its reach in logical px for tiled and floating windows. `hud_float_glow_range` can still enlarge floating halos |
+| `$themeHudGlowAlpha` | `hud_glow_alpha` | `style` | `style` keeps the style's halo strength; 0 to 1 overrides it before spatial falloff and floating boost. Does not change the crisp border |
 | `$themeHudGlyphColor` | `hud_glyph_color` | `none` | `rgb(rrggbb)` or `none`; the colour of the characters of a glyph style such as `matrix` and of its lamps (the heads are it lightened, the glow of the characters it too); `none` leaves them the colours of the line. Anything else is ignored |
 | `$themeHudSideOpacity` | `hud_side_opacity` | `1` | 0 to 1; how visible the outline of a `panel` or `matrix` is down its left and right sides, its halo beside it with it, and the corners fade between that and the top and the bottom edge's (`hud_edge_opacity`). A theme whose characters fall there dims it so that they stand out: `0.1` leaves it almost unseen, `0` none at all, `1` as strong as the rest. The ring styles ignore it; not a number, it is ignored |
 | `$themeHudEdgeOpacity` | `hud_edge_opacity` | `1` | 0 to 1; the same along the top and the bottom edge of a `panel` or `matrix` outline: `1` is the full line, `0.1` as dark as the sides of `matrix-hud`, `0` none at all (the lamps of a `matrix`, which have a track of their own, and the underglow are not dimmed by it). The ring styles ignore it; not a number, it is ignored |
@@ -79,9 +82,12 @@ keys interact with `gaps_in`, `rounding` and `rounding_power`.
 
 ## Focus only
 
-Every window gets the frame, but only the focused window moves. Three things follow
-the focus, the first two in `HudDecoration.cpp`, the third in `ScannerDecoration.cpp`:
+Every window gets the frame, but only the focused window moves. The frame's motion
+lives in `HudDecoration.cpp`, the scanner's in `ScannerDecoration.cpp`:
 
+- **The static halo**, with `hud_glow_focused_only`, disappears immediately on
+  focus loss without affecting the crisp border. This flag starts no timer and
+  schedules no periodic repaints. Other themes retain their existing halos.
 - **The travelling glow** (below) drifts along the focused window's outline, and
   with it the dots of a `panel`, and the lamps and falling characters of a `matrix`,
   move. When focus moves it fades out on the old window and in on the new one, half
@@ -101,11 +107,10 @@ the focus, the first two in `HudDecoration.cpp`, the third in `ScannerDecoration
   The others show it where it stopped, at 40 % of its strength, and it comes up to
   full and goes back down in half a second as focus moves.
 
-None of them adds a theme key beyond the one that turns the scanner on
-(`hud_scanner_blur` only decides whether its glass blurs what is under it):
-`hud_sweep` and `border_animation` stay the switches of the first two, `hud_scanner`
-alone decides the scanner (`hud_sweep = "false"` does not still it), and the cost no
-longer grows with the number of windows.
+`hud_sweep` and `border_animation` independently control travelling light and
+rotation. `hud_scanner` alone decides the scanner
+(`hud_sweep = "false"` does not still it); `hud_scanner_blur` only decides whether
+its glass blurs what is under it. Motion cost does not grow with unfocused windows.
 
 ## Floating windows
 

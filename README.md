@@ -76,7 +76,7 @@ It started as an attempt to build a lighter version of Omarchy - same keybinding
 - **Fast installs.** Fully offline - no internet required. A fresh install completes in under 2 minutes.
 - **Cross-compositor.** Built from the ground up to support multiple compositors. Hyprland (Wayland) ships first, [DWM (X11) is next](DWM-X11.md). Shared configs, shared themes, shared keybindings - the compositor is just a thin layer.
 - **One UI toolkit.** EWW powers the bar, widgets, and dialogs. It runs on both X11 and Wayland. No waybar, no polybar, no redundant tools.
-- **21 built-in themes.** One command switches colors across the entire system - terminal, bar, notifications, borders, lock screen, and editor.
+- **22 built-in themes.** One command switches colors across the entire system - terminal, bar, notifications, borders, lock screen, and editor.
 
 ---
 
@@ -120,7 +120,7 @@ This is the same pattern we use everywhere: the theme system writes config files
 
 #### Themes
 
-smplOS ships with 21 themes inherited and expanded from the Omarchy project. A single `theme-set` command applies colors system-wide - terminal, EWW bar, notifications, Hyprland borders, lock screen, btop, neovim, and VS Code. Themes are generated from a single `colors.toml` source of truth.
+smplOS ships with 22 themes inherited and expanded from the Omarchy project. A single `theme-set` command applies colors system-wide - terminal, EWW bar, notifications, Hyprland borders, lock screen, btop, neovim, and VS Code. Themes are generated from a single `colors.toml` source of truth.
 
 Native transparency is **background-only**: capable Nemo, Grafium in Auto mode,
 and regular smpl-apps windows use `app_background_opacity`, while text, icons,
@@ -505,7 +505,7 @@ src/
     configs/
       smplos/               Cross-compositor configs (bindings.conf, messengers.conf, branding)
       <app>/                Per-app default configs (btop, dunst, fish, foot, nvim, …)
-    themes/                 21 themes — each a self-contained directory with pre-baked configs
+    themes/                 22 themes — each a self-contained directory with pre-baked configs
     icons/                  SVG status icon templates (baked with accent colors by theme-set)
     applications/           Shared web-app .desktop entries and hicolor icons
     skel/                   Default user home skeleton (copied to /etc/skel in the ISO)
@@ -946,9 +946,9 @@ See the [Development Guide](DEVELOPMENT.md) for hot-reload iteration, VM testing
 
 ## Themes
 
-21 built-in themes. Press <kbd>Super</kbd> + <kbd>Shift</kbd> + <kbd>T</kbd> to open the theme picker and switch instantly.
+22 built-in themes. Press <kbd>Super</kbd> + <kbd>Shift</kbd> + <kbd>T</kbd> to open the theme picker and switch instantly.
 
-Amber, Amber HUD, Catppuccin Mocha, Catppuccin Latte, Ethereal, Everforest, Flexoki Light, Frosted, Grafium, Gruvbox, Hackerman, Kanagawa, Matrix, Matrix HUD, Matte Black, Neon, Nord, Osaka Jade, Ristretto, Rose Pine, Tokyo Night.
+Amber, Amber HUD, Blueprint, Catppuccin Mocha, Catppuccin Latte, Ethereal, Everforest, Flexoki Light, Frosted, Grafium, Gruvbox, Hackerman, Kanagawa, Matrix, Matrix HUD, Matte Black, Neon, Nord, Osaka Jade, Ristretto, Rose Pine, Tokyo Night.
 
 One command - `theme-set <name>` - applies colors across the entire system: terminal, bar, notifications, compositor borders, lock screen, launcher, system monitor, editor, fish shell, Grafium, and browser chrome.
 

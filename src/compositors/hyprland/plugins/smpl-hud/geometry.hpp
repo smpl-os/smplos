@@ -7,6 +7,7 @@
 // top-left corner of the window box. Nothing here touches Hyprland, so it can
 // be unit tested with a plain compiler.
 
+#include <optional>
 #include <span>
 #include <string_view>
 #include <vector>
@@ -136,6 +137,8 @@ struct Params {
     double lineWidth      = 3;
     double chamfer        = 10;
     double floatGlowRange = 14;
+    double glowRange      = 0;
+    std::optional<double> glowAlpha;
     double sweepLength    = 180; // logical px: how long a lamp is at most, which decides how many fit on an edge
     double sideOpacity    = 1;   // 0..1: how visible the outline of a panel style is down its left and right sides (1: as everywhere else); the corners fade between a side and an edge
     double edgeOpacity    = 1;   // 0..1: the same along its top and bottom edge

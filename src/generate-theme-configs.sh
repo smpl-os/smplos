@@ -84,7 +84,7 @@ generate_theme() {
   # angle). Every default reproduces the classic look, so a theme that sets none
   # of these renders exactly as before. Flags become 0/1 for hyprlang and Lua.
   # The word after each colon is what a theme gets that does not set the flag.
-  for flag_pair in glow:false border_animation:false hud_frame:false hud_sweep:false hud_hide_border:false hud_scanner_blur:true; do
+  for flag_pair in glow:false border_animation:false hud_frame:false hud_sweep:false hud_hide_border:false hud_scanner_blur:true hud_glow_focused_only:false; do
     flag="${flag_pair%%:*}"
     pairs[$flag]="${pairs[$flag]-${flag_pair#*:}}"
     if [[ "${pairs[$flag]}" != true && "${pairs[$flag]}" != false ]]; then
@@ -134,6 +134,18 @@ generate_theme() {
   pairs[hud_style]="${pairs[hud_style]-scifi}"
   if [[ ! "${pairs[hud_style]}" =~ ^[a-z0-9_-]+$ ]]; then
     echo "ERROR: $name: hud_style must be a style name (lowercase letters, digits, - and _)" >&2
+    return 1
+  fi
+  pairs[hud_glow_range]="${pairs[hud_glow_range]-0}"
+  if [[ ! "${pairs[hud_glow_range]}" =~ ^[0-9]{1,2}$ ]] \
+    || (( 10#${pairs[hud_glow_range]} > 64 )); then
+    echo "ERROR: $name: hud_glow_range must be an integer from 0 to 64" >&2
+    return 1
+  fi
+  pairs[hud_glow_range]=$((10#${pairs[hud_glow_range]}))
+  pairs[hud_glow_alpha]="${pairs[hud_glow_alpha]-style}"
+  if [[ ! "${pairs[hud_glow_alpha]}" =~ ^(style|0(\.[0-9]+)?|1(\.0+)?)$ ]]; then
+    echo "ERROR: $name: hud_glow_alpha must be style or a number from 0 to 1" >&2
     return 1
   fi
   # The travelling glow (hud_sweep): speed in px per second and length in px,

@@ -1,0 +1,18 @@
+# dunst theme colors -- auto-generated from colors.toml
+[global]
+    frame_color = "#ff8a30"
+
+[urgency_low]
+    background = "#101010"
+    foreground = "#ffffff"
+    frame_color = "#999999"
+
+[urgency_normal]
+    background = "#000000"
+    foreground = "#ffffff"
+    frame_color = "#ff8a30"
+
+[urgency_critical]
+    background = "#ff8a30"
+    foreground = "#ffffff"
+    frame_color = "#ff8a30"

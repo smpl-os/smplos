@@ -415,6 +415,10 @@ std::vector<UP<IPassElement>> CHudPassElement::draw() {
         data.roundingPower = m_frame.roundingPower;
         data.borderSize    = ring.borderSize;
         data.a             = ring.alpha * m_frame.alpha;
+        if (ring.paint == smplhud::Paint::Glow)
+            data.a *= m_frame.glowAlpha;
+        if (data.a < 0.002F)
+            continue;
         data.outerRound    = ring.outerRound;
 
         const auto& paint = m_frame.paints[static_cast<size_t>(ring.paint)];

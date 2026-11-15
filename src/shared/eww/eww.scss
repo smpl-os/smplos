@@ -230,7 +230,7 @@ window {
 
 .workspace-monitor-label {
   font-weight: bold;
-  color: $accent;
+  color: $fg;
 }
 
 .workspace-chip {
@@ -454,7 +454,7 @@ window {
 .tray-notifications .icon,
 .tray-usb .icon {
   font-size: 14px;
-  color: $accent;
+  color: $fg;
 }
 
 /* Internet icon: colors baked into SVGs by theme-set (no CSS needed) */
@@ -466,7 +466,7 @@ window {
 .tray-keyboard .kb-code {
   font-size: 11px;
   font-weight: bold;
-  color: $accent;
+  color: $fg;
 }
 
 /* Dictation: mic icon appears when voxtype is installed.
@@ -507,7 +507,7 @@ window {
    even for users who cannot distinguish colors. .charging tints success. */
 .tray-battery .icon {
   font-size: 14px;
-  color: $accent;
+  color: $fg;
 }
 .tray-battery .value {
   font-size: 10px;
@@ -536,7 +536,7 @@ window {
 .tray-clock .clock-top {
   font-size: 10px;
   font-weight: bold;
-  color: $accent;
+  color: $fg;
   margin-bottom: -1px;
 }
 

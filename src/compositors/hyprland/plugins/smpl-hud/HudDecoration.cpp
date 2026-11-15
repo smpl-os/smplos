@@ -228,6 +228,8 @@ namespace {
         params.lineWidth      = settings.theme.lineWidth;
         params.chamfer        = settings.theme.chamfer;
         params.floatGlowRange = settings.theme.floatGlowRange;
+        params.glowRange      = settings.theme.glowRange;
+        params.glowAlpha      = settings.theme.glowAlpha;
         params.scannerW       = size.w;
         params.scannerH       = size.h;
         return smplhud::extentsFor(*settings.style, params);
@@ -765,7 +767,7 @@ void CHudDecoration::setFocused(bool focused, bool force) {
 
     m_waiting = 0;
     wakeHudSweep();
-    if (focused)
+    if (focused || g_settings.theme.glowFocusedOnly)
         damageEntire(); // the draw it causes builds the glow's path
 }
 
@@ -898,6 +900,8 @@ void CHudDecoration::draw(PHLMONITOR monitor, const float& a) {
         params.lineWidth      = theme.lineWidth;
         params.chamfer        = theme.chamfer;
         params.floatGlowRange = theme.floatGlowRange;
+        params.glowRange      = theme.glowRange;
+        params.glowAlpha      = theme.glowAlpha;
         params.sweepLength    = theme.sweepLength;
         params.sideOpacity    = theme.sideOpacity;
         params.edgeOpacity    = theme.edgeOpacity;
@@ -932,6 +936,8 @@ void CHudDecoration::draw(PHLMONITOR monitor, const float& a) {
         frame.glyphColour = glyphColourOf(*own, g_settings.style->brightWhiten);
 
     frame.alpha         = hudFadeOf(window, a);
+    if (g_settings.theme.glowFocusedOnly && !m_focused)
+        frame.glowAlpha = 0;
     frame.roundingPower = key.roundingPower;
     frame.window        = physical;
     frame.bounds        = grown(local, m_extents, 2);

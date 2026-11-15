@@ -12,7 +12,7 @@ BUILD    := build
 PLUGIN   := $(BUILD)/smpl-hud.so
 
 ifeq ($(CXX),g++)
-EXTRA_FLAGS := --no-gnu-unique
+EXTRA_FLAGS := -fno-gnu-unique
 else
 EXTRA_FLAGS :=
 endif

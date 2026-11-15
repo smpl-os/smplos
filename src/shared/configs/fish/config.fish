@@ -66,6 +66,10 @@ if test -f ~/.config/fish/theme.fish
     source ~/.config/fish/theme.fish
 end
 
+if status is-interactive; and isatty stdout; and command -q theme-set-st
+    theme-set-st --print
+end
+
 # ── Media helpers ────────────────────────────────────────────
 # yt-dlp
 alias yaopus  'yt-dlp --extract-audio --audio-format opus --audio-quality 48k'

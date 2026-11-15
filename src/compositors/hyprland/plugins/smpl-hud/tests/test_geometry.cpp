@@ -160,6 +160,44 @@ void testFloatingIsBrighterAndWider() {
     CHECK(floatPeak > tiledPeak);
 }
 
+void testWiderHaloKeepsBorderCrispAndFivePixelsVisible() {
+    for (float scale : {1.f, 1.5f, 2.f}) {
+        for (bool floating : {false, true}) {
+            Params p = neon(scale, floating);
+            p.gap = 1;
+            p.lineWidth = 2;
+            p.floatGlowRange = 0;
+            const auto baseline = buildLayout(*styleFor("minimal"), p);
+            p.glowRange = 18;
+            p.glowAlpha = 0.9;
+            const auto layout = buildLayout(*styleFor("minimal"), p);
+            const auto* line = findLine(layout);
+            const auto* original = findLine(baseline);
+            CHECK(line && original);
+            if (!line || !original)
+                continue;
+            CHECK(line->inner == original->inner);
+            CHECK(line->thickness == original->thickness);
+            CHECK(line->alpha == original->alpha);
+            CHECK(layout.extents.left > baseline.extents.left);
+            const int outer = -line->inner.x + line->thickness;
+            const int fifthPixel = outer + int(std::lround(4 * scale));
+            int reach = 0;
+            float fifthAlpha = 0;
+            for (const auto& ring : layout.rings) {
+                if (ring.paint != Paint::Glow || -ring.inner.x < outer)
+                    continue;
+                const int start = -ring.inner.x;
+                reach = std::max(reach, start + ring.thickness - outer);
+                if (start <= fifthPixel && fifthPixel < start + ring.thickness)
+                    fifthAlpha = ring.alpha;
+            }
+            CHECK(std::abs(reach - 18 * scale) <= 1);
+            CHECK(fifthAlpha >= 0.35f);
+        }
+    }
+}
+
 void testShapesStayInsideExtents() {
     for (const Style& st : allStyles()) {
         for (float s : {1.f, 1.25f, 1.5f, 2.f}) {
@@ -469,6 +507,7 @@ int main() {
     testChamferFloor();
     testHaloBandsAreContiguous();
     testFloatingIsBrighterAndWider();
+    testWiderHaloKeepsBorderCrispAndFivePixelsVisible();
     testShapesStayInsideExtents();
     testExtentsIgnoreWindowSize();
     testTooSmallWindow();

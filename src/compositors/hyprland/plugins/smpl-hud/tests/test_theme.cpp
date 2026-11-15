@@ -274,6 +274,27 @@ void testGlyphColour() {
     CHECK(only.glyphColour && !only.frame && !only.sweep && !only.hideBorder);
 }
 
+void testFocusedHalo() {
+    CHECK(!parseTheme("").glowFocusedOnly);
+    CHECK(parseTheme("$themeHudGlowFocusedOnly = 1").glowFocusedOnly);
+    CHECK(!parseTheme("$themeHudGlowFocusedOnly = 1\n$themeHudGlowFocusedOnly = false").glowFocusedOnly);
+    CHECK(parseTheme("$themeHudGlowFocusedOnly = 1\n$themeHudGlowFocusedOnly = invalid").glowFocusedOnly);
+}
+
+void testHaloOverrides() {
+    const Theme t = parseTheme("$themeHudGlowRange = 16\n$themeHudGlowAlpha = 0.8\n");
+    CHECK_NEAR(t.glowRange, 16, 1e-9);
+    CHECK(t.glowAlpha && *t.glowAlpha == 0.8);
+    CHECK_NEAR(parseTheme("$themeHudGlowRange = 999").glowRange, 64, 1e-9);
+    CHECK_NEAR(parseTheme("$themeHudGlowRange = -1").glowRange, 0, 1e-9);
+    CHECK(parseTheme("$themeHudGlowAlpha = 0").glowAlpha == 0);
+    CHECK(parseTheme("$themeHudGlowAlpha = 2").glowAlpha == 1);
+    CHECK(!parseTheme("$themeHudGlowAlpha = 0.8\n$themeHudGlowAlpha = style").glowAlpha);
+    for (const char* bad : {"", "nan", "inf", "bright", "0.8px"})
+        CHECK(parseTheme(std::string("$themeHudGlowAlpha = 0.8\n$themeHudGlowAlpha = ") + bad).glowAlpha == 0.8);
+    CHECK(!Theme{}.glowAlpha);
+}
+
 } // namespace
 
 int main() {
@@ -293,5 +314,7 @@ int main() {
     testFractionsAreIndependent();
     testScanner();
     testScannerBlur();
+    testFocusedHalo();
+    testHaloOverrides();
     return finish("test_theme");
 }

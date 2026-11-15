@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import tomllib
 import unittest
 from test_app_delivery import function
 
@@ -28,6 +29,9 @@ case "$name" in
   bar-ctl) exit "${FAIL_RELOAD:-0}" ;;
   theme-set-st) exit "${FAIL_TERMINAL:-0}" ;;
   theme-set-copilot) exit "${FAIL_COPILOT:-0}" ;;
+  gresource)
+    [[ "${MISSING_GTK_RESOURCE:-0}" == 1 ]] && exit 1
+    echo /org/gtk/libgtk/theme/Adwaita/gtk-dark.css ;;
   hyprctl)
     case "$1" in
       eval)
@@ -99,6 +103,8 @@ class ThemeSwitchingTests(unittest.TestCase):
         for cmd in (
             "pgrep", "cp", "bar-ctl", "theme-bg-next", "theme-set-st", "fish",
             "gsettings", "hyprctl", "systemctl", "code", "codium", "cursor", "notify-send",
+            "smplos-gtk-theme-compat",
+            "gresource",
         ):
             path = self.bin / cmd
             path.write_text(MOCK_COMMAND)
@@ -282,6 +288,79 @@ class ThemeSwitchingTests(unittest.TestCase):
             result = self.switch(name)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(icon.read_text(), f'<svg fill="{accent}" stroke="{foreground}"/>')
+
+    def install_status_icons(self):
+        template = self.home / ".local/share/smplos/icons/status"
+        shutil.copytree(ROOT / "src/shared/icons/status", template)
+        return self.home / ".config/eww/icons/status"
+
+    def test_shared_status_icon_templates_follow_foreground_not_selection_for_new_themes(self):
+        icons = self.install_status_icons()
+        result = self.switch("new")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        for name in ("start", "dictation", "keypad", "sync", "monitor",
+                     "network-vpn", "network-wired-activated",
+                     "network-wired-unavailable", "network-wired-disconnected",
+                     "network-wired-no-internet"):
+            with self.subTest(icon=name):
+                icon = (icons / f"{name}.svg").read_text()
+                self.assertIn("#c1c497", icon)
+                self.assertNotIn("#509475", icon)
+                self.assertNotIn("{{", icon)
+        self.assertIn("#111c18", (icons / "dictation-on.svg").read_text())
+        self.assertIn('accent = "#509475"', (self.current / "theme/colors.toml").read_text())
+
+    def test_shared_icon_rendering_uses_each_stock_themes_own_foreground(self):
+        icons = self.install_status_icons()
+        for colors in sorted((ROOT / "src/shared/themes").glob("*/colors.toml")):
+            with self.subTest(theme=colors.parent.name):
+                palette = tomllib.loads(colors.read_text())
+                theme = self.stock / colors.parent.name
+                theme.mkdir()
+                shutil.copy2(colors, theme / "colors.toml")
+                result = self.switch(colors.parent.name)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                foreground = palette["foreground"]
+                if palette.get("glass") in (True, "true"):
+                    foreground = palette.get("glass_foreground", foreground)
+                for name in ("start", "dictation", "network-wired-activated"):
+                    rendered = (icons / f"{name}.svg").read_text()
+                    self.assertIn(f'"{foreground}"', rendered)
+                    self.assertNotIn("{{", rendered)
+                self.assertIn(f'"{palette["background"]}"', (icons / "dictation-on.svg").read_text())
+
+    def gtk_compat(self, **env):
+        return subprocess.run(
+            ["bash", str(BIN / "smplos-gtk-theme-compat")],
+            env={**self.env, "XDG_DATA_HOME": str(self.home / "data"),
+                 "XDG_DATA_DIRS": str(self.home / "system-data"), **env},
+            text=True, capture_output=True, timeout=5,
+        )
+
+    def test_missing_gtk_dark_alias_is_exposed_without_copying_the_theme(self):
+        result = self.gtk_compat()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        alias = self.home / "data/themes/Adwaita-dark/gtk-3.0/gtk.css"
+        self.assertIn('resource:///org/gtk/libgtk/theme/Adwaita/gtk-dark.css', alias.read_text())
+        before = alias.stat()
+        result = self.gtk_compat(MISSING_GTK_RESOURCE="1")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(alias.stat().st_ino, before.st_ino)
+
+    def test_existing_user_gtk_dark_theme_is_not_overwritten(self):
+        alias = self.home / ".themes/Adwaita-dark/gtk-3.0/gtk.css"
+        alias.parent.mkdir(parents=True)
+        alias.write_text("/* User-owned GTK theme */\n")
+        result = self.gtk_compat(MISSING_GTK_RESOURCE="1")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(alias.read_text(), "/* User-owned GTK theme */\n")
+        self.assertFalse((self.home / "data/themes/Adwaita-dark").exists())
+
+    def test_missing_gtk_resource_fails_without_publishing_a_broken_alias(self):
+        result = self.gtk_compat(MISSING_GTK_RESOURCE="1")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("bundled Adwaita dark stylesheet is unavailable", result.stderr)
+        self.assertFalse((self.home / "data/themes/Adwaita-dark").exists())
 
     def test_dark_frosted_switch_retires_old_light_marker_and_applies_dark_mode(self):
         shutil.copytree(ROOT / "src/shared/themes/frosted", self.stock / "frosted")
@@ -468,6 +547,30 @@ class ThemeSwitchingTests(unittest.TestCase):
         self.assertIn("Cannot update /dev/pts/", result.stderr)
         self.assertEqual(payload, b"")
         self.assertEqual(signalled, "False")
+
+    def test_terminal_palette_overrides_take_precedence_over_legacy_colors(self):
+        palette = self.stock / "new/colors.toml"
+        with palette.open("a") as source:
+            source.write('color4 = "#112233"\nterm_4 = "#62b5ff"\nterm_12 = "#a1d6ff"\n')
+        self.assertEqual(self.switch("new").returncode, 0)
+        result, payload, _ = self.refresh_terminal("st-wl")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(b"\x1b]4;0;#111c18\x1b\\", payload)
+        self.assertIn(b"\x1b]4;4;#62b5ff\x1b\\", payload)
+        self.assertIn(b"\x1b]4;12;#a1d6ff\x1b\\", payload)
+        self.assertNotIn(b"#112233", payload)
+
+    def test_terminal_print_mode_only_themes_the_new_shell(self):
+        self.assertEqual(self.switch("new").returncode, 0)
+        self.log.write_text("")
+        result = subprocess.run(
+            ["bash", str(BIN / "theme-set-st"), "--print"],
+            env=self.env, capture_output=True, timeout=5,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(b"\x1b]4;0;#111c18\x1b\\", result.stdout)
+        self.assertIn(b"\x1b]10;#c1c497\x1b\\", result.stdout)
+        self.assertNotIn("pgrep", self.log.read_text())
 
     def test_exited_unreaped_terminal_has_no_pty_and_is_not_a_refresh_failure(self):
         self.assertEqual(self.switch("new").returncode, 0)

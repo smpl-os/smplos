@@ -48,6 +48,9 @@ HUD = (
     ("hud_underglow", "hud_underglow", "themeHudUnderglow"),
     ("hud_scanner", "hud_scanner", "themeHudScanner"),
     ("hud_scanner_blur", "hud_scanner_blur_flag", "themeHudScannerBlur"),
+    ("hud_glow_focused_only", "hud_glow_focused_only_flag", "themeHudGlowFocusedOnly"),
+    ("hud_glow_range", "hud_glow_range", "themeHudGlowRange"),
+    ("hud_glow_alpha", "hud_glow_alpha", "themeHudGlowAlpha"),
 )
 # The HUD keys that are a fraction from 0 to 1, with the variable each is written to and the value it
 # has when a theme does not set it.
@@ -87,6 +90,9 @@ CLASSIC = {
     "themeHudUnderglow": "0",
     "themeHudScanner": "0",
     "themeHudScannerBlur": "1",
+    "themeHudGlowFocusedOnly": "0",
+    "themeHudGlowRange": "0",
+    "themeHudGlowAlpha": "style",
 }
 
 # Evaluates the real looknfeel.lua (and theme.lua) against a recording hl stub.
@@ -683,7 +689,7 @@ class EffectGenerationTests(unittest.TestCase):
         variables = self.variables()
         self.assertEqual(
             [variables[var] for _, _, var in HUD],
-            ["0", "scifi", "5", "10", "3", "0", "0", "80", "180", "0", "none", "1", "1", "0", "0", "1"],
+            ["0", "scifi", "5", "10", "3", "0", "0", "80", "180", "0", "none", "1", "1", "0", "0", "1", "0", "0", "style"],
         )
         result = self.generate(
             'hud_frame = "true"\nhud_style = "minimal"\nhud_gap = "6"\n'
@@ -692,13 +698,37 @@ class EffectGenerationTests(unittest.TestCase):
             'hud_hide_border = "true"\nhud_glyph_color = "rgb(3cff28)"\n'
             'hud_side_opacity = "0.1"\nhud_edge_opacity = "0.2"\nhud_underglow = "0.3"\n'
             'hud_scanner = "64"\nhud_scanner_blur = "false"\n'
+            'hud_glow_range = "16"\nhud_glow_alpha = "0.80"\nhud_glow_focused_only = "true"\n'
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         variables = self.variables()
         self.assertEqual(
             [variables[var] for _, _, var in HUD],
-            ["1", "minimal", "6", "0", "2.5", "14", "1", "120", "240", "1", "rgb(3cff28)", "0.1", "0.2", "0.3", "64", "0"],
+            ["1", "minimal", "6", "0", "2.5", "14", "1", "120", "240", "1", "rgb(3cff28)", "0.1", "0.2", "0.3", "64", "0", "1", "16", "0.80"],
         )
+
+    def test_halo_controls_reject_invalid_widths_and_strengths(self):
+        for key, values in (
+            ("hud_glow_range", ("-1", "65", "16px", "", "nan")),
+            ("hud_glow_alpha", ("-0.1", "1.01", "bright", "", "nan")),
+        ):
+            for value in values:
+                with self.subTest(key=key, value=value):
+                    result = self.generate(f'{key} = "{value}"\n')
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn(f"{key} must be", result.stderr)
+
+    def test_focused_halo_requires_a_boolean(self):
+        for value, expected in (("false", "0"), ("true", "1")):
+            with self.subTest(value=value):
+                result = self.generate(f'hud_glow_focused_only = "{value}"\n')
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(self.variables()["themeHudGlowFocusedOnly"], expected)
+        for value in ("1", "slow", "", "nan"):
+            with self.subTest(value=value):
+                result = self.generate(f'hud_glow_focused_only = "{value}"\n')
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn("hud_glow_focused_only must be", result.stderr)
 
     def test_hidden_border_gives_hyprland_no_border_but_keeps_the_configured_width(self):
         configured = read_palette(self.palette)["border_size"]

@@ -2,7 +2,7 @@
 
   <!-- Rounded-square O -->
   <rect x="30" y="30" width="260" height="260" rx="60" ry="60"
-        stroke="{{accent}}" stroke-width="24" fill="none"/>
+        stroke="{{fg}}" stroke-width="24" fill="none"/>
 
   <!-- S with slightly extended top & bottom bars only -->
   <path d="
@@ -18,7 +18,7 @@
     H 109
   "
     fill="none"
-    stroke="{{accent}}"
+    stroke="{{fg}}"
     stroke-width="33"
     stroke-linecap="round"
     stroke-linejoin="round"

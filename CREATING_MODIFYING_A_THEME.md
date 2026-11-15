@@ -79,6 +79,38 @@ and picks a wallpaper. Press **Super+Shift+W** (`theme-bg-next`) to randomly
 choose another without repeating the current image. An empty `backgrounds/`
 directory intentionally uses the theme's solid background color instead.
 
+### Blueprint
+
+`theme-set blueprint` selects black drafting glass (`#000000`, 80% background
+alpha), pure white primary text and orange (`#ff8a30`) selections. Selected text
+is black for contrast. Corners are 2 px; focused window borders are soft white,
+unfocused borders dark gray. There is no bundled wallpaper yet, so the desktop
+is solid black. Transparency will pick up wallpaper colors when one is added.
+The VS Code preset uses its built-in high-contrast theme rather than installing
+an extension; the custom palette applies to Micro and Neovim.
+
+Terminal ANSI colors deliberately use a separate vivid palette, including sky
+blue (`#62b5ff`) and bright ice blue (`#a1d6ff`), so directory listings and
+diagnostics stay readable without changing the monochrome desktop accents.
+Ordinary bar icons, the clock and monitor labels use the theme foreground;
+selected workspaces and recording backgrounds use the accent. This shared
+role mapping applies automatically to every theme, including future themes.
+
+With the matching `smpl-hud` build, the minimal white halo is static and
+focused-window-only. It reaches 18 logical px at strength 0.90 before falloff;
+the crisp border remains 2 px. There is no pulsation, travelling light, scanner
+or rotating gradient, so the halo requires no animation timer or periodic
+repaints. Unfocused windows have no halo. Without the plugin, regular static
+borders remain. Native compositor glow/shadow are disabled to avoid extra glow.
+
+`hud_glow_range` overrides the outer halo reach for tiled and floating windows
+(1 to 64 logical px; `"0"` preserves the style's width). `hud_glow_alpha`
+overrides halo strength before falloff (`"0"` to `"1"`;
+`"style"` preserves the style's strength). Both default to the existing style,
+so adding these controls does not change other themes.
+`hud_glow_focused_only = "true"` hides the halo on unfocused windows; its
+default is `"false"` to preserve existing themes.
+
 ---
 
 ## Step-by-Step: Create a New Theme
@@ -174,6 +206,31 @@ The terminal palette (ANSI slots 0-15) is **auto-derived** from semantic names:
 | 15 | `fg_dim` | `term_15` |
 
 Most themes never need overrides. Use `term_N` only when a terminal slot should differ from its semantic source (e.g. hackerman's accent is green but terminal "blue" slot should still be blue-ish).
+
+`theme-set-st` applies explicit `term_N` overrides to running st/st-wl terminals,
+falling back to legacy `colorN` keys when present. New interactive Fish terminals
+use `theme-set-st --print` to initialize their own palette without refreshing
+other windows. This does not change truecolor output chosen directly by programs.
+
+### Bar foreground and selection
+
+The shared EWW stylesheet uses `foreground` for ordinary bar glyphs, clock text
+and monitor labels. Status SVG templates use `{{fg}}` for the same role.
+For glass themes this resolves to `glass_foreground`. `accent` remains the
+selection/activity background, with `{{bg}}` for contrasting selected SVGs
+(such as the recording microphone). Warning/charging colors and distinct state
+shapes remain separate. New themes inherit this mapping without extra keys,
+per-theme CSS or per-theme icon copies.
+
+### GTK dark dialogs
+
+`theme-set` runs `smplos-gtk-theme-compat` before applying GTK preferences.
+Minimal GTK3 installations can provide the built-in Adwaita dark variant but
+not the `Adwaita-dark` theme directory selected by desktop settings. Without
+that alias GTK silently falls back to light CSS, including Polkit dialogs.
+The helper exposes the bundled resource through a tiny user-data stylesheet
+only when the named theme is missing. Existing user/system themes are preserved.
+This restores standard dark/light GTK styling, not a custom application palette.
 
 ### Decoration, Layout, and App Selectors
 

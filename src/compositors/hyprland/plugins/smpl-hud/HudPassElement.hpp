@@ -69,6 +69,7 @@ struct SHudFrame {
     std::vector<smplhud::GlyphDraw>        glyphs;  // the falling characters of a glyph style
     std::optional<SHudGlyphColour>         glyphColour;
     float                                  alpha         = 1.F;
+    float                                  glowAlpha     = 1.F;
     float                                  roundingPower = 1.F;
     CBox                                   window;  // window box, monitor-local physical px
     CBox                                   bounds;  // everything the HUD can touch, monitor-local logical px

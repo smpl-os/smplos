@@ -81,6 +81,15 @@ void apply(Theme& t, std::string_view key, std::string_view value) {
         parseNumber(value, 0, 96, t.chamfer);
     else if (key == "themeHudFloatGlowRange")
         parseNumber(value, 0, 64, t.floatGlowRange);
+    else if (key == "themeHudGlowRange")
+        parseNumber(value, 0, 64, t.glowRange);
+    else if (key == "themeHudGlowAlpha") {
+        double alpha = 0;
+        if (value == "style")
+            t.glowAlpha.reset();
+        else if (parseNumber(value, 0, 1, alpha))
+            t.glowAlpha = alpha;
+    }
     else if (key == "themeHudStyle" && isStyleName(value))
         t.style = std::string(value);
     else if (key == "themeHudSweep")
@@ -89,6 +98,8 @@ void apply(Theme& t, std::string_view key, std::string_view value) {
         parseNumber(value, 10, 400, t.sweepSpeed);
     else if (key == "themeHudSweepLength")
         parseNumber(value, 40, 600, t.sweepLength);
+    else if (key == "themeHudGlowFocusedOnly")
+        parseBool(value, t.glowFocusedOnly);
     else if (key == "themeHudHideBorder")
         parseBool(value, t.hideBorder);
     else if (key == "themeHudSideOpacity")

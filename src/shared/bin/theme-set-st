@@ -4,6 +4,12 @@
 #
 # Uses OSC 4 (palette 0-15), OSC 10 (fg), OSC 11 (bg), OSC 12 (cursor)
 # These are standard VT escape sequences -- work on both X11 and Wayland, no dependencies.
+# --print emits the payload for a new interactive shell without refreshing other terminals.
+
+if (( $# > 1 )) || [[ $# -eq 1 && "$1" != --print ]]; then
+  echo "Usage: theme-set-st [--print]" >&2
+  exit 1
+fi
 
 CURRENT_THEME_PATH="$HOME/.config/smplos/current/theme"
 COLORS_FILE="$CURRENT_THEME_PATH/colors.toml"
@@ -24,7 +30,8 @@ append_osc() {
 
 # OSC 4: set palette colors 0-15
 for i in $(seq 0 15); do
-  color=$(get_color "color${i}")
+  color=$(get_color "term_${i}")
+  [[ -n "$color" ]] || color=$(get_color "color${i}")
   [[ -n "$color" ]] && append_osc "4;${i};${color}"
 done
 
@@ -41,6 +48,11 @@ cursor=$(get_color "cursor")
 [[ -n "$cursor" ]] && append_osc "12;${cursor}"
 
 [[ -z "$osc" ]] && exit 0
+
+if [[ "${1:-}" == --print ]]; then
+  printf '%s' "$osc"
+  exit 0
+fi
 
 # The terminal's stdin belongs to its launcher (often /dev/tty2), not its
 # child shell. Linux exposes the slave's index on the PTY master's fdinfo.

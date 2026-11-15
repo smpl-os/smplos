@@ -402,10 +402,15 @@ Layout buildLayout(const Style& style, const Params& params) {
     if (params.width < kMinWindow || params.height < kMinWindow || params.scale <= 0.f)
         return out;
 
-    if (style.kind == Kind::Panel)
-        buildPanel(style, params, out);
+    Style effective = style;
+    if (params.glowRange > 0)
+        effective.haloReach = float(params.glowRange);
+    if (params.glowAlpha)
+        effective.haloAlpha = float(*params.glowAlpha);
+    if (effective.kind == Kind::Panel)
+        buildPanel(effective, params, out);
     else
-        Builder(style, params, out).build();
+        Builder(effective, params, out).build();
     return out;
 }
 
