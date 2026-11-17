@@ -452,6 +452,21 @@ cuts can be limited by keyframe positions.
 Existing installations receive `/usr/local/bin/clip` through **Update OS**
 without changing personal shell configuration.
 
+### File-manager shortcuts and administrator access
+
+Nemo uses **F8** or **Delete** to move items to Trash, and **Shift+Delete** or
+**Shift+F8** for permanent deletion. Existing confirmation dialogs remain enabled.
+Update OS repairs the old stock defaults with verified backups, preserving
+explicit custom shortcuts and reporting occupied keys instead of replacing them.
+
+**Super+Ctrl+Shift+F** opens Nemo at `admin:///` for administrator file access.
+The window remains a normal-user application; GVfs requests authorization through
+the foreground Polkit dialog for privileged file operations. No passwordless rule,
+root desktop session or ordinary-launch behavior is changed. Cancel authentication
+to abandon administrator access. Normal **Super+Shift+F** remains unchanged.
+Administrator locations may not support Trash; use permanent deletion only after
+checking the target and confirming Nemo's warning.
+
 ### Themes
 
 Switch the system theme (terminal, bar, borders, lock screen, editor) with a single command:

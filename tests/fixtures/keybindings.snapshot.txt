@@ -8,6 +8,7 @@ stock | SUPER+SUPER_L |  | exec toggle-start-menu -> exec_cmd("toggle-start-menu
 stock | CTRL+ALT+SPACE | Start Menu (VM) | exec toggle-start-menu -> exec_cmd("toggle-start-menu")
 stock | SUPER+A | App Center | exec toggle-app-center -> exec_cmd("toggle-app-center")
 stock | SUPER+SHIFT+F | File manager | exec focus-or-launch --current-workspace nemo nemo -> exec_cmd("focus-or-launch --current-workspace nemo nemo")
+stock | SUPER+CTRL+SHIFT+F | File manager (administrator) | exec nemo-admin -> exec_cmd("nemo-admin")
 stock | SUPER+ALT+SHIFT+F | File manager (floating) | exec nemo --class nemo-float -> exec_cmd("nemo --class nemo-float")
 stock | SUPER+SHIFT+B | Web browser | exec focus-web-browser -> exec_cmd("focus-web-browser")
 stock | SUPER+SHIFT+N | Neovim | exec terminal -e nvim -> exec_cmd("terminal -e nvim")

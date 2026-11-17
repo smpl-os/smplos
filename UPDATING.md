@@ -590,6 +590,24 @@ requires the separately agreed activation described above.
 
 ## 2. Updating Configs (EWW, Hyprland, foot, etc.)
 
+### Nemo deletion shortcuts and administrator access
+
+Stock `src/shared/system/dconf/00-nemo` keeps F8 as Trash and adds Delete as its
+alternate; permanent deletion uses Shift+Delete and Shift+F8. Migration
+`20261118-000000-nemo-trash-and-admin.sh` repairs inherited old defaults on
+existing installations without resetting explicit user settings. It saves and
+verifies private snapshots of all user/effective Nemo shortcut values before any
+change, checks for conflicting accelerators and confirms settings persistence.
+Backups live in `~/.local/state/smplos/backups/nemo-shortcuts/`.
+
+The same migration enrolls Super+Ctrl+Shift+F only when unassigned, with verified
+backups of modified shared/legacy Hyprland and niri binding files. Existing custom
+assignments are retained. The shipped `nemo-admin` command opens `admin:///` in
+normal-user Nemo; GVfs uses its existing Polkit-authenticated administrator backend.
+No authorization bypass, settings reset, Nemo restart or test deletion is performed.
+The running Nemo consumes GSettings changes live; existing Hyprland bindings are
+reloaded by the normal updater's final reload, and niri watches its config.
+
 Config ownership determines update behavior. EWW's OS-owned entry point,
 overview fragment, stylesheet and scripts are refreshed. Hyprland's OS-owned
 `.conf`/`.lua` files and `apps/` rules are refreshed on every normal update,

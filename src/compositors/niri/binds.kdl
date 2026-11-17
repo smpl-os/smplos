@@ -15,6 +15,7 @@ binds {
     Ctrl+Alt+Space hotkey-overlay-title="Start Menu (VM)" { spawn "sh" "-c" "toggle-start-menu"; }
     Mod+a hotkey-overlay-title="App Center" { spawn "sh" "-c" "toggle-app-center"; }
     Mod+Shift+f hotkey-overlay-title="File manager" { spawn "sh" "-c" "focus-or-launch --current-workspace nemo nemo"; }
+    Mod+Ctrl+Shift+f hotkey-overlay-title="File manager (administrator)" { spawn "sh" "-c" "nemo-admin"; }
     Mod+Shift+Alt+f hotkey-overlay-title="File manager (floating)" { spawn "sh" "-c" "nemo --class nemo-float"; }
     Mod+Shift+b hotkey-overlay-title="Web browser" { spawn "sh" "-c" "focus-web-browser"; }
     Mod+Shift+n hotkey-overlay-title="Neovim" { spawn "sh" "-c" "terminal -e nvim"; }

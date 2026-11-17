@@ -19,11 +19,13 @@ new-folder-alt='Insert'
 # F4 = Open with default application
 open-default='F4'
 
-# F8 = Move to Trash
+# F8 / Delete = Move to Trash
 trash='F8'
+trash-alt='Delete'
 
-# Delete = Delete permanently (since Trash is on F8)
-delete-permanently='Delete'
+# Shift+Delete / Shift+F8 = Delete permanently
+delete-permanently='<Shift>Delete'
+delete-permanently-alt='<Shift>F8'
 
 # Alt+F7 = Search
 search='<Alt>F7'

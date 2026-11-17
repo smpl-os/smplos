@@ -50,7 +50,9 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install Lua and libxkbcommon
-        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends lua5.4 libxkbcommon0
+        run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends lua5.4 libxkbcommon0 python3-gi gir1.2-gtk-3.0 libglib2.0-bin
+      - name: Check Nemo shortcut migration with isolated settings
+        run: PATH=/usr/bin:/bin /usr/bin/python3 -m unittest discover -s tests -p test_nemo_shortcuts.py -v
       - name: Show the tools under test
         run: python3 --version && tools/keybind-check doctor
       - name: Check every bind
