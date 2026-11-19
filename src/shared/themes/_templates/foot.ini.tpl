@@ -1,6 +1,6 @@
 # foot terminal colors — auto-generated from colors.toml
 [colors]
-foreground={{ foreground_strip }}
+foreground={{ terminal_foreground_strip }}
 background={{ background_strip }}
 
 [colors.palette]

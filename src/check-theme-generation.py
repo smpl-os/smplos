@@ -18,6 +18,10 @@ def main():
             "regen-nemo-css.py", "theme_opacity.py",
         ):
             shutil.copy2(source / name, fixture / name)
+        helper = fixture / "shared/lib"
+        helper.mkdir(parents=True)
+        shutil.copy2(source / "shared/lib/theme_terminal_colors.py",
+                     helper / "theme_terminal_colors.py")
         generated = fixture / "shared/themes"
         shutil.copytree(themes / "_templates", generated / "_templates")
         for palette in themes.glob("*/colors.toml"):

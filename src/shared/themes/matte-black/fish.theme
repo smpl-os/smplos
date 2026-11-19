@@ -3,27 +3,27 @@
 
 # Syntax highlighting
 set -g fish_color_normal bebebe
-set -g fish_color_command e68e0d
-set -g fish_color_keyword D35F5F
-set -g fish_color_quote FFC107
-set -g fish_color_redirection bebebe
-set -g fish_color_end D35F5F
-set -g fish_color_error D35F5F
+set -g fish_color_command f59e0b
+set -g fish_color_keyword d57777
+set -g fish_color_quote ffc107
+set -g fish_color_redirection eaeaea
+set -g fish_color_end d56c6c
+set -g fish_color_error d57777
 set -g fish_color_param bebebe
 set -g fish_color_comment 8a8a8d
 set -g fish_color_selection --background=333333
-set -g fish_color_operator bebebe
-set -g fish_color_escape D35F5F
+set -g fish_color_operator eaeaea
+set -g fish_color_escape d57777
 set -g fish_color_autosuggestion 8a8a8d
-set -g fish_color_search_match e68e0d --background=1e1e1e
+set -g fish_color_search_match f59e0b --background=1e1e1e
 set -g fish_color_valid_path --underline
 
 # Pager (tab completion menu)
 set -g fish_pager_color_progress 8a8a8d
-set -g fish_pager_color_prefix e68e0d --bold --underline
+set -g fish_pager_color_prefix f59e0b --bold --underline
 set -g fish_pager_color_completion bebebe
 set -g fish_pager_color_description 8a8a8d
 set -g fish_pager_color_selected_background --background=1e1e1e
 set -g fish_pager_color_selected_completion bebebe
-set -g fish_pager_color_selected_prefix e68e0d --bold --underline
+set -g fish_pager_color_selected_prefix f59e0b --bold --underline
 set -g fish_pager_color_selected_description 8a8a8d

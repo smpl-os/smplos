@@ -610,7 +610,7 @@ class ThemeSwitchingTests(unittest.TestCase):
         self.assertEqual(self.switch("new").returncode, 0)
         result, payload, _ = self.refresh_terminal("st-wl")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn(b"\x1b]4;0;#111c18\x1b\\", payload)
+        self.assertIn(b"\x1b]4;0;#868b89\x1b\\", payload)
         self.assertIn(b"\x1b]4;4;#62b5ff\x1b\\", payload)
         self.assertIn(b"\x1b]4;12;#a1d6ff\x1b\\", payload)
         self.assertNotIn(b"#112233", payload)
@@ -623,7 +623,7 @@ class ThemeSwitchingTests(unittest.TestCase):
             env=self.env, capture_output=True, timeout=5,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn(b"\x1b]4;0;#111c18\x1b\\", result.stdout)
+        self.assertIn(b"\x1b]4;0;#868b89\x1b\\", result.stdout)
         self.assertIn(b"\x1b]10;#c1c497\x1b\\", result.stdout)
         self.assertNotIn("pgrep", self.log.read_text())
 

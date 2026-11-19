@@ -214,12 +214,21 @@ The terminal palette (ANSI slots 0-15) is **auto-derived** from semantic names:
 | 14 | `info_bright` | `term_14` |
 | 15 | `fg_dim` | `term_15` |
 
-Most themes never need overrides. Use `term_N` only when a terminal slot should differ from its semantic source (e.g. hackerman's accent is green but terminal "blue" slot should still be blue-ish).
+Most themes never need overrides. Use `term_N` only when a terminal slot should
+differ from its semantic source (e.g. hackerman's accent is green but terminal
+"blue" slot should still be blue-ish). During generation and live st delivery,
+`theme_terminal_colors.py` retains each hue but mixes it toward black or white
+as needed so every ANSI slot has at least 5:1 contrast against the theme
+background. Foreground text targets 7:1.
 
 `theme-set-st` applies explicit `term_N` overrides to running st/st-wl terminals,
 falling back to legacy `colorN` keys when present. New interactive Fish terminals
 use `theme-set-st --print` to initialize their own palette without refreshing
-other windows. This does not change truecolor output chosen directly by programs.
+other windows. Fish command/error, keyword, comment and autosuggestion roles are
+derived separately: valid and invalid commands target 6:1 and are forced apart
+when a theme uses the same accent for both, comments target 4.8:1, and
+autosuggestions target 4.5:1. This does not change truecolor output chosen
+directly by programs.
 
 ### Bar foreground and selection
 
@@ -733,8 +742,8 @@ rendering requires a separate smpl-apps implementation of the glass tokens,
 not native source copied into this OS repo. Third-party applications retain
 the documented whole-window-alpha tradeoff; they cannot acquire native glass
 text outlines through compositor rules.
-Terminal semantic `term_N` versus the legacy `theme-set-st` `colorN` reader is
-a separate known palette issue, not fixed by this alpha work.
+Terminal semantic `term_N` and legacy `colorN` colors share the same contrast
+derivation path, so native terminal alpha cannot make text itself dim or faint.
 
 ### Validation and live delivery
 

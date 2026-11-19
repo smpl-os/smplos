@@ -188,6 +188,10 @@ class GenerationTests(unittest.TestCase):
             "theme_opacity.py", "check-theme-generation.py",
         ):
             shutil.copy2(SRC / name, self.source / name)
+        helpers = self.source / "shared/lib"
+        helpers.mkdir(parents=True)
+        shutil.copy2(SRC / "shared/lib/theme_terminal_colors.py",
+                     helpers / "theme_terminal_colors.py")
         self.themes = self.source / "shared/themes"
         shutil.copytree(SRC / "shared/themes/_templates", self.themes / "_templates")
         self.theme = self.themes / "fixture"

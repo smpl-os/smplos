@@ -216,6 +216,14 @@ generate_theme() {
     fi
   done
 
+  # Keep terminal syntax and ANSI output readable in both dark and light
+  # themes, including eye-saving display filters.
+  local terminal_values
+  terminal_values=$(python3 "$SCRIPT_DIR/shared/lib/theme_terminal_colors.py" "$colors_file") || return 1
+  while IFS='=' read -r terminal_key terminal_value; do
+    pairs["$terminal_key"]="$terminal_value"
+  done <<< "$terminal_values"
+
   # Build sed script from all pairs
   local sed_script
   sed_script=$(mktemp)

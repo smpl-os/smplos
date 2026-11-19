@@ -3,27 +3,27 @@
 
 # Syntax highlighting
 set -g fish_color_normal d8dee9
-set -g fish_color_command 81a1c1
-set -g fish_color_keyword b48ead
+set -g fish_color_command 9eb7cf
+set -g fish_color_keyword ebcb8b
 set -g fish_color_quote a3be8c
-set -g fish_color_redirection 88c0d0
-set -g fish_color_end b48ead
-set -g fish_color_error bf616a
+set -g fish_color_redirection 8fbcbb
+set -g fish_color_end ebcb8b
+set -g fish_color_error dba7ac
 set -g fish_color_param d8dee9
-set -g fish_color_comment 4c566a
+set -g fish_color_comment 9da2ad
 set -g fish_color_selection --background=3b4252
-set -g fish_color_operator 88c0d0
-set -g fish_color_escape b48ead
-set -g fish_color_autosuggestion 7b88a1
-set -g fish_color_search_match 81a1c1 --background=3b4252
+set -g fish_color_operator 8fbcbb
+set -g fish_color_escape ebcb8b
+set -g fish_color_autosuggestion 919cb1
+set -g fish_color_search_match 9eb7cf --background=3b4252
 set -g fish_color_valid_path --underline
 
 # Pager (tab completion menu)
-set -g fish_pager_color_progress 4c566a
-set -g fish_pager_color_prefix 81a1c1 --bold --underline
+set -g fish_pager_color_progress 9da2ad
+set -g fish_pager_color_prefix 9eb7cf --bold --underline
 set -g fish_pager_color_completion d8dee9
-set -g fish_pager_color_description 4c566a
+set -g fish_pager_color_description 9da2ad
 set -g fish_pager_color_selected_background --background=3b4252
 set -g fish_pager_color_selected_completion d8dee9
-set -g fish_pager_color_selected_prefix 81a1c1 --bold --underline
-set -g fish_pager_color_selected_description 4c566a
+set -g fish_pager_color_selected_prefix 9eb7cf --bold --underline
+set -g fish_pager_color_selected_description 9da2ad

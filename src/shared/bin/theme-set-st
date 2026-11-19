@@ -21,6 +21,23 @@ get_color() {
   sed -n "s/^${1}[[:space:]]*=[[:space:]]*[\"']\(.*\)[\"']/\1/p" "$COLORS_FILE" | head -1
 }
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "$SCRIPT_DIR/../lib/theme_terminal_colors.py" ]]; then
+  TERMINAL_COLORS="$SCRIPT_DIR/../lib/theme_terminal_colors.py"
+else
+  TERMINAL_COLORS="/usr/local/lib/smplos/theme_terminal_colors.py"
+fi
+if [[ ! -f "$TERMINAL_COLORS" ]]; then
+  echo "theme-set-st: Missing terminal color helper: $TERMINAL_COLORS" >&2
+  exit 1
+fi
+
+declare -A derived_colors=()
+terminal_values=$(python3 "$TERMINAL_COLORS" "$COLORS_FILE") || exit 1
+while IFS='=' read -r key value; do
+  derived_colors["$key"]="$value"
+done <<< "$terminal_values"
+
 # Build the full OSC sequence payload (all colors in one string for efficiency)
 osc=""
 
@@ -30,13 +47,12 @@ append_osc() {
 
 # OSC 4: set palette colors 0-15
 for i in $(seq 0 15); do
-  color=$(get_color "term_${i}")
-  [[ -n "$color" ]] || color=$(get_color "color${i}")
+  color="${derived_colors[term_${i}]:-$(get_color "term_${i}")}"
   [[ -n "$color" ]] && append_osc "4;${i};${color}"
 done
 
 # OSC 10: foreground
-fg=$(get_color "foreground")
+fg="${derived_colors[terminal_foreground]:-$(get_color "foreground")}"
 [[ -n "$fg" ]] && append_osc "10;${fg}"
 
 # OSC 11: background
