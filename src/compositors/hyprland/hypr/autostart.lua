@@ -49,9 +49,6 @@ hl.on("hyprland.start", function()
     -- (PAM can't unlock it because greetd autologin never prompts for a password)
     hl.exec_cmd([[bash -c 'echo "" | gnome-keyring-daemon --start --unlock --components=secrets,pkcs11,ssh']])
 
-    -- Polkit agent for authentication dialogs
-    hl.exec_cmd("/usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1")
-
     -- Clean stale browser locks (VM force-shutdown leaves these behind)
     hl.exec_cmd("bash -c 'pgrep -x brave >/dev/null || rm -f ~/.config/BraveSoftware/Brave-Browser/Singleton*'")
 

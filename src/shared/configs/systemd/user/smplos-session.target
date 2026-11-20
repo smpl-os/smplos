@@ -8,3 +8,4 @@ Documentation=https://www.freedesktop.org/software/systemd/man/latest/systemd.sp
 BindsTo=graphical-session.target
 Wants=graphical-session-pre.target
 After=graphical-session-pre.target
+Wants=polkit-gnome.service

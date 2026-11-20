@@ -24,7 +24,8 @@ LOG_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/smplos"
 LOG="$LOG_DIR/session-services.log"
 # Failing units are announced when the set changes; power timers every login.
 FAILED_FILE="${XDG_STATE_HOME:-$HOME/.local/state}/smplos/session-services.failed"
-ALWAYS_REPORT=(hypridle.service)
+CORE_UNITS=(polkit-gnome.service)
+ALWAYS_REPORT=(hypridle.service polkit-gnome.service)
 DEVICE_SERVICES=(control-surface.service mouse-remap.service)
 mkdir -p "$LOG_DIR" "${FAILED_FILE%/*}" 2>/dev/null
 log() { printf '%s %s\n' "$(date '+%F %T')" "$*" >> "$LOG"; }
@@ -83,6 +84,7 @@ failure_reason() {
 describe() {
     case "$1" in
         hypridle.service) echo "Power timers (screen off, suspend, lock)" ;;
+        polkit-gnome.service) echo "Administrator authentication dialogs" ;;
         voxtype.service) echo "Dictation" ;;
         xr-glasses.service) echo "XR glasses watcher" ;;
         control-surface.service) echo "Macro keypad app" ;;
@@ -92,6 +94,9 @@ describe() {
 }
 
 mapfile -t units < <(enabled_session_units)
+for unit in "${CORE_UNITS[@]}"; do
+    [[ " ${units[*]} " == *" $unit "* ]] || units+=("$unit")
+done
 
 if [[ "$MODE" != --verify ]]; then
     # Services need WAYLAND_DISPLAY (hypridle checks it), portals the rest.

@@ -841,7 +841,8 @@ class SessionServicesTests(unittest.TestCase):
             (bin_dir / tool).chmod(0o755)
         wants = root / "config/systemd/user/graphical-session.target.wants"
         wants.mkdir(parents=True)
-        for unit in ("hypridle.service", "voxtype.service", "xr-glasses.service"):
+        for unit in ("hypridle.service", "voxtype.service", "xr-glasses.service",
+                     "polkit-gnome.service"):
             (wants / unit).touch()
         self.root = root
         self.calls = root / "calls"
@@ -856,7 +857,8 @@ class SessionServicesTests(unittest.TestCase):
     def run_login(self, graphical=False, start_fails=0, skip=(), extra_units=None,
                   keypad=False, keypad_failures=0, mouse=False, mouse_failures=0, **env):
         units = {u: {"active": False, "skip": u in skip}
-                 for u in ("hypridle.service", "voxtype.service", "xr-glasses.service")}
+                 for u in ("hypridle.service", "voxtype.service", "xr-glasses.service",
+                           "polkit-gnome.service")}
         units.update(extra_units or {})
         self.state.write_text(json.dumps({"graphical": graphical, "start_fails": start_fails, "units": units,
                                          "keypad": keypad, "keypad_failures": keypad_failures,
@@ -881,14 +883,32 @@ class SessionServicesTests(unittest.TestCase):
     def test_target_activates_the_graphical_session(self):
         lines = self.TARGET.read_text().splitlines()
         self.assertIn("BindsTo=graphical-session.target", lines)
+        self.assertIn("Wants=polkit-gnome.service", lines)
         self.assertNotIn("RefuseManualStart=yes", lines)
+
+    def test_polkit_agent_is_supervised_instead_of_started_once(self):
+        unit = ROOT / "src/shared/configs/systemd/user/polkit-gnome.service"
+        self.assertIn("Restart=always", unit.read_text())
+        self.assertIn("PartOf=graphical-session.target", unit.read_text())
+        for name in ("autostart.lua", "autostart.conf"):
+            self.assertNotIn(
+                "polkit-gnome-authentication-agent-1",
+                (self.HYPR / name).read_text(),
+            )
+        self.assertNotIn(
+            'spawn-at-startup "/usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1"',
+            (ROOT / "src/compositors/niri/config.kdl").read_text(),
+        )
 
     def test_fresh_login_imports_the_environment_and_starts_everything(self):
         result, calls = self.run_login()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(calls[0], "import-environment")
         self.assertNotIn("stop graphical-session.target", calls)
-        self.assertIn("reset-failed hypridle.service voxtype.service xr-glasses.service", calls)
+        self.assertIn(
+            "reset-failed hypridle.service polkit-gnome.service voxtype.service xr-glasses.service",
+            calls,
+        )
         self.assertLess(calls.index("import-environment"), calls.index("start smplos-session.target"))
         self.assertFalse(self.notified.exists())
 
@@ -1091,6 +1111,8 @@ class SessionServicesTests(unittest.TestCase):
         unit_dir = repo / "src/shared/configs/systemd/user"
         unit_dir.mkdir(parents=True)
         (unit_dir / "smplos-session.target").write_text(self.TARGET.read_text())
+        polkit = ROOT / "src/shared/configs/systemd/user/polkit-gnome.service"
+        (unit_dir / "polkit-gnome.service").write_bytes(polkit.read_bytes())
         home = self.root / "home"
         script = "\n".join([
             "set -euo pipefail", "log() { :; }", "warn() { echo \"$*\" >&2; }", 'die() { exit 1; }',
@@ -1104,6 +1126,9 @@ class SessionServicesTests(unittest.TestCase):
         installed = home / ".config/systemd/user/smplos-session.target"
         self.assertEqual(installed.read_text(), self.TARGET.read_text())
         self.assertEqual(installed.stat().st_mode & 0o777, 0o644)
+        installed_polkit = home / ".config/systemd/user/polkit-gnome.service"
+        self.assertEqual(installed_polkit.read_bytes(), polkit.read_bytes())
+        self.assertEqual(installed_polkit.stat().st_mode & 0o777, 0o644)
         # Reload only after a change; start in the running session each time.
         self.assertEqual(self.calls.read_text().splitlines(), [
             "systemctl --user daemon-reload", "systemctl --user start smplos-session.target",

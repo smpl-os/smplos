@@ -814,7 +814,7 @@ sync_hypr_configs() {
 sync_user_units() {
     local unit_src="$SMPLOS_REPO/src/shared/configs/systemd/user"
     local unit_dst="$HOME/.config/systemd/user"
-    local units=(smplos-session.target) unit changed=0
+    local units=(smplos-session.target polkit-gnome.service) unit changed=0
     [[ -d "$unit_src" ]] || return 0
 
     as_invoker mkdir -p "$unit_dst"
