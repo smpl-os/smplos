@@ -930,7 +930,7 @@ class Audit:
         # Optional bundled executables are verified when delivered, not required
         # on machines whose release never included them.
         if component == "smpl-apps":
-            optional = ("xr-workspace", "xrctl", "xr-game", "xr-glasses-hotplugd")
+            optional = ("xr-workspace", "xrctl", "xr-game", "xr-glasses-hotplugd", "smpl-bar")
             for name in optional:
                 path = self.root / "usr/local/bin" / name
                 if path.exists() or path.is_symlink() or str(path) in recorded:

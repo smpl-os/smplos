@@ -45,9 +45,9 @@ check() {
 package() {
   [[ -x "$srcdir/usr/bin/mouse-remapperd" ]] ||
     { echo "mouse-remapperd is missing from the native release" >&2; return 1; }
-  # smplOS's control-surface.service passes --eww-window/--eww-config
-  # (cheatsheet push); refuse a daemon without them (Qt keeps it as UTF-16).
+  # smplOS's control-surface-run preserves the EWW backend with
+  # --eww-window/--eww-config; refuse a daemon without those flags.
   LC_ALL=C grep -aqP 'e\x00w\x00w\x00-\x00w\x00i\x00n\x00d\x00o\x00w\x00' "$srcdir/usr/bin/control-surfaced" ||
-    { echo "control-surfaced is too old for smplOS's unit (needs --eww-window)" >&2; return 1; }
+    { echo "control-surfaced is too old for smplOS's bar bridge (needs --eww-window)" >&2; return 1; }
   cp -a --no-preserve=ownership "$srcdir/usr" "$pkgdir/"
 }

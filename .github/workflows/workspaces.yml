@@ -10,15 +10,21 @@ on:
       - "src/shared/bin/launch-webapp"
       - "src/shared/bin/popup-toggle"
       - "src/shared/bin/bar-ctl"
+      - "src/shared/bin/bar-session-start"
+      - "src/shared/bin/control-surface-run"
       - "src/shared/bin/toggle-messenger"
       - "src/shared/bin/smplos-os-update"
       - "src/shared/eww/**"
       - "src/shared/packages.txt"
       - "src/compositors/hyprland/hypr/**"
+      - "src/compositors/niri/**"
+      - "src/shared/configs/systemd/user/control-surface.service"
+      - "src/shared/lib/smplos-app-bundle.sh"
       - "migrations/*workspace*.sh"
       - "tests/test_workspace*.py"
       - "tests/test_messenger_focus.py"
       - "tests/test_bar_ctl.py"
+      - "tests/test_smpl_bar_integration.py"
       - "tests/test_webapp_dns.py"
   push:
     branches: [main]
@@ -30,15 +36,21 @@ on:
       - "src/shared/bin/launch-webapp"
       - "src/shared/bin/popup-toggle"
       - "src/shared/bin/bar-ctl"
+      - "src/shared/bin/bar-session-start"
+      - "src/shared/bin/control-surface-run"
       - "src/shared/bin/toggle-messenger"
       - "src/shared/bin/smplos-os-update"
       - "src/shared/eww/**"
       - "src/shared/packages.txt"
       - "src/compositors/hyprland/hypr/**"
+      - "src/compositors/niri/**"
+      - "src/shared/configs/systemd/user/control-surface.service"
+      - "src/shared/lib/smplos-app-bundle.sh"
       - "migrations/*workspace*.sh"
       - "tests/test_workspace*.py"
       - "tests/test_messenger_focus.py"
       - "tests/test_bar_ctl.py"
+      - "tests/test_smpl_bar_integration.py"
       - "tests/test_webapp_dns.py"
   workflow_dispatch:
 
@@ -61,5 +73,7 @@ jobs:
         run: python3 -m unittest discover -s tests -p 'test_messenger_focus.py' -v
       - name: Check taskbar preference application
         run: python3 -m unittest discover -s tests -p 'test_bar_ctl.py' -v
+      - name: Check opt-in native bar integration
+        run: python3 -m unittest discover -s tests -p 'test_smpl_bar_integration.py' -v
       - name: Check web-app sandbox DNS
         run: python3 -m unittest discover -s tests -p 'test_webapp_dns.py' -v

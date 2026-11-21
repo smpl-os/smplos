@@ -964,6 +964,12 @@ install_prebuilt_apps() {
             log_warn "$app: not found in $bin_dir"
         fi
     done
+    for app in "${SMPLOS_APP_OPTIONAL_BINS[@]}"; do
+        [[ -f "$bin_dir/$app" ]] || continue
+        install -Dm755 "$bin_dir/$app" "$airootfs/usr/local/bin/$app"
+        install -Dm755 "$bin_dir/$app" "$airootfs/root/smplos/bin/$app"
+        log_info "$app: installed (optional in published smpl-apps release)"
+    done
 
     local calendar_unit=smpl-calendar-alertd.service
     local calendar_units="$airootfs/etc/skel/.config/systemd/user"

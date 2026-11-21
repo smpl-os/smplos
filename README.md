@@ -383,6 +383,56 @@ invalid values, duplicate workspace keys or EWW failures instead of silently
 claiming success. `bar.conf` uses literal `key=value` lines; surrounding whitespace
 and full-line comments are supported.
 
+#### Native bar compatibility (opt-in)
+
+EWW remains the default and is never removed. `~/.config/smplos/bar.conf` has a
+compatibility selector, `backend=eww|smpl-bar`; `BAR_BACKEND` overrides that
+value for one command or a side-by-side qualification session. The selector is
+separate from Settings' seven taskbar values, and Settings preserves unknown
+`bar.conf` keys. Missing files and older configs therefore continue to select
+EWW.
+
+`bar-ctl` keeps the existing `start`, `stop`, `toggle`, `reload`, `ensure`,
+`redraw`, `refresh`, `watch` and `apply` commands. With the native backend
+selected, it forwards controls through smpl-bar's CLI and resident Unix socket
+at `${XDG_RUNTIME_DIR:-/run/user/$UID}/smplos/smpl-bar.sock`. Additional
+pass-throughs are `status`, `identify`, `popup`, `set-keypad-present`,
+`keypad-sheet`, `close-popups` and `telemetry-sample`.
+
+Session startup calls `bar-session-start`: it starts only EWW by default,
+starts the native resident only when explicitly selected, and falls back to
+EWW when the published smpl-bar binary is unavailable. For manual coexistence:
+
+```bash
+BAR_BACKEND=smpl-bar bar-ctl start   # the existing EWW remains running
+BAR_BACKEND=smpl-bar bar-ctl status
+BAR_BACKEND=smpl-bar popup-toggle quick-settings
+```
+
+`SMPL_BAR_TELEMETRY=1` and `SMPL_BAR_TELEMETRY_FILE` retain the native
+measurement hooks. The bar, workspace actions and external launch contracts
+run in the native process; smplOS shell scripts do not sit on its steady-state
+or UI input hot path.
+
+The performance gates are part of the implementation, not optional polish:
+the mapped native bar must remain lower than a same-session EWW sample in RSS,
+peak RSS and thread count, use a smaller release binary, and record bounded
+first-map/first-paint and popup latency. Current stretch goals are at most
+23 MiB RSS and first paint at most 0.8x the paired EWW cold-start measurement.
+Telemetry is disabled unless explicitly enabled; benchmark reports retain the
+raw samples and never claim a paint-speed win without an equivalent EWW
+first-paint fixture. Layout, compositing, event and popup work must stay
+event-driven, resident, and allocation-light.
+
+The verified native release contract currently exposes IPC popups for quick
+settings, USB, workspace overview and keypad sheets. Calendar and notification
+surface toggles retain the existing `toggle-calendar` and
+`toggle-notif-center` app ownership after native popups are closed. Native
+click-through is forwarded in the keypad sheet JSON, but the current Winit
+build still requires real compositor input-region support before it can claim
+pass-through parity. smpl-bar's windows are regular transparent xdg-toplevels
+until its layer-shell/exclusive-zone and SNI gates are complete.
+
 Keyboard workspace selection, bar clicks, and existing-app shortcuts follow a
 workspace to its home instead of swapping it onto another monitor. Local
 next/previous navigation stays within the focused monitor's homes. Window

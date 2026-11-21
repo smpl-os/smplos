@@ -1,0 +1,43 @@
+#!/bin/bash
+set -u
+
+daemon="${SMPLOS_CONTROL_SURFACED:-/usr/bin/control-surfaced}"
+BAR_CTL="${BAR_CTL:-bar-ctl}"
+backend=$("$BAR_CTL" backend 2>/dev/null || echo eww)
+
+if [[ "$backend" != smpl-bar ]]; then
+    exec "$daemon" run --quiet \
+        --eww-window pad-cheatsheet \
+        --eww-config "${HOME:-}/.config/eww"
+fi
+
+daemon_pid=
+follower_pid=
+cleanup() {
+    [[ -z "$follower_pid" ]] || kill "$follower_pid" 2>/dev/null || true
+    [[ -z "$daemon_pid" ]] || kill "$daemon_pid" 2>/dev/null || true
+}
+trap 'cleanup; exit 143' TERM INT HUP
+trap cleanup EXIT
+
+"$daemon" run --quiet &
+daemon_pid=$!
+
+(
+    while kill -0 "$daemon_pid" 2>/dev/null; do
+        "$daemon" cheatsheet --json --follow 2>/dev/null |
+            while IFS= read -r sheet; do
+                [[ -n "$sheet" ]] || continue
+                if [[ "$("$BAR_CTL" backend 2>/dev/null || echo eww)" != smpl-bar ]]; then
+                    systemctl --user restart control-surface.service 2>/dev/null || true
+                    exit 75
+                fi
+                printf '%s\n' "$sheet" |
+                    BAR_BACKEND=smpl-bar "$BAR_CTL" keypad-sheet -
+            done
+        sleep 0.2
+    done
+) &
+follower_pid=$!
+
+wait "$daemon_pid"

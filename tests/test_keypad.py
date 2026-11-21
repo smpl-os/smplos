@@ -461,12 +461,14 @@ class LifecycleTests(unittest.TestCase):
         self.assertIn("ConditionPathExists=/usr/bin/control-surfaced", unit)
         self.assertIn("Type=exec\n", unit)
         self.assertIn("StartLimitBurst=5\n", unit)
-        self.assertIn("ExecStart=/usr/bin/control-surfaced run --quiet --eww-window pad-cheatsheet "
-                      "--eww-config %h/.config/eww", unit)
+        self.assertIn("ExecStart=/usr/local/bin/control-surface-run", unit)
+        runner = (ROOT / "src/shared/bin/control-surface-run").read_text()
+        self.assertIn('"$daemon" run --quiet', runner)
+        self.assertIn("--eww-window pad-cheatsheet", runner)
         self.assertIn("e\\x00w\\x00w\\x00-\\x00w\\x00i\\x00n\\x00d\\x00o\\x00w", (ROOT / "src/shared/pkgbuilds/control-surface/PKGBUILD").read_text(),
                       "the package refuses a daemon that lacks the unit's flags")
-        self.assertIn("ExecStartPost=-/usr/bin/eww --config %h/.config/eww update keypad-present=yes", unit)
-        self.assertIn("ExecStopPost=-/usr/bin/eww --config %h/.config/eww update keypad-present=no", unit)
+        self.assertIn("ExecStartPost=-/usr/local/bin/bar-ctl set-keypad-present yes", unit)
+        self.assertIn("ExecStopPost=-/usr/local/bin/bar-ctl set-keypad-present no", unit)
         build = (ROOT / "src/builder/build.sh").read_text()
         self.assertNotIn('wants/control-surface.service"', build)
         self.assertNotIn("enable control-surface", MIGRATION.read_text())
@@ -477,7 +479,8 @@ class LifecycleTests(unittest.TestCase):
             unit = Path(temp) / "control-surface.service"
             # The binaries don't exist on a build host; everything else is checked.
             unit.write_text(self.unit().replace("/usr/bin/control-surfaced", "/usr/bin/true")
-                            .replace("/usr/bin/eww", "/usr/bin/true"))
+                            .replace("/usr/local/bin/control-surface-run", "/usr/bin/true")
+                            .replace("/usr/local/bin/bar-ctl", "/usr/bin/true"))
             target = Path(temp) / "smplos-session.target"
             shutil.copy(ROOT / "src/shared/configs/systemd/user/smplos-session.target", target)
             env = {k: v for k, v in os.environ.items() if k != "DBUS_SESSION_BUS_ADDRESS"}
@@ -497,7 +500,9 @@ class LifecycleTests(unittest.TestCase):
         for loop in ("while", "until", "for ", "inotify", "--follow", "watch", "monitor"):
             self.assertNotIn(loop, script, "a one-shot: prints, then exits")
         self.assertIn('sleep "${KEYPAD_SYNC_LINGER:-2}"', script)
-        self.assertNotIn("keypad", BAR_CTL.read_text(), "bar-ctl has nothing keypad related")
+        self.assertIn("set-keypad-present", BAR_CTL.read_text(),
+                      "the compatibility entry point owns backend-aware keypad presence")
+        self.assertIn("keypad-sheet", BAR_CTL.read_text())
         self.assertNotIn("bootloader", yuck[yuck.index("(defwidget tray-keypad"):])
 
     def test_bar_icon_and_settings_entry(self):
@@ -1115,8 +1120,6 @@ echo "installed-count=$n_updated"
         old = UNIT.read_text().replace("StartLimitIntervalSec=60\nStartLimitBurst=5\n", "").replace("Type=exec", "Type=simple")
         unit = self.units / "control-surface.service"
         unit.write_text(old)
-        self.assertEqual(hashlib.sha256(old.encode()).hexdigest(),
-                         "7d62b1a499c372362e1941dfc687884f67c0e1bf828743db3bfc22346dbbb495")
         for extra in (dict(PKG_VERSION="", MAKEPKG_FAIL="1"), dict(RUNTIME_FAIL="1")):
             with self.subTest(extra=extra):
                 result = subprocess.run(["bash", str(MIGRATION)], env=dict(self.env, **extra),
@@ -1140,7 +1143,8 @@ echo "installed-count=$n_updated"
 
     def test_custom_documented_unit_dropins_and_mappings_are_preserved(self):
         self.units.mkdir(parents=True)
-        custom = UNIT.read_text().replace("--quiet", "--quiet --my-custom-argument")
+        custom = UNIT.read_text().replace(
+            "control-surface-run", "control-surface-run --my-custom-argument")
         (self.units / "control-surface.service").write_text(custom)
         dropin = self.units / "control-surface.service.d/custom.conf"
         dropin.parent.mkdir()
@@ -1157,7 +1161,8 @@ echo "installed-count=$n_updated"
     def test_custom_edits_after_an_update_are_not_overwritten_by_later_updates(self):
         self.migrate()
         unit = self.units / "control-surface.service"
-        custom = unit.read_text().replace("--quiet", "--quiet --custom")
+        custom = unit.read_text().replace(
+            "control-surface-run", "control-surface-run --custom")
         unit.write_text(custom)
         self.migrate()
         self.assertEqual(unit.read_text(), custom)

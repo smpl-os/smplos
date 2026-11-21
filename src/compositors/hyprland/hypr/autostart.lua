@@ -25,8 +25,9 @@ hl.on("hyprland.start", function()
     -- Restore last wallpaper (must run before bar to generate colors)
     hl.exec_cmd("bash -c 'theme-bg-init'")
 
-    -- Status bar (EWW) - launch after a short delay to ensure theme is ready
-    hl.exec_cmd("bash -c 'sleep 0.5 && bar-ctl start'")
+    -- Status bar: EWW by default, native only behind backend=smpl-bar.
+    -- The session keeps an EWW fallback when the native release is absent.
+    hl.exec_cmd("bash -c 'sleep 0.5 && bar-session-start'")
     -- Keep a hidden Start Menu running so Super shows it instantly (no-op for
     -- start-menu builds without resident support).
     hl.exec_cmd("bash -c 'sleep 2 && toggle-start-menu --preload'")

@@ -792,7 +792,7 @@ These need zero changes for DWM/X11:
 - `nightlight-ctl` -- gammastep works on both
 - `airplane-ctl` -- rfkill
 - `toggle-notif-center` -- process toggle, no compositor API
-- `bar-ctl` -- EWW CLI only
+- `bar-ctl` -- EWW by default; opt-in smpl-bar backend through one Unix socket
 - `theme-picker` -- rofi (works on X11)
 - `dc-theme` -- Double Commander JSON config
 - `st-theme` -- OSC escape sequences

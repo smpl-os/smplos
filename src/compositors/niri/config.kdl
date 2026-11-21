@@ -202,7 +202,9 @@ spawn-at-startup "dunst"
 spawn-at-startup "kb-sync"
 spawn-at-startup "generate-messenger-bindings"
 spawn-at-startup "sh" "-c" "theme-bg-init"
-spawn-at-startup "sh" "-c" "sleep 0.5 && bar-ctl start"
+// EWW by default; backend=smpl-bar opts into the native candidate. If its
+// published binary is absent, bar-session-start keeps the EWW fallback.
+spawn-at-startup "sh" "-c" "sleep 0.5 && bar-session-start"
 spawn-at-startup "window-guard"
 // niri-only: close start-menu / smpl-calendar on focus loss (Windows-
 // style click-outside-to-dismiss). On Hyprland this is handled by the

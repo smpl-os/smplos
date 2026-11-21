@@ -769,10 +769,19 @@ download_prebuilt_apps() {
         for app in "${SMPLOS_APP_BINS[@]}"; do
             install -m755 "$fallback_dir/$app" "$cache_dir/$app"
         done
+        for app in "${SMPLOS_APP_OPTIONAL_BINS[@]}"; do
+            if [[ -f "$fallback_dir/$app" ]]; then
+                install -m755 "$fallback_dir/$app" "$cache_dir/$app"
+            else
+                rm -f "$cache_dir/$app"
+            fi
+        done
         install -m644 "$fallback_dir/smpl-calendar-alertd.service" \
             "$cache_dir/smpl-calendar-alertd.service"
         # A manually supplied bundle has no verified release tag.
         rm -f "$apps_ver_file"
+        smplos_app_bundle_valid "$cache_dir" ||
+            die "smpl-apps: assembled manual fallback cache is invalid"
         have_apps=true
     fi
 

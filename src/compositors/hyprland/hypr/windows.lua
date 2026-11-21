@@ -74,7 +74,7 @@ hl.window_rule({
 local slint_apps = {
     "start-menu", "notif-center", "settings",
     "app-center", "webapp-center", "sync-center", "smpl-calendar",
-    "smpl-calendar-details", "hints-overlay",
+    "smpl-calendar-details", "hints-overlay", "smpl-bar",
 }
 hl.window_rule({
     match = { class = "^(" .. table.concat(slint_apps, "|") .. ")$" },
@@ -207,6 +207,43 @@ hl.window_rule({
     match = { class = "^(settings)$" },
     float = true, center = true,
     no_shadow = true,
+    animation = "popin",
+})
+
+-- Native bar candidate. The verified transport is currently an xdg-toplevel;
+-- popup windows share app ID smpl-bar and identify themselves by title.
+hl.window_rule({
+    match = { class = "^(smpl-bar)$", title = "^smpl-bar$" },
+    float = true, pin = true, no_focus = true, no_shadow = true,
+    border_size = 0, rounding = 0,
+    move = "2 (monitor_h-window_h)",
+})
+
+local smpl_bar_popups = "^smpl-bar:(quick-settings|usb|workspace-overview|keypad-cheatsheet|identify)$"
+hl.window_rule({
+    match = { class = "^(smpl-bar)$", title = smpl_bar_popups },
+    float = true, pin = true, no_shadow = true, border_size = 0,
+})
+hl.window_rule({
+    match = {
+        class = "^(smpl-bar)$",
+        title = "^smpl-bar:(keypad-cheatsheet|identify)$",
+    },
+    no_focus = true,
+})
+hl.window_rule({
+    match = { class = "^(smpl-bar)$", title = "^smpl-bar:(quick-settings|usb)$" },
+    move = "(monitor_w-window_w-2) (monitor_h-window_h-34)",
+})
+hl.window_rule({
+    match = {
+        class = "^(smpl-bar)$",
+        title = "^smpl-bar:(workspace-overview|keypad-cheatsheet|identify)$",
+    },
+    center = true,
+})
+hl.window_rule({
+    match = { class = "^(smpl-bar)$", title = "^smpl-bar:" },
     animation = "popin",
 })
 

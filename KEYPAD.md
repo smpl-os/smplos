@@ -152,10 +152,13 @@ daemon. Everything is driven by the device:
    `SYSTEMD_USER_WANTS=control-surface.service` starts the keypad app when that
    device appears.
 2. **Running.** `control-surface.service` has `BindsTo=smplos-keypad.device`
-   and `After=smplos-keypad.device`. `ExecStartPost` runs
-   `eww update keypad-present=yes`, and the bar shows the icon.
+   and `After=smplos-keypad.device`. `control-surface-run` keeps the
+   existing EWW push for backend `eww`. Behind explicit `backend=smpl-bar`
+   it starts the daemon without EWW flags and forwards typed
+   `control-surfaced cheatsheet --follow` JSON through
+   `bar-ctl keypad-sheet -`. `ExecStartPost` sets presence through `bar-ctl`.
 3. **Unplug.** The device unit goes away, `BindsTo=` stops the service, and
-   `ExecStopPost` runs `eww update keypad-present=no`.
+   `ExecStopPost` clears presence through `bar-ctl`.
 
 The unit has no `[Install]` section and is never enabled for a target. udev is
 the only thing that starts it (Settings' Start button and the login step below
@@ -168,8 +171,9 @@ Two one-shot checks cover the cases the events can't:
   `keypad-present` is a `deflisten` of `scripts/keypad-bar-sync.sh`, which
   prints `systemctl --user is-active control-surface.service` once and exits
   (after 2 s, so EWW reads the line first). EWW runs it when the bar opens or
-  reloads and never restarts a script that ended; `eww update` from the unit
-  overrides it. Nothing polls, and `bar-ctl` has nothing keypad related.
+  reloads and never restarts a script that ended; the backend-aware command
+  from the unit overrides it. The native bar discovers connected hardware in
+  its bounded system sample. Nothing polls.
 * **Keypad plugged in before login.** The user manager can miss an already-active
   device's `SYSTEMD_USER_WANTS`, or start the app before the graphical environment
   is available. At login, `smplos-session-services` imports the environment,
@@ -215,16 +219,22 @@ Backups and the last OS-installed unit are kept under
 `~/.local/state/smplos/keypad-units/`; customized units are reported, never
 silently replaced.
 
-`ExecStartPost`/`ExecStopPost` are `-` prefixed: with no bar running, `eww
-update` fails in about a second and never starts an EWW daemon.
+`ExecStartPost`/`ExecStopPost` are `-` prefixed: with no bar running, the
+backend command fails without starting another bar daemon.
 
 Measured on the development machine:
 
 | | Processes | Memory |
 |---|---|---|
 | No keypad plugged in | **0** | 0 |
-| Keypad plugged in | 1 (`control-surfaced`) | about 5.5–5.9 MB RSS, almost all shared library pages (320 kB or less anonymous) |
+| Keypad plugged in, EWW backend | 1 (`control-surfaced`) | about 5.5–5.9 MB RSS, almost all shared library pages (320 kB or less anonymous) |
 | For comparison, the first draft (EWW `deflisten` → `keypad-ctl watch` + `udevadm monitor`) | 2, on every machine | about 31.9 MB RSS |
+
+The native backend adds one lightweight shell follower and a resident
+`control-surfaced cheatsheet --follow` client only while a keypad service is
+active. It exists to bridge the daemon's published D-Bus contract to smpl-bar's
+IPC; no process is added to the no-keypad state and no shell runs inside
+smpl-bar's UI/compositor path.
 
 The "no keypad" row was measured by starting the bar config on a private Xvfb
 display and listing the EWW daemon's descendants: the old config started
@@ -345,7 +355,10 @@ closes the old window when that changes. Settings never combines it with
 "until hidden". An EWW without it only warns about the unknown property and
 keeps the window clickable. Migration `20261008-120000-eww-smplos-passthrough`
 rebuilds an older eww-smplos; the running bar keeps the old binary until the
-next login.
+next login. The native bar receives the same `options.clickThrough` field
+through `keypad-sheet`; its Winit xdg-toplevel still lacks compositor
+input-region support, so this remains an explicit compatibility gate rather
+than a pass-through claim.
 
 ### Icons
 
@@ -418,14 +431,15 @@ what the daemon uses (its `features`). It also adds:
   the saved config) and takes the sheet down after 8 s if the saved setting
   is "until hidden".
 
-The unit turns the push on with
-`ExecStart=/usr/bin/control-surfaced run --quiet --eww-window pad-cheatsheet --eww-config %h/.config/eww`
-(daemon b83980e or newer; the PKGBUILD refuses older sources). The daemon opens
-the window with `--anchor` from the `position` option and reopens it when the
-position changes. A keypad app started by hand without those flags doesn't
-push; Settings' **Show on screen** says so (it reads `GetStatus().cheatsheet.eww`).
-The config can still override the flags: `"cheatsheet": {"eww": false}` turns
-the push off.
+The unit delegates to `control-surface-run`. In EWW mode it starts
+`control-surfaced run --quiet --eww-window pad-cheatsheet --eww-config ...`
+(daemon b83980e or newer; the PKGBUILD refuses older sources). In native mode it
+uses no EWW sink flags and forwards the daemon's JSON follower through the bar
+IPC. The EWW daemon opens the window with `--anchor` from the `position` option
+and reopens it when the position changes. A keypad app started by hand without
+the EWW flags does not push to EWW; Settings' **Show on screen** reports the
+selected sink through `GetStatus()`. The config can still explicitly force the
+EWW sink off or on.
 
 ## Settings > Keypad
 

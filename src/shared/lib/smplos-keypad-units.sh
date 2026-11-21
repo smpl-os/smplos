@@ -50,7 +50,8 @@ smplos_keypad_known_unit() {
     case "${1##*/}:${digest%% *}" in
         # Published stock unit and the unmodified live-install unit.
         control-surface.service:7d62b1a499c372362e1941dfc687884f67c0e1bf828743db3bfc22346dbbb495|\
-        control-surface.service:ea6f35d910bc9b67f2d3601a27d08910693a8029e09891d879036638f1dc86f9) return 0 ;;
+        control-surface.service:ea6f35d910bc9b67f2d3601a27d08910693a8029e09891d879036638f1dc86f9|\
+        control-surface.service:013df80ba72b0f9f5a4b0f5e139fc930519567664f6075a5b3282df7d78cdcfd) return 0 ;;
         # Original coldplug helper and its RemainAfterExit repair.
         smplos-keypad-login.service:1dad7fdb11158b3d732695a92d84ae4a3b50333c811b61840104e685ae6ebeff|\
         smplos-keypad-login.service:b8d149479eebfe132679ef2939d921ba2e1522e250272e0f297ddca0e511a8ed) return 0 ;;

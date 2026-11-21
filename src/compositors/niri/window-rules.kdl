@@ -102,6 +102,36 @@ window-rule {
     shadow { off; }
 }
 
+// Native bar candidate. smpl-bar 5e220bd uses a Winit xdg-toplevel, not a
+// layer surface; this is the equivalent app/title contract on niri.
+window-rule {
+    match app-id="^smpl-bar$" title="^smpl-bar$"
+    open-floating true
+    open-focused false
+    default-floating-position x=2 y=0 relative-to="bottom-left"
+    focus-ring { off; }
+    border { off; }
+    shadow { off; }
+}
+
+window-rule {
+    match app-id="^smpl-bar$" title="^smpl-bar:(quick-settings|usb)$"
+    open-floating true
+    default-floating-position x=2 y=34 relative-to="bottom-right"
+    focus-ring { off; }
+    border { off; }
+    shadow { off; }
+}
+
+window-rule {
+    match app-id="^smpl-bar$" title="^smpl-bar:(workspace-overview|keypad-cheatsheet|identify)$"
+    open-floating true
+    open-focused false
+    focus-ring { off; }
+    border { off; }
+    shadow { off; }
+}
+
 // smpl Calendar — bottom-right (same anchor as notif-center, opens singly)
 window-rule {
     match app-id="^smpl-calendar$"

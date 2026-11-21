@@ -870,6 +870,13 @@ smpl-apps and runs `/usr/local/bin/smpl-calendar-alertd --foreground` under the
 user's `default.target`. A bare daemon invocation is not a substitute for
 installing this service.
 
+`smpl-bar` is intentionally prepared as a **validated optional twelfth
+binary**, not a current release requirement. Older published bundles remain
+complete with the 11 required apps. If and only if a published smpl-apps
+archive actually contains `smpl-bar`, OTA, ISO and manual fallback staging
+validate, install and checksum it automatically. No OS URL or manifest points
+at an unpublished app source, local checkout or nonexistent release asset.
+
 Both normal `src/build-iso.sh` builds and `--build-apps` use the latest published
 smpl-apps release, not a local Rust checkout. The standard build compares its
 tag with `.cache/app-binaries/.smpl-apps-version`; `--build-apps` calls
@@ -1047,6 +1054,10 @@ The smpl-apps bundle contract requires all **11** binaries, including
 `smpl-hints` and `smpl-hintsd`. Sync Center's executable is `sync-center-gui`
 but its window app ID is `sync-center`; `smpl-calendar-details` is a window
 from the calendar binary, and `hints-overlay` is owned by `smpl-hintsd`.
+`smpl-bar` is optional until the published bundle contains that ELF. A
+present `smpl-bar` receives the same linkage and checksum checks; an older
+release need not contain it. If a later bundle omits an already installed
+optional bar, the verified copy is retained rather than mixed or deleted.
 A matching version marker does not bypass missing-binary checks, either in
 the download cache or installed bundle. Optional XR binaries remain optional.
 When included in the installed bundle, they receive the same linkage preflight

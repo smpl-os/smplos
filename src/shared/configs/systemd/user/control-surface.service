@@ -13,12 +13,13 @@ StartLimitBurst=5
 
 [Service]
 Type=exec
-# --eww-*: the app pushes its cheatsheet into the bar's EWW (pad_sheet,
-# pad-cheatsheet) itself, only while it runs; no listener process.
-ExecStart=/usr/bin/control-surfaced run --quiet --eww-window pad-cheatsheet --eww-config %h/.config/eww
-# The bar icon is an EWW variable, set here instead of by a watcher process.
-# "-": no bar running yet is fine; keypad-bar-sync.sh sets it when the bar opens.
-ExecStartPost=-/usr/bin/eww --config %h/.config/eww update keypad-present=yes
-ExecStopPost=-/usr/bin/eww --config %h/.config/eww update keypad-present=no
+# The compatibility runner keeps the current EWW push for the EWW backend.
+# A smpl-bar selection disables that EWW sink and forwards typed cheatsheet
+# snapshots through smpl-bar's resident IPC instead.
+ExecStart=/usr/local/bin/control-surface-run
+# "-": either bar may not be running yet; EWW sync and smpl-bar discovery
+# reconcile the icon without a listener process.
+ExecStartPost=-/usr/local/bin/bar-ctl set-keypad-present yes
+ExecStopPost=-/usr/local/bin/bar-ctl set-keypad-present no
 Restart=on-failure
 RestartSec=2

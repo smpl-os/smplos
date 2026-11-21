@@ -457,6 +457,19 @@ class InstalledStateTests(unittest.TestCase):
         self.write(optional, b"\x7fELFchanged-XR")
         self.assertIn("differs from its retained checksum receipt", "\n".join(self.audit()["errors"]))
 
+    def test_retained_native_bar_from_iso_is_audited_as_optional(self):
+        optional = self.root / "usr/local/bin/smpl-bar"
+        self.write(optional, b"\x7fELFprevious-bar")
+        state = self.home / ".local/state/smplos/app-versions"
+        retained = f"{CHECK.digest(optional)}  {optional}\n"
+        self.write(state / "smpl-apps-retained.sha256", retained)
+        report = self.audit()
+        self.assertEqual(report["errors"], [])
+        self.assertEqual(
+            report["native_files"][str(optional)]["delivery"],
+            "retained-not-upgraded",
+        )
+
     def test_shared_library_abi_failure_is_explicit(self):
         self.ldd_error = "Hyprland"
         self.assertIn("libhyprutils.so.99", "\n".join(self.audit()["errors"]))

@@ -1,5 +1,5 @@
 #!/bin/bash
-# smplOS Popup Toggle -- opens one EWW popup, closes all others
+# smplOS Popup Toggle -- opens one bar popup, closes all others
 # Usage: popup-toggle <window-name>    Open/toggle a popup
 #        popup-toggle --close          Close all popups
 #
@@ -8,6 +8,7 @@
 #   - Works on both Wayland and X11 (no compositor-specific code)
 
 EWW="eww --config $HOME/.config/eww"
+BAR_CTL="${BAR_CTL:-bar-ctl}"
 
 # All known popup windows (add new popups here)
 POPUPS=(calendar-popup quick-settings notification-hub usb-popup workspace-overview)
@@ -36,6 +37,91 @@ close_all() {
   done
 }
 
+compact_calendar_running() {
+  local binary
+  binary=$(command -v smpl-calendar 2>/dev/null || true)
+  [[ -n "$binary" ]] && pgrep -f "^${binary}$" >/dev/null 2>&1
+}
+
+notification_center_running() {
+  pgrep -x notif-center >/dev/null 2>&1
+}
+
+close_resident_popups() {
+  if compact_calendar_running; then
+    toggle-calendar
+  fi
+  if notification_center_running; then
+    toggle-notif-center
+  fi
+}
+
+close_native_all() {
+  rm -f -- "${XDG_RUNTIME_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}}/smplos/native-popup.active"
+  "$BAR_CTL" close-popups
+  close_resident_popups
+}
+
+native_popup() {
+  local target="${1:-}"
+  local state_dir="${XDG_RUNTIME_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}}/smplos"
+  local state="$state_dir/native-popup.active"
+  if [[ "$target" == "--close" ]]; then
+    close_native_all
+    return
+  fi
+  case "$target" in
+    quick-settings)
+      native_open_or_close "$target" quick-settings "$state"
+      ;;
+    usb-popup)
+      native_open_or_close "$target" usb "$state"
+      ;;
+    workspace-overview)
+      native_open_or_close "$target" workspace-overview "$state"
+      ;;
+    notification-hub)
+      if notification_center_running; then
+        rm -f -- "$state"
+        "$BAR_CTL" close-popups
+        toggle-notif-center
+      else
+        close_native_all
+        toggle-notif-center
+      fi
+      ;;
+    calendar-popup)
+      if compact_calendar_running; then
+        rm -f -- "$state"
+        "$BAR_CTL" close-popups
+        toggle-calendar
+      else
+        close_native_all
+        toggle-calendar
+      fi
+      ;;
+    *)
+      echo "popup-toggle: unsupported popup '$target'" >&2
+      return 1
+      ;;
+  esac
+}
+
+native_open_or_close() {
+  local target="$1" command="$2" state="$3" current=""
+  [[ ! -f "$state" ]] || current=$(<"$state")
+  if [[ "$current" == "$target" ]]; then
+    "$BAR_CTL" close-popups
+    rm -f -- "$state"
+  else
+    close_resident_popups
+    "$BAR_CTL" close-popups
+    "$BAR_CTL" popup "$command" || return
+    mkdir -p "${state%/*}" || return
+    printf '%s\n' "$target" > "$state"
+  fi
+}
+
 # Open on the primary monitor (where the bar is) when it is known and
 # addressable; otherwise let EWW pick its default monitor. The primary is
 # resolved in the background (primary_fd) while the other popups close; a
@@ -49,6 +135,15 @@ open_popup() {
   fi
   $EWW open "$@"
 }
+
+# Native IPC owns quick settings, USB and workspace overview. Calendar and
+# notifications deliberately use their resident app toggles from the same
+# action surface rather than inventing unsupported IPC command names.
+backend=$("$BAR_CTL" backend 2>/dev/null) || backend=eww
+if [[ "$backend" == smpl-bar ]]; then
+  native_popup "${1:-}"
+  exit $?
+fi
 
 # --close: just close everything
 if [[ "${1:-}" == "--close" ]]; then
