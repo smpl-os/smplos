@@ -59,6 +59,7 @@ case "${1:-}" in
             mapfile -t legacy < <(legacy_pids)
             [[ ${#legacy[@]} -gt 0 ]] && kill "${legacy[@]}"
         fi
+        exit 0
         ;;
     *)
         # Signal a resident first: scanning processes (pgrep) costs ~20 ms.

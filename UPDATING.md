@@ -870,12 +870,27 @@ smpl-apps and runs `/usr/local/bin/smpl-calendar-alertd --foreground` under the
 user's `default.target`. A bare daemon invocation is not a substitute for
 installing this service.
 
-`smpl-bar` is intentionally prepared as a **validated optional twelfth
-binary**, not a current release requirement. Older published bundles remain
+`smpl-bar` is a **validated optional twelfth binary**, not a required app for
+older fleets. Older published bundles remain
 complete with the 11 required apps. If and only if a published smpl-apps
 archive actually contains `smpl-bar`, OTA, ISO and manual fallback staging
 validate, install and checksum it automatically. No OS URL or manifest points
 at an unpublished app source, local checkout or nonexistent release asset.
+
+EWW remains the installed and session default. Only `backend=smpl-bar` selects
+the native resident, and `bar-session-start` records the effective backend
+under the private user runtime directory. A missing binary, unsupported
+compositor, or unavailable pinned Wayland `smpl-bar-reservation` exclusive
+layer falls back to EWW. The visible `smpl-bar` window is distinct from that
+input-transparent layer namespace; the IPC socket is not used as the exclusive
+placement readiness signal.
+
+The control-surface runner forwards the daemon's keypad cheat-sheet JSON
+without rewriting it. Native X11 click-through uses an XShape input region; Wayland
+requests are rejected by smpl-bar rather than being converted to an unsafe
+claim. StatusNotifierItem/DBusMenu windows use the exact
+`smpl-bar:tray-menu` title rule. Start Menu and notification/calendar processes
+remain independently owned, with `popup-toggle` as the mutual-exclusion route.
 
 Both normal `src/build-iso.sh` builds and `--build-apps` use the latest published
 smpl-apps release, not a local Rust checkout. The standard build compares its

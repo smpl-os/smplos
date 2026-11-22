@@ -22,3 +22,12 @@ layer-rule {
     // the theme so it doesn't look out of place against rounded popups.
     geometry-corner-radius 8
 }
+
+// smpl-bar's layer shell is an input-transparent, exclusive-edge reservation;
+// the visible app-owned Slint surface remains a normal smpl-bar window.
+layer-rule {
+    match namespace="smpl-bar-reservation"
+    geometry-corner-radius 0
+    shadow { off; }
+    place-within-backdrop false
+}

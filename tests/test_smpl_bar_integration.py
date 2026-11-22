@@ -51,8 +51,23 @@ if args == ["--resident"]:
 if args == ["status"] and not ready.exists():
     sys.exit(1)
 if args == ["status"]:
-    print('{"resident":true}')
+    kind = "niri" if os.environ.get("NIRI_SOCKET") else (
+        "hyprland" if os.environ.get("HYPRLAND_INSTANCE_SIGNATURE") else "x11"
+    )
+    print(json.dumps({
+        "resident": True,
+        "compositor": kind,
+        "config": {"mode": os.environ.get("MOCK_PANEL_MODE", "pinned")},
+        "panel": {
+            "active": os.environ.get("MOCK_PANEL_ACTIVE", "1") == "1",
+            "transport": "wayland-layer-shell",
+        },
+    }))
 """,
+        )
+        self.tool(
+            "toggle-start-menu",
+            "#!/bin/sh\nprintf 'start-menu:%s\\n' \"$*\" >> \"$CALLS\"\n",
         )
         self.ready = self.root / "ready"
         self.env["READY"] = str(self.ready)
@@ -142,6 +157,27 @@ if args == ["status"]:
         self.assertIn("Invalid ws_count", result.stderr)
         self.assertFalse(self.calls.exists())
 
+    def test_native_apply_validates_panel_contract_values(self):
+        conf = self.home / ".config/smplos/bar.conf"
+        self.ready.touch()
+        conf.write_text("bar_edge=top\nbar_mode=floating\nbar_margin=24\n")
+        result = self.invoke(BAR_CTL, "apply", BAR_BACKEND="smpl-bar")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(["smpl-bar", "apply"], self.recorded())
+        self.calls.unlink()
+        for contents, message in (
+            ("bar_edge=side\n", "Invalid bar_edge"),
+            ("bar_mode=overlay\n", "Invalid bar_mode"),
+            ("bar_margin=25\n", "Invalid bar_margin"),
+            ("bar_edge=top\nbar_edge=bottom\n", "Duplicate bar_edge"),
+        ):
+            with self.subTest(contents=contents):
+                conf.write_text(contents)
+                result = self.invoke(BAR_CTL, "apply", BAR_BACKEND="smpl-bar")
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn(message, result.stderr)
+                self.assertFalse(self.calls.exists())
+
     def test_native_start_owns_resident_lifecycle_and_keypad_payloads(self):
         result = self.invoke(BAR_CTL, "start", BAR_BACKEND="smpl-bar")
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -179,13 +215,13 @@ exit 1
         pid = int(resident_pid.read_text())
         self.assertFalse(Path(f"/proc/{pid}").exists())
 
-    def test_native_winit_bar_is_gated_on_niri_until_layer_shell_exists(self):
+    def test_native_bar_starts_on_niri_with_layer_reservation(self):
         result = self.invoke(
             BAR_CTL, "start", BAR_BACKEND="smpl-bar", NIRI_SOCKET="/tmp/niri.sock"
         )
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("persistent Niri layer surface", result.stderr)
-        self.assertNotIn(["smpl-bar", "--resident"], self.recorded())
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(["smpl-bar", "--resident"], self.recorded())
+        self.assertIn(["smpl-bar", "show"], self.recorded())
 
     def test_popup_compatibility_uses_verified_native_commands(self):
         self.ready.touch()
@@ -193,6 +229,7 @@ exit 1
         self.tool("toggle-calendar", "#!/bin/sh\nprintf 'calendar\\n' >> \"$CALLS\"\n")
         common = dict(BAR_BACKEND="smpl-bar", BAR_CTL=str(BAR_CTL))
         for window, expected in (
+            ("start-menu", "start-menu:"),
             ("quick-settings", ["smpl-bar", "popup", "quick-settings"]),
             ("usb-popup", ["smpl-bar", "popup", "usb"]),
             ("workspace-overview", ["smpl-bar", "popup", "workspace-overview"]),
@@ -209,6 +246,8 @@ exit 1
                     self.assertIn(["smpl-bar", "close-popups"], rows)
                 else:
                     self.assertIn(["smpl-bar", "close-popups"], rows)
+                if window != "start-menu":
+                    self.assertIn("start-menu:--hide", rows)
         result = self.invoke(POPUP, "--close", **common)
         self.assertEqual(result.returncode, 0)
         self.assertIn(["smpl-bar", "close-popups"], self.recorded())
@@ -248,13 +287,25 @@ printf '%s|%s|%s\n' "$BAR_BACKEND" "$1" "$FAIL_NATIVE" >> "$CALLS"
         )
         self.assertNotEqual(result.returncode, 0)
 
-    def test_native_resident_status_cannot_bypass_niri_gate(self):
+    def test_native_resident_requires_a_pinned_wayland_reservation(self):
         self.ready.touch()
         result = self.invoke(
-            BAR_CTL, "start", BAR_BACKEND="smpl-bar", NIRI_SOCKET="/tmp/niri.sock"
+            BAR_CTL, "start", BAR_BACKEND="smpl-bar",
+            NIRI_SOCKET="/tmp/niri.sock", MOCK_PANEL_ACTIVE="0",
         )
         self.assertNotEqual(result.returncode, 0)
-        self.assertNotIn(["smpl-bar", "show"], self.recorded())
+        self.assertIn("panel transport is unavailable", result.stderr)
+        self.assertIn(["smpl-bar", "show"], self.recorded())
+        self.assertIn(["smpl-bar", "hide"], self.recorded())
+
+    def test_floating_wayland_panel_does_not_require_exclusive_reservation(self):
+        result = self.invoke(
+            BAR_CTL, "start", BAR_BACKEND="smpl-bar",
+            HYPRLAND_INSTANCE_SIGNATURE="fixture", WAYLAND_DISPLAY="wayland-1",
+            MOCK_PANEL_MODE="floating", MOCK_PANEL_ACTIVE="0",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(["smpl-bar", "show"], self.recorded())
 
     def test_control_surface_selects_the_sink_only_for_its_backend(self):
         daemon = self.tool(
@@ -301,10 +352,20 @@ fi
             self.assertIn("quick-settings", text)
             self.assertIn("workspace-overview", text)
             self.assertIn("keypad-cheatsheet", text)
+            self.assertIn("tray-menu", text)
+            self.assertIn("panel-(top|bottom)-(pinned|floating)", text)
+            self.assertIn("smpl-bar-preview", text)
+            self.assertIn("smpl-bar-reservation", text)
         niri = (ROOT / "src/compositors/niri/window-rules.kdl").read_text()
         self.assertIn('app-id="^smpl-bar$"', niri)
-        self.assertIn('title="^smpl-bar$', niri)
+        self.assertIn("panel-(top|bottom)-(pinned|floating)", niri)
+        self.assertIn("tray-menu", niri)
+        self.assertIn("identify(:.*)?", niri)
         self.assertIn("open-focused false", niri)
+        self.assertIn(
+            'namespace="smpl-bar-reservation"',
+            (ROOT / "src/compositors/niri/layer-rules.kdl").read_text(),
+        )
         self.assertIn("no_focus", "\n".join(
             path.read_text() for path in paths
         ))

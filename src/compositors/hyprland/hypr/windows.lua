@@ -21,6 +21,9 @@ for _, ns in ipairs(eww_namespaces) do
     hl.layer_rule({ match = { namespace = ns }, ignore_alpha = 0.1 })
     hl.layer_rule({ match = { namespace = ns }, xray = false })
 end
+hl.layer_rule({ match = { namespace = "smpl-bar-reservation" }, no_anim = true })
+hl.layer_rule({ match = { namespace = "smpl-bar-reservation" }, blur = false })
+hl.layer_rule({ match = { namespace = "smpl-bar-reservation" }, xray = false })
 
 require("keypad_glass")
 
@@ -74,7 +77,7 @@ hl.window_rule({
 local slint_apps = {
     "start-menu", "notif-center", "settings",
     "app-center", "webapp-center", "sync-center", "smpl-calendar",
-    "smpl-calendar-details", "hints-overlay", "smpl-bar",
+    "smpl-calendar-details", "hints-overlay", "smpl-bar", "smpl-bar-preview",
 }
 hl.window_rule({
     match = { class = "^(" .. table.concat(slint_apps, "|") .. ")$" },
@@ -210,16 +213,23 @@ hl.window_rule({
     animation = "popin",
 })
 
--- Native bar candidate. The verified transport is currently an xdg-toplevel;
--- popup windows share app ID smpl-bar and identify themselves by title.
+-- Native panel. The visible xdg-toplevel is placed directly by smpl-bar; the
+-- transparent smpl-bar-reservation layer surface owns the exclusive zone.
+local smpl_bar_panel = "^smpl-bar(:panel-(top|bottom)-(pinned|floating))?$"
 hl.window_rule({
-    match = { class = "^(smpl-bar)$", title = "^smpl-bar$" },
+    match = { class = "^(smpl-bar)$", title = smpl_bar_panel },
     float = true, pin = true, no_focus = true, no_shadow = true,
     border_size = 0, rounding = 0,
-    move = "2 (monitor_h-window_h)",
 })
 
-local smpl_bar_popups = "^smpl-bar:(quick-settings|usb|workspace-overview|keypad-cheatsheet|identify)$"
+hl.window_rule({
+    match = { class = "^(smpl-bar-preview)$", title = "^smpl-bar-preview$" },
+    float = true, pin = true, no_focus = true, no_shadow = true,
+    border_size = 0, rounding = 0,
+})
+
+local smpl_bar_popups =
+    "^smpl-bar:(quick-settings|usb|workspace-overview|keypad-cheatsheet|tray-menu|identify(:.*)?)$"
 hl.window_rule({
     match = { class = "^(smpl-bar)$", title = smpl_bar_popups },
     float = true, pin = true, no_shadow = true, border_size = 0,
@@ -227,18 +237,18 @@ hl.window_rule({
 hl.window_rule({
     match = {
         class = "^(smpl-bar)$",
-        title = "^smpl-bar:(keypad-cheatsheet|identify)$",
+        title = "^smpl-bar:(keypad-cheatsheet|identify(:.*)?)$",
     },
     no_focus = true,
 })
 hl.window_rule({
-    match = { class = "^(smpl-bar)$", title = "^smpl-bar:(quick-settings|usb)$" },
+    match = { class = "^(smpl-bar)$", title = "^smpl-bar:(quick-settings|usb|tray-menu)$" },
     move = "(monitor_w-window_w-2) (monitor_h-window_h-34)",
 })
 hl.window_rule({
     match = {
         class = "^(smpl-bar)$",
-        title = "^smpl-bar:(workspace-overview|keypad-cheatsheet|identify)$",
+        title = "^smpl-bar:(workspace-overview|keypad-cheatsheet|identify(:.*)?)$",
     },
     center = true,
 })

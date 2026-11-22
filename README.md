@@ -388,20 +388,27 @@ and full-line comments are supported.
 EWW remains the default and is never removed. `~/.config/smplos/bar.conf` has a
 compatibility selector, `backend=eww|smpl-bar`; `BAR_BACKEND` overrides that
 value for one command or a side-by-side qualification session. The selector is
-separate from Settings' seven taskbar values, and Settings preserves unknown
+separate from the taskbar values, and Settings preserves unknown
 `bar.conf` keys. Missing files and older configs therefore continue to select
 EWW.
 
 `bar-ctl` keeps the existing `start`, `stop`, `toggle`, `reload`, `ensure`,
 `redraw`, `refresh`, `watch` and `apply` commands. With the native backend
 selected, it forwards controls through smpl-bar's CLI and resident Unix socket
-at `${XDG_RUNTIME_DIR:-/run/user/$UID}/smplos/smpl-bar.sock`. Additional
-pass-throughs are `status`, `identify`, `popup`, `set-keypad-present`,
-`keypad-sheet`, `close-popups` and `telemetry-sample`.
+at `${XDG_RUNTIME_DIR:-/run/user/$UID}/smplos/smpl-bar.sock`. The compatibility
+file also accepts the native `bar_edge=top|bottom`,
+`bar_mode=pinned|floating` and `bar_margin=0..24` panel values. Duplicate or
+out-of-range values fail before the resident starts. Additional pass-throughs
+are `status`, `identify`, `popup`, `set-keypad-present`, `keypad-sheet`,
+`close-popups` and `telemetry-sample`.
 
 Session startup calls `bar-session-start`: it starts only EWW by default,
 starts the native resident only when explicitly selected, and falls back to
-EWW when the published smpl-bar binary is unavailable. For manual coexistence:
+EWW when the published smpl-bar binary, compositor state or a pinned Wayland
+`wlr-layer-shell` reservation is unavailable. Floating mode intentionally has
+no exclusive zone. X11 uses the app's EWMH strut instead. `smpl-bar status`
+is the readiness source of truth; an IPC socket alone does not prove that a
+pinned panel owns the work-area reservation.
 
 ```bash
 BAR_BACKEND=smpl-bar bar-ctl start   # the existing EWW remains running
@@ -424,14 +431,26 @@ raw samples and never claim a paint-speed win without an equivalent EWW
 first-paint fixture. Layout, compositing, event and popup work must stay
 event-driven, resident, and allocation-light.
 
-The verified native release contract currently exposes IPC popups for quick
-settings, USB, workspace overview and keypad sheets. Calendar and notification
-surface toggles retain the existing `toggle-calendar` and
-`toggle-notif-center` app ownership after native popups are closed. Native
-click-through is forwarded in the keypad sheet JSON, but the current Winit
-build still requires real compositor input-region support before it can claim
-pass-through parity. smpl-bar's windows are regular transparent xdg-toplevels
-until its layer-shell/exclusive-zone and SNI gates are complete.
+The native release renders the visible `smpl-bar` (or qualification-only
+`smpl-bar-preview`) xdg-toplevel, and reserves a pinned top or bottom edge with
+the input-transparent `smpl-bar-reservation` Wayland layer. The app directly
+places that surface on the workspace-policy primary monitor; Hyprland and Niri
+only provide no-focus/border/shadow and popup identity rules. Dynamic panel
+titles include `smpl-bar:panel-(top|bottom)-(pinned|floating)`.
+
+IPC popups cover quick settings, USB and workspace overview; the keypad sheet
+uses `keypad-sheet` IPC. Calendar and notification surfaces retain ownership by
+`toggle-calendar` and `toggle-notif-center`. Start Menu remains a resident
+process: native-bar activation signals the validated resident PID, while other
+popup routes close it with the existing `toggle-start-menu --hide` contract.
+`smpl-bar:tray-menu` is allowed as a native SNI/DBusMenu popup. Opening any
+bar popup closes the other native and resident popup owners; global native
+close never launches a hidden app.
+
+Keypad `options.clickThrough` is forwarded unchanged. The native bar implements
+real input-shape pass-through on X11 and rejects a requested click-through
+sheet on Wayland instead of claiming an empty compositor input region. A
+normal EWW overlay retains the existing compositor-specific behavior.
 
 Keyboard workspace selection, bar clicks, and existing-app shortcuts follow a
 workspace to its home instead of swapping it onto another monitor. Local

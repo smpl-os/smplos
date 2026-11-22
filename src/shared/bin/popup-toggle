@@ -47,19 +47,32 @@ notification_center_running() {
   pgrep -x notif-center >/dev/null 2>&1
 }
 
+close_start_menu() {
+  toggle-start-menu --hide
+}
+
 close_resident_popups() {
-  if compact_calendar_running; then
+  local except="${1:-}"
+  if [[ "$except" != calendar-popup ]] && compact_calendar_running; then
     toggle-calendar
   fi
-  if notification_center_running; then
+  if [[ "$except" != notification-hub ]] && notification_center_running; then
     toggle-notif-center
+  fi
+  if [[ "$except" != start-menu ]]; then
+    close_start_menu
   fi
 }
 
 close_native_all() {
   rm -f -- "${XDG_RUNTIME_DIR:-${XDG_CACHE_HOME:-$HOME/.cache}}/smplos/native-popup.active"
   "$BAR_CTL" close-popups
-  close_resident_popups
+  if compact_calendar_running; then
+    toggle-calendar
+  fi
+  if notification_center_running; then
+    toggle-notif-center
+  fi
 }
 
 native_popup() {
@@ -80,25 +93,23 @@ native_popup() {
     workspace-overview)
       native_open_or_close "$target" workspace-overview "$state"
       ;;
+    start-menu)
+      rm -f -- "$state"
+      "$BAR_CTL" close-popups
+      close_resident_popups start-menu
+      toggle-start-menu
+      ;;
     notification-hub)
-      if notification_center_running; then
-        rm -f -- "$state"
-        "$BAR_CTL" close-popups
-        toggle-notif-center
-      else
-        close_native_all
-        toggle-notif-center
-      fi
+      rm -f -- "$state"
+      "$BAR_CTL" close-popups
+      close_resident_popups notification-hub
+      toggle-notif-center
       ;;
     calendar-popup)
-      if compact_calendar_running; then
-        rm -f -- "$state"
-        "$BAR_CTL" close-popups
-        toggle-calendar
-      else
-        close_native_all
-        toggle-calendar
-      fi
+      rm -f -- "$state"
+      "$BAR_CTL" close-popups
+      close_resident_popups calendar-popup
+      toggle-calendar
       ;;
     *)
       echo "popup-toggle: unsupported popup '$target'" >&2
@@ -114,7 +125,7 @@ native_open_or_close() {
     "$BAR_CTL" close-popups
     rm -f -- "$state"
   else
-    close_resident_popups
+    close_resident_popups "$target"
     "$BAR_CTL" close-popups
     "$BAR_CTL" popup "$command" || return
     mkdir -p "${state%/*}" || return
@@ -153,6 +164,13 @@ if [[ "${1:-}" == "--close" ]]; then
 fi
 
 WINDOW="${1:?Usage: popup-toggle <window-name> | --close}"
+
+if [[ "$WINDOW" == start-menu ]]; then
+  close_all
+  close_resident_popups start-menu
+  toggle-start-menu
+  exit $?
+fi
 
 # Toggle: if open, close; if closed, close others and open
 if is_window_open "$WINDOW"; then

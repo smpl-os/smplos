@@ -356,9 +356,11 @@ closes the old window when that changes. Settings never combines it with
 keeps the window clickable. Migration `20261008-120000-eww-smplos-passthrough`
 rebuilds an older eww-smplos; the running bar keeps the old binary until the
 next login. The native bar receives the same `options.clickThrough` field
-through `keypad-sheet`; its Winit xdg-toplevel still lacks compositor
-input-region support, so this remains an explicit compatibility gate rather
-than a pass-through claim.
+through `keypad-sheet` without rewriting it. On X11 the app applies a real
+XShape input region and leaves the visible cheatsheet on screen. On Hyprland
+and Niri a click-through request is rejected because Winit does not expose a
+real Wayland compositor input-region handle; smplOS does not substitute a JSON
+flag for safe pass-through.
 
 ### Icons
 

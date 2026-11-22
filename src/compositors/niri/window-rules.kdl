@@ -102,20 +102,19 @@ window-rule {
     shadow { off; }
 }
 
-// Native bar candidate. smpl-bar 5e220bd uses a Winit xdg-toplevel, not a
-// layer surface; this is the equivalent app/title contract on niri.
+// Native bar panel. The app moves the visible xdg-toplevel directly and uses
+// a separate transparent smpl-bar-reservation layer to own the exclusive zone.
 window-rule {
-    match app-id="^smpl-bar$" title="^smpl-bar$"
+    match app-id="^smpl-bar$" title="^smpl-bar(:panel-(top|bottom)-(pinned|floating))?$"
     open-floating true
     open-focused false
-    default-floating-position x=2 y=0 relative-to="bottom-left"
     focus-ring { off; }
     border { off; }
     shadow { off; }
 }
 
 window-rule {
-    match app-id="^smpl-bar$" title="^smpl-bar:(quick-settings|usb)$"
+    match app-id="^smpl-bar$" title="^smpl-bar:(quick-settings|usb|tray-menu)$"
     open-floating true
     default-floating-position x=2 y=34 relative-to="bottom-right"
     focus-ring { off; }
@@ -124,7 +123,7 @@ window-rule {
 }
 
 window-rule {
-    match app-id="^smpl-bar$" title="^smpl-bar:(workspace-overview|keypad-cheatsheet|identify)$"
+    match app-id="^smpl-bar$" title="^smpl-bar:(workspace-overview|keypad-cheatsheet|identify(:.*)?)$"
     open-floating true
     open-focused false
     focus-ring { off; }

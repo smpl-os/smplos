@@ -81,7 +81,7 @@ src/compositors/dwm/
 | `dwm-autostart` | Run commands on startup | `exec-once` in autostart.conf |
 | `dwm-fakefullscreen` | Fullscreen within tile | `fullscreenstate` dispatcher |
 | `dwm-pertag` | Per-tag layout memory | Hyprland does this natively |
-| `dwm-systray` | System tray in bar | EWW tray (if EWW handles it) or standalone `trayer` |
+| `dwm-systray` | System tray in bar | EWW fallback or native smpl-bar SNI/DBusMenu host |
 | `dwm-swallow` | Terminal swallows GUI apps | Not needed but nice to have |
 | `dwm-cfacts` | Resize slaves | `resizeactive` dispatcher |
 | `dwm-vanitygaps` | Gaps between windows | `general:gaps_in/gaps_out` |

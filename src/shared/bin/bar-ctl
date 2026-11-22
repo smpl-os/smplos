@@ -57,7 +57,8 @@ native_bar_cmd() {
 }
 
 native_bar_preflight() {
-    local key val ws_count=4 ws_position=center ws_spacing=1 ws_style=numbers
+    local key val ws_count=4 ws_position=left ws_spacing=1 ws_style=numbers
+    local bar_edge=bottom bar_mode=pinned bar_margin=2
     local -A seen=()
     [[ ! -f "$BAR_CONF" ]] || {
         while IFS='=' read -r key val || [[ -n "$key" ]]; do
@@ -67,7 +68,7 @@ native_bar_preflight() {
             val="${val%"${val##*[![:space:]]}"}"
             [[ -z "$key" || "$key" == \#* ]] && continue
             case "$key" in
-                ws_count|ws_position|ws_spacing|ws_style)
+                ws_count|ws_position|ws_spacing|ws_style|bar_edge|bar_mode|bar_margin)
                     [[ -z "${seen[$key]:-}" ]] ||
                         { bar_backend_error "Duplicate $key"; return 1; }
                     seen[$key]=1
@@ -78,6 +79,9 @@ native_bar_preflight() {
                 ws_position) ws_position="$val" ;;
                 ws_spacing) ws_spacing="$val" ;;
                 ws_style) ws_style="$val" ;;
+                bar_edge) bar_edge="$val" ;;
+                bar_mode) bar_mode="$val" ;;
+                bar_margin) bar_margin="$val" ;;
             esac
         done < "$BAR_CONF" || { bar_backend_error "Cannot read $BAR_CONF"; return 1; }
     }
@@ -89,17 +93,44 @@ native_bar_preflight() {
         { bar_backend_error "Invalid ws_position: $ws_position"; return 1; }
     [[ "$ws_style" == numbers || "$ws_style" == squares ]] ||
         { bar_backend_error "Invalid ws_style: $ws_style"; return 1; }
+    [[ "$bar_edge" == top || "$bar_edge" == bottom ]] ||
+        { bar_backend_error "Invalid bar_edge: $bar_edge"; return 1; }
+    [[ "$bar_mode" == pinned || "$bar_mode" == floating ]] ||
+        { bar_backend_error "Invalid bar_mode: $bar_mode"; return 1; }
+    [[ "$bar_margin" =~ ^([0-9]|1[0-9]|2[0-4])$ ]] ||
+        { bar_backend_error "Invalid bar_margin: $bar_margin (expected 0-24)"; return 1; }
+}
+
+native_bar_ready() {
+    local status
+    status=$(native_bar_cmd status 2>/dev/null) || return 1
+    jq -e '
+        (.compositor == "hyprland" or .compositor == "niri" or .compositor == "x11") and
+        (if (.compositor == "hyprland" or .compositor == "niri") and
+             .config.mode == "pinned"
+         then .panel.active == true and .panel.transport == "wayland-layer-shell"
+         else true
+         end)
+    ' >/dev/null <<< "$status"
 }
 
 native_bar_start() {
     local pid attempt
-    if [[ -n "${NIRI_SOCKET:-}" && "${SMPLOS_BAR_PREVIEW:-0}" != 1 ]]; then
-        bar_backend_error "smpl-bar's current Winit build is not a persistent Niri layer surface; use the EWW backend"
-        return 1
-    fi
     if native_bar_cmd status >/dev/null 2>&1; then
-        native_bar_cmd show
-        return
+        if native_bar_ready; then
+            native_bar_cmd show
+            return
+        fi
+        native_bar_cmd show || return
+        for ((attempt=0; attempt<20; attempt++)); do
+            if native_bar_ready; then
+                return
+            fi
+            sleep 0.1
+        done
+        native_bar_cmd hide >/dev/null 2>&1 || true
+        bar_backend_error "smpl-bar is ready but its panel transport is unavailable; keeping the EWW fallback"
+        return 1
     fi
     setsid smpl-bar --resident </dev/null >> "$LOG" 2>&1 &
     pid=$!
@@ -112,8 +143,19 @@ native_bar_start() {
     for ((attempt=0; attempt<100; attempt++)); do
         if native_bar_cmd status >/dev/null 2>&1; then
             if native_bar_cmd show; then
+                for ((attempt=0; attempt<20; attempt++)); do
+                    if native_bar_ready; then
+                        trap - EXIT HUP INT TERM
+                        return
+                    fi
+                    sleep 0.1
+                done
+                native_bar_cmd hide >/dev/null 2>&1 || true
+                kill "$pid" 2>/dev/null || true
+                wait "$pid" 2>/dev/null || true
                 trap - EXIT HUP INT TERM
-                return
+                bar_backend_error "smpl-bar IPC is ready but its panel transport is unavailable; keeping the EWW fallback"
+                return 1
             fi
             kill "$pid" 2>/dev/null || true
             wait "$pid" 2>/dev/null || true
