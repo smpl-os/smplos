@@ -832,6 +832,21 @@ class Audit:
                         return
                     plan["targets"][name] = version
                 plan["removals"] = self.planned_removals(plan["targets"])
+                required = installed_closure(records, pins)
+                abi_additions = {}
+                for name in set(plan["targets"]) & required - pins.keys():
+                    current = {
+                        value for value in records[name].get("Provides", [])
+                        if ".so" in value and value != "None"
+                    }
+                    target = {
+                        value for value in self.planned_metadata[name].get("Provides", [])
+                        if ".so" in value and value != "None"
+                    }
+                    if current != target:
+                        abi_additions[name] = (
+                            "provides shared-object ABI required by the protected stack"
+                        )
                 blocked = {name for name in plan["targets"] if self.ignored_candidate(name)}
                 for name, metadata in self.planned_metadata.items():
                     if any(re.split(r"[<>=]", value, maxsplit=1)[0] in pins and
@@ -848,12 +863,19 @@ class Audit:
                         break
                     blocked.update(dependents)
                 additions = blocked.intersection(packages).difference(pins)
+                additions.update(abi_additions)
                 if blocked:
                     if not additions:
                         self.error("Configured holds prevent the prepared dependency/replacement transaction")
                         return
                     for name in additions:
                         pins[name] = {"version": packages[name], "reason": "preserves configured dependency/replacement holds"}
+                    plan["targets"] = {}
+                    plan["removals"] = {}
+                    continue
+                if abi_additions:
+                    for name, reason in abi_additions.items():
+                        pins[name] = {"version": packages[name], "reason": reason}
                     plan["targets"] = {}
                     plan["removals"] = {}
                     continue

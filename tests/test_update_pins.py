@@ -35,6 +35,7 @@ class PinPlanTests(unittest.TestCase):
         self.ignores = ""
         self.groups = ""
         self.repo_groups = ""
+        self.target_provides = {}
         self.database = self.fixture.base / "db"
         (self.database / "local").mkdir(parents=True)
         (self.database / "local/ALPM_DB_VERSION").write_text("9\n")
@@ -57,7 +58,12 @@ class PinPlanTests(unittest.TestCase):
             return subprocess.CompletedProcess(args, 0, f"Name : hyprland\nVersion : {self.available}\nReplaces : None\nConflicts With : None\n", "")
         if args[:2] == ("pacman", "-Si"):
             versions = dict(line.split() for line in self.responses_used.splitlines())
-            output = "".join(f"Name : {name}\nVersion : {versions[name]}\nReplaces : None\nConflicts With : None\n\n" for name in args[2:])
+            output = "".join(
+                f"Name : {name}\nVersion : {versions[name]}\n"
+                f"Provides : {' '.join(self.target_provides.get(name, self.fixture.provides.get(name, ['None'])))}\n"
+                "Depends On : None\nReplaces : None\nConflicts With : None\n\n"
+                for name in args[2:]
+            )
             return subprocess.CompletedProcess(args, 0, output, "")
         if args[:2] == ("pacman", "-Su"):
             self.previews.append(args)
@@ -134,6 +140,26 @@ class PinPlanTests(unittest.TestCase):
         self.assertIn("hyprland", pins["library"]["reason"])
         self.assertIn("unavailable with the approved stack", pins["editor"]["reason"])
         self.assertEqual(len(self.previews), 4)
+
+    def test_successful_preview_pins_provider_whose_soname_changes(self):
+        self.patterns += "ffmpeg\n"
+        (self.policy / "critical-packages.txt").write_text(self.patterns)
+        self.fixture.packages.update({"ffmpeg": "1-1", "libjxl": "1-1", "imv": "1-1"})
+        self.fixture.dependencies["ffmpeg"] = ["libjxl"]
+        self.fixture.provides["libjxl"] = ["libjxl.so=0.12-64"]
+        self.target_provides["libjxl"] = ["libjxl.so=0.13-64"]
+        self.responses = [
+            (0, "libjxl 2-1\nimv 2-1\n", ""),
+            (1, "", ":: unable to satisfy dependency 'libjxl.so=0.13-64' required by imv\n"),
+            (0, "tailscale 2-1\n", ""),
+        ]
+        audit = self.plan()
+        self.assertEqual(audit.report["errors"], [])
+        pins = audit.report["pin_plan"]["pins"]
+        self.assertIn("libjxl", pins)
+        self.assertIn("imv", pins)
+        self.assertIn("shared-object ABI", pins["libjxl"]["reason"])
+        self.assertEqual(audit.report["pin_plan"]["targets"], {"tailscale": "2-1"})
 
     def test_unknown_or_unrelated_solver_errors_are_not_hidden_by_freezing_more_packages(self):
         for output in (
