@@ -925,7 +925,10 @@ install_prebuilt_apps() {
         log_error "No pre-built binaries at $bin_dir; run build-apps.sh before build-iso.sh"
         return 1
     fi
-    smplos_app_bundle_valid "$bin_dir" || return 1
+    # The downloaded release is checksum-verified by build-iso.sh on the host.
+    # This bare Arch builder has not installed the target runtime libraries yet,
+    # so validate ELF shape here instead of asking ldd to resolve the target OS.
+    smplos_app_bundle_valid "$bin_dir" smplos_app_is_elf || return 1
 
     # ── st-wl terminal ──
     # As of 2026-07-26, the only st we can install is st-wl, fetched by

@@ -420,6 +420,22 @@ fi
         self.assertNotEqual(valid().returncode, 0)
         shutil.copy2("/bin/true", bundle / "smpl-bar")
         self.assertEqual(valid().returncode, 0)
+        target_runtime = 'ldd() { echo "libfreetype.so.6 => not found"; return 1; }'
+        default_linkage = subprocess.run(
+            ["bash", "-c",
+             f'source "{library}"; {target_runtime}; smplos_app_bundle_valid "$1"',
+             "_", str(bundle)],
+            capture_output=True, text=True, timeout=10,
+        )
+        self.assertNotEqual(default_linkage.returncode, 0)
+        shape_only = subprocess.run(
+            ["bash", "-c",
+             f'source "{library}"; {target_runtime}; '
+             'smplos_app_bundle_valid "$1" smplos_app_is_elf',
+             "_", str(bundle)],
+            capture_output=True, text=True, timeout=10,
+        )
+        self.assertEqual(shape_only.returncode, 0, shape_only.stderr)
 
         archive = self.root / "smpl-apps-old.tar.gz"
         with tarfile.open(archive, "w:gz") as output:

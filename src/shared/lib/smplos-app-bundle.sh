@@ -67,7 +67,7 @@ smplos_xr_file_valid() {
 }
 
 smplos_app_binaries_valid() {
-    local dir="$1" app
+    local dir="$1" optional_validator="${2:-smplos_app_linkage_valid}" app
     for app in "${SMPLOS_APP_BINS[@]}"; do
         if ! smplos_app_is_elf "$dir/$app"; then
             echo "smpl-apps: missing or invalid binary: $dir/$app" >&2
@@ -76,7 +76,7 @@ smplos_app_binaries_valid() {
     done
     for app in "${SMPLOS_APP_OPTIONAL_BINS[@]}"; do
         if [[ -e "$dir/$app" || -L "$dir/$app" ]] &&
-            ! smplos_app_linkage_valid "$dir/$app"; then
+            ! "$optional_validator" "$dir/$app"; then
             echo "smpl-apps: invalid optional binary: $dir/$app" >&2
             return 1
         fi
@@ -90,7 +90,7 @@ smplos_calendar_service_valid() {
 }
 
 smplos_app_bundle_valid() {
-    smplos_app_binaries_valid "$1" || return 1
+    smplos_app_binaries_valid "$1" "${2:-smplos_app_linkage_valid}" || return 1
     if ! smplos_calendar_service_valid "$1/smpl-calendar-alertd.service"; then
         echo "smpl-apps: missing or incompatible calendar reminder service: $1" >&2
         return 1
