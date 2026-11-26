@@ -115,7 +115,7 @@ native_bar_ready() {
 }
 
 native_bar_anchor() {
-    local client layer status address edge margin client_height pinned x y width height
+    local client layer status active previous address edge margin client_height pinned x y width height
     [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]] || return 0
     client=$(hyprctl clients -j 2>/dev/null |
         jq -cer '[.[] | select(.class == "smpl-bar" and
@@ -145,6 +145,15 @@ native_bar_anchor() {
         hyprctl dispatch "hl.dsp.window.pin({ window = \"address:$address\" })" >/dev/null
     fi
     hyprctl dispatch "hl.dsp.window.move({ window = \"address:$address\", x = $x, y = $y })" >/dev/null
+    active=$(hyprctl activewindow -j 2>/dev/null) || active=""
+    if [[ $(jq -r '.class // ""' <<< "${active:-null}" 2>/dev/null) == smpl-bar ]]; then
+        previous=$(hyprctl clients -j 2>/dev/null |
+            jq -cer '[.[] | select(.class != "smpl-bar" and
+                                    .mapped == true and .hidden != true)]
+                     | sort_by(.focusHistoryID)[0].address')
+        [[ "$previous" != null && -n "$previous" ]] &&
+            hyprctl dispatch "hl.dsp.focus({ window = \"address:$previous\" })" >/dev/null
+    fi
 }
 
 native_bar_start() {

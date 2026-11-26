@@ -233,10 +233,13 @@ exit 1
             """#!/bin/sh
 case "$1" in
   clients)
-    printf '%s\\n' '[{"class":"smpl-bar","title":"smpl-bar","address":"0xabc","size":[1600,24],"pinned":false}]'
+    printf '%s\\n' '[{"class":"smpl-bar","title":"smpl-bar","address":"0xabc","size":[1600,24],"pinned":false},{"class":"github","address":"0xdef","focusHistoryID":1,"mapped":true,"hidden":false}]'
     ;;
   layers)
     printf '%s\\n' '{"foo":[{"namespace":"smpl-bar-reservation","x":0,"y":1406,"w":2560,"h":32}]}'
+    ;;
+  activewindow)
+    printf '%s\\n' '{"class":"smpl-bar"}'
     ;;
   dispatch)
     printf 'dispatch %s\\n' "$2" >> "$CALLS"
@@ -262,6 +265,10 @@ esac
         )
         self.assertIn(
             'dispatch hl.dsp.window.move({ window = "address:0xabc", x = 2, y = 1414 })',
+            calls,
+        )
+        self.assertIn(
+            'dispatch hl.dsp.focus({ window = "address:0xdef" })',
             calls,
         )
 
