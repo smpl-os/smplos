@@ -221,6 +221,14 @@ hl.window_rule({
     float = true, pin = true, no_focus = true, no_shadow = true,
     border_size = 0, rounding = 0,
 })
+hl.window_rule({
+    match = {
+        class = "^(smpl-bar)$",
+        title = "^smpl-bar(:panel-bottom-(pinned|floating))?$",
+    },
+    size = "(monitor_w-4) 32",
+    move = "2 (monitor_h-window_h-2)",
+})
 
 hl.window_rule({
     match = { class = "^(smpl-bar-preview)$", title = "^smpl-bar-preview$" },

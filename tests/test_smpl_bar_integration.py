@@ -57,7 +57,11 @@ if args == ["status"]:
     print(json.dumps({
         "resident": True,
         "compositor": kind,
-        "config": {"mode": os.environ.get("MOCK_PANEL_MODE", "pinned")},
+        "config": {
+            "mode": os.environ.get("MOCK_PANEL_MODE", "pinned"),
+            "edge": "bottom",
+            "margin": 2,
+        },
         "panel": {
             "active": os.environ.get("MOCK_PANEL_ACTIVE", "1") == "1",
             "transport": "wayland-layer-shell",
@@ -222,6 +226,44 @@ exit 1
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn(["smpl-bar", "--resident"], self.recorded())
         self.assertIn(["smpl-bar", "show"], self.recorded())
+
+    def test_native_bar_anchors_visible_hyprland_window_to_reservation(self):
+        self.tool(
+            "hyprctl",
+            """#!/bin/sh
+case "$1" in
+  clients)
+    printf '%s\\n' '[{"class":"smpl-bar","title":"smpl-bar","address":"0xabc","size":[1600,24],"pinned":false}]'
+    ;;
+  layers)
+    printf '%s\\n' '{"foo":[{"namespace":"smpl-bar-reservation","x":0,"y":1406,"w":2560,"h":32}]}'
+    ;;
+  dispatch)
+    printf 'dispatch %s\\n' "$2" >> "$CALLS"
+    ;;
+esac
+""",
+        )
+        result = self.invoke(
+            BAR_CTL,
+            "start",
+            BAR_BACKEND="smpl-bar",
+            HYPRLAND_INSTANCE_SIGNATURE="test",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        calls = self.recorded()
+        self.assertIn(
+            'dispatch hl.dsp.window.resize({ window = "address:0xabc", x = 2556, y = 32, relative = false })',
+            calls,
+        )
+        self.assertIn(
+            'dispatch hl.dsp.window.pin({ window = "address:0xabc" })',
+            calls,
+        )
+        self.assertIn(
+            'dispatch hl.dsp.window.move({ window = "address:0xabc", x = 2, y = 1414 })',
+            calls,
+        )
 
     def test_popup_compatibility_uses_verified_native_commands(self):
         self.ready.touch()
