@@ -115,7 +115,7 @@ native_bar_ready() {
 }
 
 native_bar_anchor() {
-    local client layer status active previous address edge margin client_height pinned x y width height
+    local client layer status active previous address edge margin floating pinned x y width height
     [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]] || return 0
     client=$(hyprctl clients -j 2>/dev/null |
         jq -cer '[.[] | select(.class == "smpl-bar" and
@@ -129,17 +129,16 @@ native_bar_anchor() {
     address=$(jq -r '.address' <<< "$client")
     edge=$(jq -r '.config.edge // "bottom"' <<< "$status")
     margin=$(jq -r '.config.margin // 2' <<< "$status")
-    client_height=$(jq -r '.size[1] // 24' <<< "$client")
+    floating=$(jq -r '.floating // false' <<< "$client")
     pinned=$(jq -r '.pinned // false' <<< "$client")
     x=$(jq -r --argjson margin "$margin" '.x + $margin' <<< "$layer")
-    if [[ "$edge" == top ]]; then
-        y=$(jq -r '.y' <<< "$layer")
-    else
-        y=$(jq -r --argjson height "$client_height" '.y + .h - $height' <<< "$layer")
-    fi
+    y=$(jq -r '.y' <<< "$layer")
     width=$(jq -r --argjson margin "$margin" '.w - (2 * $margin)' <<< "$layer")
     height=$(jq -r '.h' <<< "$layer")
     [[ "$address" != null && "$width" -gt 0 && "$height" -gt 0 ]] || return 0
+    if [[ "$floating" != true ]]; then
+        hyprctl dispatch "hl.dsp.window.float({ window = \"address:$address\", action = \"toggle\" })" >/dev/null
+    fi
     hyprctl dispatch "hl.dsp.window.resize({ window = \"address:$address\", x = $width, y = $height, relative = false })" >/dev/null
     if [[ "$pinned" != true ]]; then
         hyprctl dispatch "hl.dsp.window.pin({ window = \"address:$address\" })" >/dev/null
