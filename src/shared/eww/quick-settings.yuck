@@ -160,12 +160,12 @@
 (defwidget qs-actions []
   (box :class "qs-actions" :orientation "h" :space-evenly false :spacing 8 :halign "end"
     (button :class "qs-action-btn settings"
-            :onclick "popup-toggle --close && xdg-open x-settings: 2>/dev/null || notify-send 'Settings' 'No settings app found' -t 2000 &"
+            :onclick "popup-toggle --close && smplos-settings &"
             :tooltip "Settings"
       (image :path "icons/status/settings.svg"
              :image-width 16 :image-height 16))
     (button :class "qs-action-btn logout"
-            :onclick "popup-toggle --close && (hyprctl dispatch 'hl.dsp.exit()' 2>/dev/null || loginctl terminate-user $USER)"
+            :onclick "zenity --question --title='Log out?' --text='Log out of this desktop session?' --ok-label='Log out' --cancel-label='Cancel' && (popup-toggle --close; smplos-session-logout --confirmed)"
             :tooltip "Log out"
       (label :text "󰍃"))
     (button :class "qs-action-btn qs-power"

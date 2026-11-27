@@ -1,0 +1,31 @@
+#!/bin/bash
+
+set -u
+
+fail() {
+    local message="$1"
+    echo "smplos-session-logout: $message" >&2
+    command -v notify-send >/dev/null 2>&1 &&
+        notify-send -u critical "Log out failed" "$message"
+    exit 1
+}
+
+[[ "$#" -eq 1 && "${1:-}" == --confirmed ]] ||
+    fail "log out requires explicit user confirmation"
+
+if [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]]; then
+    command -v hyprctl >/dev/null 2>&1 || fail "Hyprland control command not found"
+    hyprctl dispatch "hl.dsp.exit()" && exit 0
+    fail "Hyprland refused to end the desktop session"
+fi
+
+if [[ -n "${NIRI_SOCKET:-}" ]]; then
+    command -v niri >/dev/null 2>&1 || fail "Niri control command not found"
+    niri msg action quit && exit 0
+    fail "Niri refused to end the desktop session"
+fi
+
+[[ -n "${XDG_SESSION_ID:-}" ]] || fail "desktop session ID is unavailable"
+command -v loginctl >/dev/null 2>&1 || fail "session control command not found"
+loginctl terminate-session "$XDG_SESSION_ID" && exit 0
+fail "the desktop session could not be terminated"

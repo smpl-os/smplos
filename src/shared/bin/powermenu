@@ -30,11 +30,7 @@ case "$choice" in
         lock-screen
         ;;
     *Logout*)
-        if [[ -n "$WAYLAND_DISPLAY" ]]; then
-            hyprctl dispatch "hl.dsp.exit()" 2>/dev/null || loginctl terminate-user "$USER"
-        else
-            pkill -KILL -u "$USER"
-        fi
+        smplos-session-logout --confirmed
         ;;
     *Suspend*)
         systemctl suspend

@@ -43,6 +43,24 @@ class SettingsDispatchTests(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(self.calls(), [f"settings --tab {tab}"])
 
+    def test_default_launch_opens_the_settings_app(self):
+        self.install("settings")
+        for args in ((), ("general",)):
+            with self.subTest(args=args):
+                self.log.unlink(missing_ok=True)
+                result = self.dispatch(*args)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(self.calls(), ["settings "])
+
+    def test_default_launch_reports_a_missing_settings_app(self):
+        self.install("notify-send")
+        result = self.dispatch()
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(
+            self.calls(),
+            ["notify-send smplOS Settings Settings app not found"],
+        )
+
     def test_a_missing_settings_app_is_reported_instead_of_ignored(self):
         self.install("notify-send")
         for tab in ("connections", "mouse", "keypad", "keybindings", "taskbar"):

@@ -8,6 +8,11 @@ die() { notify-send "smplOS Settings" "$1"; exit 1; }
 term() { exec terminal -e "$@"; }
 
 case "${1:-}" in
+  ""|general)
+    command -v settings &>/dev/null && exec settings
+    die "Settings app not found"
+    ;;
+
   appearance)
     command -v theme-picker &>/dev/null && exec theme-picker
     die "Theme picker not found"
@@ -121,7 +126,7 @@ case "${1:-}" in
     ;;
 
   *)
-    echo "Usage: smplos-settings {appearance|display|keyboard|keypad|mouse|printing|network|connections|wifi|bluetooth|audio|dictation|power|about|keybindings|taskbar}" >&2
+    echo "Usage: smplos-settings {general|appearance|display|keyboard|keypad|mouse|printing|network|connections|wifi|bluetooth|audio|dictation|power|about|keybindings|taskbar}" >&2
     exit 1
     ;;
 esac
