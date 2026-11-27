@@ -93,7 +93,8 @@ native_bar_preflight() {
         { bar_backend_error "Invalid ws_position: $ws_position"; return 1; }
     [[ "$ws_style" == numbers || "$ws_style" == squares ]] ||
         { bar_backend_error "Invalid ws_style: $ws_style"; return 1; }
-    [[ "$bar_edge" == top || "$bar_edge" == bottom ]] ||
+    [[ "$bar_edge" == top || "$bar_edge" == bottom ||
+       "$bar_edge" == left || "$bar_edge" == right ]] ||
         { bar_backend_error "Invalid bar_edge: $bar_edge"; return 1; }
     [[ "$bar_mode" == pinned || "$bar_mode" == floating ]] ||
         { bar_backend_error "Invalid bar_mode: $bar_mode"; return 1; }
@@ -131,10 +132,17 @@ native_bar_anchor() {
     margin=$(jq -r '.config.margin // 2' <<< "$status")
     floating=$(jq -r '.floating // false' <<< "$client")
     pinned=$(jq -r '.pinned // false' <<< "$client")
-    x=$(jq -r --argjson margin "$margin" '.x + $margin' <<< "$layer")
-    y=$(jq -r '.y' <<< "$layer")
-    width=$(jq -r --argjson margin "$margin" '.w - (2 * $margin)' <<< "$layer")
-    height=$(jq -r '.h' <<< "$layer")
+    if [[ "$edge" == left || "$edge" == right ]]; then
+        x=$(jq -r '.x' <<< "$layer")
+        y=$(jq -r --argjson margin "$margin" '.y + $margin' <<< "$layer")
+        width=$(jq -r '.w' <<< "$layer")
+        height=$(jq -r --argjson margin "$margin" '.h - (2 * $margin)' <<< "$layer")
+    else
+        x=$(jq -r --argjson margin "$margin" '.x + $margin' <<< "$layer")
+        y=$(jq -r '.y' <<< "$layer")
+        width=$(jq -r --argjson margin "$margin" '.w - (2 * $margin)' <<< "$layer")
+        height=$(jq -r '.h' <<< "$layer")
+    fi
     [[ "$address" != null && "$width" -gt 0 && "$height" -gt 0 ]] || return 0
     if [[ "$floating" != true ]]; then
         hyprctl dispatch "hl.dsp.window.float({ window = \"address:$address\", action = \"toggle\" })" >/dev/null

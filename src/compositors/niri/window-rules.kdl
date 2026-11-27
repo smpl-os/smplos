@@ -105,7 +105,7 @@ window-rule {
 // Native bar panel. The app moves the visible xdg-toplevel directly and uses
 // a separate transparent smpl-bar-reservation layer to own the exclusive zone.
 window-rule {
-    match app-id="^smpl-bar$" title="^smpl-bar(:panel-(top|bottom)-(pinned|floating))?$"
+    match app-id="^smpl-bar$" title="^smpl-bar(:panel-(top|bottom|left|right)-(pinned|floating))?$"
     open-floating true
     open-focused false
     focus-ring { off; }

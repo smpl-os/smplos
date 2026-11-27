@@ -215,7 +215,7 @@ hl.window_rule({
 
 -- Native panel. The visible xdg-toplevel is placed directly by smpl-bar; the
 -- transparent smpl-bar-reservation layer surface owns the exclusive zone.
-local smpl_bar_panel = "^smpl-bar(:panel-(top|bottom)-(pinned|floating))?$"
+local smpl_bar_panel = "^smpl-bar(:panel-(top|bottom|left|right)-(pinned|floating))?$"
 hl.window_rule({
     match = { class = "^(smpl-bar)$", title = smpl_bar_panel },
     float = true, pin = true, no_shadow = true,
@@ -224,7 +224,7 @@ hl.window_rule({
 hl.window_rule({
     match = {
         class = "^(smpl-bar)$",
-        title = "^smpl-bar(:panel-bottom-(pinned|floating))?$",
+        title = "^smpl-bar(:panel-(top|bottom)-(pinned|floating))?$",
     },
     size = "(monitor_w-4) 32",
     move = "2 (monitor_h-window_h-2)",

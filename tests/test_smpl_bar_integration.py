@@ -60,7 +60,7 @@ if args == ["status"]:
         "compositor": kind,
         "config": {
             "mode": os.environ.get("MOCK_PANEL_MODE", "pinned"),
-            "edge": "bottom",
+            "edge": os.environ.get("MOCK_PANEL_EDGE", "bottom"),
             "margin": 2,
         },
         "panel": {
@@ -319,6 +319,44 @@ esac
             2,
         )
 
+    def test_native_bar_anchors_vertical_reservation_without_reorienting_margins(self):
+        self.tool(
+            "hyprctl",
+            """#!/bin/sh
+case "$1" in
+  clients)
+    printf '%s\\n' '[{"class":"smpl-bar","title":"smpl-bar:panel-left-pinned","address":"0xabc","floating":true,"pinned":true}]'
+    ;;
+  layers)
+    printf '%s\\n' '{"foo":[{"namespace":"smpl-bar-reservation","x":0,"y":0,"w":32,"h":1440}]}'
+    ;;
+  activewindow)
+    printf '%s\\n' '{"class":"app"}'
+    ;;
+  dispatch)
+    printf 'dispatch %s\\n' "$2" >> "$CALLS"
+    ;;
+esac
+""",
+        )
+        self.ready.touch()
+        result = self.invoke(
+            BAR_CTL,
+            "start",
+            BAR_BACKEND="smpl-bar",
+            HYPRLAND_INSTANCE_SIGNATURE="test",
+            MOCK_PANEL_EDGE="left",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(
+            'dispatch hl.dsp.window.resize({ window = "address:0xabc", x = 32, y = 1436, relative = false })',
+            self.recorded(),
+        )
+        self.assertIn(
+            'dispatch hl.dsp.window.move({ window = "address:0xabc", x = 0, y = 2 })',
+            self.recorded(),
+        )
+
     def test_native_popup_click_outside_closes_only_when_click_misses_bar_windows(self):
         self.tool(
             "bar-ctl",
@@ -472,12 +510,12 @@ fi
             self.assertIn("workspace-overview", text)
             self.assertIn("keypad-cheatsheet", text)
             self.assertIn("tray-menu", text)
-            self.assertIn("panel-(top|bottom)-(pinned|floating)", text)
+            self.assertIn("panel-(top|bottom|left|right)-(pinned|floating)", text)
             self.assertIn("smpl-bar-preview", text)
             self.assertIn("smpl-bar-reservation", text)
         niri = (ROOT / "src/compositors/niri/window-rules.kdl").read_text()
         self.assertIn('app-id="^smpl-bar$"', niri)
-        self.assertIn("panel-(top|bottom)-(pinned|floating)", niri)
+        self.assertIn("panel-(top|bottom|left|right)-(pinned|floating)", niri)
         self.assertIn("tray-menu", niri)
         self.assertIn("identify(:.*)?", niri)
         self.assertIn("open-focused false", niri)

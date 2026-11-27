@@ -396,7 +396,7 @@ EWW.
 `redraw`, `refresh`, `watch` and `apply` commands. With the native backend
 selected, it forwards controls through smpl-bar's CLI and resident Unix socket
 at `${XDG_RUNTIME_DIR:-/run/user/$UID}/smplos/smpl-bar.sock`. The compatibility
-file also accepts the native `bar_edge=top|bottom`,
+file also accepts the native `bar_edge=top|bottom|left|right`,
 `bar_mode=pinned|floating` and `bar_margin=0..24` panel values. Duplicate or
 out-of-range values fail before the resident starts. Additional pass-throughs
 are `status`, `identify`, `popup`, `set-keypad-present`, `keypad-sheet`,
@@ -432,11 +432,11 @@ first-paint fixture. Layout, compositing, event and popup work must stay
 event-driven, resident, and allocation-light.
 
 The native release renders the visible `smpl-bar` (or qualification-only
-`smpl-bar-preview`) xdg-toplevel, and reserves a pinned top or bottom edge with
+`smpl-bar-preview`) xdg-toplevel, and reserves a pinned top, bottom, left or right edge with
 the input-transparent `smpl-bar-reservation` Wayland layer. The app directly
 places that surface on the workspace-policy primary monitor; Hyprland and Niri
 only provide no-focus/border/shadow and popup identity rules. Dynamic panel
-titles include `smpl-bar:panel-(top|bottom)-(pinned|floating)`.
+titles include `smpl-bar:panel-(top|bottom|left|right)-(pinned|floating)`.
 
 IPC popups cover quick settings, USB and workspace overview; the keypad sheet
 uses `keypad-sheet` IPC. Calendar and notification surfaces retain ownership by
