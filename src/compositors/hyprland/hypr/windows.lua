@@ -218,7 +218,7 @@ hl.window_rule({
 local smpl_bar_panel = "^smpl-bar(:panel-(top|bottom)-(pinned|floating))?$"
 hl.window_rule({
     match = { class = "^(smpl-bar)$", title = smpl_bar_panel },
-    float = true, pin = true, no_focus = true, no_shadow = true,
+    float = true, pin = true, no_shadow = true,
     border_size = 0, rounding = 0,
 })
 hl.window_rule({
