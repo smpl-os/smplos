@@ -36,6 +36,7 @@ realtime-privileges
 
 # ── Display / Input ──────────────────────────────────────────
 brightnessctl
+ddcutil
 playerctl
 pamixer
 power-profiles-daemon

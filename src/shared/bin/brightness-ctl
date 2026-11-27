@@ -5,23 +5,41 @@
 step="${1:-5}"
 direction="${2:-up}"
 
-# Find the backlight device
-device="$(ls -1 /sys/class/backlight 2>/dev/null | head -n1)"
-for candidate in amdgpu_bl* intel_backlight acpi_video*; do
-    if [[ -e "/sys/class/backlight/$candidate" ]]; then
-        device="$candidate"
-        break
-    fi
-done
+backlight_device() {
+    local device candidate
+    device="$(ls -1 /sys/class/backlight 2>/dev/null | head -n1)"
+    for candidate in amdgpu_bl* intel_backlight acpi_video*; do
+        if [[ -e "/sys/class/backlight/$candidate" ]]; then
+            device="$candidate"
+            break
+        fi
+    done
+    printf '%s\n' "$device"
+}
 
-if [[ -z "$device" ]]; then
-    # For "get" commands, silently return 100 (no backlight = always full brightness)
-    [[ "$direction" == "get" ]] && echo 100 && exit 0
-    # For interactive commands, notify once (but don't spam)
+ddc_display() {
+    command -v ddcutil &>/dev/null || return 1
+    ddcutil detect 2>/dev/null |
+        awk '/^Display [0-9]+$/ { display=$2; valid=0 }
+             /VCP version:/ { valid=1 }
+             valid && /DRM_connector:/ { print display; exit }'
+}
+
+fail_brightness() {
+    local message="$1"
+    echo "brightness-ctl: $message" >&2
+    command -v notify-send &>/dev/null &&
+        notify-send -u critical "Brightness" "$message" -t 3000
     exit 1
-fi
+}
 
-case "$direction" in
+device="$(backlight_device)"
+display=""
+[[ -n "$device" ]] && command -v brightnessctl &>/dev/null ||
+    display="$(ddc_display)"
+
+if [[ -n "$device" ]]; then
+    case "$direction" in
     up|+)
         brightnessctl -d "$device" set "+${step}%" >/dev/null
         ;;
@@ -39,8 +57,32 @@ case "$direction" in
         echo "Usage: brightness-ctl <step> [up|down|set|get]"
         exit 1
         ;;
-esac
+    esac
+    current=$(brightnessctl -d "$device" -m | cut -d',' -f4 | tr -d '%')
+elif [[ -n "$display" ]]; then
+    case "$direction" in
+        up|+) ddcutil --display "$display" setvcp 10 +"${step}" 2>/dev/null || fail_brightness "DDC/CI adjustment failed" ;;
+        down|-) ddcutil --display "$display" setvcp 10 -"${step}" 2>/dev/null || fail_brightness "DDC/CI adjustment failed" ;;
+        set) ddcutil --display "$display" setvcp 10 "$step" >/dev/null 2>&1 || fail_brightness "DDC/CI adjustment failed" ;;
+        get)
+            ddcutil --display "$display" getvcp 10 --brief 2>/dev/null |
+                awk '/^VCP 10 / { print $4; found=1 } END { exit !found }'
+            exit $?
+            ;;
+        *)
+            echo "Usage: brightness-ctl <step> [up|down|set|get]"
+            exit 1
+            ;;
+    esac
+    current=$(ddcutil --display "$display" getvcp 10 --brief 2>/dev/null |
+        awk '/^VCP 10 / { print $4; exit }')
+else
+    if [[ "$direction" == "get" ]]; then
+        echo 100
+        exit 0
+    fi
+    fail_brightness "No supported backlight or DDC/CI monitor is available"
+fi
 
-# Get current brightness for notification
-current=$(brightnessctl -d "$device" -m | cut -d',' -f4 | tr -d '%')
+[[ "$current" =~ ^[0-9]+$ ]] || fail_brightness "Could not read the applied brightness"
 notify-send "Brightness" "${current}%" -h int:value:$current -t 1000
