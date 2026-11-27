@@ -16,6 +16,7 @@ BAR_CTL = ROOT / "src/shared/bin/bar-ctl"
 POPUP = ROOT / "src/shared/bin/popup-toggle"
 SESSION_START = ROOT / "src/shared/bin/bar-session-start"
 CONTROL_RUN = ROOT / "src/shared/bin/control-surface-run"
+CLICK_CHECK = ROOT / "src/shared/bin/smpl-bar-click-check"
 
 
 class SmplBarIntegrationTests(unittest.TestCase):
@@ -275,6 +276,29 @@ esac
             'dispatch hl.dsp.focus({ window = "address:0xdef" })',
             calls,
         )
+
+    def test_native_popup_click_outside_closes_only_when_click_misses_bar_windows(self):
+        self.tool(
+            "bar-ctl",
+            "#!/bin/sh\nprintf '[\"bar-ctl\",\"%s\"]\\n' \"$1\" >> \"$CALLS\"\n",
+        )
+        self.tool(
+            "hyprctl",
+            """#!/bin/sh
+case "$1" in
+  clients)
+    printf '%s\\n' '[{"class":"smpl-bar","title":"smpl-bar","at":[0,1400],"size":[1600,40]},{"class":"smpl-bar","title":"smpl-bar:quick-settings","at":[1200,900],"size":[430,340]}]'
+    ;;
+  cursorpos)
+    printf '%s\\n' '{"x":100,"y":500}'
+    ;;
+esac
+""",
+        )
+        result = self.invoke(CLICK_CHECK)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        rows = self.recorded()
+        self.assertIn(["bar-ctl", "close-popups"], rows)
 
     def test_popup_compatibility_uses_verified_native_commands(self):
         self.ready.touch()

@@ -14,5 +14,6 @@
 
 pgrep -x start-menu    >/dev/null 2>&1 && start-menu-click-check    &
 pgrep -x smpl-calendar >/dev/null 2>&1 && smpl-calendar-click-check &
+pgrep -x smpl-bar      >/dev/null 2>&1 && smpl-bar-click-check      &
 wait
 exit 0

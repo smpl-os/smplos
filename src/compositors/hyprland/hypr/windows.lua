@@ -239,7 +239,7 @@ hl.window_rule({
 local smpl_bar_popups =
     "^smpl-bar:(quick-settings|usb|workspace-overview|keypad-cheatsheet|tray-menu|identify(:.*)?)$"
 hl.window_rule({
-    match = { class = "^(smpl-bar)$", title = smpl_bar_popups },
+    match = { class = "^(smpl-bar)$" },
     float = true, pin = true, no_shadow = true, border_size = 0,
 })
 hl.window_rule({

@@ -1,0 +1,20 @@
+#!/bin/bash
+# Dismiss native smpl-bar popups when a Hyprland click misses every bar window.
+
+command -v hyprctl >/dev/null 2>&1 || exit 0
+command -v jq >/dev/null 2>&1 || exit 0
+
+windows=$(hyprctl clients -j 2>/dev/null) || exit 0
+popup_count=$(jq '[.[] | select(.class == "smpl-bar" and
+                              (.title | startswith("smpl-bar:")))] | length' <<< "$windows")
+(( popup_count > 0 )) || exit 0
+
+cursor=$(hyprctl cursorpos -j 2>/dev/null) || exit 0
+cx=$(jq -r '.x' <<< "$cursor")
+cy=$(jq -r '.y' <<< "$cursor")
+inside=$(jq -r --argjson cx "$cx" --argjson cy "$cy" '
+    [.[] | select(.class == "smpl-bar" and
+                  $cx >= .at[0] and $cx <= (.at[0] + .size[0]) and
+                  $cy >= .at[1] and $cy <= (.at[1] + .size[1]))] | length
+' <<< "$windows")
+(( inside > 0 )) || BAR_BACKEND=smpl-bar bar-ctl close-popups >/dev/null 2>&1
