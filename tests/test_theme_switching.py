@@ -26,7 +26,9 @@ case "$name" in
   cp)
     [[ "${FAIL_COPY:-0}" == 1 ]] && exit 1
     exec /usr/bin/cp "$@" ;;
-  bar-ctl) exit "${FAIL_RELOAD:-0}" ;;
+  bar-ctl)
+      [[ "${1:-}" == backend ]] && { echo "${BAR_BACKEND:-eww}"; exit 0; }
+      exit "${FAIL_RELOAD:-0}" ;;
   theme-set-st) exit "${FAIL_TERMINAL:-0}" ;;
   theme-set-copilot) exit "${FAIL_COPILOT:-0}" ;;
   gresource)
@@ -230,6 +232,16 @@ class ThemeSwitchingTests(unittest.TestCase):
         self.assertEqual(calls.count("theme-set-st \n"), 3)
         self.assertEqual(list(self.current.glob(".theme-set.*")), [self.current / ".theme-set.lock"])
 
+    def test_native_theme_reload_runs_even_without_eww(self):
+        (self.bin / "pgrep").write_text("""#!/bin/bash
+exit 1
+""")
+        (self.bin / "pgrep").chmod(0o755)
+        result = self.switch("new", BAR_BACKEND="smpl-bar")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("bar-ctl backend\n", self.log.read_text())
+        self.assertIn("bar-ctl reload\n", self.log.read_text())
+
     @unittest.skipIf(os.geteuid() == 0, "requires unprivileged filesystem permissions")
     def test_unremovable_previous_theme_is_preserved_and_replaced(self):
         self.assertEqual(self.switch("old").returncode, 0)
@@ -286,7 +298,7 @@ class ThemeSwitchingTests(unittest.TestCase):
     def test_reload_failure_is_not_reported_as_success(self):
         result = self.switch("new", FAIL_RELOAD="1")
         self.assertNotEqual(result.returncode, 0)
-        self.assertIn("Cannot reload EWW theme", result.stderr)
+        self.assertIn("Cannot reload bar theme", result.stderr)
         self.assertNotIn("Theme set to:", result.stdout)
 
     def test_terminal_failure_does_not_prevent_other_app_updates(self):

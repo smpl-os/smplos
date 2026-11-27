@@ -245,9 +245,11 @@ theme-bg-next || die "Cannot apply theme background"
 # All guarded: only runs if the app is actually present/running
 # =========================================================================
 
-# Reload recompiles SCSS without killing the bar or its listeners.
-if pgrep -u "$UID" -x eww >/dev/null; then
-  bar-ctl reload || die "Cannot reload EWW theme"
+# Reload the selected backend. Native smpl-bar also uses this to re-anchor
+# after Slint remaps its themed Wayland window.
+if pgrep -u "$UID" -x eww >/dev/null ||
+   [[ "$(bar-ctl backend 2>/dev/null)" == smpl-bar ]]; then
+  bar-ctl reload || die "Cannot reload bar theme"
 fi
 
 # Hyprland (reload config to pick up new border colors -- runtime only)

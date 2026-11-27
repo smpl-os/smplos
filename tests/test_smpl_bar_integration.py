@@ -276,6 +276,48 @@ esac
             'dispatch hl.dsp.focus({ window = "address:0xdef" })',
             calls,
         )
+        self.assertGreaterEqual(
+            calls.count(
+                'dispatch hl.dsp.window.move({ window = "address:0xabc", x = 2, y = 1406 })'
+            ),
+            1,
+        )
+
+    def test_native_apply_reanchors_after_async_theme_remap(self):
+        self.tool(
+            "hyprctl",
+            """#!/bin/sh
+case "$1" in
+  clients)
+    printf '%s\\n' '[{"class":"smpl-bar","title":"smpl-bar","address":"0xabc","size":[1600,24],"floating":true,"pinned":true}]'
+    ;;
+  layers)
+    printf '%s\\n' '{"foo":[{"namespace":"smpl-bar-reservation","x":0,"y":1406,"w":2560,"h":32}]}'
+    ;;
+  activewindow)
+    printf '%s\\n' '{"class":"app"}'
+    ;;
+  dispatch)
+    printf 'dispatch %s\\n' "$2" >> "$CALLS"
+    ;;
+esac
+""",
+        )
+        self.ready.touch()
+        result = self.invoke(
+            BAR_CTL,
+            "apply",
+            BAR_BACKEND="smpl-bar",
+            HYPRLAND_INSTANCE_SIGNATURE="test",
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        calls = self.recorded()
+        self.assertEqual(
+            calls.count(
+                'dispatch hl.dsp.window.move({ window = "address:0xabc", x = 2, y = 1406 })'
+            ),
+            2,
+        )
 
     def test_native_popup_click_outside_closes_only_when_click_misses_bar_windows(self):
         self.tool(

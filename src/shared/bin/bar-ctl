@@ -234,6 +234,11 @@ native_bar_ctl() {
             native_bar_cmd apply
             status=$?
             native_bar_anchor
+            # Slint may remap the native window after its theme files change.
+            # Anchor once more after that asynchronous remap; otherwise the
+            # window can briefly reappear at the compositor's default center.
+            sleep 0.2
+            native_bar_anchor
             return "$status"
             ;;
         ensure) native_bar_preflight && native_bar_start && native_bar_anchor ;;
