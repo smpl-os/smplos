@@ -23,8 +23,17 @@ log "start: input_conf=$INPUT_CONF"
 # Parse kb_layout and kb_variant from input.conf (strip whitespace only).
 layouts=$(sed -n 's/^\s*kb_layout\s*=\s*//p' "$INPUT_CONF" | head -n1)
 variants=$(sed -n 's/^\s*kb_variant\s*=\s*//p' "$INPUT_CONF" | head -n1)
+options=$(sed -n 's/^\s*kb_options\s*=\s*//p' "$INPUT_CONF" | head -n1)
 layouts="${layouts//[[:space:]]/}"
 variants="${variants//[[:space:]]/}"
+options="${options//[[:space:]]/}"
+switch_option="grp:alt_shift_toggle"
+options="${options//,$switch_option/}"
+options="${options//$switch_option,/}"
+options="${options//$switch_option/}"
+options="${options#,}"
+options="${options%,}"
+options="${options:+$options,}$switch_option"
 
 if [[ -z "$layouts" ]]; then
     log "no layouts resolved from input.conf, exiting"
@@ -51,7 +60,7 @@ if [[ -n "$WAYLAND_DISPLAY" ]] || [[ -n "$HYPRLAND_INSTANCE_SIGNATURE" ]]; then
     done
 
     for attempt in {1..8}; do
-        hyprctl dispatch "function() hl.config({input={kb_rules='evdev', kb_options='ctrl:nocaps,grp:alt_shift_toggle', kb_layout='$layouts', kb_variant='$variants'}}) end" >/dev/null 2>&1
+        hyprctl dispatch "function() hl.config({input={kb_rules='evdev', kb_options='$options', kb_layout='$layouts', kb_variant='$variants'}}) end" >/dev/null 2>&1
         sleep 0.15
 
         main_kb=$(hyprctl -j devices 2>/dev/null | jq -r '.keyboards[] | select(.main == true) | .name' | head -n1)
