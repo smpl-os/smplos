@@ -11,7 +11,7 @@ local theme = require("theme")
 
 -- Apply the same blur profile to every smplOS EWW layer surface.
 local eww_namespaces = {
-    "eww-bar", "eww-calendar-popup", "eww-quick-settings",
+    "eww-bar", "eww-calendar-popup",
     "eww-notification-hub", "eww-usb-popup", "eww-workspace-overview",
     "eww-pad-cheatsheet",
 }

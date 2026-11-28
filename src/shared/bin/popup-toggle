@@ -11,7 +11,7 @@ EWW="eww --config $HOME/.config/eww"
 BAR_CTL="${BAR_CTL:-bar-ctl}"
 
 # All known popup windows (add new popups here)
-POPUPS=(calendar-popup quick-settings notification-hub usb-popup workspace-overview)
+POPUPS=(calendar-popup notification-hub usb-popup workspace-overview)
 
 # After closing a layer-shell surface, Hyprland/Wayland doesn't synthesise a
 # fresh wl_pointer.enter for surfaces below until the cursor physically moves.
@@ -154,6 +154,10 @@ backend=$("$BAR_CTL" backend 2>/dev/null) || backend=eww
 if [[ "$backend" == smpl-bar ]]; then
   native_popup "${1:-}"
   exit $?
+fi
+if [[ "${1:-}" == quick-settings ]]; then
+  echo "popup-toggle: quick settings requires the native smpl-bar backend" >&2
+  exit 1
 fi
 
 # --close: just close everything

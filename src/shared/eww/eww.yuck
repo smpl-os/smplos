@@ -2,7 +2,6 @@
 ;; Universal bar for Hyprland (Wayland) and DWM (X11)
 
 ;; Widget panels
-(include "./quick-settings.yuck")
 (include "./notification-hub.yuck")
 (include "./workspace-overview.yuck")
 (include "./pad-icons.yuck")

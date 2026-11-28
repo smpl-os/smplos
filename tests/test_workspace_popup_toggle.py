@@ -78,13 +78,19 @@ class PopupToggleTests(unittest.TestCase):
         return [call for call in self.recorded() if call[0] in ("open", "close")]
 
     def test_every_popup_opens_on_the_primary_monitor(self):
-        for window in ("calendar-popup", "quick-settings", "notification-hub", "usb-popup"):
+        for window in ("calendar-popup", "notification-hub", "usb-popup"):
             with self.subTest(window=window):
                 self.calls.unlink(missing_ok=True)
                 result = self.toggle(window, PRIMARY="DP-3")
                 self.assertEqual(result.returncode, 0, result.stderr)
                 self.assertEqual(self.calls_of("open"), [["open", window, "--screen", "DP-3"]])
                 self.assertEqual(self.calls_of("workspace-ctl"), [["workspace-ctl", "primary"]])
+
+    def test_legacy_backend_refuses_to_recreate_eww_quick_settings(self):
+        result = self.toggle("quick-settings", PRIMARY="DP-3")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("requires the native smpl-bar backend", result.stderr)
+        self.assertEqual(self.calls_of("open"), [])
 
     def test_overview_keeps_its_state_argument_and_opens_on_the_primary_monitor(self):
         result = self.toggle("workspace-overview", PRIMARY="HDMI-A-1", OVERVIEW_STATE='{"a": 1}')
