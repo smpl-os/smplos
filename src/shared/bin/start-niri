@@ -18,5 +18,5 @@ export XDG_SESSION_TYPE="wayland"
 
 # Hand off PID to greetd. niri --session integrates with the systemd user
 # session and provides graphical-session.target, which other smplOS user
-# services (eww, dunst) depend on.
+# services (dunst and native apps) depend on.
 exec niri --session "$@"

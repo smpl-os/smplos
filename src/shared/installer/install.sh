@@ -49,10 +49,7 @@ fi
 if [[ -d "$SMPLOS_PATH/config" ]]; then
   mkdir -p "$HOME/.config"
   cp -r "$SMPLOS_PATH/config/"* "$HOME/.config/" 2>/dev/null || true
-  # Ensure EWW listener scripts are executable (cp from skel may strip +x)
-  find "$HOME/.config/eww/scripts" -name '*.sh' -exec chmod +x {} \; 2>/dev/null || true
-  echo "==> Config files deployed:"
-  ls -la "$HOME/.config/eww/" 2>/dev/null || echo "    WARNING: eww config dir missing!"
+  echo "==> Config files deployed"
 fi
 
 # Use the same canonical unit and ownership stamp as the live ISO and updater.
@@ -238,13 +235,6 @@ theme-set catppuccin || echo "    WARNING: theme-set failed (exit $?)"
 if command -v fish &>/dev/null; then
   echo "==> Setting Fish as default shell..."
   sudo chsh -s /usr/bin/fish "$USER"
-fi
-
-# Verify EWW theme colors were deployed
-if [[ -f "$HOME/.config/eww/theme-colors.scss" ]]; then
-  echo "    EWW theme-colors.scss: OK"
-else
-  echo "    WARNING: EWW theme-colors.scss not found after theme-set!"
 fi
 
 # Deploy default wallpaper
@@ -485,10 +475,10 @@ echo "==> Restoring standard pacman configuration..."
 sudo tee /etc/pacman.conf > /dev/null << 'PACMANEOF'
 [options]
 HoldPkg     = pacman glibc brave-bin
-# NOTE: hyprland/eww ignore policy is enforced at update time by
+# NOTE: hyprland ignore policy is enforced at update time by
 # smplos-update via `pacman -Syu --ignore` computed from
 # src/shared/update-policy/critical-packages.txt. DO NOT re-add
-# `IgnorePkg = hyprland eww` here — a static IgnorePkg entry silently
+# `IgnorePkg = hyprland` here — a static IgnorePkg entry silently
 # breaks the fleet catch-up path (blocks `pacman -S hyprland=X.Y.Z`
 # with a [Y/n] prompt whose default has changed between pacman
 # releases, and blocks migrations that need to upgrade the pinned

@@ -6,7 +6,6 @@ on:
     paths:
       - 'src/shared/bin/rebuild-app-cache'
       - 'src/shared/bin/smplos-settings'
-      - 'src/shared/eww/eww.yuck'
       - 'src/shared/bin/smplos-*update*'
       - 'src/shared/lib/smplos-app-bundle.sh'
       - 'src/shared/lib/smplos-release-package.sh'
@@ -24,7 +23,6 @@ on:
     paths:
       - 'src/shared/bin/rebuild-app-cache'
       - 'src/shared/bin/smplos-settings'
-      - 'src/shared/eww/eww.yuck'
       - 'src/shared/bin/smplos-*update*'
       - 'src/shared/lib/smplos-app-bundle.sh'
       - 'src/shared/lib/smplos-release-package.sh'

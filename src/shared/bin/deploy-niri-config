@@ -12,7 +12,7 @@
 #   theme.kdl          — current theme's layout overrides + rounding
 #   binds.kdl          — translated from bindings.conf
 #   window-rules.kdl   — app-id positioning
-#   layer-rules.kdl    — EWW namespace blur
+#   layer-rules.kdl    — native layer-surface policy
 #
 # Each part is wrapped in `// === BEGIN <name> ===` / `// === END <name> ===`
 # markers so a human can navigate the assembled file.

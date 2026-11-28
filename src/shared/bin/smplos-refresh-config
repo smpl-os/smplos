@@ -10,7 +10,7 @@
 #
 # Examples:
 #   smplos-refresh-config hypr/hyprlock.conf
-#   smplos-refresh-config eww/eww.yuck
+#   smplos-refresh-config smplos/bar.conf
 #   smplos-refresh-config foot/foot.ini
 
 set -euo pipefail
@@ -32,7 +32,7 @@ USAGE
 fi
 
 # Resolve source — check multiple possible locations
-# (repo structure: src/shared/configs, src/shared/eww, src/compositors/*)
+# (repo structure: src/shared/configs, src/compositors/*)
 # (deployed structure: config/, configs/)
 default_config_file=""
 for candidate in \

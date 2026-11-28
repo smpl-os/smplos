@@ -1,21 +1,5 @@
 // smplOS niri layer rules.
 //
-// Hand-written counterpart to src/compositors/hyprland/hypr/windows.conf
-// layerrule blocks. Each EWW window has an explicit `:namespace "eww-<name>"`
-// per smplOS conventions; layer-rule matches that namespace exactly.
-//
-// Limitations vs Hyprland:
-//   • niri has NO compositor-side window blur (Hyprland-style `blur on`
-//     does not exist as a layer-rule field). Translucency comes from each
-//     surface's own alpha — EWW uses `transparent` GTK windows + the
-//     theme's $theme-popup-opacity.
-//   • `place-within-backdrop true` shows the surface inside the workspace
-//     overview's blurred backdrop, but it's not always-on blur.
-//
-// What we CAN set per-layer in niri: opacity, geometry-corner-radius,
-// shadow, block-out-from, place-within-backdrop. Corner radius for
-// EWW popups follows theme.kdl's catch-all `eww-.*` rule.
-
 layer-rule {
     match namespace="rofi"
     // rofi-wayland is a layer-shell launcher — round its corners to match

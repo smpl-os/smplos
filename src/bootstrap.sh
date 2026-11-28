@@ -12,11 +12,10 @@ mkdir -p $ROOT/{compositors,editions,installer,iso,shared}
 ###############################################
 # Shared Layer
 ###############################################
-mkdir -p $ROOT/shared/{configs,eww,settings-panel,themes,system,bin}
+mkdir -p $ROOT/shared/{configs,settings-panel,themes,system,bin}
 
 touch $ROOT/shared/bin/.keep
 touch $ROOT/shared/configs/.keep
-touch $ROOT/shared/eww/.keep
 touch $ROOT/shared/settings-panel/.keep
 touch $ROOT/shared/themes/.keep
 touch $ROOT/shared/system/.keep

@@ -21,7 +21,7 @@ printf '%s %s\\n' "$name" "$*" >> "$CALL_LOG"
 case "$name" in
   pgrep)
     [[ -n "${ST_PID:-}" ]] && { echo "$ST_PID"; exit 0; }
-    [[ "$*" == *eww ]] && { echo 123; exit 0; }
+    [[ "$*" == *smpl-bar ]] && { echo 123; exit 0; }
     exit 1 ;;
   cp)
     [[ "${FAIL_COPY:-0}" == 1 ]] && exit 1
@@ -149,7 +149,6 @@ class ThemeSwitchingTests(unittest.TestCase):
         (theme / "colors.toml").write_text(
             "".join(f'{key} = "{value}"\n' for key, value in colors.items())
         )
-        (theme / "eww-colors.scss").write_text(f"$theme-bg: {background};\n")
         (theme / "nemo.css").write_text(f"window {{ background: {background}; }}\n")
         (theme / "vscode.json").write_text(json.dumps({"name": name}))
         (theme / ".hidden").write_text(name)
@@ -166,7 +165,6 @@ class ThemeSwitchingTests(unittest.TestCase):
         for source, target in (
             ("colors.toml", self.current / "theme/colors.toml"),
             (".hidden", self.current / "theme/.hidden"),
-            ("eww-colors.scss", self.home / ".config/eww/theme-colors.scss"),
             ("nemo.css", self.home / ".config/smplos/nemo-theme.css"),
         ):
             self.assertEqual(target.read_bytes(), (self.stock / name / source).read_bytes())
@@ -182,9 +180,8 @@ class ThemeSwitchingTests(unittest.TestCase):
             env=self.env, capture_output=True, text=True, timeout=15,
         )
         self.assertEqual(core.returncode, 0, core.stderr)
-        palette = self.home / ".config/eww/theme-colors.scss"
         nemo = self.home / ".config/smplos/nemo-theme.css"
-        before = (palette.read_bytes(), nemo.read_bytes(), (self.current / "theme.name").read_bytes())
+        before = (nemo.read_bytes(), (self.current / "theme.name").read_bytes())
         self.assertFalse((self.home / ".config/Code/User/settings.json").exists())
         self.assertFalse((self.home / ".config/foot/theme.ini").exists())
         self.assertFalse((self.home / ".config/btop/themes/current.theme").exists())
@@ -193,8 +190,7 @@ class ThemeSwitchingTests(unittest.TestCase):
             env=self.env, capture_output=True, text=True, timeout=15,
         )
         self.assertEqual(apps.returncode, 0, apps.stderr)
-        self.assertEqual(before, (palette.read_bytes(), nemo.read_bytes(),
-                                  (self.current / "theme.name").read_bytes()))
+        self.assertEqual(before, (nemo.read_bytes(), (self.current / "theme.name").read_bytes()))
         self.assert_switched("new")
         self.assertEqual((self.home / ".config/foot/theme.ini").read_text(), "new foot colors\n")
         self.assertEqual((self.home / ".config/btop/themes/current.theme").read_text(), "new btop colors\n")
@@ -205,15 +201,14 @@ class ThemeSwitchingTests(unittest.TestCase):
             env=self.env, capture_output=True, timeout=15,
         ).returncode, 0)
         (self.current / "theme/foot.ini").write_text("optional colors\n")
-        palette = self.home / ".config/eww/theme-colors.scss"
         nemo = self.home / ".config/smplos/nemo-theme.css"
-        before = (palette.read_bytes(), nemo.read_bytes())
+        before = nemo.read_bytes()
         apps = subprocess.run(
             ["bash", str(BIN / "theme-set"), "--apps"],
             env={**self.env, "FAIL_COPY": "1"}, capture_output=True, timeout=15,
         )
         self.assertNotEqual(apps.returncode, 0)
-        self.assertEqual(before, (palette.read_bytes(), nemo.read_bytes()))
+        self.assertEqual(before, nemo.read_bytes())
         self.assertEqual((self.current / "theme.name").read_text().strip(), "new")
 
     def test_switch_updates_all_consumers_and_keeps_editor_settings(self):
@@ -232,15 +227,12 @@ class ThemeSwitchingTests(unittest.TestCase):
         self.assertEqual(calls.count("theme-set-st \n"), 3)
         self.assertEqual(list(self.current.glob(".theme-set.*")), [self.current / ".theme-set.lock"])
 
-    def test_native_theme_reload_runs_even_without_eww(self):
-        (self.bin / "pgrep").write_text("""#!/bin/bash
-exit 1
-""")
+    def test_theme_switch_does_not_manage_a_nonresident_bar(self):
+        (self.bin / "pgrep").write_text("#!/bin/bash\nexit 1\n")
         (self.bin / "pgrep").chmod(0o755)
-        result = self.switch("new", BAR_BACKEND="smpl-bar")
+        result = self.switch("new")
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("bar-ctl backend\n", self.log.read_text())
-        self.assertIn("bar-ctl reload\n", self.log.read_text())
+        self.assertNotIn("bar-ctl", self.log.read_text())
 
     @unittest.skipIf(os.geteuid() == 0, "requires unprivileged filesystem permissions")
     def test_unremovable_previous_theme_is_preserved_and_replaced(self):
@@ -285,7 +277,7 @@ exit 1
 
     def test_palette_publication_replaces_inode_without_truncating_readers(self):
         self.assertEqual(self.switch("old").returncode, 0)
-        for relative in ("eww/theme-colors.scss", "smplos/nemo-theme.css"):
+        for relative in ("smplos/nemo-theme.css",):
             target = self.home / ".config" / relative
             with self.subTest(target=relative), target.open("rb") as reader:
                 old = reader.read()
@@ -307,74 +299,6 @@ exit 1
         self.assertIn("terminal refresh failed", result.stderr)
         self.assertNotIn("Theme set to:", result.stdout)
         self.assert_switched("new")
-
-    def test_frosted_status_icons_use_glass_ink_and_switch_back(self):
-        template = self.home / ".local/share/smplos/icons/status"
-        template.mkdir(parents=True)
-        (template / "test.svg").write_text('<svg fill="{{accent}}" stroke="{{fg}}"/>')
-        frosted = self.make_theme("frosted", "#0b2230")
-        with (frosted / "colors.toml").open("a") as file:
-            file.write('glass = "true"\nglass_background = "#dce6f0"\n'
-                       'glass_foreground = "#f4f8ff"\nglass_accent = "#d4e8fa"\n')
-        icon = self.home / ".config/eww/icons/status/test.svg"
-        for name, foreground, accent in (
-            ("frosted", "#f4f8ff", "#d4e8fa"),
-            ("old", "#c1c497", "#509475"),
-        ):
-            result = self.switch(name)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual(icon.read_text(), f'<svg fill="{accent}" stroke="{foreground}"/>')
-
-    def install_status_icons(self):
-        template = self.home / ".local/share/smplos/icons/status"
-        shutil.copytree(ROOT / "src/shared/icons/status", template)
-        return self.home / ".config/eww/icons/status"
-
-    def test_bad_icon_palette_keeps_the_previous_rendered_icons(self):
-        icons = self.install_status_icons()
-        self.assertEqual(self.switch("new").returncode, 0)
-        previous = (icons / "start.svg").read_bytes()
-        palette = self.stock / "new/colors.toml"
-        palette.write_text(palette.read_text().replace("#c1c497", "invalid"))
-        result = self.switch("new")
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("Cannot bake status icon", result.stderr)
-        self.assertEqual((icons / "start.svg").read_bytes(), previous)
-
-    def test_shared_status_icon_templates_follow_foreground_not_selection_for_new_themes(self):
-        icons = self.install_status_icons()
-        result = self.switch("new")
-        self.assertEqual(result.returncode, 0, result.stderr)
-        for name in ("start", "dictation", "keypad", "sync", "monitor",
-                     "network-vpn", "network-wired-activated",
-                     "network-wired-unavailable", "network-wired-disconnected",
-                     "network-wired-no-internet"):
-            with self.subTest(icon=name):
-                icon = (icons / f"{name}.svg").read_text()
-                self.assertIn("#c1c497", icon)
-                self.assertNotIn("#509475", icon)
-                self.assertNotIn("{{", icon)
-        self.assertIn("#111c18", (icons / "dictation-on.svg").read_text())
-        self.assertIn('accent = "#509475"', (self.current / "theme/colors.toml").read_text())
-
-    def test_shared_icon_rendering_uses_each_stock_themes_own_foreground(self):
-        icons = self.install_status_icons()
-        for colors in sorted((ROOT / "src/shared/themes").glob("*/colors.toml")):
-            with self.subTest(theme=colors.parent.name):
-                palette = tomllib.loads(colors.read_text())
-                theme = self.stock / colors.parent.name
-                theme.mkdir()
-                shutil.copy2(colors, theme / "colors.toml")
-                result = self.switch(colors.parent.name)
-                self.assertEqual(result.returncode, 0, result.stderr)
-                foreground = palette["foreground"]
-                if palette.get("glass") in (True, "true"):
-                    foreground = palette.get("glass_foreground", foreground)
-                for name in ("start", "dictation", "network-wired-activated"):
-                    rendered = (icons / f"{name}.svg").read_text()
-                    self.assertIn(f'"{foreground}"', rendered)
-                    self.assertNotIn("{{", rendered)
-                self.assertIn(f'"{palette["background"]}"', (icons / "dictation-on.svg").read_text())
 
     def gtk_compat(self, **env):
         return subprocess.run(
@@ -509,25 +433,10 @@ exit 1
         self.assertIn("theme-set-copilot is not installed", result.stderr)
         self.assert_switched("new")
 
-    def test_bar_ctl_preserves_eww_reload_failure(self):
-        eww = self.bin / "eww"
-        eww.write_text("#!/bin/bash\nexit 42\n")
-        eww.chmod(0o755)
-        result = subprocess.run(
-            ["bash", str(BIN / "bar-ctl"), "reload"],
-            env={**self.env, "HYPRLAND_INSTANCE_SIGNATURE": ""}, capture_output=True, timeout=5,
-        )
-        self.assertEqual(result.returncode, 42)
-
-    def test_same_palette_is_not_republished_and_failed_reload_releases_batch_lock(self):
+    def test_failed_reload_releases_theme_batch_lock(self):
         self.assertEqual(self.switch("new").returncode, 0)
-        palette = self.home / ".config/eww/theme-colors.scss"
-        before = palette.stat()
-        self.assertEqual(self.switch("new").returncode, 0)
-        after = palette.stat()
-        self.assertEqual((before.st_ino, before.st_mtime_ns), (after.st_ino, after.st_mtime_ns))
         self.assertNotEqual(self.switch("old", FAIL_RELOAD="1").returncode, 0)
-        with (self.home / ".config/eww/.smplos-reload.lock").open("r") as lock:
+        with (self.current / ".theme-set.lock").open("r") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
 
     def test_hyprland_environment_uses_running_lua_or_legacy_provider_not_setenv(self):

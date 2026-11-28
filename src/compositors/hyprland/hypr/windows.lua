@@ -6,26 +6,12 @@
 local theme = require("theme")
 
 -- ============================================================================
--- Layer rules: EWW bar + popups + Rofi
+-- Layer rules: native smpl-bar
 -- ============================================================================
 
--- Apply the same blur profile to every smplOS EWW layer surface.
-local eww_namespaces = {
-    "eww-bar", "eww-calendar-popup",
-    "eww-notification-hub", "eww-usb-popup", "eww-workspace-overview",
-    "eww-pad-cheatsheet",
-}
-for _, ns in ipairs(eww_namespaces) do
-    hl.layer_rule({ match = { namespace = ns }, blur = true })
-    hl.layer_rule({ match = { namespace = ns }, blur_popups = true })
-    hl.layer_rule({ match = { namespace = ns }, ignore_alpha = 0.1 })
-    hl.layer_rule({ match = { namespace = ns }, xray = false })
-end
 hl.layer_rule({ match = { namespace = "smpl-bar-reservation" }, no_anim = true })
 hl.layer_rule({ match = { namespace = "smpl-bar-reservation" }, blur = false })
 hl.layer_rule({ match = { namespace = "smpl-bar-reservation" }, xray = false })
-
-require("keypad_glass")
 
 -- Screenshot selection overlay (slurp). `grim` runs the moment slurp exits, so
 -- an animated close gets captured half-faded: a washed-out white frame plus a

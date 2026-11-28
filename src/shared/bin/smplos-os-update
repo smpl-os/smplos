@@ -47,7 +47,7 @@ SMPLOS_REPO_URL="https://github.com/smpl-os/smplos.git"
 # ── Session env helper ───────────────────────────────────────────────────────
 # We run as root under pkexec, which strips XDG_RUNTIME_DIR, WAYLAND_DISPLAY
 # and HYPRLAND_INSTANCE_SIGNATURE. Anything that talks to the user's live
-# session (hyprctl, eww, systemctl --user) must be routed back into it.
+# session (hyprctl, systemctl --user) must be routed back into it.
 # Prefer the repo copy — it is always at least as new as the installed one.
 for _cand in "$SMPLOS_REPO/src/shared/lib/smplos-session-env.sh" \
              "/usr/local/lib/smplos/smplos-session-env.sh"; do
@@ -347,50 +347,7 @@ sync_configs() {
 
     local n_updated=0
 
-    # EWW configs (eww.yuck, eww.scss, scripts/)
-    local eww_src="$SMPLOS_REPO/src/shared/eww"
-    local eww_dst="$HOME/.config/eww"
-    if [[ -d "$eww_src" ]]; then
-        as_invoker mkdir -p "$eww_dst"
-        as_invoker touch "$eww_dst/.smplos-reload.lock"
-        exec 8<"$eww_dst/.smplos-reload.lock" || die "Cannot open EWW publication lock"
-        flock 8 || die "Cannot lock EWW publication"
-        # Publish included fragments before the entry point so live reloads
-        # never see an include that has not reached disk yet.
-        local source f
-        for source in "$eww_src"/*.yuck "$eww_src"/*.scss; do
-            f="${source##*/}"
-            case "$f" in eww.yuck|eww.scss|theme-colors.*) continue ;; esac
-            if [[ -f "$eww_src/$f" ]] && ! cmp -s "$eww_src/$f" "$eww_dst/$f" 2>/dev/null; then
-                copy_user_config "$eww_src/$f" "$eww_dst/$f"
-                ((n_updated++)) || true
-            fi
-        done
-        # Sync scripts directory
-        if [[ -d "$eww_src/scripts" ]]; then
-            as_invoker mkdir -p "$eww_dst/scripts"
-            for script in "$eww_src/scripts/"*; do
-                [[ -f "$script" ]] || continue
-                local name
-                name=$(basename "$script")
-                if [[ ! -x "$eww_dst/scripts/$name" ]] || ! cmp -s "$script" "$eww_dst/scripts/$name" 2>/dev/null; then
-                    copy_user_config "$script" "$eww_dst/scripts/$name"
-                    as_invoker chmod +x "$eww_dst/scripts/$name"
-                    ((n_updated++)) || true
-                fi
-            done
-        fi
-        for f in eww.scss eww.yuck; do
-            if ! cmp -s "$eww_src/$f" "$eww_dst/$f"; then
-                copy_user_config "$eww_src/$f" "$eww_dst/$f"
-                ((n_updated++)) || true
-            fi
-        done
-        flock -u 8 || die "Cannot unlock EWW publication"
-        exec 8<&-
-    fi
-
-    # smplOS fonts (keypad cheatsheet icons; EWW draws them by family name)
+    # smplOS fonts (keypad cheatsheet icons)
     local fonts_src="$SMPLOS_REPO/src/shared/fonts" fonts_dst="$HOME/.local/share/fonts/smplos"
     local font fonts_changed=0
     for font in "$fonts_src/"*.ttf "$fonts_src/keypad-icons/LICENSE-tabler-icons.txt"; do
@@ -439,7 +396,7 @@ sync_config_defaults() {
 }
 
 # ── Sync themes to ~/.local/share/smplos/themes/ ─────────────────────────────
-# Stock theme files (colors.toml, nemo.css, eww-colors.scss, etc.) are read by
+# Stock theme files (colors.toml, nemo.css, compositor palettes, etc.) are read by
 # theme-set from $STOCK_THEMES_PATH ($HOME/.local/share/smplos/themes). They are
 # stamped into the installed system from the ISO and otherwise never updated,
 # which means CSS fixes (e.g. nemo submenu rendering) shipped via the repo never
@@ -563,19 +520,19 @@ sync_apps() {
             # ── Single-copy invariant ────────────────────────────────────
             # Guarantee ONE canonical binary on the system: /usr/local/bin/$name.
             # Any file at a PATH location that comes BEFORE /usr/local/bin on
-            # the effective shell PATH will silently override it — Eww, tray
+            # the effective shell PATH will silently override it — Tray
             # buttons, keybindings, and toggle-scripts using bare `$name` all
             # then launch the OLD binary and the "I updated but nothing changed"
             # trap fires again.
             #
             # We MUST also scrub ~/.local/share/smplos/bin/, even though that
             # dir is normally meant to hold sync_scripts output (bash scripts).
-            # Eww inherits its PATH from smplos-start-session, which prepends
+            # Session commands inherit their PATH from smplos-start-session, which prepends
             # ~/.local/share/smplos/bin, so any binary that landed there via a
             # historical `deploy-local.sh` cp (or manual copy) silently takes
             # priority over every sync_apps install to /usr/local/bin. This is
             # exactly how ~/.local/share/smplos/bin/smpl-calendar ended up
-            # stuck at v0.7.4 while /usr/local/bin was at v0.8.11 — Eww
+            # stuck at v0.7.4 while /usr/local/bin was at v0.8.11 — bar launchers
             # launched the March binary and users saw "the fix did not take".
             #
             # Policy: if a shadow exists and differs, delete it. If it exists

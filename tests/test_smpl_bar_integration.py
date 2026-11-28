@@ -103,32 +103,19 @@ if args == ["status"]:
                 rows.append(line)
         return rows
 
-    def test_backend_defaults_to_eww_and_environment_overrides_config(self):
-        result = self.invoke(BAR_CTL, "backend")
-        self.assertEqual(result.stdout, "eww\n")
+    def test_backend_is_mandatory_native(self):
+        self.assertEqual(self.invoke(BAR_CTL, "backend").stdout, "smpl-bar\n")
         conf = self.home / ".config/smplos/bar.conf"
-        conf.write_text(
-            "backend=smpl-bar\nws_count=7\nclock_format=date\n"
-            "clock_24h=true\nclock_date_fmt=ISO\n"
-        )
-        result = self.invoke(BAR_CTL, "backend")
-        self.assertEqual(result.stdout, "smpl-bar\n")
-        result = self.invoke(BAR_CTL, "backend", BAR_BACKEND="eww")
-        self.assertEqual(result.stdout, "eww\n")
-        self.assertIn("backend=smpl-bar", conf.read_text())
-        self.assertIn("clock_date_fmt=ISO", conf.read_text())
+        conf.write_text("backend=eww\nws_count=7\n")
+        self.assertEqual(self.invoke(BAR_CTL, "backend").stdout, "smpl-bar\n")
+        self.assertEqual(self.invoke(BAR_CTL, "backend", BAR_BACKEND="eww").stdout, "smpl-bar\n")
 
-    def test_backend_rejects_duplicate_and_invalid_values(self):
+    def test_native_preflight_rejects_duplicate_taskbar_values(self):
         conf = self.home / ".config/smplos/bar.conf"
-        for contents, message in (
-            ("backend=eww\n backend = eww\n", "Duplicate backend"),
-            ("backend=native\n", "Invalid backend"),
-        ):
-            with self.subTest(contents=contents):
-                conf.write_text(contents)
-                result = self.invoke(BAR_CTL, "backend")
-                self.assertNotEqual(result.returncode, 0)
-                self.assertIn(message, result.stderr)
+        conf.write_text("bar_edge=top\n bar_edge=bottom\n")
+        result = self.invoke(BAR_CTL, "apply")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("Duplicate bar_edge", result.stderr)
 
     def test_native_commands_use_ipc_without_touching_eww(self):
         self.ready.touch()
@@ -415,34 +402,20 @@ esac
         self.assertIn(["smpl-bar", "popup", "quick-settings"], rows)
         self.assertIn(["smpl-bar", "close-popups"], rows)
 
-    def test_session_start_is_native_only_when_explicit_and_falls_back(self):
-        control = self.tool(
-            "bar-ctl-mock",
-            """#!/bin/sh
-if [ "$1" = backend ]; then echo "${MOCK_BACKEND:-eww}"; exit 0; fi
-printf '%s|%s|%s\n' "$BAR_BACKEND" "$1" "$FAIL_NATIVE" >> "$CALLS"
-[ "$BAR_BACKEND" != eww ] || [ "${FAIL_FALLBACK:-0}" != 1 ] || exit 1
-[ "$BAR_BACKEND" != smpl-bar ] || [ "$FAIL_NATIVE" != 1 ]
-""",
-        )
-        result = self.invoke(
-            SESSION_START, BAR_CTL=str(control), MOCK_BACKEND="eww", FAIL_NATIVE="0"
-        )
-        self.assertEqual(result.returncode, 0)
-        self.assertIn("eww|start|0", self.calls.read_text())
+    def test_session_start_requires_the_native_bar_without_fallback(self):
+        control = self.tool("bar-ctl-mock", """#!/bin/sh
+printf '%s|%s\n' "$1" "$FAIL_NATIVE" >> "$CALLS"
+[ "$FAIL_NATIVE" != 1 ]
+""")
+        result = self.invoke(SESSION_START, BAR_CTL=str(control))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("ensure|", self.calls.read_text())
         self.calls.unlink()
-        result = self.invoke(
-            SESSION_START, BAR_CTL=str(control), MOCK_BACKEND="smpl-bar", FAIL_NATIVE="1"
-        )
-        self.assertEqual(result.returncode, 0)
-        self.assertIn("smpl-bar|ensure|1", self.calls.read_text())
-        self.assertIn("eww|start|1", self.calls.read_text())
-        self.calls.unlink()
-        result = self.invoke(
-            SESSION_START, BAR_CTL=str(control), MOCK_BACKEND="smpl-bar",
-            FAIL_NATIVE="1", FAIL_FALLBACK="1",
-        )
+        result = self.invoke(SESSION_START, BAR_CTL=str(control), FAIL_NATIVE="1")
         self.assertNotEqual(result.returncode, 0)
+        self.assertTrue(self.calls.read_text().endswith("ensure|1\n"))
+        self.assertFalse(any("remove" in str(row) or "uninstall" in str(row)
+                             for row in self.recorded()))
 
     def test_native_resident_requires_a_pinned_wayland_reservation(self):
         self.ready.touch()
@@ -464,34 +437,21 @@ printf '%s|%s|%s\n' "$BAR_BACKEND" "$1" "$FAIL_NATIVE" >> "$CALLS"
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn(["smpl-bar", "show"], self.recorded())
 
-    def test_control_surface_selects_the_sink_only_for_its_backend(self):
-        daemon = self.tool(
-            "control-surfaced",
-            """#!/bin/sh
+    def test_control_surface_uses_only_native_bar_sink(self):
+        daemon = self.tool("control-surfaced", """#!/bin/sh
 printf 'daemon:%s\n' "$*" >> "$CALLS"
 if [ "$1" = cheatsheet ]; then
-    printf '%s\n' '{"visible":true,"options":{"clickThrough":true}}'
+  printf '%s\n' '{"visible":true,"options":{"clickThrough":true}}'
 else
-    sleep 0.2
+  sleep 0.2
 fi
-""",
-        )
-        control = self.tool(
-            "bar-ctl-mock",
-            """#!/bin/sh
-if [ "$1" = backend ]; then echo "${MOCK_BACKEND}"; exit 0; fi
+""")
+        control = self.tool("bar-ctl-mock", """#!/bin/sh
 if [ "$1" = keypad-sheet ] && [ "$2" = - ]; then
-    payload=$(cat)
-    printf 'sheet:%s\n' "$payload" >> "$CALLS"
+  payload=$(cat); printf 'sheet:%s\n' "$payload" >> "$CALLS"
 fi
-""",
-        )
-        common = dict(BAR_CTL=str(control), SMPLOS_CONTROL_SURFACED=str(daemon))
-        result = self.invoke(CONTROL_RUN, MOCK_BACKEND="eww", **common)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertIn("--eww-window pad-cheatsheet", self.calls.read_text())
-        self.calls.unlink()
-        result = self.invoke(CONTROL_RUN, MOCK_BACKEND="smpl-bar", **common)
+""")
+        result = self.invoke(CONTROL_RUN, BAR_CTL=str(control), SMPLOS_CONTROL_SURFACED=str(daemon))
         self.assertEqual(result.returncode, 0, result.stderr)
         text = self.calls.read_text()
         self.assertIn("daemon:run --quiet", text)
@@ -534,10 +494,7 @@ fi
             text = path.read_text()
             self.assertIn("bar-session-start", text)
             self.assertNotIn("bar-ctl start'", text)
-        self.assertEqual(
-            (ROOT / "src/shared/configs/smplos/bar.conf").read_text().splitlines()[0],
-            "backend=eww",
-        )
+        self.assertNotIn("backend=", (ROOT / "src/shared/configs/smplos/bar.conf").read_text())
 
     def test_keypad_unit_replaces_only_the_selected_bar_sink(self):
         unit = (ROOT / "src/shared/configs/systemd/user/control-surface.service").read_text()
@@ -548,75 +505,22 @@ fi
         migration = (ROOT / "migrations/20261121-000000-native-bar-keypad-sink.sh").read_text()
         self.assertIn("smplos_keypad_sync_units", migration)
 
-    def test_release_contract_accepts_old_bundle_and_validates_optional_bar(self):
+    def test_release_contract_requires_smpl_bar(self):
         bundle = self.root / "bundle"
         bundle.mkdir()
         library = ROOT / "src/shared/lib/smplos-app-bundle.sh"
-        source = subprocess.run(
-            ["bash", "-c",
-             f'source "{library}"; printf "%s\\n" "${{SMPLOS_APP_BINS[@]}}"'],
-            capture_output=True, text=True, check=True,
-        ).stdout.splitlines()
-        for name in source:
+        names = subprocess.run(["bash", "-c", f'source "{library}"; printf "%s\n" "${{SMPLOS_APP_BINS[@]}}"'], capture_output=True, text=True, check=True).stdout.splitlines()
+        self.assertIn("smpl-bar", names)
+        for name in names:
             (bundle / name).write_bytes(b"\x7fELFfixture")
-        service = bundle / "smpl-calendar-alertd.service"
-        service.write_text(
-            "ExecStart=/usr/local/bin/smpl-calendar-alertd --foreground\n"
-            "WantedBy=default.target\n"
-        )
-
-        def valid():
-            return subprocess.run(
-                ["bash", "-c", f'source "{library}"; smplos_app_bundle_valid "$1"', "_",
-                 str(bundle)],
-                capture_output=True, text=True, timeout=10,
-            )
-
-        self.assertEqual(valid().returncode, 0)
-        (bundle / "smpl-bar").write_bytes(b"broken")
-        self.assertNotEqual(valid().returncode, 0)
-        shutil.copy2("/bin/true", bundle / "smpl-bar")
-        self.assertEqual(valid().returncode, 0)
-        target_runtime = 'ldd() { echo "libfreetype.so.6 => not found"; return 1; }'
-        default_linkage = subprocess.run(
-            ["bash", "-c",
-             f'source "{library}"; {target_runtime}; smplos_app_bundle_valid "$1"',
-             "_", str(bundle)],
-            capture_output=True, text=True, timeout=10,
-        )
-        self.assertNotEqual(default_linkage.returncode, 0)
-        shape_only = subprocess.run(
-            ["bash", "-c",
-             f'source "{library}"; {target_runtime}; '
-             'smplos_app_bundle_valid "$1" smplos_app_is_elf',
-             "_", str(bundle)],
-            capture_output=True, text=True, timeout=10,
-        )
-        self.assertEqual(shape_only.returncode, 0, shape_only.stderr)
-
-        archive = self.root / "smpl-apps-old.tar.gz"
-        with tarfile.open(archive, "w:gz") as output:
-            for path in bundle.iterdir():
-                if path.name != "smpl-bar":
-                    output.add(path, arcname=path.name)
-        staged = subprocess.run(
-            ["bash", "-c",
-             f'source "{library}"; smplos_stage_app_bundle "$1" "$2"', "_",
-             str(archive), str(bundle)],
-            capture_output=True, text=True, timeout=10,
-        )
-        self.assertEqual(staged.returncode, 0, staged.stderr)
-        self.assertFalse((bundle / "smpl-bar").exists(),
-                         "an omitted optional binary must not leak from the previous cache")
-        for path in (
-            ROOT / "src/build-iso.sh",
-            ROOT / "src/builder/build.sh",
-            ROOT / "src/shared/bin/smplos-update-apps",
-        ):
-            self.assertIn("SMPLOS_APP_OPTIONAL_BINS", path.read_text())
-        build = (ROOT / "src/build-iso.sh").read_text()
-        self.assertIn('rm -f "$cache_dir/$app"', build)
-        self.assertIn('smplos_app_bundle_valid "$cache_dir"', build)
+        (bundle / "smpl-calendar-alertd.service").write_text("ExecStart=/usr/local/bin/smpl-calendar-alertd --foreground\nWantedBy=default.target\n")
+        check = ["bash", "-c", 'source "$1"; smplos_app_bundle_valid "$2"', "_", str(library), str(bundle)]
+        self.assertEqual(subprocess.run(check, capture_output=True, text=True).returncode, 0)
+        (bundle / "smpl-bar").unlink()
+        self.assertNotEqual(subprocess.run(check, capture_output=True, text=True).returncode, 0)
+        for path in (ROOT / "src/build-iso.sh", ROOT / "src/builder/build.sh", ROOT / "src/shared/bin/smplos-update-apps"):
+            self.assertNotIn("SMPLOS_APP_OPTIONAL_BINS", path.read_text())
+        self.assertNotIn("optional", (ROOT / "src/builder/build.sh").read_text())
 
 
 if __name__ == "__main__":

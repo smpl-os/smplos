@@ -23,7 +23,5 @@ fi
 
 smplos_run_as_user hyprctl reload config-only
 smplos_run_as_user workspace-ctl enroll
-if smplos_run_as_user pgrep -u "$SMPLOS_SESSION_UID" -x eww >/dev/null; then
-    smplos_run_as_user bar-ctl reload
-fi
+smplos_run_as_user bar-ctl reload
 echo "  Workspace scripts, monitor overview and saved preference are applied"

@@ -34,7 +34,7 @@ class WorkspaceRolloutTests(unittest.TestCase):
             **os.environ, "HOME": str(self.home), "SMPLOS_REPO": str(self.repo),
             "PATH": f"{self.bin}:{os.environ['PATH']}", "TEST_LOG": str(self.log),
             "HYPRLAND_INSTANCE_SIGNATURE": "test-session", "NIRI_SOCKET": "",
-            "HAVE_HYPRLAND": "yes", "HAVE_EWW": "yes", "FAIL_BAR": "0",
+            "HAVE_HYPRLAND": "yes", "FAIL_BAR": "0",
         }
 
     def write(self, path, text):
@@ -53,7 +53,6 @@ class WorkspaceRolloutTests(unittest.TestCase):
             path = self.write(self.bin / name, """#!/bin/bash
 printf '%s %s\\n' "${0##*/}" "$*" >> "$TEST_LOG"
 case "${0##*/}" in
-  pgrep) [[ "$HAVE_EWW" == yes ]] ;;
   bar-ctl) exit "$FAIL_BAR" ;;
 esac
 """)
@@ -67,13 +66,9 @@ log() { :; }
 ok() { :; }
 die() { echo "$*" >&2; exit 1; }
 as_invoker() {
-    if [[ "$1" == install && "${FAIL_FRAGMENT:-0}" == 1 && "$3" == */workspace-overview.yuck ]]; then
-        return 1
-    fi
     if [[ "$1" == mv ]]; then
         destination="${@: -1}"
         case "$destination" in
-          */eww.yuck) [[ -f "$HOME/.config/eww/workspace-overview.yuck" ]] ;;
           */hyprland.lua)
             [[ -f "$HOME/.config/hypr/workspace_policy.lua" ]]
             [[ -f "$HOME/.config/hypr/apps/example.lua" ]] ;;
@@ -84,62 +79,31 @@ as_invoker() {
 }
 """ + function("copy_user_config") + function("sync_config_defaults") + function("sync_configs") + function("sync_hypr_configs")
 
-    def test_update_publishes_fragments_and_modules_before_entrypoints(self):
-        self.write(self.repo / "src/shared/eww/workspace-overview.yuck", "(defwidget overview [] (label :text \"map\"))\n")
-        self.write(self.repo / "src/shared/eww/eww.yuck", '(include "./workspace-overview.yuck")\n')
-        self.write(self.repo / "src/shared/eww/eww.scss", ".bar { color: green; }\n")
+    def test_update_publishes_native_workspace_compositor_modules_before_entrypoints(self):
         hypr = self.repo / "src/compositors/hyprland/hypr"
         self.write(hypr / "workspace_policy.lua", "return true\n")
         self.write(hypr / "hyprland.lua", 'require("workspace_policy")\n')
         self.write(hypr / "hyprland.conf", "source = opacity-policy.conf\n")
         for suffix in ("lua", "conf"):
-            self.write(hypr / f"opacity-policy.{suffix}",
-                       (ROOT / f"src/compositors/hyprland/hypr/opacity-policy.{suffix}").read_text())
+            self.write(hypr / f"opacity-policy.{suffix}", (ROOT / f"src/compositors/hyprland/hypr/opacity-policy.{suffix}").read_text())
         self.write(hypr / "apps/example.lua", "-- app rules\n")
         self.write(hypr / "apps/theme.conf", "managed app theme\n")
         self.write(hypr / "monitors.conf", "stock monitor\n")
         self.write(hypr / "bindings.conf", "stock bindings\n")
         monitor = self.write(self.home / ".config/hypr/monitors.conf", "user monitor\n")
         binding = self.write(self.home / ".config/hypr/bindings.conf", "user bindings\n")
-        colors = self.write(self.home / ".config/eww/theme-colors.scss", "user theme\n")
-        choice = self.write(self.home / ".config/smplos/workspace-policy.json", '{"enabled":false}\n')
+        legacy = self.write(self.home / ".config/eww/custom.yuck", "user-owned\n")
         script = self.config_sync_script() + "\nsync_configs\nsync_hypr_configs\n"
         self.run_bash(script)
         self.assertEqual(monitor.read_text(), "user monitor\n")
         self.assertEqual(binding.read_text(), "user bindings\n")
-        self.assertEqual(colors.read_text(), "user theme\n")
-        self.assertEqual(choice.read_text(), '{"enabled":false}\n')
-        self.assertEqual((self.home / ".config/hypr/apps/theme.conf").read_text(), "managed app theme\n")
+        self.assertEqual(legacy.read_text(), "user-owned\n")
         events = self.log.read_text().splitlines()
-        self.assertLess(events.index(str(self.home / ".config/eww/workspace-overview.yuck")),
-                        events.index(str(self.home / ".config/eww/eww.yuck")))
-        self.assertLess(events.index(str(self.home / ".config/hypr/workspace_policy.lua")),
-                        events.index(str(self.home / ".config/hypr/hyprland.lua")))
-        for suffix in ("lua", "conf"):
-            policy = self.home / f".config/hypr/opacity-policy.{suffix}"
-            self.assertEqual(policy.read_bytes(), (hypr / policy.name).read_bytes())
-            self.assertLess(events.index(str(policy)),
-                            events.index(str(self.home / f".config/hypr/hyprland.{suffix}")))
-        self.run_bash(script)
-        self.assertEqual(self.log.read_text().splitlines(), events)
-
-    def test_failed_fragment_install_leaves_old_entrypoint_intact(self):
-        self.write(self.repo / "src/shared/eww/workspace-overview.yuck", "new fragment\n")
-        self.write(self.repo / "src/shared/eww/eww.yuck", "new entry point\n")
-        old = self.write(self.home / ".config/eww/eww.yuck", "old entry point\n")
-        self.env["FAIL_FRAGMENT"] = "1"
-        result = self.run_bash(self.config_sync_script() + "\nsync_configs\n", check=False)
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("Could not update config", result.stderr)
-        self.assertEqual(old.read_text(), "old entry point\n")
-        self.assertFalse((old.parent / "workspace-overview.yuck").exists())
+        self.assertLess(events.index(str(self.home / ".config/hypr/workspace_policy.lua")), events.index(str(self.home / ".config/hypr/hyprland.lua")))
 
     def test_normal_update_delivers_taskbar_files_without_replacing_preferences(self):
         commands = ("bar-ctl", "workspace-ctl", "smplos-hypr-dpms")
-        configs = ("workspace-overview.yuck", "eww.yuck", "eww.scss",
-                   "scripts/workspace-count.sh")
-        for relative in ([f"src/shared/bin/{name}" for name in commands]
-                         + [f"src/shared/eww/{name}" for name in configs]):
+        for relative in [f"src/shared/bin/{name}" for name in commands]:
             destination = self.repo / relative
             destination.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(ROOT / relative, destination)
@@ -173,10 +137,6 @@ sync_libs() { :; }
         for name in commands:
             self.assertEqual((installed / name).read_bytes(), (BIN / name).read_bytes())
             self.assertTrue(os.access(installed / name, os.X_OK))
-        for name in configs:
-            self.assertEqual((self.home / ".config/eww" / name).read_bytes(),
-                             (ROOT / "src/shared/eww" / name).read_bytes())
-        self.assertTrue(os.access(self.home / ".config/eww/scripts/workspace-count.sh", os.X_OK))
         for relative, contents in preferences.items():
             self.assertEqual((self.home / relative).read_text(), contents)
         self.run_bash(script)
@@ -224,7 +184,6 @@ smplos_run_as_user() {
         calls = self.log.read_text()
         self.assertIn("as-user hyprctl reload config-only", calls)
         self.assertIn("as-user workspace-ctl enroll", calls)
-        self.assertIn("as-user pgrep -u 1234 -x eww", calls)
         self.assertIn("as-user bar-ctl reload", calls)
         self.assertNotIn("kill", calls)
         self.assertLess(calls.index("hyprctl reload"), calls.index("workspace-ctl enroll"))

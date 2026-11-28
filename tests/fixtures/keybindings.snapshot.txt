@@ -169,4 +169,3 @@ emergency | CTRL+ALT+R |  | exec hyprctl reload -> exec_cmd("hyprctl reload")
 emergency | SUPER+CTRL+D |  | exec screen-recover -> exec_cmd("screen-recover")
 emergency | CTRL+ALT+A |  | exec app-center -> exec_cmd("app-center")
 popup_watchers | mouse:272 | _popup_click_check | <lua> -> exec_cmd("popup-click-check") {"non_consuming":true}
-popup_watchers | Escape | _workspace_overview_escape | <lua> -> <function> {"dont_inhibit":true}

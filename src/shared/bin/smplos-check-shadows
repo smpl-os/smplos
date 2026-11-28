@@ -5,7 +5,7 @@
 # path — /usr/local/bin/<name>. Any file with the same basename in a shadow
 # dir that appears earlier on $PATH silently overrides the canonical copy the
 # instant PATH resolution runs, and every subsequent invocation of that name
-# (from Eww, keybindings, tray toggles, systemd --user, another script) hits
+# (from keybindings, tray toggles, systemd --user, another script) hits
 # the shadow and drifts from the canonical version.
 #
 # This is the root cause of the entire "I updated but the fix did not take"

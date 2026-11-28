@@ -4,7 +4,7 @@
 -- Why we parse hyprlang from Lua:
 --   • src/shared/configs/smplos/bindings.conf is the **single source of truth**
 --     for keybindings. The DWM build (future) parses the same file into C
---     structs, and src/shared/bin/keybind-help renders an EWW overlay from it.
+--     structs, and src/shared/bin/keybind-help renders the native help overlay from it.
 --     Keeping it hyprlang preserves that invariant.
 --   • messenger-bindings.conf is generated at runtime by
 --     `generate-messenger-bindings`. Same parser handles it.

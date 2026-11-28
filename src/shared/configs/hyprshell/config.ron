@@ -1,5 +1,5 @@
 // smplOS hyprshell config — Alt-Tab window switcher only
-// Overview/launcher disabled (smplOS uses its own EWW-based start-menu)
+// Overview/launcher disabled (smplOS uses its own native start menu)
 // Edit with `hyprshell config edit`
 (
     version: 3,

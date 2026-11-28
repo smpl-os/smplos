@@ -19,7 +19,7 @@ from datetime import datetime, timezone
 APPS = (
     "start-menu", "notif-center", "settings", "app-center", "webapp-center",
     "sync-center-daemon", "sync-center-gui", "smpl-calendar", "smpl-calendar-alertd",
-    "smpl-hints", "smpl-hintsd",
+    "smpl-hints", "smpl-hintsd", "smpl-bar",
 )
 XR_SCRIPTS = {"xrctl", "xr-game", "xr-glasses-hotplugd"}
 USER_HYPR = {
@@ -29,7 +29,7 @@ USER_HYPR = {
 STACK = re.compile(
     r"^(linux(?:-lts|-zen|-hardened|-surface)?(?:-headers)?|linux-firmware.*|"
     r".*nvidia.*|.*mesa.*|.*vulkan.*|.*-dkms(?:-git)?|xf86-(?:input|video)-.*|"
-    r".*ucode|hypr.*|aquamarine|xdg-desktop-portal.*|eww.*|glibc|gcc-libs|"
+    r".*ucode|hypr.*|aquamarine|xdg-desktop-portal.*|glibc|gcc-libs|"
     r"openssl|systemd.*|pacman|libalpm|grub|mkinitcpio.*|kernel-modules-hook|dkms|"
     r"libdrm|wayland|libxkbcommon.*|qt6-.*|gtk[34]|glib2|webkit2gtk.*|"
     r"nemo-smpl|control-surface|bash|coreutils|sudo|polkit.*|pam|"
@@ -272,15 +272,6 @@ class Audit:
                         self.compare(source, destination / source.name, executable=relative.endswith("/bin"))
         if not desktop:
             return
-        eww = self.repo / "src/shared/eww"
-        for pattern in ("*.yuck", "*.scss", "scripts/*"):
-            for source in eww.glob(pattern):
-                if source.is_file() and not source.name.startswith("theme-colors."):
-                    self.compare(source, self.home / ".config/eww" / source.relative_to(eww),
-                                 executable=source.parent.name == "scripts")
-        palette = self.home / ".config/eww/theme-colors.scss"
-        if not palette.is_file() or not palette.stat().st_size:
-            self.error(f"Missing generated EWW palette: {palette}")
         hypr = self.repo / "src/compositors/hyprland/hypr"
         if self.hyprland_installed():
             for pattern in ("*.conf", "*.lua", "apps/*"):
@@ -319,12 +310,11 @@ class Audit:
                 selected = self.home / ".config/smplos/themes" / name
                 if not selected.is_dir():
                     selected = self.home / ".local/share/smplos/themes" / name
-                for filename in ("colors.toml", "eww-colors.scss", "nemo.css", "hyprland.conf", "hyprlock.conf"):
+                for filename in ("colors.toml", "nemo.css", "hyprland.conf", "hyprlock.conf"):
                     source = selected / filename
                     if source.is_file():
                         self.compare(source, current / "theme" / filename)
                 for filename, target in (
-                    ("eww-colors.scss", ".config/eww/theme-colors.scss"),
                     ("nemo.css", ".config/smplos/nemo-theme.css"),
                     ("hyprland.conf", ".config/hypr/theme.conf"),
                     ("hyprlock.conf", ".config/hypr/hyprlock-theme.conf"),
@@ -382,7 +372,7 @@ class Audit:
     def apps(self):
         for name in (*APPS, "st-wl", "micro"):
             self.linkage(self.root / "usr/local/bin" / name)
-        for name in ("nemo", "eww"):
+        for name in ("nemo",):
             self.linkage(self.root / "usr/bin" / name)
         if self.hyprland_installed():
             self.linkage(self.root / "usr/bin/Hyprland")
@@ -629,7 +619,7 @@ class Audit:
                     self.error(f"No system provider for core dependency {dependency} required by {name}")
                     return
                 pending.extend(candidates - closure)
-        managed = {"nemo-smpl", "eww-smplos", "control-surface"}
+        managed = {"nemo-smpl", "control-surface"}
         app_only = {"grafium-bin"}
         excluded = managed | app_only
         self.report["aur_policy"] = {
@@ -952,7 +942,7 @@ class Audit:
         # Optional bundled executables are verified when delivered, not required
         # on machines whose release never included them.
         if component == "smpl-apps":
-            optional = ("xr-workspace", "xrctl", "xr-game", "xr-glasses-hotplugd", "smpl-bar")
+            optional = ("xr-workspace", "xrctl", "xr-game", "xr-glasses-hotplugd")
             for name in optional:
                 path = self.root / "usr/local/bin" / name
                 if path.exists() or path.is_symlink() or str(path) in recorded:
@@ -1074,11 +1064,6 @@ class Audit:
             if unexpected or result.stderr.strip() or result.returncode not in (0, 1):
                 self.error(f"Repository updates remain or could not be checked: {result.stdout}{result.stderr}")
         packages = self.report["packages"]
-        recipe = self.repo / "src/shared/pkgbuilds/eww-smplos/PKGBUILD"
-        if recipe.is_file():
-            commit = re.search(r"^_commit=([0-9a-f]{7})", recipe.read_text(), re.M)
-            if commit and f".g{commit[1]}-" not in packages.get("eww-smplos", ""):
-                self.error("EWW fork is missing or behind the required commit; its migration remains incomplete")
         self.repository_versions()
         critical = sorted(
             name for name in packages
@@ -1235,10 +1220,9 @@ class Audit:
         if not (os.environ.get("WAYLAND_DISPLAY") or os.environ.get("DISPLAY")):
             self.report["warnings"].append("No graphical session; live bar/config checks deferred")
             return
-        result = self.command("eww", "--config", self.home / ".config/eww", "active-windows")
-        if result is not None:
-            if result.returncode or not any(line.split(":", 1)[0] == "bar" for line in result.stdout.splitlines()):
-                self.error("EWW bar is not open; inspect ~/.local/state/smplos/eww-startup.log")
+        result = self.command("bar-ctl", "status")
+        if result is not None and result.returncode:
+            self.error(f"Native smpl-bar status failed: {result.stderr.strip()}")
         if os.environ.get("HYPRLAND_INSTANCE_SIGNATURE"):
             result = self.command("hyprctl", "configerrors")
             if result is not None:

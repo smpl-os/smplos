@@ -109,7 +109,6 @@ dump_cmd "logs/journal-boot.txt"         journalctl -b --no-pager
 dump_cmd "logs/journal-errors.txt"       journalctl -b -p err --no-pager
 dump_cmd "logs/journal-warnings.txt"     journalctl -b -p warning --no-pager
 dump_cmd "logs/journal-hyprland.txt"     journalctl -b --user -u hyprland --no-pager
-dump_cmd "logs/journal-eww.txt"          journalctl -b --user -u eww --no-pager
 
 # Hyprland log (if it writes one)
 for log in /tmp/hypr/*/hyprland.log; do
@@ -118,9 +117,6 @@ for log in /tmp/hypr/*/hyprland.log; do
     dump_file "$log" "logs/hyprland-$instance.log"
 done
 
-# EWW log
-dump_file "$REAL_HOME/.cache/eww/eww.log"     "logs/eww.log"
-dump_file "$REAL_HOME/.cache/eww/eww_stderr"   "logs/eww_stderr.log"
 
 # ════════════════════════════════════════════════════════════
 # PACKAGES
@@ -136,8 +132,6 @@ dump_cmd "packages/foreign.txt"      pacman -Qm
 # ════════════════════════════════════════════════════════════
 header "Config Files"
 
-# EWW
-dump_file "$REAL_HOME/.config/eww"                    "config/eww"
 
 # Hyprland
 dump_file "$REAL_HOME/.config/hypr"                   "config/hypr"
@@ -177,8 +171,6 @@ dump_cmd "theme/current-name.txt"  cat "$REAL_HOME/.config/smplos/current/theme.
 # List available themes
 dump_cmd "theme/available.txt"     ls -1 "$REAL_HOME/.local/share/smplos/themes/"
 
-# The active theme-colors.scss that EWW uses
-dump_file "$REAL_HOME/.config/eww/theme-colors.scss"  "theme/active-eww-colors.scss"
 
 # Active theme dir contents
 if [[ -d "$REAL_HOME/.config/smplos/current/theme" ]]; then
@@ -191,8 +183,6 @@ fi
 header "Runtime State"
 
 dump_cmd "runtime/processes.txt"          ps auxf
-dump_cmd "runtime/eww-state.txt"         su -c "eww state" "$REAL_USER" 2>&1 || true
-dump_cmd "runtime/eww-windows.txt"       su -c "eww windows" "$REAL_USER" 2>&1 || true
 dump_cmd "runtime/hyprctl-monitors.txt"  su -c "hyprctl monitors" "$REAL_USER" 2>&1 || true
 dump_cmd "runtime/hyprctl-clients.txt"   su -c "hyprctl clients" "$REAL_USER" 2>&1 || true
 dump_cmd "runtime/hyprctl-layers.txt"    su -c "hyprctl layers" "$REAL_USER" 2>&1 || true

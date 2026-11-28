@@ -131,25 +131,6 @@ class AudioSettingsTests(unittest.TestCase):
         self.assertIn("terminal failed", result.stderr)
         self.assertEqual(self.calls_made(), ["terminal", "-e", "alsamixer"])
 
-    def test_volume_bar_right_click_uses_the_same_audio_fallback(self):
-        bar = (ROOT / "src/shared/eww/eww.yuck").read_text()
-        widget = re.search(r"^\(defwidget tray-volume \[\]\n.*?(?=^\(defwidget |\Z)",
-                           bar, re.M | re.S)
-        self.assertIsNotNone(widget)
-        action = re.search(r':onrightclick "([^"]+)"', widget.group())
-        self.assertIsNotNone(action)
-        self.assertEqual(action[1], "smplos-settings audio &")
-        launcher = self.bin / "smplos-settings"
-        launcher.write_bytes(SETTINGS.read_bytes())
-        launcher.chmod(0o755)
-        self.terminal()
-        self.tool("alsamixer")
-        result = subprocess.run(
-            ["/bin/bash", "-c", action[1] + ' wait "$!"'], env=self.env,
-            capture_output=True, text=True, timeout=5,
-        )
-        self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.calls_made(), ["terminal", "-e", "alsamixer", "alsamixer"])
 
 
 if __name__ == "__main__":

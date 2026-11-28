@@ -157,10 +157,10 @@ dofile(arg[1])
                 self.assertIn("self-managed-alpha", tags)
                 self.assertEqual(opacity, "1.0 override 1.0 override")
 
-    def test_iso_seeds_native_palette_and_nemo_css_before_first_switch(self):
+    def test_iso_seeds_nemo_css_before_first_switch(self):
         source = (SRC / "builder/build.sh").read_text()
         fragment = source.split("# Link pre-baked configs into app config dirs for live session", 1)[1]
-        fragment = fragment.split("# Bake SVG icon templates", 1)[0]
+        fragment = fragment.split("# Rofi theme", 1)[0]
         with tempfile.TemporaryDirectory() as temporary:
             result = subprocess.run(
                 ["bash", "-c", 'set -e; SRC_DIR=$1; skel=$2; seed() {\n'
@@ -168,14 +168,8 @@ dofile(arg[1])
                 text=True, capture_output=True, timeout=5,
             )
             self.assertEqual(result.returncode, 0, result.stderr)
-            for source_name, target_name in (
-                ("eww-colors.scss", "eww/theme-colors.scss"),
-                ("nemo.css", "smplos/nemo-theme.css"),
-            ):
-                self.assertEqual(
-                    (Path(temporary) / ".config" / target_name).read_bytes(),
-                    (SRC / "shared/themes/catppuccin" / source_name).read_bytes(),
-                )
+            self.assertEqual((Path(temporary) / ".config/smplos/nemo-theme.css").read_bytes(),
+                             (SRC / "shared/themes/catppuccin/nemo.css").read_bytes())
 
 
 class GenerationTests(unittest.TestCase):
@@ -260,10 +254,6 @@ class GenerationTests(unittest.TestCase):
                 self.palette.write_text(text)
                 result = self.generate()
                 self.assertEqual(result.returncode, 0, result.stderr)
-                self.assertIn(
-                    f"$theme-app-background-opacity: {expected};",
-                    (self.theme / "eww-colors.scss").read_text(),
-                )
                 self.assertIn(
                     f"alpha(#1e1e2e, {expected})",
                     (self.theme / "nemo.css").read_text(),

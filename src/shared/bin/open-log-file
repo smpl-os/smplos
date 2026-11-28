@@ -8,7 +8,7 @@ file="${1:-}"
 [[ ! -f "$file" ]] && { echo "File not found: $file" >&2; exit 1; }
 
 # Re-source user environment so Wayland/display vars are available
-# (notif-center may be launched with a stripped env from EWW/Hyprland).
+# (notif-center may be launched with a stripped compositor environment).
 if [[ -f "$HOME/.config/hypr/envs.conf" ]]; then
   while IFS= read -r line; do
     [[ "$line" =~ ^env\ =\ ([^,]+),(.+)$ ]] && export "${BASH_REMATCH[1]}"="${BASH_REMATCH[2]}"

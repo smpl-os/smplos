@@ -336,7 +336,6 @@ install_desktop() {
     arch-chroot "$MOUNT_POINT" pacman -S --noconfirm --needed \
         hyprland hypridle hyprlock hyprpaper \
         nemo nemo-fileroller file-roller \
-        eww \
         pipewire pipewire-alsa pipewire-pulse wireplumber \
         ttf-jetbrains-mono-nerd noto-fonts \
         firefox \
@@ -359,13 +358,6 @@ copy_configs() {
         log "Copying configuration files..."
         cp -r /etc/skel/.config "$USER_HOME/"
         arch-chroot "$MOUNT_POINT" chown -R "$USERNAME:$USERNAME" "/home/$USERNAME/.config"
-    fi
-    
-    # Copy EWW config
-    if [[ -d /home/smplos/.config/eww ]]; then
-        mkdir -p "$USER_HOME/.config"
-        cp -r /home/smplos/.config/eww "$USER_HOME/.config/"
-        arch-chroot "$MOUNT_POINT" chown -R "$USERNAME:$USERNAME" "/home/$USERNAME/.config/eww"
     fi
     
     # Copy Hyprland config

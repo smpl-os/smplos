@@ -5,7 +5,7 @@ set -euo pipefail
 #
 # Usage:  sudo ./dev-local.sh [component...]
 #
-# Components:  eww bin hypr themes configs apps icons plugins rust st all
+# Components:  bin hypr themes configs apps icons plugins rust st all
 #   (default: all except st and rust -- use 'st' or 'rust' explicitly)
 #
 # 'plugins' compiles the Hyprland plugins in src/compositors/hyprland/plugins
@@ -13,11 +13,9 @@ set -euo pipefail
 # and reloads them in the running session when a build changed.
 #
 # Examples:
-#   sudo ./dev-local.sh              # configs + scripts + eww + themes
-#   sudo ./dev-local.sh eww          # just EWW
+#   sudo ./dev-local.sh              # configs + scripts + themes
 #   sudo ./dev-local.sh plugins      # rebuild + reload the HUD plugin
 #   sudo ./dev-local.sh rust         # rebuild all Rust apps
-#   sudo ./dev-local.sh eww rust     # EWW configs + rebuild Rust apps
 #   sudo ./dev-local.sh all          # everything including st + Rust
 #
 
@@ -68,7 +66,7 @@ run_as_user() {
     [[ -z "$hypr_sig" && -d "$xdg_dir/hypr" ]] && hypr_sig=$(ls -1 "$xdg_dir/hypr/" 2>/dev/null | head -n1)
     if [[ -z "$hypr_sig" ]]; then
         local child_pid
-        child_pid=$(pgrep -u "$REAL_USER" -f 'eww|hyprctl' 2>/dev/null | head -n1) || true
+        child_pid=$(pgrep -u "$REAL_USER" -f 'smpl-bar|hyprctl' 2>/dev/null | head -n1) || true
         [[ -n "$child_pid" ]] && hypr_sig=$(tr '\0' '\n' < /proc/"$child_pid"/environ 2>/dev/null | grep ^HYPRLAND_INSTANCE_SIGNATURE= | cut -d= -f2)
     fi
     [[ -n "$hypr_sig" ]] && env_vars+=" HYPRLAND_INSTANCE_SIGNATURE=$hypr_sig"
@@ -82,7 +80,7 @@ run_as_user() {
 components=("$@")
 if [[ ${#components[@]} -eq 0 ]]; then
     # Default: everything except st and rust (those are slow)
-    components=(eww bin hypr themes configs apps icons plugins)
+    components=(bin hypr themes configs apps icons plugins)
 fi
 
 do_component() {
@@ -93,31 +91,12 @@ do_component() {
     return 1
 }
 
-restart_eww=false
 restart_hypr=false
 plugin_action=""
 
 log "${BOLD}Applying from:${NC} $SRC_DIR"
 log "${BOLD}Target user:${NC}  $REAL_USER ($USER_HOME)"
 echo ""
-
-# ── EWW ─────────────────────────────────────────────────────
-if do_component eww; then
-    log "Applying EWW configs..."
-    mkdir -p "$USER_HOME/.config/eww"
-    for file in "$SRC_DIR/shared/eww/"*; do
-        name=$(basename "$file")
-        case "$name" in
-            theme-colors.scss|theme-colors.yuck)
-                [[ -f "$USER_HOME/.config/eww/$name" ]] && continue ;;
-        esac
-        cp -a "$file" "$USER_HOME/.config/eww/"
-    done
-    find "$USER_HOME/.config/eww/scripts" -name '*.sh' -exec chmod +x {} \; 2>/dev/null || true
-    own "$USER_HOME/.config/eww/"
-    restart_eww=true
-    log "  $(find "$SRC_DIR/shared/eww" -type f | wc -l) files"
-fi
 
 # ── Icons ───────────────────────────────────────────────────
 if do_component icons; then
@@ -322,10 +301,10 @@ fi
 # ── Restart services ────────────────────────────────────────
 current_theme=$(cat "$USER_HOME/.config/smplos/current/theme.name" 2>/dev/null || true)
 
-if [[ -n "${current_theme:-}" ]] && ($restart_eww || $restart_hypr || do_component themes); then
+if [[ -n "${current_theme:-}" ]] && { $restart_hypr || do_component themes; }; then
     log "Re-applying theme '$current_theme'..."
     run_as_user "theme-set '$current_theme'" || {
-        err "Theme re-apply failed; deployment is incomplete. EWW was not restarted."
+        err "Theme re-apply failed; deployment is incomplete. bar reload was not completed."
         exit 1
     }
 
@@ -340,13 +319,8 @@ if [[ -n "${current_theme:-}" ]] && ($restart_eww || $restart_hypr || do_compone
             echo "$BROWSER_POLICY" > "/etc/$browser/policies/managed/color.json" 2>/dev/null
         done
     fi
-elif $restart_eww; then
-    log "Reloading EWW without restarting the daemon..."
-    run_as_user "bar-ctl reload" || {
-        err "EWW reload failed; deployment is incomplete."
-        exit 1
-    }
 fi
+
 
 if $restart_hypr; then
     log "Generating messenger bindings..."

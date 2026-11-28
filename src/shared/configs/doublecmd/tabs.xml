@@ -16,9 +16,6 @@
               <Entry Active="True">
                 <FileSource Type="FileSystem"/>
                 <Paths>
-                  <Path Filename="scripts">/home/blin/Documents/sources/smplos/src/shared/eww/</Path>
-                  <Path Filename="notification-listener.sh">/home/blin/Documents/sources/smplos/src/shared/eww/scripts/</Path>
-                  <Path Filename="scripts">/home/blin/Documents/sources/smplos/src/shared/eww/</Path>
                   <Path Filename="..">/home/blin/Documents/sources/smplos/src/shared/</Path>
                   <Path Filename="shared">/home/blin/Documents/sources/smplos/src/</Path>
                   <Path Filename="..">/home/blin/Documents/sources/smplos/src/shared/</Path>
@@ -312,7 +309,6 @@
                   <Path Filename="vmshare">/home/blin/Documents/sources/smplos/release/</Path>
                   <Path Filename="..">/home/blin/Documents/sources/smplos/release/vmshare/</Path>
                   <Path Filename="vmshare">/home/blin/Documents/sources/smplos/release/</Path>
-                  <Path Filename="debug-eww.sh">/home/blin/Documents/sources/smplos/release/vmshare/</Path>
                   <Path Filename="vmshare">/home/blin/Documents/sources/smplos/release/</Path>
                   <Path Filename="..">/home/blin/Documents/sources/smplos/release/vmshare/</Path>
                   <Path Filename="">/home/blin/Documents/sources/smplos/release/</Path>

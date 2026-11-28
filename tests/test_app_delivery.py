@@ -16,7 +16,7 @@ LIB = ROOT / "src/shared/lib/smplos-app-bundle.sh"
 APPS = (
     "start-menu", "notif-center", "settings", "app-center", "webapp-center",
     "sync-center-daemon", "sync-center-gui", "smpl-calendar", "smpl-calendar-alertd",
-    "smpl-hints", "smpl-hintsd",
+    "smpl-hints", "smpl-hintsd", "smpl-bar",
 )
 XR_SCRIPTS = ("xrctl", "xr-game", "xr-glasses-hotplugd")
 CALENDAR_SERVICE = "smpl-calendar-alertd.service"
@@ -788,8 +788,7 @@ sync_apps
 
     def test_os_update_delivers_launcher_scripts_cache_and_volume_widget(self):
         scripts = ("smplos-settings", "rebuild-app-cache")
-        for relative in (*(f"bin/{name}" for name in scripts),
-                         "eww/eww.yuck", "eww/eww.scss"):
+        for relative in (f"bin/{name}" for name in scripts):
             target = self.project / "src/shared" / relative
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / "src/shared" / relative, target)
@@ -797,9 +796,9 @@ sync_apps
         installed.mkdir()
         for name in scripts:
             (installed / name).write_text("#!/bin/bash\nexit 97\n")
-        eww = self.home / ".config/eww/eww.yuck"
-        eww.parent.mkdir(parents=True)
-        eww.write_text("old widget\n")
+        legacy = self.home / ".config/eww/eww.yuck"
+        legacy.parent.mkdir(parents=True)
+        legacy.write_text("user-owned legacy widget\n")
         cache = self.home / ".cache/smplos/app_index"
         cache.parent.mkdir(parents=True)
         cache.write_text("old cache\n")
@@ -839,8 +838,7 @@ sync_libs() { :; }; sync_config_defaults() { :; }
             self.assertEqual((installed / name).read_bytes(),
                              (ROOT / "src/shared/bin" / name).read_bytes())
             self.assertEqual((installed / name).stat().st_mode & 0o777, 0o755)
-        self.assertEqual(eww.read_bytes(), (ROOT / "src/shared/eww/eww.yuck").read_bytes())
-        self.assertEqual(eww.stat().st_mode & 0o777, 0o644)
+        self.assertEqual(legacy.read_text(), "user-owned legacy widget\n")
         rows = {row[0]: row for row in
                 (line.split(";") for line in cache.read_text().splitlines())}
         for name in ("Volume", "Sound", "Speakers", "Output Device", "Input Device"):

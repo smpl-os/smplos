@@ -37,7 +37,6 @@ if ! declare -F smplos_app_bundle_valid >/dev/null; then
     echo "ERROR: smplos-app-bundle.sh not found; run smplos-os-update first" >&2
     exit 1
 fi
-declare -p SMPLOS_APP_OPTIONAL_BINS >/dev/null 2>&1 || SMPLOS_APP_OPTIONAL_BINS=()
 mkdir -p "$STATE_DIR" "$SMPLOS_BIN"
 
 CHECK_ONLY=0; QUIET=0; REPORT_FILE=""; GROUP=all
@@ -229,9 +228,6 @@ update_smpl_apps() {
     local cached_ver remote_ver
     local app xrbin receipt installed=() retained=() retain_xr=0
     for app in "${SMPLOS_APP_BINS[@]}"; do installed+=("/usr/local/bin/$app"); done
-    for app in "${SMPLOS_APP_OPTIONAL_BINS[@]}"; do
-        [[ ! -e "/usr/local/bin/$app" ]] || installed+=("/usr/local/bin/$app")
-    done
     for xrbin in xr-workspace xrctl xr-game xr-glasses-hotplugd; do
         if [[ -e "/usr/local/bin/$xrbin" || -L "/usr/local/bin/$xrbin" ]]; then
             installed+=("/usr/local/bin/$xrbin")
@@ -297,25 +293,6 @@ update_smpl_apps() {
     for app in "${SMPLOS_APP_BINS[@]}"; do
         smplos_app_linkage_valid "$tmpdir/$app" || return 1
     done
-    for app in "${SMPLOS_APP_OPTIONAL_BINS[@]}"; do
-        [[ ! -f "$tmpdir/$app" ]] || smplos_app_linkage_valid "$tmpdir/$app" || return 1
-        if [[ -e "/usr/local/bin/$app" && ! -f "$tmpdir/$app" ]]; then
-            local optional_receipt="$STATE_DIR/smpl-apps.sha256"
-            local iso_bootstrap=0
-            if [[ ! -s "$optional_receipt" &&
-                  "$(stat -c '%u:%g:%a' "/usr/local/bin/$app" 2>/dev/null)" == "0:0:755" ]]; then
-                iso_bootstrap=1
-            fi
-            if ! { component_files_current smpl-apps "/usr/local/bin/$app" ||
-                    (( iso_bootstrap )); } ||
-                ! smplos_app_linkage_valid "/usr/local/bin/$app"; then
-                warn "smpl-apps: cannot safely retain optional binary $app omitted by $remote_ver"
-                return 1
-            fi
-            retained+=("/usr/local/bin/$app")
-            warn "smpl-apps: $remote_ver omits optional binary $app; retaining the verified installed copy"
-        fi
-    done
     for xrbin in xr-workspace xrctl xr-game xr-glasses-hotplugd; do
         if [[ " ${installed[*]} " == *" /usr/local/bin/$xrbin "* && ! -f "$tmpdir/$xrbin" ]]; then
             retain_xr=1
@@ -346,7 +323,7 @@ update_smpl_apps() {
     done
 
     # Atomic rename preserves already-running mappings; never kill user work.
-    for app in "${SMPLOS_APP_BINS[@]}" "${SMPLOS_APP_OPTIONAL_BINS[@]}"; do
+    for app in "${SMPLOS_APP_BINS[@]}"; do
         local src="$tmpdir/$app"
         [[ -f "$src" ]] || continue
 
@@ -363,8 +340,8 @@ update_smpl_apps() {
         # left the two copies out of sync, and the ~/.local/share copy
         # silently kept serving old code because it comes first on PATH.
         # This is exactly how ~/.local/share/smplos/bin/smpl-calendar got
-        # pinned at v0.7.4 while /usr/local/bin ran v0.8.11 — Eww resolved
-        # by bare name, hit the shadow, users saw "the fix did not take".
+        # pinned at v0.7.4 while /usr/local/bin ran v0.8.11 — launchers
+        # resolved the shadow and users saw "the fix did not take".
         # We now DELETE any shadow left behind by previous runs (or by
         # deploy-local.sh) so the /usr/local/bin copy is the only one
         # anything on PATH can find.
@@ -387,9 +364,6 @@ update_smpl_apps() {
     # possibly resolve to a stale copy.
     installed=()
     for app in "${SMPLOS_APP_BINS[@]}"; do installed+=("/usr/local/bin/$app"); done
-    for app in "${SMPLOS_APP_OPTIONAL_BINS[@]}"; do
-        [[ ! -f "$tmpdir/$app" ]] || installed+=("/usr/local/bin/$app")
-    done
     local xr_installed=0
     for xrbin in xr-workspace xrctl xr-game xr-glasses-hotplugd; do
         (( retain_xr == 0 )) || break
@@ -706,7 +680,7 @@ for component in smpl-apps st-smpl nemo-smpl micro-smpl control-surface; do
     # A separate shell retains errexit inside each component; independent apps
     # still run after a failure, and no failed install gets a version stamp.
     if ! SMPLOS_APP_RESULT_FILE="$REPORT_WORK/$component.json" \
-        bash -e -o pipefail -c "$(declare -f); $(declare -p STATE_DIR SMPLOS_PATH CHECK_ONLY QUIET SMPLOS_APP_BINS REPORT_WORK); $(declare -p SMPLOS_APP_OPTIONAL_BINS 2>/dev/null || echo 'SMPLOS_APP_OPTIONAL_BINS=()'); n_updated=0; $function_name; printf '%s\n' \"\$n_updated\" > \"\$SMPLOS_APP_RESULT_FILE.installed\""; then
+        bash -e -o pipefail -c "$(declare -f); $(declare -p STATE_DIR SMPLOS_PATH CHECK_ONLY QUIET SMPLOS_APP_BINS REPORT_WORK); n_updated=0; $function_name; printf '%s\n' \"\$n_updated\" > \"\$SMPLOS_APP_RESULT_FILE.installed\""; then
         status=failed
         failed=1
     fi

@@ -5,13 +5,6 @@
 # AUR helper (so users can install AUR packages after install)
 yay-bin
 
-# EWW - Universal widget system (works on Wayland and X11)
-# smplOS fork with Wayland button-grab fixes (see pkgbuilds/eww-smplos).
-# Upstream AUR `eww` (tag v0.6.0) has a bug where clicking a bar button
-# no-ops until the mouse is moved. eww-smplos is a local PKGBUILD that
-# builds from github.com/smpl-os/eww at a pinned commit.
-eww-smplos
-
 # Bounded Signal notification pre-forward hook; no daemon restart on install.
 dunst-smplos
 

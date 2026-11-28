@@ -45,7 +45,7 @@ into Lua**):
   (no longer `example/hyprland.conf`) and runs auto-generated configs in Lua.
 * **smplOS has external consumers** that parse the hyprlang format:
   * The DWM-X11 build (planned) will parse `bindings.conf` into C structs.
-  * `keybind-help` renders the EWW overlay from `bindings.conf`.
+  * `keybind-help` renders the keybinding overlay from `bindings.conf`.
   * The Settings app writes `monitors.conf` and `pointer.conf` in hyprlang.
   * `theme-set` writes `theme.conf` in hyprlang.
 * We keep the existing `.conf` files **untouched** so reverting is one rename

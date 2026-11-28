@@ -268,12 +268,6 @@ class InstalledStateTests(unittest.TestCase):
         self.kernel_releases = {"linux-lts": "6.12-test"}
         self.write(self.repo / "src/shared/bin/example", "#!/bin/bash\ntrue\n")
         self.write(self.repo / "src/shared/lib/example.sh", "helper() { :; }\n")
-        self.write(self.repo / "src/shared/eww/quick-settings.yuck", "(box)\n")
-        self.write(self.repo / "src/shared/eww/quick-settings.scss", ".quick { color: red; }\n")
-        self.write(self.repo / "src/shared/eww/eww.yuck", '(include "./quick-settings.yuck")\n')
-        self.write(self.repo / "src/shared/eww/eww.scss", '@import "quick-settings";\n')
-        self.write(self.repo / "src/shared/eww/scripts/listener.sh", "#!/bin/bash\necho '{}'\n")
-        self.write(self.repo / "src/shared/eww/theme-colors.scss", "stock palette\n")
         self.write(self.repo / "src/compositors/hyprland/hypr/windows.lua", "-- stock\n")
         self.write(self.repo / "src/compositors/hyprland/hypr/monitors.conf", "# stock\n")
         self.write(self.repo / "src/shared/themes/test/colors.toml", 'background="#000000"\n')
@@ -286,20 +280,17 @@ class InstalledStateTests(unittest.TestCase):
                 target = self.root / "usr/local/bin" / source.name
             elif text.startswith("src/shared/lib/"):
                 target = self.root / "usr/local/lib/smplos" / source.name
-            elif text.startswith("src/shared/eww/"):
-                target = self.home / ".config/eww" / source.relative_to(self.repo / "src/shared/eww")
             elif text.startswith("src/shared/themes/"):
                 target = self.home / ".local/share/smplos/themes" / source.relative_to(self.repo / "src/shared/themes")
             else:
                 target = self.home / ".config/hypr" / source.name
             self.write(target, source.read_text())
-        self.write(self.home / ".config/eww/theme-colors.scss", "custom generated palette\n")
         self.write(self.home / ".config/smplos/current/theme.name", "test\n")
         self.write(self.home / ".config/smplos/current/theme/colors.toml", 'background="#000000"\n')
         self.write(self.home / ".config/hypr/monitors.conf", "user-owned monitor setup\n")
         for name in (*CHECK.APPS, "st-wl", "micro"):
             self.write(self.root / "usr/local/bin" / name, b"\x7fELF" + name.encode())
-        for name in ("nemo", "Hyprland", "eww", "grafium"):
+        for name in ("nemo", "Hyprland", "grafium"):
             self.write(self.root / "usr/bin" / name, b"\x7fELF" + name.encode())
         for name in ("nemo-document-renderer", "nemo-archive-create-worker"):
             self.write(self.root / "usr/libexec" / name, b"\x7fELF" + name.encode())
@@ -414,10 +405,8 @@ class InstalledStateTests(unittest.TestCase):
         self.assertIn("linux-lts", critical)
 
     def test_missing_fragments_and_stale_shared_helpers_fail(self):
-        (self.home / ".config/eww/quick-settings.scss").unlink()
         self.write(self.root / "usr/local/lib/smplos/example.sh", "old helper\n")
         errors = "\n".join(self.audit()["errors"])
-        self.assertIn("quick-settings.scss", errors)
         self.assertIn("example.sh", errors)
 
     def test_theme_audit_checks_matching_overrides_and_obsolete_files_but_not_custom_only_themes(self):
@@ -457,18 +446,13 @@ class InstalledStateTests(unittest.TestCase):
         self.write(optional, b"\x7fELFchanged-XR")
         self.assertIn("differs from its retained checksum receipt", "\n".join(self.audit()["errors"]))
 
-    def test_retained_native_bar_from_iso_is_audited_as_optional(self):
-        optional = self.root / "usr/local/bin/smpl-bar"
-        self.write(optional, b"\x7fELFprevious-bar")
-        state = self.home / ".local/state/smplos/app-versions"
-        retained = f"{CHECK.digest(optional)}  {optional}\n"
-        self.write(state / "smpl-apps-retained.sha256", retained)
-        report = self.audit()
+    def test_native_bar_is_required_by_release_receipt(self):
+        audit = CHECK.Audit(self.home, self.repo, self.root, self.runner)
+        audit.snapshot()
+        report = audit.verify("apps")
+        self.assertIn("smpl-bar", CHECK.APPS)
+        self.assertIn(str(self.root / "usr/local/bin/smpl-bar"), report["native_files"])
         self.assertEqual(report["errors"], [])
-        self.assertEqual(
-            report["native_files"][str(optional)]["delivery"],
-            "retained-not-upgraded",
-        )
 
     def test_shared_library_abi_failure_is_explicit(self):
         self.ldd_error = "Hyprland"
@@ -693,7 +677,6 @@ class InstalledStateTests(unittest.TestCase):
         self.assertIn("no installed browser ELF binary", "\n".join(self.audit()["optional_failures"]))
 
     def test_apps_mode_does_not_claim_to_deploy_desktop_configs(self):
-        (self.home / ".config/eww/quick-settings.scss").unlink()
         self.write(self.home / ".config/hypr/windows.lua", "-- older deployed config\n")
         audit = CHECK.Audit(self.home, self.repo, self.root, self.runner)
         audit.snapshot()
@@ -701,7 +684,6 @@ class InstalledStateTests(unittest.TestCase):
 
     def test_bootstrap_checks_every_command_and_helper_without_requiring_new_native_apps(self):
         (self.root / "usr/local/bin/settings").unlink()
-        (self.home / ".config/eww/quick-settings.scss").unlink()
         audit = CHECK.Audit(self.home, self.repo, self.root, self.runner)
         self.assertEqual(audit.verify("bootstrap")["errors"], [])
         self.assertEqual(self.calls, [])
@@ -1121,51 +1103,6 @@ sync_scripts
             deploy()
             self.assertTrue(os.access(target, os.X_OK))
 
-    def test_fragments_and_scripts_publish_before_entrypoints_without_touching_palette(self):
-        with tempfile.TemporaryDirectory() as temporary:
-            base = Path(temporary)
-            repo, home = base / "repo", base / "home"
-            source = repo / "src/shared/eww"
-            source.mkdir(parents=True)
-            target = home / ".config/eww"
-            target.mkdir(parents=True)
-            (target / "theme-colors.scss").write_text("custom generated palette\n")
-            for name in ("quick-settings.yuck", "quick-settings.scss", "notification-hub.yuck",
-                         "notification-hub.scss", "eww.yuck", "eww.scss", "theme-colors.scss"):
-                (source / name).write_text("new " + name)
-            listener = source / "scripts/listener.sh"
-            listener.parent.mkdir()
-            listener.write_text("#!/bin/bash\ntrue\n")
-            log = base / "copies"
-            script = function(BIN / "smplos-os-update", "copy_user_config")
-            script += "\n" + function(BIN / "smplos-os-update", "sync_config_defaults")
-            script += "\n" + function(BIN / "smplos-os-update", "sync_configs")
-            script += """
-as_invoker() {
-    if [[ "$1" == install ]]; then echo "${@: -1}" >> "$COPIES"; fi
-    "$@"
-}
-header() { :; }; ok() { :; }; die() { echo "$*" >&2; exit 1; }
-sync_configs
-"""
-            result = subprocess.run(["bash", "-eu", "-c", script], capture_output=True, text=True,
-                                    env={**os.environ, "SMPLOS_REPO": str(repo), "HOME": str(home),
-                                         "COPIES": str(log)}, timeout=10)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertEqual((target / "theme-colors.scss").read_text(), "custom generated palette\n")
-            order = log.read_text()
-            self.assertLess(order.index("quick-settings.yuck."), order.index("eww.yuck."))
-            self.assertLess(order.index("notification-hub.scss."), order.index("eww.scss."))
-            self.assertTrue(os.access(target / "scripts/listener.sh", os.X_OK))
-            (target / "scripts/listener.sh").chmod(0o644)
-            result = subprocess.run(["bash", "-eu", "-c", script], capture_output=True, text=True,
-                                    env={**os.environ, "SMPLOS_REPO": str(repo), "HOME": str(home),
-                                         "COPIES": str(log)}, timeout=10)
-            self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertTrue(os.access(target / "scripts/listener.sh", os.X_OK))
-
-
-class MigrationPriorityTests(unittest.TestCase):
     def test_optional_package_migrations_do_not_stamp_real_failures_as_success(self):
         with tempfile.TemporaryDirectory() as temporary:
             home = Path(temporary)
@@ -1896,7 +1833,7 @@ exec /usr/bin/mktemp "$@"
                 aur = [line for line in calls.splitlines() if line.startswith("yay -Sua")]
                 self.assertEqual(len(aur), 2 if mode == "full" else 0)
                 for line in aur:
-                    self.assertIn("nemo-smpl,control-surface,grafium-bin,eww-smplos", line)
+                    self.assertIn("nemo-smpl,control-surface,grafium-bin", line)
 
     def test_required_foreign_driver_updates_before_native_and_failure_remains_blocking(self):
         result = self.run_body(CORE_AUR="1")
@@ -1904,8 +1841,8 @@ exec /usr/bin/mktemp "$@"
         calls = self.calls.read_text()
         self.assertEqual(calls.count("yay -Sua"), 2)
         self.assertLess(calls.index("yay -Sua"), calls.index("native-apps --group core"))
-        self.assertIn("eww-smplos,brave-bin", calls)
-        self.assertIn("eww-smplos,test-driver-dkms", calls)
+        self.assertIn("brave-bin", calls)
+        self.assertIn("test-driver-dkms", calls)
         self.calls.write_text("")
         result = self.run_body(CORE_AUR="1", CORE_AUR_FAIL="1")
         self.assertNotEqual(result.returncode, 0, result.stdout)
@@ -2377,25 +2314,6 @@ sync_version
                 self.assertTrue(link.is_symlink())
                 self.assertIn(expected, target.read_text())
                 self.assertEqual(list(target.parent.iterdir()), [target])
-
-    def test_bar_ensure_recovers_missing_bar_and_rejects_a_successful_but_ineffective_open(self):
-        script = function(BIN / "bar-ctl", "eww_ensure")
-        script += """
-BAR_NAME=bar
-LOG=fixture.log
-visible="${VISIBLE:-0}"
-eww_cmd() { [[ "$visible" != 1 ]] || echo 'bar: bar'; }
-eww_apply() { echo applied; }
-eww_start() { echo started; visible="${OPEN_EFFECTIVE:-1}"; }
-eww_ensure
-"""
-        for visible, effective, status, action in (("1", "1", 0, "applied"),
-                                                  ("0", "1", 0, "started"),
-                                                  ("0", "0", 1, "started")):
-            result = subprocess.run(["bash", "-c", script], capture_output=True, text=True,
-                                    env={**os.environ, "VISIBLE": visible, "OPEN_EFFECTIVE": effective})
-            self.assertEqual(result.returncode, status, result.stderr)
-            self.assertIn(action, result.stdout)
 
     def test_failed_install_retains_errexit_and_does_not_reboot(self):
         with tempfile.TemporaryDirectory() as temporary:

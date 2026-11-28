@@ -559,14 +559,11 @@ build_missing_aur_packages() {
     [[ ${#need_build[@]} -eq 0 ]] && { log_info "All AUR packages already built"; return 0; }
 
     log_step "Building AUR packages: ${need_build[*]}"
-    log_info "This may take a while on first run (Eww requires Rust — ~5-15 min)."
-    log_info "You will see Rust compiler WARNINGS during the Eww build. These are"
-    log_info "harmless upstream notices — they do NOT mean anything is broken."
 
     # Detect if any package needs Rust (avoid installing rustup otherwise)
     local rust_line=""
     for pkg in "${need_build[@]}"; do
-        case "$pkg" in eww|eww-git|eww-wayland|*-rs|*-rust)
+        case "$pkg" in *-rs|*-rust)
             rust_line="retry pacman -S --noconfirm --needed rustup && rustup default stable"
             break ;;
         esac
@@ -768,13 +765,6 @@ download_prebuilt_apps() {
         local app
         for app in "${SMPLOS_APP_BINS[@]}"; do
             install -m755 "$fallback_dir/$app" "$cache_dir/$app"
-        done
-        for app in "${SMPLOS_APP_OPTIONAL_BINS[@]}"; do
-            if [[ -f "$fallback_dir/$app" ]]; then
-                install -m755 "$fallback_dir/$app" "$cache_dir/$app"
-            else
-                rm -f "$cache_dir/$app"
-            fi
         done
         install -m644 "$fallback_dir/smpl-calendar-alertd.service" \
             "$cache_dir/smpl-calendar-alertd.service"

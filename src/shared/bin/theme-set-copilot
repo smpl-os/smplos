@@ -14,11 +14,13 @@ from pathlib import Path
 PALETTES = {
     "amber": "IC Orange PPL",
     "amber-hud": "IC Orange PPL",
+    "blueprint": "GitHub",
     "catppuccin": "Catppuccin Mocha",
     "catppuccin-latte": "Catppuccin Mocha",
     "ethereal": "Light purple",
     "everforest": "Selene Selenized",
     "flexoki-light": "Flexoki",
+    "frosted": "Catppuccin Mocha",
     "grafium": "GitHub",
     "gruvbox": "Gruvbox Material",
     "hackerman": "Homebrew",

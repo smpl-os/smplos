@@ -10,7 +10,7 @@ optional permanent use. **Hyprland remains the default**; nothing in
 config.kdl             ← base config (input, layout, animations, gestures, env)
 binds.kdl              ← generated from src/shared/configs/smplos/bindings.conf
 window-rules.kdl       ← float/position/opacity per app_id
-layer-rules.kdl        ← blur/shadow for EWW namespaces
+layer-rules.kdl        ← native smpl-bar reservation policy
 theme.kdl              ← colors/borders/shadow (overwritten by theme-set)
 packages.txt           ← niri + xwayland-satellite + swaylock-effects + swayidle
 postinstall.sh         ← niri-specific system setup
@@ -35,7 +35,7 @@ These are intentional — niri's model differs from Hyprland's:
    the focused output's workspace only.
 2. **No runtime binding changes.** Popup click-out dismissal that Hyprland
    does via `hyprctl keyword bindn ", mouse:272, ..."` isn't possible.
-   EWW popups dismiss on `Esc` only.
+   Native popups support Escape and click-outside dismissal.
 3. **Lock/idle:** `swaylock` + `swayidle` instead of `hyprlock`/`hypridle`
    (the latter are Hyprland-protocol-specific and won't run reliably on niri).
 4. **Window positioning by formula** (`monitor_w-window_w-2`) isn't supported;

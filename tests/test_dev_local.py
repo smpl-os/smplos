@@ -30,10 +30,9 @@ log() { echo "$*"; }
 warn() { echo "$*"; }
 err() { echo "$*" >&2; }
 BOLD= NC=
-restart_eww=true
 restart_hypr="${RESTART_HYPR:-false}"
 plugin_action="${PLUGIN_ACTION:-}"
-do_component() { [[ "$1" == "${COMPONENT:-eww}" ]]; }
+do_component() { [[ "$1" == "${COMPONENT:-themes}" ]]; }
 own() { :; }
 command() {
     [[ "$*" == "-v chromium" || "$*" == "-v brave" ]] && return 1
@@ -75,13 +74,6 @@ run_as_user() {
         self.assertIn("All done!", result.stdout)
         self.assertNotIn("bar-ctl start", result.stdout)
         self.assertNotIn("killall", SOURCE)
-
-    def test_missing_current_theme_reload_failure_stops_deployment(self):
-        (self.home / ".config/smplos/current/theme.name").unlink()
-        result = self.run_fragment(self.restart_fragment(), FAIL_BAR="42")
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("EWW reload failed", result.stderr)
-        self.assertNotIn("All done!", result.stdout)
 
     def test_plugins_reload_after_hyprland_reload_with_the_checkout_tool(self):
         result = self.run_fragment(self.restart_fragment(), RESTART_HYPR="true",
@@ -152,24 +144,6 @@ run_as_user() {
         self.assertNotIn("tool ran", result.stdout)
         self.assertIn("Hyprland headers are not installed", result.stdout)
         self.assertIn("action=\n", result.stdout)
-
-    def test_eww_copy_preserves_palette_icons_and_custom_files(self):
-        target = self.home / ".config/eww"
-        target.mkdir()
-        for name in ("theme-colors.scss", "theme-colors.yuck", "custom.yuck"):
-            (target / name).write_text("keep " + name)
-        (target / "icons").mkdir()
-        (target / "icons/user.svg").write_text("keep icon")
-        fragment = SOURCE.split("# ── EWW ", 1)[1].split("\n", 1)[1]
-        fragment = fragment.split("# ── Icons ", 1)[0]
-        result = self.run_fragment(fragment, SRC_DIR=str(ROOT / "src"))
-        self.assertEqual(result.returncode, 0, result.stderr)
-        for name in ("theme-colors.scss", "theme-colors.yuck", "custom.yuck"):
-            self.assertEqual((target / name).read_text(), "keep " + name)
-        self.assertEqual((target / "icons/user.svg").read_text(), "keep icon")
-        self.assertEqual((target / "eww.scss").read_bytes(),
-                         (ROOT / "src/shared/eww/eww.scss").read_bytes())
-
 
 if __name__ == "__main__":
     unittest.main()

@@ -9,7 +9,7 @@
 # changes required.
 
 # Window manager / shell
-eww
+smpl-bar
 hyprland
 dunst
 dunst-smplos

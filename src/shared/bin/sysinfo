@@ -1,6 +1,6 @@
 #!/bin/bash
 # System Info
-# Returns system information for EWW widgets
+# Returns system information for shell consumers
 
 case "${1:---help}" in
     --cpu)

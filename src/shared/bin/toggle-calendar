@@ -13,7 +13,7 @@ APP_NAME="smpl-calendar"
 # locations. This is critical for dev machines: `deploy-local.sh` installs
 # a fresh build to ~/.local/bin, which sits ahead of /usr/local/bin on the
 # default PATH. Hardcoding /usr/local/bin here (the previous behaviour) meant
-# Eww's tray button kept launching the STALE system binary every time, while
+# A tray launch kept selecting the stale system binary every time, while
 # any direct terminal invocation of `smpl-calendar` correctly picked up the
 # fresh dev build — the "I installed the fix, tested it in a terminal, but the
 # tray icon still runs the old code" trap that just cost us multiple hours.

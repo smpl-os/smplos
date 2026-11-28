@@ -55,7 +55,7 @@ run_as_user() {
         [[ -d /tmp/hypr ]] && hypr_sig=$(ls -1 /tmp/hypr/ 2>/dev/null | head -n1)
         [[ -z "$hypr_sig" && -d "$xdg_dir/hypr" ]] && hypr_sig=$(ls -1 "$xdg_dir/hypr/" 2>/dev/null | head -n1)
         if [[ -z "$hypr_sig" ]]; then
-            local child_pid=$(pgrep -u "$REAL_USER" -f 'eww|hyprctl' 2>/dev/null | head -n1)
+            local child_pid=$(pgrep -u "$REAL_USER" -f 'smpl-bar|hyprctl' 2>/dev/null | head -n1)
             [[ -n "$child_pid" ]] && hypr_sig=$(tr '\0' '\n' < /proc/"$child_pid"/environ 2>/dev/null | grep ^HYPRLAND_INSTANCE_SIGNATURE= | cut -d= -f2)
         fi
         [[ -n "$hypr_sig" ]] && env_vars+=" HYPRLAND_INSTANCE_SIGNATURE=$hypr_sig"
@@ -75,26 +75,11 @@ if [[ ! -f "$SHARE/dev-apply.sh" ]]; then
     exit 1
 fi
 
-restart_eww=false
 restart_hypr=false
 
 own() { chown -R "$(stat -c '%U:%G' "$USER_HOME")" "$1" 2>/dev/null || true; }
 
-# ── EWW configs ─────────────────────────────────────────────
-if [[ -d "$SHARE/eww" && "$(ls -A "$SHARE/eww" 2>/dev/null)" ]]; then
-    log "Applying EWW configs..."
-    mkdir -p "$USER_HOME/.config/eww"
-    # Do not remove the top-level directory itself: if the caller's cwd is
-    # ~/.config/eww, deleting it causes noisy getcwd errors in subsequent commands.
-    find "$USER_HOME/.config/eww" -mindepth 1 -maxdepth 1 -exec rm -rf {} + 2>/dev/null || true
-    cp -a "$SHARE/eww/." "$USER_HOME/.config/eww/"
-    find "$USER_HOME/.config/eww/scripts" -name '*.sh' -exec chmod +x {} \; 2>/dev/null || true
-    own "$USER_HOME/.config/eww/"
-    restart_eww=true
-    log "  done"
-fi
-
-# ── Shared icons (SVG templates for EWW bar) ───────────────
+# ── Shared icons ─────────────────────────────────────────────
 if [[ -d "$SHARE/icons" && "$(ls -A "$SHARE/icons" 2>/dev/null)" ]]; then
     log "Applying icon templates..."
     ICONS_DEST="$USER_HOME/.local/share/smplos/icons"
@@ -477,18 +462,9 @@ fi
 
 # Re-apply current theme (copies theme-colors.scss, bakes SVG icons, etc.)
 current_theme=$(cat "$USER_HOME/.config/smplos/current/theme.name" 2>/dev/null || true)
-if [[ -n "${current_theme:-}" ]] && ($restart_eww || $restart_hypr); then
-    log "Killing EWW before theme re-apply..."
-    run_as_user "eww --config ~/.config/eww kill 2>/dev/null; killall -9 eww 2>/dev/null" || true
-    sleep 0.5
+if [[ -n "${current_theme:-}" ]] && $restart_hypr; then
     log "Re-applying theme '$current_theme'..."
-    # Re-bake theme assets (SVG icons, eww colors, app themes)
     run_as_user "theme-set '$current_theme'" 2>/dev/null || warn "  theme-set failed"
-    # theme-set skips bar restart since we killed eww above — start it once here.
-    # Use timeout to avoid hanging dev-apply if eww IPC stalls.
-    sleep 0.3
-    log "Starting EWW bar..."
-    run_as_user "timeout 8s bar-ctl start >/tmp/eww-startup.log 2>&1 || true"
 
     # Browser policies need root -- theme-set skips them when non-root,
     # so we handle them here directly (we're already root)

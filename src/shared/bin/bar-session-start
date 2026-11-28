@@ -2,30 +2,26 @@
 set -u
 
 BAR_CTL="${BAR_CTL:-bar-ctl}"
-backend=$(SMPLOS_BAR_IGNORE_EFFECTIVE=1 "$BAR_CTL" backend 2>/dev/null || true)
 state_dir="${XDG_RUNTIME_DIR:-/run/user/$UID}/smplos"
 state="$state_dir/bar.backend"
 mkdir -p "$state_dir"
+# Retire the previous shell process during migration without uninstalling its
+# package or touching ~/.config/eww, which may contain user-owned data.
+if command -v eww >/dev/null 2>&1; then
+    eww --config "$HOME/.config/eww" kill >/dev/null 2>&1 || true
+fi
 restart_control_surface() {
     if systemctl --user is-active --quiet control-surface.service 2>/dev/null; then
         systemctl --user restart control-surface.service 2>/dev/null || true
     fi
 }
 
-if [[ "$backend" == smpl-bar ]] &&
-    BAR_BACKEND=smpl-bar "$BAR_CTL" ensure; then
+if "$BAR_CTL" ensure; then
     printf 'smpl-bar\n' > "$state"
     restart_control_surface
     exit 0
 fi
 
-if [[ "$backend" == smpl-bar ]]; then
-    echo "bar-session-start: smpl-bar is unavailable; keeping the EWW fallback" >&2
-fi
-if BAR_BACKEND=eww "$BAR_CTL" start; then
-    printf 'eww\n' > "$state"
-    restart_control_surface
-    exit 0
-fi
-echo "bar-session-start: EWW fallback failed" >&2
+rm -f -- "$state"
+echo "bar-session-start: smpl-bar failed to start" >&2
 exit 1

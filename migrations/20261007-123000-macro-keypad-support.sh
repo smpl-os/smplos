@@ -7,9 +7,9 @@
 #
 #          Nothing keypad related runs while no keypad is plugged in: udev
 #          starts control-surface.service on plug-in, BindsTo= stops it on
-#          unplug, and the bar icon is an EWW variable the unit sets.
+#          unplug, and the native bar receives presence through IPC the unit sets.
 #
-#          smplos-os-update already delivers keypad-ctl (sync_scripts), the EWW
+#          smplos-os-update already delivers keypad-ctl (sync_scripts), native bar
 #          config (sync_configs) and drops the unit file when the user has none.
 #          This migration does what those generic steps can't:
 #            1. Install the udev rules into /etc/udev/rules.d (root).
@@ -102,29 +102,7 @@ if [[ $rules_changed -eq 1 ]]; then
     fi
 fi
 
-# ── 2. Tray icon: template + bake with shared theme color roles ──────────────
-TPL_DIR="$HOME/.local/share/smplos/icons/status"
-EWW_ICONS="$HOME/.config/eww/icons/status"
-src="$REPO/src/shared/icons/status/keypad.svg"
-if [[ -f "$src" ]]; then
-    if ! cmp -s "$src" "$TPL_DIR/keypad.svg" 2>/dev/null; then
-        mkdir -p "$TPL_DIR"
-        cp "$src" "$TPL_DIR/keypad.svg"
-        changed "Installed icon template keypad.svg"
-    fi
-    if [[ -d "$HOME/.config/eww" ]]; then
-        mkdir -p "$EWW_ICONS"
-        previous=$(cat "$EWW_ICONS/keypad.svg" 2>/dev/null || true)
-        python3 "$REPO/src/shared/lib/smplos-theme-svg.py" \
-            "$HOME/.config/smplos/current/theme/colors.toml" "$src" "$EWW_ICONS/keypad.svg" \
-            || { echo "Cannot bake keypad tray icon" >&2; exit 1; }
-        if [[ "$previous" != "$(cat "$EWW_ICONS/keypad.svg")" ]]; then
-            changed "Baked tray icon keypad.svg"
-        fi
-    fi
-fi
-
-# ── 3. The keypad app: deliver and validate before switching units ──────────
+# ── 2. The keypad app: deliver and validate before switching units ──────────
 deferred=0
 PKG_DIR="$REPO/src/shared/pkgbuilds/control-surface"
 # shellcheck source=../src/shared/lib/smplos-pkgbuild.sh

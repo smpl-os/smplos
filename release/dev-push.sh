@@ -24,15 +24,10 @@ for arg in "$@"; do
 done
 
 # Clean and recreate
-rm -rf "${SHARE:?}"/{eww,bin,lib,hypr,plugins,themes,configs,icons,st,notif-center,settings,webapp-center,app-center,start-menu,applications}
-mkdir -p "$SHARE"/{eww,bin,lib,hypr,plugins,themes,configs,icons,st,notif-center,settings,webapp-center,app-center,start-menu,applications}
+rm -rf "${SHARE:?}"/{bin,lib,hypr,plugins,themes,configs,icons,st,notif-center,settings,webapp-center,app-center,start-menu,applications}
+mkdir -p "$SHARE"/{bin,lib,hypr,plugins,themes,configs,icons,st,notif-center,settings,webapp-center,app-center,start-menu,applications}
 
-# EWW
-cp -r "$SRC_DIR/shared/eww/"* "$SHARE/eww/"
-find "$SHARE/eww/scripts" -name '*.sh' -exec chmod +x {} \; 2>/dev/null || true
-log "EWW: $(find "$SHARE/eww" -type f | wc -l) files"
-
-# Shared icons (SVG status icons for EWW bar)
+# Shared icons (shared status assets)
 if [[ -d "$SRC_DIR/shared/icons" ]]; then
     cp -r "$SRC_DIR/shared/icons/"* "$SHARE/icons/"
     log "Icons: $(find "$SHARE/icons" -type f | wc -l) files"

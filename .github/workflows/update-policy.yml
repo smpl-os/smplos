@@ -33,7 +33,6 @@ on:
       - "tests/test_keypad.py"
       - "tests/test_mouse.py"
       - "src/shared/pkgbuilds/yay-bin/**"
-      - "src/shared/pkgbuilds/eww-smplos/**"
       - "src/shared/packages-aur.txt"
       - "src/shared/packages-flatpak.txt"
       - "src/shared/packages-appimage.txt"
@@ -43,7 +42,6 @@ on:
       - "src/shared/bin/theme-set-st"
       - "src/shared/installer/install.sh"
       - "src/shared/bin/bar-ctl"
-      - "tests/test_eww_delivery.py"
       - "src/shared/lib/smplos-app-bundle.sh"
       - "src/shared/installer/automated_script.sh"
       - "migrations/**"
@@ -91,7 +89,6 @@ on:
       - "tests/test_keypad.py"
       - "tests/test_mouse.py"
       - "src/shared/pkgbuilds/yay-bin/**"
-      - "src/shared/pkgbuilds/eww-smplos/**"
       - "src/shared/packages-aur.txt"
       - "src/shared/packages-flatpak.txt"
       - "src/shared/packages-appimage.txt"
@@ -101,7 +98,6 @@ on:
       - "src/shared/bin/theme-set-st"
       - "src/shared/installer/install.sh"
       - "src/shared/bin/bar-ctl"
-      - "tests/test_eww_delivery.py"
       - "src/shared/lib/smplos-app-bundle.sh"
       - "src/shared/installer/automated_script.sh"
       - "migrations/**"
@@ -141,7 +137,7 @@ jobs:
             src/shared/lib/smplos-reboot.sh src/shared/bin/smplos-reboot-notify \
             src/shared/bin/smplos-update-apps src/shared/bin/smplos-update-bootstrap src/shared/bin/bar-ctl \
             src/shared/bin/smplos-ensure-yay src/shared/bin/heal-paru src/shared/bin/rebuild-paru \
-            src/shared/pkgbuilds/yay-bin/PKGBUILD src/shared/pkgbuilds/eww-smplos/PKGBUILD src/shared/lib/smplos-pkgbuild.sh \
+            src/shared/pkgbuilds/yay-bin/PKGBUILD src/shared/lib/smplos-pkgbuild.sh \
             src/shared/lib/smplos-app-bundle.sh src/shared/installer/automated_script.sh \
             src/shared/lib/smplos-control-surface.sh src/shared/lib/smplos-release-package.sh \
             src/shared/pkgbuilds/control-surface/PKGBUILD src/build-iso.sh \
@@ -161,7 +157,6 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_app_delivery.py' -v
           PYTHONPATH=tests python3 -m unittest test_keypad test_mouse -v
           python3 -m unittest discover -s tests -p 'test_bar_ctl.py' -v
-          python3 -m unittest discover -s tests -p 'test_eww_delivery.py' -v
           python3 -m unittest discover -s tests -p 'test_dropped_packages.py' -v
           PYTHONPATH=tests python3 -m unittest test_logseq_retirement test_theme_switching -v
           PYTHONPATH=tests python3 -m unittest test_scrolling_bindings test_keybind_help test_keybinding_migrations -v

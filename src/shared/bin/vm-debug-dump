@@ -77,51 +77,9 @@ for hypr_base in /tmp/hypr "$REAL_HOME/.cache/hypr" "/run/user/$(id -u "$REAL_US
     done
 done
 
-# EWW logs — log filename includes a hash of the config dir (eww_<hash>.log)
-for eww_log in "$REAL_HOME/.cache/eww"/eww_*.log; do
-    [[ -f "$eww_log" ]] || continue
-    dump_file "$eww_log" "logs/$(basename "$eww_log")"
-done
-# Also try the simpler name just in case
-dump_file "$REAL_HOME/.cache/eww/eww.log" "logs/eww.log"
-# Capture EWW startup log (bar-ctl redirects daemon stderr here)
-dump_file "/tmp/eww-startup.log" "logs/eww-startup.log"
-# Capture theme-picker log
-dump_file "/tmp/theme-picker.log" "logs/theme-picker.log"
+# Native bar startup/status diagnostics are collected through bar-ctl below.
 
-# ── Packages ───────────────────────────────────────────────
-header "Packages"
-dump_cmd "packages/installed.txt"  pacman -Q
-dump_cmd "packages/foreign.txt"    pacman -Qm
-
-# ── Configs ─────────────────────────────────────────────────
-header "Config Files"
-dump_file "$REAL_HOME/.config/eww"           "config/eww"
-dump_file "$REAL_HOME/.config/hypr"          "config/hypr"
-dump_file "$REAL_HOME/.config/smplos"        "config/smplos"
-dump_file "$REAL_HOME/.config/foot"          "config/foot"
-dump_file "$REAL_HOME/.config/dunst"          "config/dunst"
-dump_file "$REAL_HOME/.config/btop"          "config/btop"
-dump_file "$REAL_HOME/.config/fastfetch"     "config/fastfetch"
-
-# ── File Listings ───────────────────────────────────────────
-header "File Listings"
-dump_cmd "filelists/eww-config-dir.txt"      find "$REAL_HOME/.config/eww" -ls 2>/dev/null
-dump_cmd "filelists/smplos-data-dir.txt"     find "$REAL_HOME/.local/share/smplos" -maxdepth 3 -ls 2>/dev/null
-dump_cmd "filelists/home-config.txt"         ls -laR "$REAL_HOME/.config/" 2>/dev/null | head -200
-dump_cmd "filelists/usr-local-bin.txt"       ls -la /usr/local/bin/ 2>/dev/null
-
-# ── Theme State ─────────────────────────────────────────────
-header "Theme State"
-dump_cmd "theme/current-name.txt"        cat "$REAL_HOME/.config/smplos/current/theme.name"
-dump_cmd "theme/available.txt"           ls -1 "$REAL_HOME/.local/share/smplos/themes/"
-dump_file "$REAL_HOME/.config/eww/theme-colors.scss" "theme/active-eww-colors.scss"
-
-# ── Runtime ─────────────────────────────────────────────────
-header "Runtime State"
-dump_cmd "runtime/processes.txt"         ps auxf
-
-# Run user commands with proper env vars so eww/hyprctl can find their sockets
+# Run user commands with proper env vars so compositor commands can find their sockets
 REAL_UID=$(id -u "$REAL_USER")
 RUNDIR="/run/user/$REAL_UID"
 HYPR_SIG=$(find "$RUNDIR/hypr" -maxdepth 1 -mindepth 1 -type d -printf '%f' 2>/dev/null | head -1)
@@ -129,9 +87,6 @@ user_cmd() {
     runuser -u "$REAL_USER" -- env XDG_RUNTIME_DIR="$RUNDIR" HYPRLAND_INSTANCE_SIGNATURE="$HYPR_SIG" bash -c "$*"
 }
 
-dump_cmd "runtime/eww-state.txt"         user_cmd "eww --config $REAL_HOME/.config/eww state"
-dump_cmd "runtime/eww-windows.txt"       user_cmd "eww --config $REAL_HOME/.config/eww list-windows"
-dump_cmd "runtime/eww-active.txt"        user_cmd "eww --config $REAL_HOME/.config/eww active-windows"
 
 # Compositor-specific runtime state
 if [[ -n "${WAYLAND_DISPLAY:-}" ]] || [[ -n "$HYPR_SIG" ]]; then

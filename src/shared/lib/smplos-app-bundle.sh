@@ -3,12 +3,8 @@
 SMPLOS_APP_BINS=(
     start-menu notif-center settings app-center webapp-center
     sync-center-daemon sync-center-gui smpl-calendar smpl-calendar-alertd
-    smpl-hints smpl-hintsd
+    smpl-hints smpl-hintsd smpl-bar
 )
-# Published releases without a native bar remain valid. Once smpl-apps includes
-# this binary, all staged and installed paths consume it automatically; it is
-# not a required release member until that publication is real.
-SMPLOS_APP_OPTIONAL_BINS=(smpl-bar)
 
 smplos_install_app_binary() {
     local source="$1" destination="$2" validator="${3:-smplos_app_linkage_valid}" staged
@@ -67,17 +63,10 @@ smplos_xr_file_valid() {
 }
 
 smplos_app_binaries_valid() {
-    local dir="$1" optional_validator="${2:-smplos_app_linkage_valid}" app
+    local dir="$1" app
     for app in "${SMPLOS_APP_BINS[@]}"; do
         if ! smplos_app_is_elf "$dir/$app"; then
             echo "smpl-apps: missing or invalid binary: $dir/$app" >&2
-            return 1
-        fi
-    done
-    for app in "${SMPLOS_APP_OPTIONAL_BINS[@]}"; do
-        if [[ -e "$dir/$app" || -L "$dir/$app" ]] &&
-            ! "$optional_validator" "$dir/$app"; then
-            echo "smpl-apps: invalid optional binary: $dir/$app" >&2
             return 1
         fi
     done
@@ -90,7 +79,11 @@ smplos_calendar_service_valid() {
 }
 
 smplos_app_bundle_valid() {
-    smplos_app_binaries_valid "$1" "${2:-smplos_app_linkage_valid}" || return 1
+    smplos_app_binaries_valid "$1" || return 1
+    local app validator="${2:-smplos_app_linkage_valid}"
+    for app in "${SMPLOS_APP_BINS[@]}"; do
+        "$validator" "$1/$app" || return 1
+    done
     if ! smplos_calendar_service_valid "$1/smpl-calendar-alertd.service"; then
         echo "smpl-apps: missing or incompatible calendar reminder service: $1" >&2
         return 1
@@ -171,9 +164,6 @@ smplos_stage_app_bundle() (
     tar -xzf "$archive" --no-same-owner --no-same-permissions -C "$unpacked" || return 1
     smplos_app_bundle_valid "$unpacked" || return 1
     mkdir -p "$destination" || return 1
-    for file in "${SMPLOS_APP_OPTIONAL_BINS[@]}"; do
-        [[ -f "$unpacked/$file" ]] || rm -f -- "$destination/$file"
-    done
     for file in "$unpacked"/*; do
         if ! smplos_app_is_elf "$file"; then
             smplos_xr_script_name "$file" && smplos_xr_file_valid "$file" || continue

@@ -118,7 +118,6 @@ are a thin layer on top of a shared foundation.
 ```
 src/shared/          ← Everything here works on ALL compositors
   bin/               ← User-facing scripts (installed to /usr/local/bin/)
-  eww/               ← EWW bar, launcher, theme picker, keybind help (GTK3, works on X11 + Wayland)
   configs/smplos/    ← Cross-compositor configs (bindings.conf = single source of truth)
   themes/            ← 17 themes with templates for all apps
   installer/         ← OS installer
@@ -137,9 +136,8 @@ src/compositors/dwm/        ← ONLY DWM-specific config (future)
 1. **Shared by default.** New scripts go in `src/shared/bin/`. Only put code in
    `src/compositors/<name>/` if it literally cannot work elsewhere.
 
-2. **No unnecessary dependencies.** Before adding a tool (fuzzel, rofi, wofi),
-   ask: can EWW do this? EWW works on both X11 and Wayland. One fewer package
-   to maintain per compositor.
+2. **No unnecessary dependencies.** Reuse the native smpl-apps controls and
+   shared shell contracts before adding another UI stack.
 
 3. **Compositor detection, not hardcoding.** When a script needs compositor-specific
    behavior, detect at runtime:
@@ -156,13 +154,14 @@ src/compositors/dwm/        ← ONLY DWM-specific config (future)
    - Uses Hyprland `bindd` format (human-readable, comma-delimited)
    - Build pipeline copies it as-is for Hyprland
    - DWM build will parse it and generate C structs for `config.h`
-   - `get-keybindings.sh` parses it for the EWW keybind-help overlay
+   - `get-keybindings.sh` parses it for keybinding help
 
-5. **EWW is the UI layer.** Bar, launcher, theme picker, keybind help — all EWW.
-   No waybar, no polybar. EWW runs on both GTK3/X11 and GTK3/Wayland.
+5. **smpl-apps owns shell UI.** The native smpl-bar is the sole taskbar;
+   start menu, notification center, calendar and other shell surfaces remain
+   separate native or external applications.
 
 6. **Theme system is universal.** One `theme-set` script applies colors to:
-   EWW, st, foot, btop, mako, Hyprland borders, hyprlock, neovim.
+   native apps, st, foot, btop, mako, Hyprland borders, hyprlock and neovim.
    Adding a compositor means adding one more template, not rewriting themes.
 
 ### Nemo CSS Theming (REGRESSION-PRONE — READ BEFORE TOUCHING)
@@ -309,38 +308,13 @@ CSS/selector assets are inert and do not justify creating Logseq configuration.
 Full updates reset both stock themes and matching personal theme overrides only
 after verified backups. Preserve custom-only theme names and all backup data.
 
-### EWW Guidelines
-
-- **Single-line JSON for `deflisten`.** EWW reads stdout line-by-line. Multi-line
-  JSON breaks `deflisten` variables. Always output compact single-line JSON.
-- **No `@charset` triggers.** Avoid non-ASCII characters (em-dashes `—`, curly
-  quotes, etc.) in `.scss` files. The grass SCSS compiler inserts
-  `@charset "UTF-8"` which GTK3's CSS parser rejects silently → white unstyled bar.
-- **Script permissions.** Always `chmod +x` EWW scripts in build pipeline AND at
-  runtime (archiso/useradd can strip execute bits).
-- **`--config $HOME/.config/eww`** on every `eww` CLI call.
-- **Every `defwindow` must have an explicit `:namespace`.** Without it, the
-  Wayland layer surface gets the default namespace `"gtk-layer-shell"`, which
-  means Hyprland `layerrule` (blur, opacity, animations) cannot target individual
-  windows. Use the convention `:namespace "eww-<window-name>"` (e.g.
-  `"eww-bar"`, `"eww-calendar-popup"`). Then match in `windows.conf`:
-  `layerrule = blur on, match:namespace eww-<window-name>`.
-- **Use the shared dialog system for overlays.** Theme picker, keybind help, and
-  any future overlay (settings, about, etc.) use the same pattern:
-  - **CSS:** `.dialog`, `.dialog-header`, `.dialog-title`, `.dialog-close`,
-    `.dialog-search`, `.dialog-scroll` -- shared classes in `eww.scss`.
-  - **Script:** `dialog-toggle <window> [submap] [--pre-cmd CMD] [--post-cmd CMD]`
-    handles toggle, daemon, open/close, submap. New dialogs are thin wrappers.
-  - **Yuck:** Each widget uses the `.dialog` container and `.dialog-header` box.
-    Only the item-specific content (e.g. theme-card, kb-row) is unique.
-
 ### Build & Iteration
 
 - **ISO builds are expensive** (~15 min). Only rebuild for package changes.
 - **Use `dev-push.sh` + `dev-apply.sh`** for config/script iteration:
   ```bash
   # Host:
-  cd release && ./dev-push.sh eww    # or: bin, hypr, themes, all
+  cd release && ./dev-push.sh bin    # or: hypr, themes, all
 
   # VM:
   sudo bash /mnt/dev-apply.sh
@@ -361,13 +335,12 @@ after verified backups. Preserve custom-only theme names and all backup data.
 - **One responsibility per script.** A script does one thing well. Compose scripts
   together rather than building monoliths.
 - **Shared helpers over copy-paste.** Common patterns (logging, JSON output,
-  compositor detection, EWW daemon checks) should live in a shared library or
+  compositor detection and resident-app checks) should live in a shared library or
   consistent helper functions, not be duplicated across scripts.
 - **Keep it concise.** Prefer short, readable code. Avoid verbose boilerplate,
   redundant comments that restate the code, or unnecessary wrapper layers.
-- **Consistent patterns.** All EWW listener scripts should follow the same
-  structure: setup, emit function, initial emit, watch loop. All `src/shared/bin/`
-  scripts should follow the same error-handling and logging conventions.
+- **Consistent patterns.** All `src/shared/bin/` scripts should follow the same
+  error-handling and logging conventions.
 
 ### Suckless-style Programs (st, dwm, etc.)
 
@@ -485,7 +458,7 @@ contract. Do not force a renderer with OS environment variables.
   `opacity`, `opacity_inactive`, `opacity_fullscreen` window properties after
   title changes and reloads; tags/global settings alone do not establish alpha.
 - **Atomic watchers:** `theme-set` replaces `current/theme` and atomically
-  publishes EWW palette/Nemo CSS. Watch parents/reopen paths after replacement,
+  publishes Nemo CSS and native/compositor theme inputs. Watch parents/reopen paths after replacement,
   not only the original inode. Native releases and reopen-once rollout are
   required; an OS source update is not a native binary delivery.
 

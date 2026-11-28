@@ -24,15 +24,11 @@ BAR_CTL = ROOT / "src/shared/bin/bar-ctl"
 SESSION_SERVICES = ROOT / "src/shared/bin/smplos-session-services"
 MIGRATION = ROOT / "migrations/20261007-123000-macro-keypad-support.sh"
 PKGBUILD = ROOT / "src/shared/pkgbuilds/control-surface/PKGBUILD"
-EWW_MIGRATION = ROOT / "migrations/20261008-120000-eww-smplos-passthrough.sh"
-EWW_PKGBUILD = ROOT / "src/shared/pkgbuilds/eww-smplos/PKGBUILD"
 UDEV = ROOT / "src/shared/system/udev"
 RULES = UDEV / "70-smplos-keypads.rules"
 REGISTRY = ROOT / "src/shared/keypads/registry.json"
 GEN = ROOT / "src/shared/keypads/gen.py"
-SYNC = ROOT / "src/shared/eww/scripts/keypad-bar-sync.sh"
 UNIT = ROOT / "src/shared/configs/systemd/user/control-surface.service"
-SHEET_HIDE = ROOT / "src/shared/eww/scripts/pad-sheet-hide.sh"
 
 STOCK = dict(idVendor="1189", idProduct="8890", manufacturer="wch.cn", product="CH552",
              serial="key153", bcdDevice="0100")
@@ -236,48 +232,13 @@ def escape_device(path):
     return subprocess.run(["systemd-escape", "--path", "--suffix=device", path],
                           capture_output=True, text=True, check=True).stdout.strip()
 
-
-class SheetHideTests(KeypadCase):
-    """scripts/pad-sheet-hide.sh: what a click on the cheatsheet overlay runs.
-    EWW runs it from its config directory, so it needs nothing on PATH but
-    busctl and eww."""
-
-    def setUp(self):
-        super().setUp()
-        self.tool("eww", 'echo "eww $*" >> "$CALLS"\n')
-        self.config = self.root / "eww"
-        (self.config / "scripts").mkdir(parents=True)
-        shutil.copy(SHEET_HIDE, self.config / "scripts")
-
-    def hide(self):
-        result = subprocess.run(["sh", "scripts/pad-sheet-hide.sh"], cwd=self.config, env=self.env,
-                                capture_output=True, text=True, timeout=20)
-        self.assertEqual((result.returncode, result.stdout, result.stderr), (0, "", ""))
-
-    def test_asks_the_daemon_first(self):
-        self.tool("busctl", 'echo "busctl $*" >> "$CALLS"\n')
-        self.hide()
-        self.assertEqual(self.calls_made(), [
-            "busctl --user --timeout=2 call org.smplos.ControlSurface /org/smplos/ControlSurface "
-            "org.smplos.ControlSurface1 HideCheatsheet"])
-
-    def test_closes_it_in_its_own_eww_without_a_daemon(self):
-        self.tool("busctl", 'echo "busctl $*" >> "$CALLS"\nexit 1\n')
-        self.hide()
-        self.assertEqual(self.calls_made()[1:], [
-            f"eww --config {self.config} close pad-cheatsheet pad-cheatsheet-passthrough",
-            f'eww --config {self.config} update pad_sheet={{"visible":false}}'])
-
-
 FONTS = ROOT / "src/shared/fonts"
-PAD_ICONS = ROOT / "src/shared/eww/pad-icons.yuck"
-# Every icon the keypad app picks by itself (features.cheatsheet.icons.auto),
-# pinned from its build: all of them must be in the bundled font.
 DAEMON_AUTO = FONTS / "keypad-icons/daemon-auto.txt"
 
 
 def names_in(path):
-    return [w for line in path.read_text().splitlines() for w in line.split("#")[0].split()]
+    return [word for line in path.read_text().splitlines()
+            for word in line.split("#")[0].split()]
 
 
 def icon_vocabulary():
@@ -290,37 +251,16 @@ def icon_vocabulary():
 
 
 class KeypadIconTests(unittest.TestCase):
-    """The cheatsheet's outline icons: icons.txt -> font, JSON and eww table."""
+    """The native cheatsheet's outline icons: icons.txt -> font and JSON."""
 
     def table(self):
         return json.loads((FONTS / "keypad-icons.json").read_text())
-
-    def eww_glyphs(self):
-        text = PAD_ICONS.read_text()
-        literal = re.search(r"\(defvar pad_icons '(.*)'\)", text).group(1)
-        # yuck strings drop one backslash; eww then parses the JSON.
-        return json.loads(literal.replace("\\\\", "\\"))
-
-    def test_icons_txt_json_and_eww_table_agree(self):
-        names = icon_vocabulary()
-        self.assertEqual(len(names), len(set(names)))
-        table = self.table()
-        self.assertEqual(table["family"], "smplOS Keypad Icons")
-        self.assertEqual([i["name"] for i in table["icons"]], names)
-        glyphs = self.eww_glyphs()
-        self.assertEqual(list(glyphs), names)
-        for icon in table["icons"]:
-            self.assertEqual(glyphs[icon["name"]], chr(int(icon["codepoint"], 16)), icon["name"])
-        self.assertTrue(PAD_ICONS.read_text().isascii(), "generated, but readable and diffable")
 
     def test_every_automatic_and_overlay_icon_is_bundled(self):
         names = set(icon_vocabulary())
         auto = names_in(DAEMON_AUTO)
         self.assertGreaterEqual(len(auto), 121)
         self.assertEqual(sorted(set(auto) - names), [], "the keypad app's automatic icons need glyphs")
-        yuck = (ROOT / "src/shared/eww/eww.yuck").read_text()
-        for direction in re.findall(r':dir "([a-z0-9-]+)"', yuck):
-            self.assertIn(direction, names)
 
     def test_a_built_keypad_app_picks_only_bundled_icons(self):
         """With SMPLOS_CONTROL_SURFACED or control-surfaced on PATH (a build
@@ -349,19 +289,6 @@ class KeypadIconTests(unittest.TestCase):
         self.assertEqual(font["name"].getDebugName(1), "smplOS Keypad Icons")
         self.assertLess((FONTS / "smplos-keypad-icons.ttf").stat().st_size, 100_000, "a subset, not all of Tabler")
 
-    def test_overlay_draws_icons_with_the_bundled_font(self):
-        yuck = (ROOT / "src/shared/eww/eww.yuck").read_text()
-        self.assertIn('(include "./pad-icons.yuck")', yuck)
-        self.assertIn('(pad-sheet-key :k k :glyph {pad_icons_font == "yes" ? (pad_icons[k?.icon ?: ""] ?: "") : ""})', yuck)
-        for event in ("ccw", "press", "cw"):
-            self.assertIn(f':glyph {{pad_icons_font == "yes" ? (pad_icons[n.{event}?.icon ?: ""] ?: "") : ""}}', yuck)
-        key = yuck[yuck.index("(defwidget pad-sheet-key"):yuck.index("(defwidget pad-sheet-turn")]
-        self.assertIn('(label :class "pad-sheet-icon" :visible {k.bound && glyph != ""} :text glyph)', key)
-        scss = (ROOT / "src/shared/eww/eww.scss").read_text()
-        icons = scss[scss.index(".pad-sheet-icon,"):]
-        self.assertIn(f'font-family: "{self.table()["family"]}";', icons)
-        self.assertNotRegex(icons, r"(?<!-)opacity\s*:", "icons are as opaque as text")
-
     def test_licence_ships_with_the_font(self):
         licence = (FONTS / "keypad-icons/LICENSE-tabler-icons.txt").read_text()
         self.assertTrue(licence.startswith("MIT License"))
@@ -372,35 +299,6 @@ class KeypadIconTests(unittest.TestCase):
         install = (ROOT / "src/shared/installer/install.sh").read_text()
         self.assertIn('"$HOME/.local/share/fonts/smplos" "$SMPLOS_PATH/fonts/"*.ttf "$SMPLOS_PATH/fonts/"LICENSE-*.txt', install)
         self.assertIn("Tabler Icons", (ROOT / "KEYPAD.md").read_text())
-
-
-class IconSyncTests(KeypadCase):
-    """smplos-os-update delivers the font and the eww icon table."""
-
-    def test_update_installs_the_font_and_table_before_the_bar(self):
-        updater = (ROOT / "src/shared/bin/smplos-os-update").read_text()
-        function = lambda name: f"{name}() {{" + updater.split(f"{name}() {{", 1)[1].split("\n}\n", 1)[0] + "\n}\n"
-        repo = self.root / "repo"
-        for rel in ("src/shared/eww/eww.yuck", "src/shared/eww/pad-icons.yuck", "src/shared/eww/eww.scss",
-                    "src/shared/fonts/smplos-keypad-icons.ttf", "src/shared/fonts/keypad-icons/LICENSE-tabler-icons.txt"):
-            (repo / rel).parent.mkdir(parents=True, exist_ok=True)
-            shutil.copy(ROOT / rel, repo / rel)
-        self.tool("fc-cache", 'echo "fc-cache $*" >> "$CALLS"\n')
-        script = ("set -euo pipefail\nheader() { :; }\nok() { :; }\ndie() { echo \"$*\" >&2; exit 1; }\n"
-                  "as_invoker() { [[ $1 == mv ]] && echo \"mv ${@: -1}\" >> \"$CALLS\"; \"$@\"; }\n"
-                  + function("copy_user_config") + function("sync_config_defaults")
-                  + function("sync_configs") + "sync_configs\n")
-        env = dict(self.env, SMPLOS_REPO=str(repo))
-        for _ in range(2):
-            subprocess.run(["bash", "-c", script], env=env, check=True, capture_output=True, text=True, timeout=20)
-        fonts = self.home / ".local/share/fonts/smplos"
-        self.assertEqual((fonts / "smplos-keypad-icons.ttf").read_bytes(), (FONTS / "smplos-keypad-icons.ttf").read_bytes())
-        self.assertTrue((fonts / "LICENSE-tabler-icons.txt").exists())
-        calls = self.calls_made()
-        self.assertEqual([c for c in calls if c.startswith("fc-cache")], [f"fc-cache -f {fonts}"], "once, only on change")
-        moved = [c for c in calls if c.startswith("mv ")]
-        self.assertLess(moved.index(f"mv {self.home}/.config/eww/pad-icons.yuck"),
-                        moved.index(f"mv {self.home}/.config/eww/eww.yuck"), "the include lands first")
 
 
 class LifecycleTests(unittest.TestCase):
@@ -464,9 +362,8 @@ class LifecycleTests(unittest.TestCase):
         self.assertIn("ExecStart=/usr/local/bin/control-surface-run", unit)
         runner = (ROOT / "src/shared/bin/control-surface-run").read_text()
         self.assertIn('"$daemon" run --quiet', runner)
-        self.assertIn("--eww-window pad-cheatsheet", runner)
-        self.assertIn("e\\x00w\\x00w\\x00-\\x00w\\x00i\\x00n\\x00d\\x00o\\x00w", (ROOT / "src/shared/pkgbuilds/control-surface/PKGBUILD").read_text(),
-                      "the package refuses a daemon that lacks the unit's flags")
+        self.assertNotIn("--eww", runner)
+        self.assertIn("keypad-sheet -", runner)
         self.assertIn("ExecStartPost=-/usr/local/bin/bar-ctl set-keypad-present yes", unit)
         self.assertIn("ExecStopPost=-/usr/local/bin/bar-ctl set-keypad-present no", unit)
         build = (ROOT / "src/builder/build.sh").read_text()
@@ -489,87 +386,6 @@ class LifecycleTests(unittest.TestCase):
                                     env=env, capture_output=True, text=True, timeout=30)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertNotIn("ordering cycle", result.stderr.lower())
-
-    def test_bar_syncs_once_and_runs_no_keypad_watcher(self):
-        yuck = (ROOT / "src/shared/eww/eww.yuck").read_text()
-        listeners = [line.strip() for line in yuck.splitlines() if re.match(r"\s*\((deflisten|defpoll)\b", line)
-                     and ("keypad" in line or "pad-sheet" in line or "pad_" in line)]
-        self.assertEqual(listeners, ['(deflisten keypad-present :initial "no" "sh scripts/keypad-bar-sync.sh")'])
-        self.assertEqual(sorted(p.name for p in (ROOT / "src/shared/eww/scripts").glob("*keypad*")), ["keypad-bar-sync.sh"])
-        script = "\n".join(l for l in SYNC.read_text().splitlines() if not l.lstrip().startswith("#"))
-        for loop in ("while", "until", "for ", "inotify", "--follow", "watch", "monitor"):
-            self.assertNotIn(loop, script, "a one-shot: prints, then exits")
-        self.assertIn('sleep "${KEYPAD_SYNC_LINGER:-2}"', script)
-        self.assertIn("set-keypad-present", BAR_CTL.read_text(),
-                      "the compatibility entry point owns backend-aware keypad presence")
-        self.assertIn("keypad-sheet", BAR_CTL.read_text())
-        self.assertNotIn("bootloader", yuck[yuck.index("(defwidget tray-keypad"):])
-
-    def test_bar_icon_and_settings_entry(self):
-        yuck = (ROOT / "src/shared/eww/eww.yuck").read_text()
-        widget = yuck[yuck.index("(defwidget tray-keypad"):]
-        widget = widget[:widget.index("\n\n")]
-        self.assertIn(':visible {keypad-present == "yes"}', widget)
-        self.assertIn(':onclick "smplos-settings keypad &"', widget)
-        tray = yuck[yuck.index("(defwidget tray []"):]
-        self.assertIn("(tray-keypad)", tray[:tray.index("\n\n")])
-        self.assertIn(".tray-keypad", (ROOT / "src/shared/eww/eww.scss").read_text())
-        self.assertIn("{{fg}}", (ROOT / "src/shared/icons/status/keypad.svg").read_text())
-        self.assertFalse((ROOT / "src/shared/icons/status/keypad-bootloader.svg").exists())
-        settings = (ROOT / "src/shared/bin/smplos-settings").read_text()
-        self.assertIn("exec settings --tab keypad", settings)
-        self.assertIn("Keypad;smplos-settings keypad;settings;", (ROOT / "src/shared/bin/rebuild-app-cache").read_text())
-
-    def test_cheatsheet_overlay_is_pushed_not_listened_for(self):
-        yuck = (ROOT / "src/shared/eww/eww.yuck").read_text()
-        self.assertIn("""(defvar pad_sheet '{"visible":false}')""", yuck)
-        self.assertNotIn("cheatsheet --follow", yuck)
-        windows = dict(re.findall(r"\(defwindow (pad-cheatsheet\S*)\n(.*?)\n\n", yuck + "\n\n", re.S))
-        self.assertEqual(sorted(windows), ["pad-cheatsheet", "pad-cheatsheet-passthrough"])
-        self.assertIn("close " + " ".join(sorted(windows)), SHEET_HIDE.read_text(),
-                      "a click closes every overlay window")
-        for name, window in windows.items():
-            for needle in (':namespace "eww-pad-cheatsheet"', ':stacking "overlay"', ":focusable false"):
-                self.assertIn(needle, window)
-            through = name.endswith("-passthrough")
-            self.assertEqual(":passthrough true" in window, through)
-            self.assertIn(f"(pad-sheet :through {str(through).lower()})", window)
-        sheet = yuck[yuck.index("(defwidget pad-sheet-hint"):yuck.index("(defwindow pad-cheatsheet")]
-        for field in ("pad_sheet.title", "pad_sheet.notice", "pad_sheet.keys", "pad_sheet.knobs",
-                      "pad_sheet.options?.opacity", "pad_sheet.layers", "pad_sheet.options?.autoHideMs"):
-            self.assertIn(field, sheet)
-        self.assertIn('(eventbox :onclick "sh scripts/pad-sheet-hide.sh &"', sheet, "a click anywhere dismisses it")
-        self.assertIn('"Click to close"', sheet)
-        self.assertIn("(pad_sheet.options?.opacity ?: 0.35) * 20", sheet, "see-through by default")
-        scss = (ROOT / "src/shared/eww/eww.scss").read_text()
-        self.assertIn(".pad-sheet.o#{$i}", scss)
-        self.assertIn("background-color: rgba($material-bg, min(1, min($popup-opacity, 0.35) * $i / 7))", scss)
-        self.assertIn("border: 1px dashed", scss, "inactive bindings differ by shape, not only color")
-        styles = scss[scss.index("Macro keypad cheatsheet"):]
-        self.assertNotRegex(styles, r"(?<!-)opacity\s*:", "alpha only on the background, never on text")
-        self.assertNotRegex(styles, r"(?m)^\s*color:\s*rgba", "glass must not fade foregrounds")
-        for path in ("windows.conf", "windows.lua"):
-            self.assertIn("eww-pad-cheatsheet", (ROOT / "src/compositors/hyprland/hypr" / path).read_text())
-
-    @unittest.skipUnless(shutil.which("eww"), "eww not installed")
-    def test_eww_parses_the_bar_config(self):
-        with tempfile.TemporaryDirectory(dir="/tmp", prefix="kpe") as temp:
-            config = Path(temp) / "eww"
-            shutil.copytree(ROOT / "src/shared/eww", config)
-            for script in (config / "scripts").iterdir():
-                script.write_text("#!/bin/sh\nexec sleep 30\n")
-                script.chmod(0o755)
-            run = Path(temp) / "run"
-            run.mkdir(mode=0o700)
-            env = {k: v for k, v in os.environ.items() if k not in (
-                "WAYLAND_DISPLAY", "DISPLAY", "HYPRLAND_INSTANCE_SIGNATURE", "XDG_SESSION_TYPE", "DBUS_SESSION_BUS_ADDRESS")}
-            env.update(HOME=temp, XDG_RUNTIME_DIR=str(run))
-            # Without a display the daemon can't start GTK, but the config is
-            # parsed first: a yuck error is reported before that.
-            result = subprocess.run(["eww", "--config", str(config), "daemon", "--no-daemonize"],
-                                    env=env, capture_output=True, text=True, timeout=30)
-            output = result.stdout + result.stderr
-            self.assertNotIn("error:", output.split("Failed to initialize GTK")[0].lower(), output)
 
     def test_daemon_package_snapshot_is_resolved_with_its_release_digest(self):
         recipe = ROOT / "src/shared/pkgbuilds/control-surface"
@@ -661,7 +477,7 @@ class LifecycleTests(unittest.TestCase):
         return subprocess.run(["bash", "-c", script], capture_output=True, text=True), pkgdir, files
 
     def test_package_installs_the_release_tree_as_is(self):
-        daemon = b"\x7fELF..." + "--eww-window".encode("utf-16-le") + b"..."
+        daemon = b"\x7fELF..."
         result, pkgdir, files = self.package(daemon)
         self.assertEqual(result.returncode, 0, result.stderr)
         for name, data in files.items():
@@ -669,12 +485,6 @@ class LifecycleTests(unittest.TestCase):
         self.assertEqual((pkgdir / "usr/bin/control-surfaced").stat().st_mode & 0o777, 0o755)
         self.assertEqual((pkgdir / "usr/bin/mouse-remapperd").stat().st_mode & 0o777, 0o755)
         self.assertEqual((pkgdir / "usr/share/control-surface/firmware/fw.bin").stat().st_mode & 0o777, 0o644)
-
-    def test_package_refuses_a_daemon_without_the_units_flags(self):
-        result, pkgdir, _ = self.package(b"\x7fELF old daemon --eww-window as UTF-8 only")
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("too old", result.stderr)
-        self.assertFalse((pkgdir / "usr").exists())
 
     def test_package_refuses_a_release_without_the_mouse_daemon(self):
         daemon = b"\x7fELF..." + "--eww-window".encode("utf-16-le")
@@ -697,83 +507,6 @@ class LifecycleTests(unittest.TestCase):
                         daemon.chmod(0o755)
                     result = subprocess.run(["bash", "-c", script], capture_output=True, text=True, timeout=20)
                     self.assertEqual(result.returncode, keypad_status or mouse_status)
-
-
-class OneShotSyncTests(KeypadCase):
-    """The bar learns the state once at start/reload; login restarts the app once."""
-
-    def setUp(self):
-        super().setUp()
-        self.tool("systemctl", 'echo "systemctl $*" >> "$CALLS"\n'
-                  'case "$*" in\n'
-                  '  *"is-active --quiet control-surface.service"*) [ -n "$APP_ACTIVE" ];;\n'
-                  '  *"is-active --quiet smplos-keypad.device"*) [ -n "$KEYPAD" ];;\n'
-                  '  *is-active*) exit 3;;\n'
-                  'esac\n')
-        self.tool("eww", 'echo "eww $*" >> "$CALLS"\n')
-        self.tool("notify-send", "exit 0\n")
-        (self.home / ".config/eww").mkdir(parents=True)
-        for name in ("eww.yuck", "eww.scss", "theme-colors.scss"):
-            (self.home / ".config/eww" / name).touch()
-        (self.home / ".config/eww/scripts").mkdir()
-        self.sync = self.home / ".config/eww/scripts/keypad-bar-sync.sh"
-        shutil.copy(SYNC, self.sync)
-        self.env["KEYPAD_SYNC_LINGER"] = "0"
-
-    def run_sync(self, **env):
-        """What EWW runs when the bar opens or reloads; returns its output."""
-        self.calls.unlink(missing_ok=True)
-        result = subprocess.run(["sh", "scripts/keypad-bar-sync.sh"], cwd=self.sync.parent.parent,
-                                env=dict(self.env, **env), capture_output=True, text=True, timeout=20)
-        self.assertEqual(result.returncode, 0, result.stderr)
-        return result.stdout
-
-    def test_the_bar_learns_once_whether_the_keypad_app_runs(self):
-        self.assertEqual(self.run_sync(APP_ACTIVE="1"), "yes\n")
-        self.assertEqual(self.run_sync(), "no\n")
-
-    def icons_flag(self, font_age, eww_age, installed=True):
-        """The bar's one-shot sync with an icon font installed font_age s ago and an
-        EWW daemon started eww_age s ago."""
-        font = self.root / "fonts/smplos-keypad-icons.ttf"
-        font.parent.mkdir(exist_ok=True)
-        font.touch()
-        os.utime(font, (time.time() - font_age,) * 2)
-        self.tool("fc-list", f'[ -n "{"1" if installed else ""}" ] && echo "{font}"\nexit 0\n')
-        self.tool("pgrep", 'echo 4242\n')
-        self.tool("ps", f'echo "{eww_age}"\n')
-        self.run_sync()
-        return [c for c in self.calls_made() if "pad_icons_font" in c]
-
-    def test_icons_only_for_an_eww_that_started_with_the_font(self):
-        config = self.home / ".config/eww"
-        self.assertEqual(self.icons_flag(font_age=600, eww_age=60), [f"eww --config {config} update pad_icons_font=yes"])
-        self.assertEqual(self.icons_flag(font_age=60, eww_age=600), [], "font installed after EWW started")
-        self.assertEqual(self.icons_flag(font_age=600, eww_age=60, installed=False), [], "no font")
-        yuck = (ROOT / "src/shared/eww/eww.yuck").read_text()
-        self.assertIn('(defvar pad_icons_font "no")', yuck)
-        self.assertEqual(yuck.count('pad_icons_font == "yes" ? (pad_icons['), 4, "every glyph lookup is gated")
-
-    def login(self, **env):
-        self.calls.unlink(missing_ok=True)
-        env = dict(self.env, XDG_CONFIG_HOME=str(self.root / "cfg"), XDG_STATE_HOME=str(self.root / "state"),
-                   XDG_CACHE_HOME=str(self.root / "cache"), SMPLOS_SYSTEM_USER_UNITS=str(self.root / "none"),
-                   SMPLOS_SESSION_SETTLE="0", SMPLOS_SESSION_RETRY="0", **env)
-        subprocess.run(["bash", str(SESSION_SERVICES)], env=env, capture_output=True, text=True, timeout=20)
-        return self.calls_made()
-
-    def test_login_restarts_the_app_once_only_with_a_keypad(self):
-        self.tool("systemctl", 'echo "systemctl $*" >> "$CALLS"\n'
-                  'case "$*" in\n'
-                  '  *"is-active --quiet smplos-keypad.device"*) [ -n "$KEYPAD" ];;\n'
-                  '  *is-active*) exit 3;;\n'
-                  '  *"show control-surface.service -p ActiveState"*) echo active;;\n'
-                  'esac\n')
-        calls = self.login(KEYPAD="1")
-        self.assertIn("systemctl --user restart control-surface.service", calls)
-        self.assertLess(calls.index("systemctl --user start smplos-session.target"),
-                        calls.index("systemctl --user restart control-surface.service"))
-        self.assertNotIn("systemctl --user restart control-surface.service", self.login())
 
 
 class MigrationTests(KeypadCase):
@@ -844,9 +577,6 @@ class MigrationTests(KeypadCase):
         self.assertFalse((self.udev / "70-ch552-macropad.rules").exists())
         self.assertEqual((self.units / "control-surface.service").read_text(), UNIT.read_text())
         self.assertFalse(list(self.units.glob("*.wants/control-surface.service")))
-        baked = (self.home / ".config/eww/icons/status/keypad.svg").read_text()
-        self.assertIn('stroke="#abcdef"', baked)
-        self.assertNotIn("{{", baked)
         calls = self.calls_made()
         self.assertIn("udevadm control --reload-rules", calls)
         self.assertIn(f"udevadm trigger --action=change --parent-match={pad.resolve()}", calls)
@@ -1259,7 +989,7 @@ echo "installed-count=$n_updated"
         copies = [
             fragment("    # 2. Populate /etc/skel/.config", '    mkdir -p "$airootfs/root/smplos/install/helpers"'),
             fragment("    # Copy shared bin scripts", "    # Deploy shared web app"),
-            fragment("    # Deploy udev rules", "    # Copy EWW configs"),
+            fragment("    # Deploy udev rules", "    # smplOS fonts"),
             fragment("    # Copy package lists so", "    # Copy edition extra packages"),
             fragment("    # Copy configs for post-install", "    # Setup systemd services"),
         ]
@@ -1326,51 +1056,3 @@ stage_fixture() {
         self.assertIn('cp -r "$SRC_DIR/shared/bin/"* "$airootfs/usr/local/bin/"', build)
         self.assertIn('cp -r "$SRC_DIR/shared/bin/"* "$airootfs/root/smplos/bin/"', build)
         self.assertIn("control-surface", (ROOT / "src/shared/packages-aur.txt").read_text().splitlines())
-
-
-class EwwPassthroughMigrationTests(KeypadCase):
-    """eww-smplos is rebuilt at the fork commit with :passthrough when older."""
-
-    def setUp(self):
-        super().setUp()
-        self.tool("sudo", '"$@"\n')
-        self.tool("pacman", '[ "$1" = -Q ] && { [ -n "$EWW_VERSION" ] && echo "$2 $EWW_VERSION"; exit 0; }\n'
-                            'echo "pacman $*" >> "$CALLS"\n')
-        self.tool("fakeroot", 'exit 0\n')
-        self.tool("makepkg", 'echo "makepkg $*" >> "$CALLS"\n[ -n "$MAKEPKG_FAIL" ] && exit 1\n'
-                             'touch eww-smplos-0.6.0.r9.g0eb4604-2-x86_64.pkg.tar.zst\n')
-        self.env.update(SMPLOS_REPO=str(ROOT))
-
-    def migrate(self, version, **env):
-        self.calls.unlink(missing_ok=True)
-        result = subprocess.run(["bash", str(EWW_MIGRATION)], env=dict(self.env, EWW_VERSION=version, **env),
-                                capture_output=True, text=True, timeout=20)
-        return result.returncode, result.stdout, self.calls_made()
-
-    def test_pkgbuild_pins_the_passthrough_commit(self):
-        pkgbuild = EWW_PKGBUILD.read_text()
-        self.assertIn("_commit=0eb460422278dfaec64e5a527c1fd35dd3b35a1b\n", pkgbuild)
-        self.assertIn("pkgrel=5\n", pkgbuild)
-        self.assertIn("options=(!debug)", pkgbuild)
-        self.assertIn("Verified on X11 only", (ROOT / "KEYPAD.md").read_text())
-
-    def test_rebuilds_only_an_older_eww_smplos_and_never_restarts_the_bar(self):
-        code, output, calls = self.migrate("0.6.0.r840.g78105f3-1")
-        self.assertEqual(code, 0, output)
-        self.assertIn("makepkg -s --noconfirm", calls)
-        self.assertNotIn("--skippgpcheck", calls)
-        self.assertTrue(any(c.startswith("pacman -U --noconfirm ") for c in calls), calls)
-        self.assertFalse(any("eww" in c and "kill" in c or "bar-ctl" in c for c in calls))
-        for version, expected in (("0.6.0.r841.g0eb4604-2", "already at 0eb4604"), ("", "not installed")):
-            code, output, calls = self.migrate(version)
-            self.assertEqual((code, calls), (0, []), output)
-            self.assertIn(expected, output)
-
-    def test_a_failed_build_defers_and_keeps_the_installed_eww(self):
-        code, output, calls = self.migrate("0.6.0.r840.g78105f3-1", MAKEPKG_FAIL="1")
-        self.assertEqual(code, 75, output)
-        self.assertFalse(any(c.startswith("pacman -U") for c in calls))
-
-
-if __name__ == "__main__":
-    unittest.main()

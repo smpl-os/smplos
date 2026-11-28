@@ -171,7 +171,7 @@ cat << 'INSTRUCTIONS'
 ║    sudo mount -t 9p -o trans=virtio hostshare /mnt          ║
 ║                                                             ║
 ║  Hot-reload workflow (on host):                             ║
-║    cd release && ./dev-push.sh eww                          ║
+║    cd release && ./dev-push.sh bin                          ║
 ║                                                             ║
 ║  Then inside VM:                                            ║
 ║    sudo bash /mnt/dev-apply.sh                              ║

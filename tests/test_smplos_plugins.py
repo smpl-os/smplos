@@ -569,7 +569,7 @@ class IntegrationWiringTests(unittest.TestCase):
 
     def test_dev_workflows_build_and_reload_the_plugins(self):
         local = self.read("release/dev-local.sh")
-        defaults = re.search(r"components=\((eww [^)]*)\)", local)
+        defaults = re.search(r"components=\((bin [^)]*)\)", local)
         self.assertIsNotNone(defaults, "dev-local.sh has no default component list")
         self.assertIn("plugins", defaults.group(1).split())
         self.assertIn('"$SHARE/plugins"', self.read("release/dev-push.sh"))

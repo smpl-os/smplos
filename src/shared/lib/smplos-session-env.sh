@@ -16,10 +16,8 @@
 # operations; this helper still supports legacy callers and session recovery.
 #
 # Consequences observed on real machines:
-#   * eww derives its IPC socket from $XDG_RUNTIME_DIR and silently falls back
-#     to /tmp when it is unset. A migration that ran `bar-ctl stop` followed by
-#     `bar-ctl start` therefore closed the user's working bar and then started
-#     a second daemon on /tmp/eww-server_* which could not reach the
+#   * session clients derive IPC sockets from XDG_RUNTIME_DIR. Unsetting it can
+#     make a management command address a different runtime transport.
 #     compositor ("Failed to initialize GTK"). The user was left with no bar.
 #   * `hyprctl` aborts with "HYPRLAND_INSTANCE_SIGNATURE not set!".
 #   * `systemctl --user` aborts with "Failed to connect to user scope bus via

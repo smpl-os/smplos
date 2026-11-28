@@ -124,7 +124,7 @@ for file in "$MIGRATIONS_DIR"/*.sh; do
         # smplos-migrate run. Aborting the whole chain on one failure means
         # a single flaky migration blocks every unrelated migration behind
         # it — which is exactly how the fleet ended up with hyprland stuck
-        # at 0.55.4 when the eww-smplos install hit a resolvable pacman
+        # at 0.55.4 when a local package install hit a resolvable pacman
         # conflict on 2026-08-04. Use --strict to restore the historical
         # abort-on-first-failure behavior for one-off manual debugging.
         ((n_fail++)) || true

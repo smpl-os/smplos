@@ -85,10 +85,7 @@ fi
 mkdir -p "$CURRENT_PATH" || die "Cannot create $CURRENT_PATH"
 exec 9>"$CURRENT_PATH/.theme-set.lock" || die "Cannot open theme lock"
 flock 9 || die "Cannot lock theme state"
-mkdir -p "$HOME/.config/eww" || die "Cannot create EWW config directory"
-exec 8>"$HOME/.config/eww/.smplos-reload.lock" || die "Cannot open EWW publication lock"
-flock 8 || die "Cannot lock EWW publication"
-trap 'flock -u 8; flock -u 9' EXIT
+trap 'flock -u 9' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
@@ -126,31 +123,6 @@ else
   rm -rf -- "$PREVIOUS_THEME_PATH" || die "Cannot clean previous theme"
 fi
 rm -rf -- "$NEXT_THEME_PATH" || die "Cannot clean theme staging directory"
-
-# Link EWW theme colors into EWW config dir
-if [[ -f "$CURRENT_THEME_PATH/eww-colors.scss" ]] &&
-    ! cmp -s "$CURRENT_THEME_PATH/eww-colors.scss" "$HOME/.config/eww/theme-colors.scss"; then
-  mkdir -p "$HOME/.config/eww"
-  cp "$CURRENT_THEME_PATH/eww-colors.scss" "$HOME/.config/eww/theme-colors.scss.tmp" \
-    && mv -f "$HOME/.config/eww/theme-colors.scss.tmp" "$HOME/.config/eww/theme-colors.scss" \
-    || die "Cannot deploy EWW theme"
-fi
-
-# Bake theme colors into SVG icon templates
-# Templates in icons/status/ use {{fg}}, {{bg}} and {{accent}} semantic roles.
-# We re-copy from source and replace with actual hex values each theme switch
-_svg_helper="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../lib/smplos-theme-svg.py"
-[[ -r "$_svg_helper" ]] || _svg_helper="/usr/local/lib/smplos/smplos-theme-svg.py"
-EWW_ICONS_TPL="$HOME/.local/share/smplos/icons/status"
-EWW_ICONS_DST="$HOME/.config/eww/icons/status"
-if [[ -d "$EWW_ICONS_TPL" ]]; then
-  mkdir -p "$EWW_ICONS_DST"
-  for svg in "$EWW_ICONS_TPL"/*.svg; do
-    [[ -f "$svg" ]] || continue
-    python3 "$_svg_helper" "$CURRENT_THEME_PATH/colors.toml" "$svg" "$EWW_ICONS_DST/$(basename "$svg")" \
-      || die "Cannot bake status icon $(basename "$svg")"
-  done
-fi
 
 # Compositor-specific theme configs
 # Always copy if the files exist -- during install (chroot) there's no
@@ -245,10 +217,8 @@ theme-bg-next || die "Cannot apply theme background"
 # All guarded: only runs if the app is actually present/running
 # =========================================================================
 
-# Reload the selected backend. Native smpl-bar also uses this to re-anchor
-# after Slint remaps its themed Wayland window.
-if pgrep -u "$UID" -x eww >/dev/null ||
-   [[ "$(bar-ctl backend 2>/dev/null)" == smpl-bar ]]; then
+# smpl-bar reanchors after Slint remaps its themed Wayland window.
+if pgrep -u "$UID" -x smpl-bar >/dev/null; then
   bar-ctl reload || die "Cannot reload bar theme"
 fi
 

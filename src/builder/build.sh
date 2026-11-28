@@ -615,7 +615,7 @@ process_aur_packages() {
     
     log_info "AUR packages processed"
     
-    # AUR packages have dependencies on official repo packages (e.g. eww needs
+    # AUR packages have dependencies on official repo packages (e.g. AUR apps may need
     # gtk-layer-shell, vscode needs lsof). Extract those
     # deps from the prebuilt .PKGINFO and download them to the offline mirror.
     log_info "Resolving AUR package dependencies..."
@@ -964,14 +964,9 @@ install_prebuilt_apps() {
             install -Dm755 "$bin_dir/$app" "$airootfs/root/smplos/bin/$app"
             log_info "$app: installed"
         else
-            log_warn "$app: not found in $bin_dir"
+            log_error "$app: not found in $bin_dir"
+        return 1
         fi
-    done
-    for app in "${SMPLOS_APP_OPTIONAL_BINS[@]}"; do
-        [[ -f "$bin_dir/$app" ]] || continue
-        install -Dm755 "$bin_dir/$app" "$airootfs/usr/local/bin/$app"
-        install -Dm755 "$bin_dir/$app" "$airootfs/root/smplos/bin/$app"
-        log_info "$app: installed (optional in published smpl-apps release)"
     done
 
     local calendar_unit=smpl-calendar-alertd.service
@@ -1316,33 +1311,6 @@ DCONF_PROFILE
         fi
     done
     
-    # Copy EWW configs
-    if [[ -d "$SRC_DIR/shared/eww" ]]; then
-        log_info "Copying EWW configuration"
-        mkdir -p "$skel/.config/eww"
-        cp -r "$SRC_DIR/shared/eww/"* "$skel/.config/eww/" 2>/dev/null || true
-        # Ensure EWW listener scripts are executable (archiso skel copy may strip +x)
-        find "$skel/.config/eww/scripts" -name '*.sh' -exec chmod +x {} \; 2>/dev/null || true
-        # Also copy to smplos install path so install.sh deploys it to the installed system
-        mkdir -p "$airootfs/root/smplos/config/eww"
-        cp -r "$SRC_DIR/shared/eww/"* "$airootfs/root/smplos/config/eww/" 2>/dev/null || true
-        find "$airootfs/root/smplos/config/eww/scripts" -name '*.sh' -exec chmod +x {} \; 2>/dev/null || true
-    fi
-
-    # Copy shared icons (SVG status icons for EWW bar)
-    if [[ -d "$SRC_DIR/shared/icons" ]]; then
-        log_info "Copying shared icons"
-        mkdir -p "$skel/.config/eww/icons"
-        cp -r "$SRC_DIR/shared/icons/"* "$skel/.config/eww/icons/" 2>/dev/null || true
-        # Also to smplos install path (for install.sh → ~/.config/eww/icons/)
-        mkdir -p "$airootfs/root/smplos/config/eww/icons"
-        cp -r "$SRC_DIR/shared/icons/"* "$airootfs/root/smplos/config/eww/icons/" 2>/dev/null || true
-        # SVG templates for theme-set to bake on theme switch
-        # theme-set reads from ~/.local/share/smplos/icons/status/
-        mkdir -p "$airootfs/root/smplos/icons"
-        cp -r "$SRC_DIR/shared/icons/"* "$airootfs/root/smplos/icons/" 2>/dev/null || true
-    fi
-
     # smplOS fonts (keypad cheatsheet icons): the live user's font dir, and
     # the installer's copy (install.sh -> ~/.local/share/fonts/smplos/)
     if compgen -G "$SRC_DIR/shared/fonts/*.ttf" >/dev/null; then
@@ -1402,21 +1370,7 @@ DCONF_PROFILE
         
         # Link pre-baked configs into app config dirs for live session
         local theme_src="$SRC_DIR/shared/themes/catppuccin"
-        install -Dm644 "$theme_src/eww-colors.scss" "$skel/.config/eww/theme-colors.scss"
         install -Dm644 "$theme_src/nemo.css" "$skel/.config/smplos/nemo-theme.css"
-        # Bake SVG icon templates with catppuccin colors for live session
-        if [[ -d "$SRC_DIR/shared/icons/status" ]]; then
-            # Install templates to smplos data dir
-            mkdir -p "$skel/.local/share/smplos/icons/status"
-            cp "$SRC_DIR/shared/icons/status/"*.svg "$skel/.local/share/smplos/icons/status/"
-            # Bake for the default theme
-            mkdir -p "$skel/.config/eww/icons/status"
-            for svg in "$skel/.local/share/smplos/icons/status/"*.svg; do
-                python3 "$SRC_DIR/shared/lib/smplos-theme-svg.py" "$theme_src/colors.toml" \
-                    "$svg" "$skel/.config/eww/icons/status/$(basename "$svg")" \
-                    || { log_error "Failed to bake status icon $(basename "$svg")"; return 1; }
-            done
-        fi
         mkdir -p "$skel/.config/hypr" && cp "$theme_src/hyprland.conf" "$skel/.config/hypr/theme.conf" 2>/dev/null || true
         cp "$theme_src/hyprlock.conf" "$skel/.config/hypr/hyprlock-theme.conf" 2>/dev/null || true
         mkdir -p "$skel/.config/foot" && cp "$theme_src/foot.ini" "$skel/.config/foot/theme.ini" 2>/dev/null || true

@@ -13,12 +13,9 @@ StartLimitBurst=5
 
 [Service]
 Type=exec
-# The compatibility runner keeps the current EWW push for the EWW backend.
-# A smpl-bar selection disables that EWW sink and forwards typed cheatsheet
-# snapshots through smpl-bar's resident IPC instead.
+# The runner forwards typed cheatsheet snapshots through smpl-bar's resident IPC.
 ExecStart=/usr/local/bin/control-surface-run
-# "-": either bar may not be running yet; EWW sync and smpl-bar discovery
-# reconcile the icon without a listener process.
+# "-": the bar may not be running yet; the resident IPC remains the sole sink.
 ExecStartPost=-/usr/local/bin/bar-ctl set-keypad-present yes
 ExecStopPost=-/usr/local/bin/bar-ctl set-keypad-present no
 Restart=on-failure

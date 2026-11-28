@@ -60,8 +60,7 @@ layout {
     }
 
     struts {
-        // The EWW bar is a wlr-layer-shell surface anchored to the BOTTOM
-        // with an exclusive zone, so niri already reserves the bottom strip
+        // The native bar owns an exclusive layer reservation, so niri reserves
         // from the working area automatically. We must NOT add an extra
         // strut here — otherwise tiled windows get an invisible gap.
         //
@@ -79,10 +78,4 @@ layout {
 window-rule {
     geometry-corner-radius 10
     clip-to-geometry true
-}
-
-// EWW layers also rounded
-layer-rule {
-    match namespace="eww-.*"
-    geometry-corner-radius 10
 }

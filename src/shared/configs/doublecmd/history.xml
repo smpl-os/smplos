@@ -22,8 +22,6 @@
       <Item>/home/blin/Documents/sources/smplos/src/shared/notif-center/target/release/build/</Item>
       <Item>/home/blin/Documents/sources/smplos/src/shared/notif-center/target/release/examples/</Item>
       <Item>/home/blin/Documents/sources/smplos/release/vmshare/</Item>
-      <Item>/home/blin/Documents/sources/smplos/src/shared/eww/</Item>
-      <Item>/home/blin/Documents/sources/smplos/src/shared/eww/scripts/</Item>
       <Item>/home/blin/Documents/sources/smplos/src/shared/themes/</Item>
       <Item>/home/blin/Documents/sources/smplos/src/shared/themes/catppuccin/</Item>
       <Item>/home/blin/Documents/sources/smplos/src/builder/</Item>
@@ -42,7 +40,6 @@
       <Item>/home/blin/Documents/backup/</Item>
       <Item>/home/blin/Documents/sources/smplos/src/shared/skel/.config/</Item>
       <Item>/home/blin/Documents/sources/smplos/release/vmshare/themes/</Item>
-      <Item>/home/blin/Documents/sources/smplos/release/vmshare/eww/</Item>
       <Item>/home/blin/Documents/sources/smplos/release/vmshare/hypr/</Item>
       <Item>/home/blin/Documents/sources/st-wl/</Item>
       <Item>/home/blin/Documents/sources/smplos/src/shared/skel/.config/fish/</Item>
@@ -65,7 +62,6 @@
       <Item>st</Item>
       <Item>rofi-</Item>
       <Item>tide_user</Item>
-      <Item>eww.yuck</Item>
       <Item>binding</Item>
       <Item>binding.con</Item>
       <Item>plymou</Item>

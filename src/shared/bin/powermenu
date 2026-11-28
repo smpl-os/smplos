@@ -1,6 +1,6 @@
 #!/bin/bash
 # Power Menu
-# Shows power options using EWW or dmenu/wofi fallback
+# Shows power options using the available native/external menu
 
 show_menu() {
     local options="  Lock\n  Logout\n  Suspend\n⏻  Shutdown\n  Reboot"

@@ -140,7 +140,7 @@ animations {
 // niri is DYNAMIC: it always keeps N+1 workspaces (one trailing empty)
 // per output. We embrace this rather than fight it — Super+1..N maps to
 // the Nth visible workspace by position (see src/shared/bin/workspace-group
-// and the EWW bar listeners), so the bar dots, overview order, and Super+N
+// and the native bar provider), so the bar dots, overview order, and Super+N
 // targets all agree.
 //
 // We previously predeclared named workspaces "g1".."g4" to mimic Hyprland's
@@ -202,8 +202,7 @@ spawn-at-startup "dunst"
 spawn-at-startup "kb-sync"
 spawn-at-startup "generate-messenger-bindings"
 spawn-at-startup "sh" "-c" "theme-bg-init"
-// EWW by default; backend=smpl-bar opts into the native candidate. If its
-// published binary is absent, bar-session-start keeps the EWW fallback.
+// Start the mandatory native smpl-bar.
 spawn-at-startup "sh" "-c" "sleep 0.5 && bar-session-start"
 spawn-at-startup "window-guard"
 // niri-only: close start-menu / smpl-calendar on focus loss (Windows-

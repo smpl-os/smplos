@@ -16,7 +16,7 @@ hl.on("hyprland.start", function()
     -- hl.exec_cmd("hypridle")
     hl.exec_cmd("dunst")
 
-    -- Sync saved keyboard layouts to compositor (before EWW bar starts)
+    -- Sync saved keyboard layouts to compositor (before the native bar starts)
     hl.exec_cmd("kb-sync")
 
     -- Generate messenger toggle keybindings (auto-detects installed apps)
@@ -25,8 +25,7 @@ hl.on("hyprland.start", function()
     -- Restore last wallpaper (must run before bar to generate colors)
     hl.exec_cmd("bash -c 'theme-bg-init'")
 
-    -- Status bar: EWW by default, native only behind backend=smpl-bar.
-    -- The session keeps an EWW fallback when the native release is absent.
+    -- Status bar: mandatory native smpl-bar.
     hl.exec_cmd("bash -c 'sleep 0.5 && bar-session-start'")
     -- Keep a hidden Start Menu running so Super shows it instantly (no-op for
     -- start-menu builds without resident support).

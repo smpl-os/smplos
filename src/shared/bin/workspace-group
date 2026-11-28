@@ -7,7 +7,7 @@
 #   - N visible on another monitor-> swap the two monitors' workspaces
 #     (pulls N here, pushes this monitor's workspace over there)
 #   - N hidden (on no monitor)    -> plain focus brings it here
-# The name is kept for compatibility with the eww-bar onclick and the
+# The name is kept for binding compatibility and the
 # Super+scroll binds that call it.
 #
 # Usage:
