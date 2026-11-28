@@ -344,7 +344,7 @@ esac
             self.recorded(),
         )
 
-    def test_native_popup_click_outside_closes_only_when_click_misses_bar_windows(self):
+    def test_native_popup_click_outside_closes_on_bar_or_desktop_but_not_inside_popup(self):
         self.tool(
             "bar-ctl",
             "#!/bin/sh\nprintf '[\"bar-ctl\",\"%s\"]\\n' \"$1\" >> \"$CALLS\"\n",
@@ -357,7 +357,7 @@ case "$1" in
     printf '%s\\n' '[{"class":"smpl-bar","title":"smpl-bar","at":[0,1400],"size":[1600,40]},{"class":"smpl-bar","title":"smpl-bar:quick-settings","at":[1200,900],"size":[430,340]}]'
     ;;
   cursorpos)
-    printf '%s\\n' '{"x":100,"y":500}'
+    printf '{"x":%s,"y":%s}\\n' "${CX:-100}" "${CY:-500}"
     ;;
 esac
 """,
@@ -366,6 +366,15 @@ esac
         self.assertEqual(result.returncode, 0, result.stderr)
         rows = self.recorded()
         self.assertIn(["bar-ctl", "close-popups"], rows)
+        for x, y, should_close in ((1250, 950, False), (100, 1420, True)):
+            with self.subTest(x=x, y=y):
+                self.calls.unlink(missing_ok=True)
+                result = self.invoke(CLICK_CHECK, CX=str(x), CY=str(y))
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(
+                    ["bar-ctl", "close-popups"] in self.recorded(),
+                    should_close,
+                )
 
     def test_popup_compatibility_uses_verified_native_commands(self):
         self.ready.touch()

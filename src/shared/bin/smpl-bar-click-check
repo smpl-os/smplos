@@ -14,6 +14,7 @@ cx=$(jq -r '.x' <<< "$cursor")
 cy=$(jq -r '.y' <<< "$cursor")
 inside=$(jq -r --argjson cx "$cx" --argjson cy "$cy" '
     [.[] | select(.class == "smpl-bar" and
+                  (.title | startswith("smpl-bar:")) and
                   $cx >= .at[0] and $cx <= (.at[0] + .size[0]) and
                   $cy >= .at[1] and $cy <= (.at[1] + .size[1]))] | length
 ' <<< "$windows")
