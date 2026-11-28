@@ -482,6 +482,7 @@ fi
             self.assertIn("panel-(top|bottom|left|right)-(pinned|floating)", text)
             self.assertIn("smpl-bar-preview", text)
             self.assertIn("smpl-bar-reservation", text)
+            self.assertIn("stay_focused", text)
         niri = (ROOT / "src/compositors/niri/window-rules.kdl").read_text()
         self.assertIn('app-id="^smpl-bar$"', niri)
         self.assertIn("panel-(top|bottom|left|right)-(pinned|floating)", niri)

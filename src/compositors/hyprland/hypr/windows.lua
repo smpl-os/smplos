@@ -240,6 +240,10 @@ hl.window_rule({
     move = "(monitor_w-window_w-2) (monitor_h-window_h-34)",
 })
 hl.window_rule({
+    match = { class = "^(smpl-bar)$", title = "^smpl-bar:quick-settings$" },
+    stay_focused = true,
+})
+hl.window_rule({
     match = {
         class = "^(smpl-bar)$",
         title = "^smpl-bar:(workspace-overview|keypad-cheatsheet|identify(:.*)?)$",
